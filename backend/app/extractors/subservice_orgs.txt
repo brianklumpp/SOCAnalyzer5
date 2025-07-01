@@ -1,0 +1,202 @@
+Adobe Sign
+ADP
+Aegon
+Akamai
+Ally Bank
+Allianz
+Alteryx
+Amazon Web Services
+American Express
+Asana
+Atlassian
+Aviva
+AXA
+Bank of America
+Bank of America Merrill Lynch
+Barclays
+Barracuda Networks
+Beacon Securities
+Belfius
+Bitbucket
+BlackRock
+BlueSnap
+BNP Paribas
+BNY Mellon
+Box
+Braintree
+Brookfield Asset Management
+Canada Life
+Canaccord Genuity
+Capital One
+CenturyLink
+Charles Schwab
+Chase
+Chime
+CIBC World Markets
+Cisco
+Citibank
+Citigroup
+Clarus Securities
+Cloudflare
+Comcast
+Confluence
+Coupa
+Cormark Securities
+Credit Suisse
+Danske Bank
+Datadog
+Deutsche Bank
+DigitalOcean
+Discover
+DocuSign
+Dropbox
+Duo Security
+Dundee Capital Markets
+E*TRADE
+Echelon Wealth Partners
+Edward Jones
+Elavon
+Equinix
+Euro Pacific Canada
+Expensify
+Fairfax Financial
+Fastly
+Fidelity
+FIS
+Fiserv
+First Data
+Fortinet
+Generali
+GitHub
+GitLab
+GMP Capital
+GMP Securities
+Goldman Sachs
+Google Cloud Platform
+Google Workspace
+Great-West Lifeco
+Haywood Securities
+Heartland Payment Systems
+Heroku
+HSBC
+HubSpot
+IBM Cloud
+ING
+Ingenico
+Interactive Brokers
+Intact Financial
+Intuit
+Iron Mountain
+Janney Montgomery Scott
+Jennings Capital
+Jira
+JPMorgan Chase
+KBC
+Kingsdale Advisors
+Laurentian Bank Securities
+Leede Jones Gable
+Linode
+LPL Financial
+Looker
+Macquarie Group
+Mailgun
+Manulife
+Marketo
+Mastercard
+Mackie Research Capital
+M Partners
+Mackie Research Capital
+Mailgun
+Manulife
+Marketo
+Mastercard
+Merrill Lynch
+MetLife
+Mimecast
+MongoDB Atlas
+Monzo
+Morgan Stanley
+National Bank Financial
+National Bank Financial
+NetSuite
+N26
+Northern Trust
+Okta
+OneLogin
+Onit
+Oracle Cloud
+PagerDuty
+Paradigm Capital
+Paychex
+Payoneer
+PayPal
+Ping Identity
+PI Financial
+PI Financial
+Plaid
+Power Corporation of Canada
+Prudential
+Proofpoint
+Qlik
+QuickBooks
+Rabobank
+Rackspace
+Raymond James
+Raymond James Ltd.
+Remitly
+Revolut
+Richardson GMP
+Robinhood
+Salesforce
+Salesforce Marketing Cloud
+SAP
+SAP Concur
+Scotia Capital
+Scotiabank
+SendGrid
+ServiceNow
+SEB
+Slack
+Smartsheet
+Snowflake
+Societe Generale
+SoFi
+Splunk
+Sprott Capital Partners
+Square
+Stifel
+Stripe
+Sumo Logic
+Sun Life
+Swedbank
+Tableau
+TD Ameritrade
+TD Securities
+TD Securities
+T-Mobile
+Tableau
+Trello
+TransferWise
+TSYS
+Twilio
+Vanguard
+Vantiv
+Venmo
+Verifone
+Verizon
+Visa
+WePay
+Wells Fargo
+Wells Fargo Securities
+Wellington West Capital Markets
+Western Union
+Wise
+Wolfe Research
+Workday
+Workiva
+Worldpay
+Xero
+Zendesk
+Zscaler
+Zoom
+Zacks Investment Research

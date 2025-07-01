@@ -1,0 +1,8 @@
+{
+  "company": "SimpleLegal, Inc.",
+  "parent_company": "Onit, Inc.",
+  "confidence": 1,
+  "raw_gpt_responses": [
+    "{\n  \"company\": \"SimpleLegal, Inc.\",\n  \"parent_company\": \"Onit, Inc.\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly states 'Todd Pagni, Vice President, Security and Compliance, Onit, Inc.' as part of the report, indicating that SimpleLegal, Inc. is a subsidiary or part of Onit, Inc.\"\n}"
+  ]
+}

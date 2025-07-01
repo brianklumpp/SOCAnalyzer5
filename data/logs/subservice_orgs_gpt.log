@@ -1,0 +1,1376 @@
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+ solution enables customers 
+to better support their legal operations and helps them extend these benefits to the broader organization. 
+SimpleLegal offers the following core functions: 
+e-Billing & Spend Management 
+End-to-end control over how legal departments manage invoices, budgets, accruals, and more, so legal teams 
+can proactively drive cost-efficiencies. 
+Key features include: 
+• 
+Invoice management 
+• 
+Automated billing guideline and discount enforcement 
+• 
+AI-powered invoice reviews 
+• 
+Support for Alternative Fee Arrangements (AFAs) 
+• 
+Flexible workflow configurations 
+• 
+Timekeeper management 
+• 
+Automated accruals management 
+• 
+Budget creation and management 
+• 
+Dedicated, no-cost vendor portal to submit invoices (CounselGO) 
+Matter Management 
+A single place to create, manage, and collaborate on legal projects that fundamentally transforms the way legal 
+teams – and external vendors – complete day to day tasks. 
+Key features include: 
+• 
+Central matter repository 
+• 
+
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: SimpleLegal
+Description: Legal operations management software provider
+RESPONSE:
+{
+	"keep": true,
+	"type": "company",
+	"reason": "This is an actual service offering in the legal operations management software industry.",
+	"entry": {
+		"Name": "SimpleLegal",
+		"Description": "Legal operations management software provider"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+ solution enables customers 
+to better support their legal operations and helps them extend these benefits to the broader organization. 
+SimpleLegal offers the following core functions: 
+e-Billing & Spend Management 
+End-to-end control over how legal departments manage invoices, budgets, accruals, and more, so legal teams 
+can proactively drive cost-efficiencies. 
+Key features include: 
+• 
+Invoice management 
+• 
+Automated billing guideline and discount enforcement 
+• 
+AI-powered invoice reviews 
+• 
+Support for Alternative Fee Arrangements (AFAs) 
+• 
+Flexible workflow configurations 
+• 
+Timekeeper management 
+• 
+Automated accruals management 
+• 
+Budget creation and management 
+• 
+Dedicated, no-cost vendor portal to submit invoices (CounselGO) 
+Matter Management 
+A single place to create, manage, and collaborate on legal projects that fundamentally transforms the way legal 
+teams – and external vendors – complete day to day tasks. 
+Key features include: 
+• 
+Central matter repository 
+• 
+
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: CounselGO
+Description: Vendor portal for invoice submission
+RESPONSE:
+{
+	"keep": true,
+	"type": "service offering",
+	"reason": "This is a service offering provided by SimpleLegal.",
+	"entry": {
+		"Name": "CounselGO",
+		"Description": "Vendor portal for invoice submission"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+ solution enables customers 
+to better support their legal operations and helps them extend these benefits to the broader organization. 
+SimpleLegal offers the following core functions: 
+e-Billing & Spend Management 
+End-to-end control over how legal departments manage invoices, budgets, accruals, and more, so legal teams 
+can proactively drive cost-efficiencies. 
+Key features include: 
+• 
+Invoice management 
+• 
+Automated billing guideline and discount enforcement 
+• 
+AI-powered invoice reviews 
+• 
+Support for Alternative Fee Arrangements (AFAs) 
+• 
+Flexible workflow configurations 
+• 
+Timekeeper management 
+• 
+Automated accruals management 
+• 
+Budget creation and management 
+• 
+Dedicated, no-cost vendor portal to submit invoices (CounselGO) 
+Matter Management 
+A single place to create, manage, and collaborate on legal projects that fundamentally transforms the way legal 
+teams – and external vendors – complete day to day tasks. 
+Key features include: 
+• 
+Central matter repository 
+• 
+
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Vendor Surveys
+Description: Service provider for comparing law firm rates and performance
+RESPONSE:
+{
+	"keep": true,
+	"type": "service offering",
+	"reason": "This is an actual service offering for comparing law firm rates and performance.",
+	"entry": {
+		"Name": "Vendor Surveys",
+		"Description": "Service provider for comparing law firm rates and performance"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+ solution enables customers 
+to better support their legal operations and helps them extend these benefits to the broader organization. 
+SimpleLegal offers the following core functions: 
+e-Billing & Spend Management 
+End-to-end control over how legal departments manage invoices, budgets, accruals, and more, so legal teams 
+can proactively drive cost-efficiencies. 
+Key features include: 
+• 
+Invoice management 
+• 
+Automated billing guideline and discount enforcement 
+• 
+AI-powered invoice reviews 
+• 
+Support for Alternative Fee Arrangements (AFAs) 
+• 
+Flexible workflow configurations 
+• 
+Timekeeper management 
+• 
+Automated accruals management 
+• 
+Budget creation and management 
+• 
+Dedicated, no-cost vendor portal to submit invoices (CounselGO) 
+Matter Management 
+A single place to create, manage, and collaborate on legal projects that fundamentally transforms the way legal 
+teams – and external vendors – complete day to day tasks. 
+Key features include: 
+• 
+Central matter repository 
+• 
+
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Tableau
+Description: Data visualization software provider
+RESPONSE:
+{
+	"keep": true,
+	"type": "company",
+	"reason": "This is an actual service offering company providing data visualization software.",
+	"entry": {
+		"Name": "Tableau",
+		"Description": "Data visualization software provider"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+y legal teams create, share, and find information for quicker access to key intel to boost 
+productivity and make better decisions. 
+Key features include: 
+• 
+Easily find information with quick and global searches 
+• 
+Identify who has worked a matter and in what capacity 
+• 
+Identify and track related matters to streamline work 
+• 
+Full-text search of matter documents 
+Reporting & Analytics 
+Uncover the valuable information hidden in data so legal teams have the intelligence needed to make strategic 
+business decisions quicker and easier. 
+Key features include: 
+• 
+Standard reports that align with legal analytics best practices and industry standards 
+• 
+Easy-to-use ad hoc report builder for on-the-fly insights 
+• 
+Customized reports to meet internal requirements 
+• 
+Advanced reports with dynamic dashboards and presentation-ready data visuals (integration with 
+Tableau) 
+• 
+Robust dashboards and ability to drill into the data on every page 
+• 
+Easily export reports for further analysis
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Representational State Transfer (REST) API
+Description: Architectural style for designing networked applications
+RESPONSE:
+{"keep": false, "type": "framework", "reason": "This is a framework, not a company or service offering.", "entry": {"Name": "Representational State Transfer (REST) API", "Description": "Architectural style for designing networked applications"}}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+y legal teams create, share, and find information for quicker access to key intel to boost 
+productivity and make better decisions. 
+Key features include: 
+• 
+Easily find information with quick and global searches 
+• 
+Identify who has worked a matter and in what capacity 
+• 
+Identify and track related matters to streamline work 
+• 
+Full-text search of matter documents 
+Reporting & Analytics 
+Uncover the valuable information hidden in data so legal teams have the intelligence needed to make strategic 
+business decisions quicker and easier. 
+Key features include: 
+• 
+Standard reports that align with legal analytics best practices and industry standards 
+• 
+Easy-to-use ad hoc report builder for on-the-fly insights 
+• 
+Customized reports to meet internal requirements 
+• 
+Advanced reports with dynamic dashboards and presentation-ready data visuals (integration with 
+Tableau) 
+• 
+Robust dashboards and ability to drill into the data on every page 
+• 
+Easily export reports for further analysis
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: SimpleLegal Professional Services team
+Description: Professional services team of SimpleLegal
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a specific department within the company SimpleLegal.",
+	"entry": {
+		"Name": "SimpleLegal Professional Services team",
+		"Description": "Professional services team of SimpleLegal"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+y legal teams create, share, and find information for quicker access to key intel to boost 
+productivity and make better decisions. 
+Key features include: 
+• 
+Easily find information with quick and global searches 
+• 
+Identify who has worked a matter and in what capacity 
+• 
+Identify and track related matters to streamline work 
+• 
+Full-text search of matter documents 
+Reporting & Analytics 
+Uncover the valuable information hidden in data so legal teams have the intelligence needed to make strategic 
+business decisions quicker and easier. 
+Key features include: 
+• 
+Standard reports that align with legal analytics best practices and industry standards 
+• 
+Easy-to-use ad hoc report builder for on-the-fly insights 
+• 
+Customized reports to meet internal requirements 
+• 
+Advanced reports with dynamic dashboards and presentation-ready data visuals (integration with 
+Tableau) 
+• 
+Robust dashboards and ability to drill into the data on every page 
+• 
+Easily export reports for further analysis
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Third-party consulting partners
+Description: Consulting partners that work closely with SimpleLegal customers
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department or group of consulting partners, not a service offering or cloud provider.",
+	"entry": {
+		"Name": "Third-party consulting partners",
+		"Description": "Consulting partners that work closely with SimpleLegal customers"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+etention practices. 
+5. A statement that the information will be disposed of in a manner that prevents loss, theft, misuse, or 
+unauthorized access to the information. 
+6. If applicable, how the service organization supports any process permitted by user entities for individuals 
+to obtain access to their information to review, update, or correct it. 
+7. If applicable, a description of the process to determine that personal information is accurate and complete 
+and how the service organization implements correction processes permitted by user entities. 
+8. If applicable, how inquiries, complaints, and disputes from individuals (whether directly from the individual 
+or indirectly through user entities) regarding their personal information are handled by the service 
+organization. 
+9. A statement regarding the existence of a written security program and what industry or other standards it 
+is based on. 
+10. Other relevant information related to privacy practices deemed appropriate for us
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Amazon Web Services
+Description: Amazon Web Services (AWS) is a subsidiary of Amazon providing on-demand cloud computing platforms and APIs to individuals, companies, and governments, on a metered pay-as-you-go basis.
+RESPONSE:
+{
+	"keep": true,
+	"type": "company",
+	"reason": "This is an actual cloud provider offering various services.",
+	"entry": {
+		"Name": "Amazon Web Services",
+		"Description": "Amazon Web Services (AWS) is a subsidiary of Amazon providing on-demand cloud computing platforms and APIs to individuals, companies, and governments, on a metered pay-as-you-go basis."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nt ensures the seamless functioning of corporate technology systems, 
+infrastructure, and business processes to support organizational efficiency. It manages IT services, and 
+operational workflows to drive innovation, productivity, and scalability. 
+Legal 
+The Legal department provides guidance on compliance, risk management, and regulatory matters to protect the 
+organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business 
+operations. 
+Human Resources 
+The Human Resources department manages recruitment, employee relations, and organizational development to 
+foster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support 
+both employee well-being and business success. 
+Customer Success 
+Provides consistent contact with established customers and ensures their satisfaction with relevant products. A 
+segment of this team also manages work tickets submitted by customers to make changes 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Legal department
+Description: Provides guidance on compliance, risk management, and regulatory matters to protect the organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business operations.
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department within the organization, not a service offering or cloud provider.",
+	"entry": {
+		"Name": "Legal department",
+		"Description": "Provides guidance on compliance, risk management, and regulatory matters to protect the organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business operations."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nt ensures the seamless functioning of corporate technology systems, 
+infrastructure, and business processes to support organizational efficiency. It manages IT services, and 
+operational workflows to drive innovation, productivity, and scalability. 
+Legal 
+The Legal department provides guidance on compliance, risk management, and regulatory matters to protect the 
+organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business 
+operations. 
+Human Resources 
+The Human Resources department manages recruitment, employee relations, and organizational development to 
+foster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support 
+both employee well-being and business success. 
+Customer Success 
+Provides consistent contact with established customers and ensures their satisfaction with relevant products. A 
+segment of this team also manages work tickets submitted by customers to make changes 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Customer Success team
+Description: Provides consistent contact with established customers and ensures their satisfaction with relevant products. A segment of this team also manages work tickets submitted by customers to make changes to their application.
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department within the organization, not a service offering or cloud provider.",
+	"entry": {
+		"Name": "Customer Success team",
+		"Description": "Provides consistent contact with established customers and ensures their satisfaction with relevant products. A segment of this team also manages work tickets submitted by customers to make changes to their application."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nt ensures the seamless functioning of corporate technology systems, 
+infrastructure, and business processes to support organizational efficiency. It manages IT services, and 
+operational workflows to drive innovation, productivity, and scalability. 
+Legal 
+The Legal department provides guidance on compliance, risk management, and regulatory matters to protect the 
+organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business 
+operations. 
+Human Resources 
+The Human Resources department manages recruitment, employee relations, and organizational development to 
+foster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support 
+both employee well-being and business success. 
+Customer Success 
+Provides consistent contact with established customers and ensures their satisfaction with relevant products. A 
+segment of this team also manages work tickets submitted by customers to make changes 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Implementation Services department
+Description: Ensures a smooth onboarding experience by configuring, integrating, and optimizing the company’s solutions for clients. It manages project planning, training, and support to drive successful adoption and long-term customer satisfaction.
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department within the organization providing specific services.",
+	"entry": {
+		"Name": "Implementation Services department",
+		"Description": "Ensures a smooth onboarding experience by configuring, integrating, and optimizing the company’s solutions for clients. It manages project planning, training, and support to drive successful adoption and long-term customer satisfaction."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nt ensures the seamless functioning of corporate technology systems, 
+infrastructure, and business processes to support organizational efficiency. It manages IT services, and 
+operational workflows to drive innovation, productivity, and scalability. 
+Legal 
+The Legal department provides guidance on compliance, risk management, and regulatory matters to protect the 
+organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business 
+operations. 
+Human Resources 
+The Human Resources department manages recruitment, employee relations, and organizational development to 
+foster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support 
+both employee well-being and business success. 
+Customer Success 
+Provides consistent contact with established customers and ensures their satisfaction with relevant products. A 
+segment of this team also manages work tickets submitted by customers to make changes 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Managed Services department
+Description: Provides continued client-directed enhancements (Time to Full Value), ongoing client support, and solution-specific optimization of the client-specific SaaS solutions. It proactively manages updated and new Client-specific instance deliverables and issue resolution, allowing clients to focus on continued expansion of their core business functionality.
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department within a company offering managed services.",
+	"entry": {
+		"Name": "Managed Services department",
+		"Description": "Provides continued client-directed enhancements (Time to Full Value), ongoing client support, and solution-specific optimization of the client-specific SaaS solutions. It proactively manages updated and new Client-specific instance deliverables and issue resolution, allowing clients to focus on continued expansion of their core business functionality."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nt ensures the seamless functioning of corporate technology systems, 
+infrastructure, and business processes to support organizational efficiency. It manages IT services, and 
+operational workflows to drive innovation, productivity, and scalability. 
+Legal 
+The Legal department provides guidance on compliance, risk management, and regulatory matters to protect the 
+organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business 
+operations. 
+Human Resources 
+The Human Resources department manages recruitment, employee relations, and organizational development to 
+foster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support 
+both employee well-being and business success. 
+Customer Success 
+Provides consistent contact with established customers and ensures their satisfaction with relevant products. A 
+segment of this team also manages work tickets submitted by customers to make changes 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Support department
+Description: Handles customer inquiries by managing support tickets, troubleshooting issues, and ensuring timely resolution to maintain a smooth SaaS experience. It also assists with additional customer requirements, providing guidance and solutions to enhance product usage and satisfaction.
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department within the organization, not a service offering or cloud provider.",
+	"entry": {
+		"Name": "Support department",
+		"Description": "Handles customer inquiries by managing support tickets, troubleshooting issues, and ensuring timely resolution to maintain a smooth SaaS experience. It also assists with additional customer requirements, providing guidance and solutions to enhance product usage and satisfaction."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nt ensures the seamless functioning of corporate technology systems, 
+infrastructure, and business processes to support organizational efficiency. It manages IT services, and 
+operational workflows to drive innovation, productivity, and scalability. 
+Legal 
+The Legal department provides guidance on compliance, risk management, and regulatory matters to protect the 
+organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business 
+operations. 
+Human Resources 
+The Human Resources department manages recruitment, employee relations, and organizational development to 
+foster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support 
+both employee well-being and business success. 
+Customer Success 
+Provides consistent contact with established customers and ensures their satisfaction with relevant products. A 
+segment of this team also manages work tickets submitted by customers to make changes 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Marketing department
+Description: Promotes the Company and creates customer leads by providing the necessary research to identify target customers and other audiences.
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department within the organization, not a service offering or cloud provider.",
+	"entry": {
+		"Name": "Marketing department",
+		"Description": "Promotes the Company and creates customer leads by providing the necessary research to identify target customers and other audiences."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nt ensures the seamless functioning of corporate technology systems, 
+infrastructure, and business processes to support organizational efficiency. It manages IT services, and 
+operational workflows to drive innovation, productivity, and scalability. 
+Legal 
+The Legal department provides guidance on compliance, risk management, and regulatory matters to protect the 
+organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business 
+operations. 
+Human Resources 
+The Human Resources department manages recruitment, employee relations, and organizational development to 
+foster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support 
+both employee well-being and business success. 
+Customer Success 
+Provides consistent contact with established customers and ensures their satisfaction with relevant products. A 
+segment of this team also manages work tickets submitted by customers to make changes 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Key Sales department
+Description: Focuses on acquiring and managing high-value clients, driving revenue growth through strategic partnerships and tailored solutions. It builds strong relationships, negotiates contracts, and collaborates with internal teams to deliver value-driven offerings that meet client needs.
+RESPONSE:
+{
+	"keep": false,
+	"type": "department",
+	"reason": "This is a department within the organization, not a service offering or cloud provider.",
+	"entry": {
+		"Name": "Key Sales department",
+		"Description": "Focuses on acquiring and managing high-value clients, driving revenue growth through strategic partnerships and tailored solutions. It builds strong relationships, negotiates contracts, and collaborates with internal teams to deliver value-driven offerings that meet client needs."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nt ensures the seamless functioning of corporate technology systems, 
+infrastructure, and business processes to support organizational efficiency. It manages IT services, and 
+operational workflows to drive innovation, productivity, and scalability. 
+Legal 
+The Legal department provides guidance on compliance, risk management, and regulatory matters to protect the 
+organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business 
+operations. 
+Human Resources 
+The Human Resources department manages recruitment, employee relations, and organizational development to 
+foster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support 
+both employee well-being and business success. 
+Customer Success 
+Provides consistent contact with established customers and ensures their satisfaction with relevant products. A 
+segment of this team also manages work tickets submitted by customers to make changes 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Partner Sales department
+Description: Works with our partner community to drive revenue across various partner engagement models including reseller, co-seller, and ISV. The team also works to enable partners who implement our solutions to ensure successful customer outcomes.
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department within the organization.",
+	"entry": {
+		"Name": "Partner Sales department",
+		"Description": "Works with our partner community to drive revenue across various partner engagement models including reseller, co-seller, and ISV. The team also works to enable partners who implement our solutions to ensure successful customer outcomes."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nt ensures the seamless functioning of corporate technology systems, 
+infrastructure, and business processes to support organizational efficiency. It manages IT services, and 
+operational workflows to drive innovation, productivity, and scalability. 
+Legal 
+The Legal department provides guidance on compliance, risk management, and regulatory matters to protect the 
+organization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business 
+operations. 
+Human Resources 
+The Human Resources department manages recruitment, employee relations, and organizational development to 
+foster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support 
+both employee well-being and business success. 
+Customer Success 
+Provides consistent contact with established customers and ensures their satisfaction with relevant products. A 
+segment of this team also manages work tickets submitted by customers to make changes 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Revenue Ops department
+Description: Optimizes the processes, tools, and d
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department within the organization, not a service offering or cloud provider.",
+	"entry": {
+		"Name": "Revenue Ops department",
+		"Description": "Optimizes the processes, tools, and d"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+with additional customer 
+requirements, providing guidance and solutions to enhance product usage and satisfaction. 
+Marketing 
+The Marketing department promotes the Company and creates customer leads by providing the necessary 
+research to identify target customers and other audiences. 
+Key Sales 
+The Key Sales department focuses on acquiring and managing high-value clients, driving revenue growth through 
+strategic partnerships and tailored solutions. It builds strong relationships, negotiates contracts, and collaborates 
+with internal teams to deliver value-driven offerings that meet client needs. 
+Partner Sales 
+The Partner Sales department works with our partner community to drive revenue across various partner 
+engagement models including reseller, co-seller, and ISV. The team also works to enable partners who 
+implement our solutions to ensure successful customer outcomes. 
+=== PAGE 15 ===
+
+15 
+Revenue Ops  
+The Revenue Operations department optimizes the processes, tools, and d
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: null
+Description: null
+RESPONSE:
+{
+	"keep": false,
+	"type": "null",
+	"reason": "This entry has no information to determine if it is a service offering or cloud provider.",
+	"entry": {
+		"Name": null,
+		"Description": null
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+rategic Sales department focuses on building and nurturing relationships with key enterprise clients to drive 
+long-term, high-value sales. It develops tailored solutions, negotiates complex deals, and collaborates with cross-
+functional teams to meet the unique needs of large-scale customers. 
+AI 
+The AI department develops and integrates artificial intelligence technologies into the Company's solutions to 
+enhance automation, analytics, and decision-making capabilities. It leverages machine learning, natural language 
+processing, large language models, and predictive analytics to create innovative features that drive value for 
+customers and improve user experience. 
+Product Management 
+This team sets priorities for the Company through examining the current workload related to products in every 
+department against pending or upcoming projects. This is also the department responsible for creating and 
+planning newly developed products that have never been developed. 
+Engineering 
+The 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: CloudOps
+Description: Department responsible for ensuring 24/7 monitoring of the environment's infrastructure and security
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department within the company responsible for specific operations.",
+	"entry": {
+		"Name": "CloudOps",
+		"Description": "Department responsible for ensuring 24/7 monitoring of the environment's infrastructure and security"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+e system are delegated to the Security and DevOps 
+teams. The Security Officer is responsible for developing, maintaining, and enforcing SimpleLegal’s information 
+security policies with input from other relevant business units. The information security policies are reviewed as 
+needed by the Security Officer. 
+As the Security and DevOps teams maintain security, they also monitor known incidents and patches as well as 
+results from recent vulnerability assessments and address necessary changes to the policies and procedures. 
+Such changes can include a reclassification of data, a reassessment of risk, changes in incident response plans, 
+and a verification of responsibilities for authorizing and monitoring accesses. Changes are reviewed and 
+communicated during weekly DevOps team meetings or through system alerts. 
+All SimpleLegal employees and contractors are required to attend information security awareness training on an 
+annual basis to ensure that personnel are knowledgeable of ri
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Onit
+Description: Onit is a provider of enterprise legal management solutions and business process automation software for legal departments and law firms.
+RESPONSE:
+{
+	"keep": true,
+	"type": "company",
+	"reason": "This is an actual company providing enterprise legal management solutions and business process automation software.",
+	"entry": {
+		"Name": "Onit",
+		"Description": "Onit is a provider of enterprise legal management solutions and business process automation software for legal departments and law firms."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+e 
+Complementary Subservice Organization Controls section below). SimpleLegal does not have a physical office 
+space as all employees work remotely. Onit’s main office, which houses personnel responsible for the 
+SimpleLegal system, is located in Houston, Texas, with additional offices in Austin, Texas and Pune, India. The 
+offices have the following security protocols in place: 
+• 
+Key fobs are required to access the main building entrance and office 
+• 
+Video surveillance cameras that provide 24/7 streaming, recording and motion detection 
+• 
+Alarm systems that automatically connect to security contractors 
+• 
+Shredders to securely dispose of hard-copy documents 
+Logical Security 
+SimpleLegal has policies and procedures that outline information technology security standards. These 
+documents are available for review by all employees and contractors through SharePoint. SimpleLegal uses role-
+based security architecture and requires users of the system to be identified and authenticate
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: SharePoint
+Description: Collaboration platform developed by Microsoft
+RESPONSE:
+{
+	"keep": false,
+	"type": "software",
+	"reason": "This is a collaboration platform, not a company.",
+	"entry": {
+		"Name": "SharePoint",
+		"Description": "Collaboration platform developed by Microsoft"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nsible for 
+ensuring adherence to the security policy which addresses logical access control procedures. 
+Individual access capabilities are removed within 48 hours by IT or data owners upon the notification of 
+termination of employment, change of responsibilities, or termination of a contract with a client that uses the 
+system. System security access levels are reviewed quarterly by IT and data owners to ensure individual access 
+rights are appropriate based on job information. 
+Change Management 
+SimpleLegal maintains a documented Change Management Policy to guide personnel in documenting and 
+implementing application and infrastructure changes. Change control procedures include change request and 
+initiation processes, documentation requirements, development practices, quality assurance testing requirements, 
+and required approval procedures.  
+A ticketing system is utilized to document the change control procedures for changes in the application and 
+implementation of new changes
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Open Web Application Security Project (OWASP)
+Description: An open community dedicated to enabling organizations to develop, purchase, and maintain applications that can be trusted.
+RESPONSE:
+{
+	"keep": false,
+	"type": "framework",
+	"reason": "This is a framework, not a company or service provider.",
+	"entry": {
+		"Name": "Open Web Application Security Project (OWASP)",
+		"Description": "An open community dedicated to enabling organizations to develop, purchase, and maintain applications that can be trusted."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nd controls. These 
+methods include the following: 
+• 
+New hire training 
+• 
+Ongoing training 
+• 
+Policy and process updates 
+• 
+Departmental meetings summarizing events and changes 
+• 
+Use of e-mail systems 
+System Monitoring 
+SimpleLegal performs system monitoring activities to continuously assess the quality of internal control over time 
+and ensure that any corrective actions are completed in a timely manner. Examples of system monitoring 
+processes in place include: 
+• 
+Firewalls – Firewalls protecting the internal network from the public network are implemented, configured, 
+and managed by the SimpleLegal administration staff. Firewalls utilize access rules to grant or deny 
+access to internal resources.  
+• 
+Vulnerability Scanning – Scanning is performed by a third-party vendor on a monthly basis in accordance 
+with SimpleLegal policy. The third-party vendor uses industry standard scanning technologies and a 
+formal methodology specified by Open Web Application Security Project 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Third-party vendor
+Description: Performs vulnerability scanning on a monthly basis using industry standard scanning technologies and a formal methodology specified by OWASP.
+RESPONSE:
+{
+	"keep": false,
+	"type": "department",
+	"reason": "This is a third-party vendor performing a service, not a company or cloud provider.",
+	"entry": {
+		"Name": "Third-party vendor",
+		"Description": "Performs vulnerability scanning on a monthly basis using industry standard scanning technologies and a formal methodology specified by OWASP."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+nd controls. These 
+methods include the following: 
+• 
+New hire training 
+• 
+Ongoing training 
+• 
+Policy and process updates 
+• 
+Departmental meetings summarizing events and changes 
+• 
+Use of e-mail systems 
+System Monitoring 
+SimpleLegal performs system monitoring activities to continuously assess the quality of internal control over time 
+and ensure that any corrective actions are completed in a timely manner. Examples of system monitoring 
+processes in place include: 
+• 
+Firewalls – Firewalls protecting the internal network from the public network are implemented, configured, 
+and managed by the SimpleLegal administration staff. Firewalls utilize access rules to grant or deny 
+access to internal resources.  
+• 
+Vulnerability Scanning – Scanning is performed by a third-party vendor on a monthly basis in accordance 
+with SimpleLegal policy. The third-party vendor uses industry standard scanning technologies and a 
+formal methodology specified by Open Web Application Security Project 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Third-party security firms
+Description: Conducts penetration testing using an accepted industry standard methodology to identify vulnerabilities and test controls and processes around applications.
+RESPONSE:
+{
+	"keep": true,
+	"type": "company",
+	"reason": "This is a third-party security firm providing services, not a framework or software.",
+	"entry": {
+		"Name": "Third-party security firms",
+		"Description": "Conducts penetration testing using an accepted industry standard methodology to identify vulnerabilities and test controls and processes around applications."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+ccess or other malicious activity is possible. 
+Penetration testing includes application layer testing as well as testing of controls and processes around 
+the applications. 
+• 
+Patch Management – SimpleLegal has implemented a patch management process to ensure 
+infrastructure systems are patched in accordance with vendor recommended operating system patches. 
+SimpleLegal system owners review proposed operating system patches to determine whether the 
+patches are applied. SimpleLegal systems are responsible for determining the risk of applying or not 
+applying patches based upon the security and availability impact of those systems and any critical 
+applications hosted on them. SimpleLegal staff validate that the patches have been installed and, if 
+applicable, that reboots have been completed.  
+Problem Management 
+Security incidents are reported to the Security and Compliance teams through an internal ticketing application. 
+Issues are triaged and tracked using a ticketing system and
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: AWS (Amazon Web Services)
+Description: Cloud computing platform provided by Amazon
+RESPONSE:
+{
+	"keep": true,
+	"type": "company",
+	"reason": "This is a cloud provider offering services.",
+	"entry": {
+		"Name": "AWS (Amazon Web Services)",
+		"Description": "Cloud computing platform provided by Amazon"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+ to controls, and communication of 
+significant events in a timely manner. Employees sign an Employee Acknowledgement Form regarding the 
+SimpleLegal Employee Handbook stating that they have received and read the manual. Security of the logical 
+security of systems is reinforced by training and through awareness programs. The communication system 
+between senior management and SimpleLegal staff includes the use of the office email system and weekly 
+meetings. Periodic department meetings between each manager and their staff are also held to discuss new 
+company policies and procedures and other business issues. Communication is encouraged at different levels to 
+promote the operating efficiency of SimpleLegal. 
+Human Resources Security 
+SimpleLegal observes HR policies, procedures, and guidelines within its Employee Handbook. Management 
+updates these policies as appropriate. SimpleLegal managers observe these policies, procedures, and guidelines 
+as well as applicable federal and stat
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: third-party specialists
+Description: Third-party specialists who coordinate background checks for newly hired employees
+RESPONSE:
+{
+	"keep": true,
+	"type": "company",
+	"reason": "This is an actual service offering provided by third-party specialists.",
+	"entry": {
+		"Name": "third-party specialists",
+		"Description": "Third-party specialists who coordinate background checks for newly hired employees"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+roperty and assets (e.g., Company credit cards, keys, computer, etc.) from 
+terminated employees. The Company proprietary files are secured, and access to electronic resources (e.g., 
+telephone, network, computer, e-mail, etc.) is terminated. 
+=== PAGE 21 ===
+
+21 
+Risk Assessment Process 
+SimpleLegal recognizes that risk management is a critical component of its operations and contributes to ensuring 
+customer data is properly protected. SimpleLegal incorporates risk management throughout its business 
+processes and across the organization. The foundation of this process is management’s knowledge of its 
+operations, its close working relationship with its customers and vendors, and its understanding of the space in 
+which it operates. 
+SimpleLegal conducts a risk assessment at least quarterly. The system risk assessment template enables 
+SimpleLegal to describe their cause and potential impact and outline mitigation steps to reduce the likelihood and 
+impact. 
+Integration with Risk Ass
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Microsoft Office
+Description: A suite of productivity applications developed by Microsoft.
+RESPONSE:
+{
+	"keep": true,
+	"type": "software",
+	"reason": "This is a suite of productivity applications, not a company.",
+	"entry": {
+		"Name": "Microsoft Office",
+		"Description": "A suite of productivity applications developed by Microsoft."
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+ information dissemination. 
+Email distribution lists are also maintained to ensure job executions are smooth and knowledge of the processes 
+is clear and up to date. 
+Monitoring Controls 
+Company management performs monitoring activities as part of normal business operations to assess the quality 
+of the internal control environment. Management performs regular reviews of tasks assigned to their teams. 
+Monitoring activities are used to initiate corrective action through team meetings, client conference calls, and 
+informal notifications. Corrective actions are taken as required to correct deviations from Company policy and 
+procedures. Tasks that are not addressed in a timely manner are escalated and resolved. 
+Ongoing Monitoring 
+SimpleLegal utilizes a suite of monitoring tools to provide proactive incident identification and response services. 
+The DevOps and CloudOps teams regularly monitor the network. Overall health and capacity planning are 
+monitored to ensure the system will 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: DevOps and CloudOps teams
+Description: Teams responsible for monitoring the network, overall health, and capacity planning
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This is a department responsible for monitoring activities within the company.",
+	"entry": {
+		"Name": "DevOps and CloudOps teams",
+		"Description": "Teams responsible for monitoring the network, overall health, and capacity planning"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+ information dissemination. 
+Email distribution lists are also maintained to ensure job executions are smooth and knowledge of the processes 
+is clear and up to date. 
+Monitoring Controls 
+Company management performs monitoring activities as part of normal business operations to assess the quality 
+of the internal control environment. Management performs regular reviews of tasks assigned to their teams. 
+Monitoring activities are used to initiate corrective action through team meetings, client conference calls, and 
+informal notifications. Corrective actions are taken as required to correct deviations from Company policy and 
+procedures. Tasks that are not addressed in a timely manner are escalated and resolved. 
+Ongoing Monitoring 
+SimpleLegal utilizes a suite of monitoring tools to provide proactive incident identification and response services. 
+The DevOps and CloudOps teams regularly monitor the network. Overall health and capacity planning are 
+monitored to ensure the system will 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Company engineers
+Description: Engineers responsible for using monitoring tools to identify and provide alerts
+RESPONSE:
+{
+	"keep": true,
+	"type": "department",
+	"reason": "This refers to a specific department within the company responsible for using monitoring tools.",
+	"entry": {
+		"Name": "Company engineers",
+		"Description": "Engineers responsible for using monitoring tools to identify and provide alerts"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+ information dissemination. 
+Email distribution lists are also maintained to ensure job executions are smooth and knowledge of the processes 
+is clear and up to date. 
+Monitoring Controls 
+Company management performs monitoring activities as part of normal business operations to assess the quality 
+of the internal control environment. Management performs regular reviews of tasks assigned to their teams. 
+Monitoring activities are used to initiate corrective action through team meetings, client conference calls, and 
+informal notifications. Corrective actions are taken as required to correct deviations from Company policy and 
+procedures. Tasks that are not addressed in a timely manner are escalated and resolved. 
+Ongoing Monitoring 
+SimpleLegal utilizes a suite of monitoring tools to provide proactive incident identification and response services. 
+The DevOps and CloudOps teams regularly monitor the network. Overall health and capacity planning are 
+monitored to ensure the system will 
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Security, and Compliance
+Description: Teams responsible for monitoring security access violations, including server logs and reports
+RESPONSE:
+{
+	"keep": false,
+	"type": "department",
+	"reason": "This is a department responsible for security and compliance, not a service offering or cloud provider.",
+	"entry": {
+		"Name": "Security, and Compliance",
+		"Description": "Teams responsible for monitoring security access violations, including server logs and reports"
+	}
+}
+---
+PROMPT:
+You are reviewing extracted third-party entities from a SOC 2 report. For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.).If not, specify what it is (framework, department, generic term, software, OS, component, etc.). Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).
+
+Context from the report:
+centers is reviewed on a quarterly basis by appropriate personnel. 
+• 
+Closed circuit television cameras (CCTV) are used to monitor server locations in data centers. Images 
+are retained for 90 days, unless limited by legal or contractual obligations. 
+• 
+Access to server locations are managed by electronic access control devices. 
+• 
+Electronic intrusion detection systems are installed within data server locations to monitor, detect, and 
+automatically alert appropriate personnel of security incidents. 
+=== PAGE 24 ===
+
+24 
+A1.2 
+• 
+Amazon-owned data centers are protected by fire detection and suppression systems. 
+• 
+Amazon-owned data centers are air conditioned to maintain appropriate atmospheric conditions. 
+Personnel and systems monitor and control air temperature and humidity at appropriate levels. 
+• 
+Uninterruptible Power Supply (UPS) units provide backup power in the event of an electrical failure in 
+Amazon-owned data centers and third-party colocation sites where Amazon main
+
+Example input:
+Name: Linux
+Description: Operating System
+
+Example output:
+{"keep": false, "type": "OS", "reason": "This is an operating system, not a company.", "entry": ... }
+
+Now review this entry:
+Name: Amazon Web Services (AWS)
+Description: Cloud computing platform by Amazon
+RESPONSE:
+{
+	"keep": true,
+	"type": "company",
+	"reason": "This is an actual cloud provider offering.",
+	"entry": {
+		"Name": "Amazon Web Services (AWS)",
+		"Description": "Cloud computing platform by Amazon"
+	}
+}
+---

@@ -1,0 +1,99 @@
+{
+  "third_parties": [
+    {
+      "third_party_name": "Amazon Web Services",
+      "third_party_description": "Amazon Web Services (AWS) is a subsidiary of Amazon providing on-demand cloud computing platforms and APIs to individuals, companies, and governments, on a metered pay-as-you-go basis.",
+      "third_party_page_ref": "PAGE 13,page 14,PAGE 18,https://aws.amazon.com/,PAGE 23,PAGE 24,https://aws.amazon.com/",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_desc": "Provision and manage physical infrastructure components"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_desc": "Implement certain controls for cloud computing and data center hosting services"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_desc": "Recovery key materials used for disaster recovery processes by Key Management Service (KMS) are physically secured offline so that no single AWS employee can gain access to the key material."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_desc": "Access attempts to recovery key materials are reviewed by authorized operators on a cadence defined in team documentation."
+        },
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_desc": "Physical access to data centers is approved by an authorized individual."
+        },
+        {
+          "third_party_control_seq": 6,
+          "third_party_control_desc": "Physical access is revoked within 24 hours of the employee or vendor record being deactivated."
+        },
+        {
+          "third_party_control_seq": 7,
+          "third_party_control_desc": "Physical access to data centers is reviewed on a quarterly basis by appropriate personnel."
+        },
+        {
+          "third_party_control_seq": 8,
+          "third_party_control_desc": "Closed circuit television cameras (CCTV) are used to monitor server locations in data centers. Images are retained for 90 days, unless limited by legal or contractual obligations."
+        },
+        {
+          "third_party_control_seq": 9,
+          "third_party_control_desc": "Access to server locations are managed by electronic access control devices."
+        },
+        {
+          "third_party_control_seq": 10,
+          "third_party_control_desc": "Electronic intrusion detection systems are installed within data server locations to monitor, detect, and automatically alert appropriate personnel of security incidents."
+        },
+        {
+          "third_party_control_seq": 11,
+          "third_party_control_desc": "Amazon-owned data centers are protected by fire detection and suppression systems."
+        },
+        {
+          "third_party_control_seq": 12,
+          "third_party_control_desc": "Amazon-owned data centers are air conditioned to maintain appropriate atmospheric conditions. Personnel and systems monitor and control air temperature and humidity at appropriate levels."
+        },
+        {
+          "third_party_control_seq": 13,
+          "third_party_control_desc": "Uninterruptible Power Supply (UPS) units provide backup power in the event of an electrical failure in Amazon-owned data centers and third-party colocation sites where Amazon main"
+        },
+        {
+          "third_party_control_seq": 14,
+          "third_party_control_desc": "Critical AWS system components are replicated across multiple Availability Zones and backups are maintained."
+        },
+        {
+          "third_party_control_seq": 15,
+          "third_party_control_desc": "Backups of critical AWS system components are monitored for successful replication across multiple Availability Zones."
+        }
+      ],
+      "source_context": "etention practices. \n5. A statement that the information will be disposed of in a manner that prevents loss, theft, misuse, or \nunauthorized access to the information. \n6. If applicable, how the service organization supports any process permitted by user entities for individuals \nto obtain access to their information to review, update, or correct it. \n7. If applicable, a description of the process to determine that personal information is accurate and complete \nand how the service organization implements correction processes permitted by user entities. \n8. If applicable, how inquiries, complaints, and disputes from individuals (whether directly from the individual \nor indirectly through user entities) regarding their personal information are handled by the service \norganization. \n9. A statement regarding the existence of a written security program and what industry or other standards it \nis based on. \n10. Other relevant information related to privacy practices deemed appropriate for us",
+      "third_party_control_ids": "A1.2,CC6.4,CC7.2"
+    },
+    {
+      "third_party_name": "Tableau",
+      "third_party_description": "Data visualization software provider",
+      "third_party_page_ref": "Description of System section,Integration with Tableau",
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 6,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": null,
+      "source_context": " solution enables customers \nto better support their legal operations and helps them extend these benefits to the broader organization. \nSimpleLegal offers the following core functions: \ne-Billing & Spend Management \nEnd-to-end control over how legal departments manage invoices, budgets, accruals, and more, so legal teams \ncan proactively drive cost-efficiencies. \nKey features include: \n• \nInvoice management \n• \nAutomated billing guideline and discount enforcement \n• \nAI-powered invoice reviews \n• \nSupport for Alternative Fee Arrangements (AFAs) \n• \nFlexible workflow configurations \n• \nTimekeeper management \n• \nAutomated accruals management \n• \nBudget creation and management \n• \nDedicated, no-cost vendor portal to submit invoices (CounselGO) \nMatter Management \nA single place to create, manage, and collaborate on legal projects that fundamentally transforms the way legal \nteams – and external vendors – complete day to day tasks. \nKey features include: \n• \nCentral matter repository \n• \n"
+    },
+    {
+      "third_party_name": "Onit",
+      "third_party_description": "Onit is a provider of enterprise legal management solutions and business process automation software for legal departments and law firms.",
+      "third_party_page_ref": "PAGE 18,page 1",
+      "third_party_confidence": 0.0,
+      "distance_from_so_keywords": 7,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": null,
+      "source_context": "e system are delegated to the Security and DevOps \nteams. The Security Officer is responsible for developing, maintaining, and enforcing SimpleLegal’s information \nsecurity policies with input from other relevant business units. The information security policies are reviewed as \nneeded by the Security Officer. \nAs the Security and DevOps teams maintain security, they also monitor known incidents and patches as well as \nresults from recent vulnerability assessments and address necessary changes to the policies and procedures. \nSuch changes can include a reclassification of data, a reassessment of risk, changes in incident response plans, \nand a verification of responsibilities for authorizing and monitoring accesses. Changes are reviewed and \ncommunicated during weekly DevOps team meetings or through system alerts. \nAll SimpleLegal employees and contractors are required to attend information security awareness training on an \nannual basis to ensure that personnel are knowledgeable of ri"
+    }
+  ]
+}

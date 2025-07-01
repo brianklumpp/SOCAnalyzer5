@@ -1,0 +1,1 @@
+DATABASE_URL = "postgresql+asyncpg://soc2_analyzer:puntitforthewin@localhost:5432/soc2analyzer"

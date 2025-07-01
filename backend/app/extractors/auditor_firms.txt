@@ -1,0 +1,83 @@
+# Format: short_name|legal_name
+A-LIGN|A-LIGN Assurance
+Aprio|Aprio LLP
+Armanino|Armanino LLP
+Aronson|Aronson LLC
+Baker Newman Noyes|Baker Newman Noyes LLC
+Baker Tilly|Baker Tilly US LLP
+Baker Tilly Virchow Krause|Baker Tilly Virchow Krause, LLP
+BDO|BDO USA LLP
+BerryDunn|BerryDunn
+BPM|BPM LLP
+BNN|Baker Newman Noyes LLC
+Berdon|Berdon LLP
+Boulay|Boulay PLLP
+Carr, Riggs & Ingram|Carr, Riggs & Ingram, LLC
+Cherry Bekaert|Cherry Bekaert LLP
+Cherry Bekaert LLP|Cherry Bekaert LLP
+CLA|CliftonLarsonAllen LLP
+CliftonLarsonAllen|CliftonLarsonAllen LLP
+CohnReznick|CohnReznick LLP
+Crowe|Crowe LLP
+Deloitte|Deloitte LLP
+DHG|Dixon Hughes Goodman LLP
+Dixon Hughes Goodman|Dixon Hughes Goodman LLP
+Doeren Mayhew|Doeren Mayhew
+Eide Bailly|Eide Bailly LLP
+Eisner Amper|EisnerAmper LLP
+EisnerAmper|EisnerAmper LLP
+Elliott Davis|Elliott Davis, LLC
+Ernst & Young|Ernst & Young LLP
+FORVIS|FORVIS LLP
+Frank Rimerman|Frank, Rimerman + Co. LLP
+Frank, Rimerman + Co.|Frank, Rimerman + Co. LLP
+Freed Maxick|Freed Maxick CPAs, P.C.
+Grant Thornton|Grant Thornton LLP
+Hancock Askew|Hancock Askew & Co., LLP
+HoganTaylor|HoganTaylor LLP
+KirkpatrickPrice|KirkpatrickPrice, Inc.
+KPMG|KPMG LLP
+LBMC|LBMC, PC
+Linford & Company|Linford & Company LLP
+MaloneBailey|MaloneBailey, LLP
+MarksNelson|MarksNelson LLC
+Mayer Hoffman McCann|Mayer Hoffman McCann P.C.
+MCM CPAs|MCM CPAs & Advisors LLP
+Moore Colson|Moore Colson CPAs and Advisors
+Moody Famiglietti & Andronico|Moody Famiglietti & Andronico LLP
+Moore Stephens|Moore Stephens LLP
+Marcum|Marcum LLP
+Mazars|Mazars USA LLP
+Moss Adams|Moss Adams LLP
+Moss Kretschmar|Moss Kretschmar CPAs LLC
+Plante Moran|Plante Moran PLLC
+PKF|PKF International
+PKF O'Connor Davies|PKF O'Connor Davies, LLP
+PricewaterhouseCoopers|PricewaterhouseCoopers LLP
+PwC|PricewaterhouseCoopers LLP
+Rehmann|Rehmann Robson LLC
+RubinBrown|RubinBrown LLP
+RSM|RSM US LLP
+Schellman|Schellman & Company, LLC
+Schellman & Company|Schellman & Company, LLC
+Schellman & Company, LLC|Schellman & Company, LLC
+Sensiba San Filippo|Sensiba San Filippo LLP
+Sikich|Sikich LLP
+Sikich LLP|Sikich LLP
+SSF|Sensiba San Filippo LLP
+SVA|SVA Certified Public Accountants, S.C.
+SVA Accountants|SVA Certified Public Accountants, S.C.
+SVA Certified Public Accountants|SVA Certified Public Accountants, S.C.
+SVA Certified Public Accountants, S.C.|SVA Certified Public Accountants, S.C.
+SVA Consulting|SVA Consulting, LLC
+SVA CPAs|SVA Certified Public Accountants, S.C.
+SVA Professional Services|SVA Professional Services, LLC
+SVA Solutions|SVA Solutions, Inc.
+UHY|UHY LLP
+Whitley Penn|Whitley Penn LLP
+Withum|WithumSmith+Brown, PC
+Wipfli|Wipfli LLP
+Wolf & Co.|Wolf & Company, P.C.
+Wolf & Company|Wolf & Company, P.C.
+Wright Ford Young|Wright Ford Young & Co.
+Warren Averett|Warren Averett, LLC

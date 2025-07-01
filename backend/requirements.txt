@@ -1,0 +1,11 @@
+PyPDF2>=3.0.0
+fastapi
+uvicorn[standard]
+sqlalchemy
+asyncpg
+alembic
+python-multipart
+psycopg2-binary
+pydantic
+python-socketio[asyncio_client]
+aiofiles
