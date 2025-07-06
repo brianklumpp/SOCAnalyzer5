@@ -8,8 +8,8 @@ Extractor for tested controls in the SOC report (Control_Descriptions section).
 import os
 import json
 import logging
-from app import config
-from app.gpt_client import gpt_extract
+from .. import config
+from ..gpt_client import gpt_extract
 from difflib import SequenceMatcher
 import requests
 import time

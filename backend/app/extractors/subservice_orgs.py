@@ -2,8 +2,8 @@
 import os
 import json
 import logging
-from app import config
-from app.gpt_client import gpt_extract
+from .. import config
+from ..gpt_client import gpt_extract
 import time
 import re
 from difflib import SequenceMatcher

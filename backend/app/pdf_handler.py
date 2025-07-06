@@ -1,14 +1,14 @@
 import os
 import re
 import collections
-from app.config import (
+from .config import (
     SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE, GPT_PROMPTS, SECTION_TOPICS, WATERMARK_PATTERNS, REGEX_PATTERNS,
     PRIORITY_KEYWORDS_MANAGEMENT_ASSERTION, PRIORITY_KEYWORDS_SERVICE_AUDITOR_REPORT, PRIORITY_KEYWORDS_DESCRIPTION_OF_SYSTEM, PRIORITY_KEYWORDS_CONTROL_DESCRIPTIONS
 )
 import openai
 from dotenv import load_dotenv
-from app.gpt_client import run_gpt_inquiry, load_api_key
-from app.config import GPT_PROMPTS, DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P
+from .gpt_client import run_gpt_inquiry, load_api_key
+from .config import GPT_PROMPTS, DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P
 
 def load_api_key():
     load_dotenv()

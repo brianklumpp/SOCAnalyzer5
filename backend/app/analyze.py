@@ -1,11 +1,11 @@
-from app.extractors.auditor import extract_auditor_from_report
-from app.extractors.company import extract_company_from_report
-from app.extractors.control_extractor import extract_controls
-from app.extractors.cuec_extractor import extract_cuecs
-from app.extractors.subservice_orgs import extract_subservice_orgs
-from app.extractors.product import extract_product_from_report
-from app.extractors.report_date import extract_report_date
-from app.extractors.coverage_period import extract_coverage_period
+from .extractors.auditor import extract_auditor_from_report
+from .extractors.company import extract_company_from_report
+from .extractors.control_extractor import extract_controls
+from .extractors.cuec_extractor import extract_cuecs
+from .extractors.subservice_orgs import extract_subservice_orgs
+from .extractors.product import extract_product_from_report
+from .extractors.report_date import extract_report_date
+from .extractors.coverage_period import extract_coverage_period
 import logging
 import traceback
 
@@ -239,8 +239,8 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
 import argparse
 import json
 import os
-from app.pdf_handler import extract_text_from_pdf, find_section_candidates
-from app.config import SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE
+from .pdf_handler import extract_text_from_pdf, find_section_candidates
+from .config import SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE
 
 def get_text_snippet(text, offset, context=200):
     start = max(0, offset - context)

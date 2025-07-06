@@ -1,7 +1,14 @@
+
 # --- Report API endpoint ---
 from fastapi import HTTPException
+from fastapi import FastAPI, Depends
+
+
 from sqlalchemy.future import select
 from app.models import ScanHistory, Company, Control, CUEC, SubserviceOrg, Product, Setting
+from app.database import get_db
+
+app = FastAPI()
 
 @app.get("/report/{scan_id}")
 async def get_report(scan_id: int, db=Depends(get_db)):
@@ -60,7 +67,7 @@ from threading import Thread
 # --- Persistent Job Storage using Redis ---
 
 import redis.asyncio as redis
-from app.config import REDIS_URL
+from .config import REDIS_URL
 import json as _json
 
 

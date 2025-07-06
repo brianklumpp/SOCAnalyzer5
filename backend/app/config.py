@@ -1,3 +1,6 @@
+# Centralized configuration for SOCAnalyzer backend
+
+
 # Configuration for SOCAnalyzer5
 import os
 

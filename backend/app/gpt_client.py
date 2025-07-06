@@ -1,7 +1,7 @@
 import os
 import openai
 from dotenv import load_dotenv
-from app.config import (
+from .config import (
     OUTPUT_TEXT_FILE, GPT_PROMPTS, ENV_PATH, DEFAULT_GPT_MODEL, GPT_MODELS,
     DEFAULT_TEMPERATURE, DEFAULT_TOP_P, CHARS_PER_TOKEN, DEFAULT_CHUNK_SIZE, TEXT_OVERLAP
 )
@@ -80,7 +80,7 @@ def main():
     args = parser.parse_args()
 
     if args.section_candidates:
-        from app.pdf_handler import find_section_candidates
+        from .pdf_handler import find_section_candidates
         with open(args.input, 'r', encoding='utf-8') as f:
             text = f.read()
         print("Finding section candidates with probability/confidence approach...")
@@ -95,7 +95,7 @@ def main():
             json.dump(results, jf, indent=2)
         print(f"Section candidate results saved to {args.json}")
     elif args.analyze:
-        from app.pdf_handler import get_section_positions
+        from .pdf_handler import get_section_positions
         with open(args.input, 'r', encoding='utf-8') as f:
             text = f.read()
         total_chars = len(text)

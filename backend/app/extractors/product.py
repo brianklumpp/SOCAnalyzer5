@@ -3,8 +3,8 @@ import os
 import json
 import logging
 from typing import Dict, Any, List, Optional
-from app import config
-from app.gpt_client import gpt_extract
+from .. import config
+from ..gpt_client import gpt_extract
 
 logger = logging.getLogger(__name__)
 
