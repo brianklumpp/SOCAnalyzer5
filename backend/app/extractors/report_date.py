@@ -1,14 +1,16 @@
+
 import os
 import json
 import logging
 from app import config
 from app.gpt_client import gpt_extract
 
-SECTION_JSON_PATH = os.path.join('data', 'json', 'section_results.json')
-OUTPUT_JSON_PATH = os.path.join('data', 'json', 'report_date_result.json')
-PDF_TXT_PATH = os.path.join('data', 'output', 'output.txt')
-LOG_PATH = os.path.join('data', 'logs', 'report_date_extractor.log')
-logging.basicConfig(filename=LOG_PATH, level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+# Use centralized config paths
+SECTION_JSON_PATH = config.SECTION_JSON_PATH
+OUTPUT_JSON_PATH = config.JSON_DIR / "report_date_result.json"
+PDF_TXT_PATH = config.PDF_TXT_PATH
+
+logger = logging.getLogger(__name__)
 
 def load_json(path):
     with open(path, 'r', encoding='utf-8') as f:
@@ -54,24 +56,45 @@ def extract_report_date():
     last_lines = '\n'.join(lines[-5:])
     prompt = config.REPORT_DATE_EXTRACTION_PROMPT.format(text=last_lines)
     response = gpt_extract(prompt)
+    result = {'report_date': None, 'explanation': '', 'raw_gpt_response': response}
     if not response:
         logging.error('No response from GPT.')
-        result = {'report_date': None, 'explanation': 'No response from GPT.', 'raw_gpt_response': response}
+        result['explanation'] = 'No response from GPT.'
     else:
         try:
             data = json.loads(response)
-            result = {
-                'report_date': data.get('report_date'),
-                'explanation': data.get('explanation', ''),
-                'raw_gpt_response': response
-            }
+            result['report_date'] = data.get('report_date')
+            result['explanation'] = data.get('explanation', '')
         except Exception as e:
             logging.error(f'Failed to parse GPT response: {response} | Error: {e}')
-            result = {'report_date': None, 'explanation': 'Failed to parse GPT response.', 'raw_gpt_response': response}
+            result['explanation'] = f'Failed to parse GPT response: {e}'
+        # Fallback: try to extract report_date from raw response if missing
+        if not result['report_date'] and response:
+            import re
+            date_patterns = [
+                r"['\"]?report_date['\"]?\s*[:=]\s*['\"]([0-9]{4}-[0-9]{2}-[0-9]{2})['\"]",
+                r"([0-9]{2}/[0-9]{2}/[0-9]{4})",
+                r"([0-9]{4}/[0-9]{2}/[0-9]{2})",
+                r"([A-Za-z]+\s+[0-9]{1,2},\s*[0-9]{4})",
+                r"([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})"
+            ]
+            found_date = None
+            for pat in date_patterns:
+                date_match = re.search(pat, response)
+                if date_match:
+                    found_date = date_match.group(1)
+                    break
+            if found_date:
+                result['report_date'] = found_date
+                result['explanation'] = 'Extracted from raw response by regex.'
+            elif not result['explanation']:
+                result['explanation'] = 'Failed to parse GPT response and no date found.'
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     logging.info(f'Report date extraction result: {result}')
     return result
+
+__all__ = ["extract_report_date"]
 
 if __name__ == '__main__':
     extract_report_date()

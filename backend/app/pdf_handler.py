@@ -1,14 +1,14 @@
 import os
 import re
 import collections
-from config import (
+from app.config import (
     SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE, GPT_PROMPTS, SECTION_TOPICS, WATERMARK_PATTERNS, REGEX_PATTERNS,
     PRIORITY_KEYWORDS_MANAGEMENT_ASSERTION, PRIORITY_KEYWORDS_SERVICE_AUDITOR_REPORT, PRIORITY_KEYWORDS_DESCRIPTION_OF_SYSTEM, PRIORITY_KEYWORDS_CONTROL_DESCRIPTIONS
 )
 import openai
 from dotenv import load_dotenv
-from gpt_client import run_gpt_inquiry, load_api_key
-from config import GPT_PROMPTS, DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P
+from app.gpt_client import run_gpt_inquiry, load_api_key
+from app.config import GPT_PROMPTS, DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P
 
 def load_api_key():
     load_dotenv()
@@ -190,8 +190,10 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
         s = re.sub(r'\s+', '', s)
         s = re.sub(r'[^\w]', '', s)
         return s.lower()
-    os.makedirs('data/logs', exist_ok=True)
-    gpt_log_path = 'data/logs/section_gpt_responses.log'
+    import pathlib
+    PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+    os.makedirs(PROJECT_ROOT / 'data/logs', exist_ok=True)
+    gpt_log_path = str(PROJECT_ROOT / 'data/logs/section_gpt_responses.log')
     with open(gpt_log_path, 'w', encoding='utf-8') as gpt_log:
         toc_text = extract_toc_with_gpt(text[:20000], model, temperature, top_p)
         toc_lines = [line.strip() for line in toc_text.splitlines() if line.strip() and 'TOC NOT FOUND' not in line]
@@ -828,7 +830,11 @@ def is_toc_entry_start(line):
         return True
     return False
 
-def join_multiline_toc_entries(lines, debug_log_path='data/logs/toc_join_debug.log'):
+def join_multiline_toc_entries(lines, debug_log_path=None):
+    import pathlib
+    PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+    if debug_log_path is None:
+        debug_log_path = str(PROJECT_ROOT / 'data/logs/toc_join_debug.log')
     """Join TOC lines into full headings, joining all consecutive lines after a main section heading until a new TOC entry is detected. This robustly reconstructs split main headings, regardless of line content. Sub-entries remain single lines. Logs joined TOC entries for debugging."""
     toc = []
     buffer = []
@@ -939,3 +945,6 @@ if __name__ == "__main__":
         pdf_path = os.path.join(soc2_dir, pdf_files[0])
     extract_text_from_pdf(pdf_path, output_file)
     print(f"Extracted text from {pdf_path} to {output_file}")
+
+# Explicitly export main functions for import
+__all__ = ["extract_text_from_pdf", "find_section_candidates"]

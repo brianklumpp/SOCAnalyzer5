@@ -1,14 +1,34 @@
 # Configuration for SOCAnalyzer5
 import os
 
-# Base directory
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# --- Centralized Path Configuration ---
+import pathlib
+
+# --- Redis Configuration ---
+REDIS_URL = os.environ.get("SOCANALYZER_REDIS_URL", "redis://localhost:6379/0")
+
+# Project root (SOCAnalyzer5)
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+# Data directories
+DATA_DIR = PROJECT_ROOT / "data"
+JSON_DIR = DATA_DIR / "json"
+LOGS_DIR = DATA_DIR / "logs"
+OUTPUT_DIR = DATA_DIR / "output"
+
+# Canonical file paths
+SECTION_JSON_PATH = JSON_DIR / "section_results.json"
+PDF_TXT_PATH = OUTPUT_DIR / "output.txt"
+CONTROL_JSON_PATH = JSON_DIR / "control_result.json"
+CONTROL_GPT_LOG_PATH = LOGS_DIR / "control_gpt.log"
+# Add other extractor output/log paths as needed
 
 # Path to SOC reports
-SOC2_REPORTS_DIR = os.path.join(BASE_DIR, 'soc2_reports')
+SOC2_REPORTS_DIR = PROJECT_ROOT / 'soc2_reports'
 
-# Path to output text file
-OUTPUT_TEXT_FILE = os.path.join(BASE_DIR, 'data', 'output', 'output.txt')
+# Path to output text file (legacy, prefer PDF_TXT_PATH)
+OUTPUT_TEXT_FILE = str(PDF_TXT_PATH)
 
 # Example prompts for GPT inquiries
 GPT_PROMPTS = {
@@ -76,18 +96,19 @@ PRODUCT_EXTRACTION_PROMPT = (
 # Prompt for extracting the report date
 REPORT_DATE_EXTRACTION_PROMPT = (
     "You are an expert at reading SOC 2 reports. Given the following text from the end of the Service Auditor's Report section, what is the date the auditor signed the report? "
-    "Return the date as 'YYYY-MM-DD' if possible, or null if not found. Respond as JSON: { 'report_date': 'YYYY-MM-DD' or null, 'explanation': '...' }\n\nText:\n{text}"
+    "Return the date as 'YYYY-MM-DD' if possible, or null if not found. Respond as JSON: {{ 'report_date': 'YYYY-MM-DD' or null, 'explanation': '...' }}\n\nText:\n{text}"
 )
 
 # Prompt for extracting the coverage period
 COVERAGE_PERIOD_EXTRACTION_PROMPT = (
     "You are an expert at reading SOC 2 reports. Given the following text from the beginning of the Service Auditor's Report section, extract the coverage period. "
     "If the report is Type 2, return the start and end dates of the period (e.g., '2023-01-01' to '2023-12-31'). If Type 1, return only the as-of date as the end date, and set start date to null. "
-    "Respond as JSON: { 'type': 'Type 1' or 'Type 2', 'start_date': 'YYYY-MM-DD' or null, 'end_date': 'YYYY-MM-DD' or null, 'explanation': '...' }\n\nText:\n{text}"
+    "Respond as JSON: {{ 'type': 'Type 1' or 'Type 2', 'start_date': 'YYYY-MM-DD' or null, 'end_date': 'YYYY-MM-DD' or null, 'explanation': '...' }}\n\nText:\n{text}"
 )
 
+
 # Path to .env file for API key
-ENV_PATH = os.path.join(BASE_DIR, '.env')
+ENV_PATH = str(PROJECT_ROOT / '.env')
 
 # Default model to use
 DEFAULT_GPT_MODEL = 'gpt-3.5-turbo'
@@ -521,4 +542,12 @@ CONTROL_EXTRACTION_PROMPT = (
     "- control_line_ref: (int, line number in the text where the control was found)\n"
     "If you cannot find a value, use null. Output a JSON array, one object per control. Do not include any explanation, markdown, or extra text.\n"
     "Text:\n{text}\n"
+)
+
+# Prompt for consolidating and deduplicating extracted controls
+CONTROL_CONSOLIDATION_PROMPT = (
+    "You are an expert at reading SOC 2 reports. Given the following extracted controls, consolidate and deduplicate the results.\n"
+    "For each unique control, merge similar or duplicate controls (based on description and control ID). For each control, provide a control_gpt_reasoning field with a concise explanation of why you merged or kept it, and any relevant context.\n"
+    "Output a single JSON array, one object per control, with these fields: control_seq, control_id, control_desc, control_test, control_test_results, control_page_ref, control_line_ref, control_gpt_opinion, control_gpt_reasoning.\n"
+    "Do not include any explanation, markdown, or extra text.\n\nExtracted Controls:\n{controls}\n"
 )

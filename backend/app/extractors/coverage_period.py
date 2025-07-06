@@ -1,14 +1,16 @@
+
 import os
 import json
 import logging
 from app import config
 from app.gpt_client import gpt_extract
 
-SECTION_JSON_PATH = os.path.join('data', 'json', 'section_results.json')
-OUTPUT_JSON_PATH = os.path.join('data', 'json', 'coverage_period_result.json')
-PDF_TXT_PATH = os.path.join('data', 'output', 'output.txt')
-LOG_PATH = os.path.join('data', 'logs', 'coverage_period_extractor.log')
-logging.basicConfig(filename=LOG_PATH, level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+# Use centralized config paths
+SECTION_JSON_PATH = config.SECTION_JSON_PATH
+OUTPUT_JSON_PATH = config.JSON_DIR / "coverage_period_result.json"
+PDF_TXT_PATH = config.PDF_TXT_PATH
+
+logger = logging.getLogger(__name__)
 
 def load_json(path):
     with open(path, 'r', encoding='utf-8') as f:
@@ -53,26 +55,66 @@ def extract_coverage_period():
     first_lines = '\n'.join(lines[:20])
     prompt = config.COVERAGE_PERIOD_EXTRACTION_PROMPT.format(text=first_lines)
     response = gpt_extract(prompt)
+    result = {'type': None, 'start_date': None, 'end_date': None, 'explanation': '', 'raw_gpt_response': response}
     if not response:
         logging.error('No response from GPT.')
-        result = {'type': None, 'start_date': None, 'end_date': None, 'explanation': 'No response from GPT.', 'raw_gpt_response': response}
+        result['explanation'] = 'No response from GPT.'
     else:
         try:
             data = json.loads(response)
-            result = {
-                'type': data.get('type'),
-                'start_date': data.get('start_date'),
-                'end_date': data.get('end_date'),
-                'explanation': data.get('explanation', ''),
-                'raw_gpt_response': response
-            }
+            result['type'] = data.get('type')
+            result['start_date'] = data.get('start_date')
+            result['end_date'] = data.get('end_date')
+            result['explanation'] = data.get('explanation', '')
         except Exception as e:
             logging.error(f'Failed to parse GPT response: {response} | Error: {e}')
-            result = {'type': None, 'start_date': None, 'end_date': None, 'explanation': 'Failed to parse GPT response.', 'raw_gpt_response': response}
+            result['explanation'] = f'Failed to parse GPT response: {e}'
+        # Fallback: try to extract type/start_date/end_date from raw response if missing
+        import re
+        if not result['type'] and response:
+            type_match = re.search(r"['\"]?type['\"]?\s*[:=]\s*['\"]?(Type 1|Type 2)['\"]?", response, re.IGNORECASE)
+            if type_match:
+                result['type'] = type_match.group(1)
+        if not result['start_date'] and response:
+            start_patterns = [
+                r"['\"]?start_date['\"]?\s*[:=]\s*['\"]([0-9]{4}-[0-9]{2}-[0-9]{2})['\"]",
+                r"([0-9]{2}/[0-9]{2}/[0-9]{4})",
+                r"([0-9]{4}/[0-9]{2}/[0-9]{2})",
+                r"([A-Za-z]+\s+[0-9]{1,2},\s*[0-9]{4})",
+                r"([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})"
+            ]
+            found_start = None
+            for pat in start_patterns:
+                start_match = re.search(pat, response)
+                if start_match:
+                    found_start = start_match.group(1)
+                    break
+            if found_start:
+                result['start_date'] = found_start
+        if not result['end_date'] and response:
+            end_patterns = [
+                r"['\"]?end_date['\"]?\s*[:=]\s*['\"]([0-9]{4}-[0-9]{2}-[0-9]{2})['\"]",
+                r"([0-9]{2}/[0-9]{2}/[0-9]{4})",
+                r"([0-9]{4}/[0-9]{2}/[0-9]{2})",
+                r"([A-Za-z]+\s+[0-9]{1,2},\s*[0-9]{4})",
+                r"([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})"
+            ]
+            found_end = None
+            for pat in end_patterns:
+                end_match = re.search(pat, response)
+                if end_match:
+                    found_end = end_match.group(1)
+                    break
+            if found_end:
+                result['end_date'] = found_end
+        if not result['type'] and not result['start_date'] and not result['end_date'] and not result['explanation']:
+            result['explanation'] = 'Failed to parse GPT response and no coverage period found.'
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     logging.info(f'Coverage period extraction result: {result}')
     return result
+
+__all__ = ["extract_coverage_period"]
 
 if __name__ == '__main__':
     extract_coverage_period()

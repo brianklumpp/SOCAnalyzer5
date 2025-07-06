@@ -61,6 +61,8 @@ def gpt_extract(prompt, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE
     )
     return response.choices[0].message.content
 
+__all__ = ["gpt_extract", "run_gpt_inquiry", "load_api_key"]
+
 def main():
     import argparse
     import json
@@ -72,11 +74,13 @@ def main():
     parser.add_argument('--top_p', type=float, default=DEFAULT_TOP_P, help='Nucleus sampling top_p')
     parser.add_argument('--analyze', action='store_true', help='Analyze SOC 2 report and estimate section positions')
     parser.add_argument('--section-candidates', action='store_true', help='Find section candidates with probability/confidence approach')
-    parser.add_argument('--json', type=str, default='data/json/section_candidates.json', help='Output JSON file for section candidates')
+    import pathlib
+    PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+    parser.add_argument('--json', type=str, default=str(PROJECT_ROOT / 'data/json/section_candidates.json'), help='Output JSON file for section candidates')
     args = parser.parse_args()
 
     if args.section_candidates:
-        from pdf_handler import find_section_candidates
+        from app.pdf_handler import find_section_candidates
         with open(args.input, 'r', encoding='utf-8') as f:
             text = f.read()
         print("Finding section candidates with probability/confidence approach...")
@@ -91,7 +95,7 @@ def main():
             json.dump(results, jf, indent=2)
         print(f"Section candidate results saved to {args.json}")
     elif args.analyze:
-        from pdf_handler import get_section_positions
+        from app.pdf_handler import get_section_positions
         with open(args.input, 'r', encoding='utf-8') as f:
             text = f.read()
         total_chars = len(text)

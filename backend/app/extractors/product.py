@@ -1,3 +1,4 @@
+
 import os
 import json
 import logging
@@ -5,12 +6,12 @@ from typing import Dict, Any, List, Optional
 from app import config
 from app.gpt_client import gpt_extract
 
-auditor_log_path = os.path.join('data', 'logs', 'product_extractor.log')
-logging.basicConfig(filename=auditor_log_path, level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger(__name__)
 
-SECTION_JSON_PATH = os.path.join('data', 'json', 'section_results.json')
-PRODUCT_JSON_PATH = os.path.join('data', 'json', 'product_result.json')
-PDF_TXT_PATH = os.path.join('data', 'output', 'output.txt')
+# Use centralized config paths
+SECTION_JSON_PATH = str(config.SECTION_JSON_PATH)
+PRODUCT_JSON_PATH = str(config.JSON_DIR / "product_result.json")
+PDF_TXT_PATH = str(config.PDF_TXT_PATH)
 
 def load_json(path: str) -> Any:
     with open(path, 'r', encoding='utf-8') as f:
@@ -100,6 +101,8 @@ def extract_product_from_report():
     save_json(result, PRODUCT_JSON_PATH)
     logging.info(f'Product extraction result: {result}')
     return result
+
+__all__ = ["extract_product_from_report"]
 
 if __name__ == '__main__':
     extract_product_from_report()

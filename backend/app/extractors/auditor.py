@@ -1,3 +1,4 @@
+
 import os
 import json
 import logging
@@ -5,13 +6,12 @@ from typing import Dict, Any, List, Optional, Tuple
 from app import config
 from app.gpt_client import gpt_extract
 
-# Set up debug logging
-auditor_log_path = os.path.join('data', 'logs', 'auditor_extractor.log')
-logging.basicConfig(filename=auditor_log_path, level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger(__name__)
 
-SECTION_JSON_PATH = os.path.join('data', 'json', 'section_results.json')
-AUDITOR_JSON_PATH = os.path.join('data', 'json', 'auditor_result.json')
-PDF_TXT_PATH = os.path.join('data', 'output', 'output.txt')
+# Use centralized config paths
+SECTION_JSON_PATH = str(config.SECTION_JSON_PATH)
+AUDITOR_JSON_PATH = str(config.JSON_DIR / "auditor_result.json")
+PDF_TXT_PATH = str(config.PDF_TXT_PATH)
 
 
 def load_json(path: str) -> Any:
@@ -63,7 +63,7 @@ def extract_auditor_from_report():
     # Load section results
     section_results = load_json(SECTION_JSON_PATH)
     # Load company and parent company for exclusion
-    company_info = load_json(os.path.join('data', 'json', 'company_result.json'))
+    company_info = load_json(str(config.JSON_DIR / 'company_result.json'))
     company = company_info.get('company')
     parent_company = company_info.get('parent_company')
     if parent_company:
@@ -174,7 +174,7 @@ def confirm_auditor_with_followup(auditor_name: str, text: str) -> Tuple[Optiona
         "Respond with a JSON object: { 'is_auditor': true/false, 'confidence': 0-1, 'explanation': '...' } "
         "If you are not sure, set 'is_auditor' to false and confidence to 0."
     )
-    from app.gpt_client import gpt_extract
+    from ..gpt_client import gpt_extract
     response = gpt_extract(followup_prompt)
     try:
         if not response:
@@ -229,6 +229,8 @@ def fallback_auditor_search(text: str) -> Optional[str]:
     firm_counts = Counter(found)
     most_common = firm_counts.most_common(1)[0][0]
     return most_common
+
+__all__ = ["extract_auditor_from_report"]
 
 if __name__ == '__main__':
     extract_auditor_from_report()

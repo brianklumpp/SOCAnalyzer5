@@ -1,3 +1,4 @@
+
 import os
 import json
 import logging
@@ -6,16 +7,14 @@ from app.gpt_client import gpt_extract
 import time
 import re
 from difflib import SequenceMatcher
-from app.config import HEURISTIC_EXCLUDE_KEYWORDS, THIRD_PARTY_ALIAS_MAP, SO_KEYWORDS, SUBSERVICE_ORG_GPT_FILTER_PROMPT, SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT
+from ..config import HEURISTIC_EXCLUDE_KEYWORDS, THIRD_PARTY_ALIAS_MAP, SO_KEYWORDS, SUBSERVICE_ORG_GPT_FILTER_PROMPT, SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT
 
-SECTION_JSON_PATH = os.path.join('data', 'json', 'section_results.json')
-OUTPUT_JSON_PATH = os.path.join('data', 'json', 'subservice_orgs_result.json')
-PDF_TXT_PATH = os.path.join('data', 'output', 'output.txt')
-LOG_PATH = os.path.join('data', 'logs', 'subservice_orgs_extractor.log')
-# Always reset log at start
-with open(LOG_PATH, 'w', encoding='utf-8') as log_reset:
-    log_reset.write('')
-logging.basicConfig(filename=LOG_PATH, level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+# Use centralized config paths
+SECTION_JSON_PATH = config.SECTION_JSON_PATH
+OUTPUT_JSON_PATH = config.JSON_DIR / "subservice_orgs_result.json"
+PDF_TXT_PATH = config.PDF_TXT_PATH
+
+logger = logging.getLogger(__name__)
 
 def load_json(path):
     with open(path, 'r', encoding='utf-8') as f:
@@ -78,10 +77,12 @@ def extract_subservice_orgs():
         end = desc_section['end_DOC_page_ref']
         pages = list(range(start, end + 1))
         text = extract_text_for_pages(txt_lines, pages)
-    chunk_size = getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000)
+    # Cap chunk size for GPT safety and add overlap
+    chunk_size = min(getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000), 1500)
     overlap = getattr(config, 'TEXT_OVERLAP', 1000)
     chunks = chunk_text_with_overlap(text, chunk_size, overlap)
     chunk_results = []
+    bad_chunks = []
     for idx, chunk in enumerate(chunks):
         logging.debug(f'Chunk {idx} text: {chunk[:1000]}...')
         prompt = SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT.format(
@@ -90,11 +91,22 @@ def extract_subservice_orgs():
         logging.debug(f'Chunk {idx} prompt: {prompt[:500]}...')
         response = gpt_extract(prompt)
         logging.debug(f'Chunk {idx} response: {response}')
+        # Log response length for truncation analysis
+        logging.info(f'Chunk {idx} GPT response length: {len(response) if response else 0}')
         if not response:
             logging.error(f'No response from GPT for chunk {idx}.')
+            bad_chunk_info = {
+                'chunk_index': idx,
+                'chunk_text': chunk[:500],
+                'gpt_response': '',
+                'error': 'No response from GPT',
+                'response_length': 0,
+                'chunk_size': len(chunk),
+                'prompt_length': len(prompt)
+            }
+            bad_chunks.append(bad_chunk_info)
             continue
         try:
-            # Remove triple backticks and whitespace
             clean_response = response.strip()
             if clean_response.startswith('```json'):
                 clean_response = clean_response[7:]
@@ -103,13 +115,63 @@ def extract_subservice_orgs():
             if clean_response.endswith('```'):
                 clean_response = clean_response[:-3]
             clean_response = clean_response.strip()
-            data = json.loads(clean_response)
+            def extract_json(text):
+                obj_match = re.search(r'(\{.*?\})', text, re.DOTALL)
+                if obj_match:
+                    return obj_match.group(1)
+                array_match = re.search(r'(\[.*?\])', text, re.DOTALL)
+                if array_match:
+                    return array_match.group(1)
+                return text
+            # Try direct parse
+            try:
+                data = json.loads(clean_response)
+            except Exception as e1:
+                # Try to extract a valid JSON object/array
+                json_sub = extract_json(clean_response)
+                try:
+                    data = json.loads(json_sub)
+                except Exception as e2:
+                    # Try to repair unterminated array (common GPT truncation)
+                    repaired = json_sub
+                    if not repaired.strip().endswith(']') and repaired.strip().startswith('['):
+                        repaired = repaired.strip() + ']'
+                    try:
+                        data = json.loads(repaired)
+                    except Exception as e3:
+                        # Try to recover as much as possible: find all valid JSON objects in the text
+                        objs = re.findall(r'\{[^}]*\}', clean_response)
+                        data = [json.loads(obj) for obj in objs if obj.strip().startswith('{')]
+                        if not data:
+                            # Log the bad chunk and response for inspection
+                            bad_chunk_info = {
+                                'chunk_index': idx,
+                                'chunk_text': chunk[:500],
+                                'gpt_response': response[:1000],
+                                'error': f"e1: {e1}; e2: {e2}; e3: {e3}",
+                                'response_length': len(response) if response else 0,
+                                'chunk_size': len(chunk),
+                                'prompt_length': len(prompt)
+                            }
+                            logging.error(f"Failed to parse GPT response as JSON. Raw response: {response}")
+                            bad_chunks.append(bad_chunk_info)
+                            continue
             if isinstance(data, list):
                 for org in data:
-                    org['source_context'] = chunk[:1000]  # Save first 1000 chars of chunk as context
+                    org['source_context'] = chunk[:1000]
                 chunk_results.extend(data)
         except Exception as e:
             logging.error(f'Failed to parse GPT response for chunk {idx}: {response} | Error: {e}')
+            bad_chunk_info = {
+                'chunk_index': idx,
+                'chunk_text': chunk[:500],
+                'gpt_response': response[:1000],
+                'error': str(e),
+                'response_length': len(response) if response else 0,
+                'chunk_size': len(chunk),
+                'prompt_length': len(prompt)
+            }
+            bad_chunks.append(bad_chunk_info)
     # Deduplicate by third_party_name and merge page refs/controls
     seen = {}
     for org in chunk_results:
@@ -126,7 +188,90 @@ def extract_subservice_orgs():
                 prev['third_party_controls'] += org['third_party_controls']
         else:
             seen[key] = org
+
+    # --- POST-EXTRACTION ANALYSIS: Rescue Check for Bad Chunks ---
+    def fuzzy_match(a, b):
+        return SequenceMatcher(None, a, b).ratio()
+
+    rescue_report = []
+    if bad_chunks:
+
+        recovered_orgs = []
+        for bad in bad_chunks:
+            bad_descs = []
+            try:
+                matches = re.findall(r'"third_party_name"\s*:\s*"([^\"]+)"', bad.get('chunk_text', ''))
+                bad_descs.extend(matches)
+            except Exception:
+                pass
+            if not bad_descs and bad.get('chunk_text'):
+                bad_descs.append(bad['chunk_text'][:100])
+            for bad_desc in bad_descs:
+                found = False
+                exact_match = None
+                fuzzy_best = None
+                fuzzy_score = 0.0
+                for good in seen.values():
+                    good_desc = good.get('third_party_name', '')
+                    if not good_desc:
+                        continue
+                    if bad_desc.strip() == good_desc.strip():
+                        exact_match = good_desc
+                        found = True
+                        break
+                    score = fuzzy_match(bad_desc.strip(), good_desc.strip())
+                    if score > fuzzy_score:
+                        fuzzy_score = score
+                        fuzzy_best = good_desc
+                if found:
+                    rescue_report.append({
+                        'bad_chunk_desc': bad_desc,
+                        'rescue_type': 'exact',
+                        'matched_desc': exact_match,
+                        'confidence_pct': 100
+                    })
+                elif fuzzy_score > 0.7:
+                    rescue_report.append({
+                        'bad_chunk_desc': bad_desc,
+                        'rescue_type': 'fuzzy',
+                        'matched_desc': fuzzy_best,
+                        'confidence_pct': int(round(fuzzy_score * 100))
+                    })
+                    # Add high-confidence rescue if confidence >= 0.9
+                    if fuzzy_score >= 0.9 and fuzzy_best:
+                        # Only add if not already present
+                        if not any((o.get('third_party_name', '').strip() == fuzzy_best.strip()) for o in seen.values()):
+                            recovered_orgs.append({
+                                'third_party_name': fuzzy_best,
+                                'org_source': 'recovered_fuzzy',
+                                'org_confidence': round(fuzzy_score, 3),
+                                'org_confidence_justification': ['Recovered by fuzzy match with confidence {:.1f}%'.format(fuzzy_score*100)]
+                            })
+                else:
+                    rescue_report.append({
+                        'bad_chunk_desc': bad_desc,
+                        'rescue_type': 'unmatched',
+                        'matched_desc': None,
+                        'confidence_pct': int(round(fuzzy_score * 100))
+                    })
+        # Add recovered orgs to seen
+        if recovered_orgs:
+            for rc in recovered_orgs:
+                key = rc['third_party_name'].lower()
+                if key not in seen:
+                    seen[key] = rc
+
+        logging.info("SUBSERVICE ORGS POST-EXTRACTION RESCUE ANALYSIS:")
+        for entry in rescue_report:
+            logging.info(f"Bad chunk desc: {entry['bad_chunk_desc'][:80]}... | Rescue: {entry['rescue_type']} | Confidence: {entry['confidence_pct']}% | Matched: {entry['matched_desc'][:80] if entry['matched_desc'] else None}")
+
     output = {'third_parties': list(seen.values())}
+    if bad_chunks:
+        output['bad_chunks'] = bad_chunks
+        output['bad_chunk_rescue_report'] = rescue_report
+        output['bad_chunk_count'] = len(bad_chunks) # type: ignore
+        output['rescued_chunk_count'] = len([r for r in rescue_report if r.get('confidence_pct', 0) >= 90]) # type: ignore
+        output['unrecoverable_chunks'] = [r for r in rescue_report if r.get('rescue_type') == 'unmatched'] # type: ignore
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
     logging.info(f'Subservice orgs extraction result: {output}')
@@ -312,7 +457,7 @@ def filter_third_parties_with_gpt():
     Post-processes extracted third parties using GPT to filter out non-companies (frameworks, departments, generic terms, software, etc.).
     Logs exclusions with reasons. Overwrites the JSON with filtered results.
     """
-    from app.gpt_client import gpt_extract
+    from ..gpt_client import gpt_extract
     
     INPUT_JSON_PATH = OUTPUT_JSON_PATH
     FILTER_LOG_PATH = os.path.join('data', 'logs', 'subservice_orgs_filter.log')
@@ -330,7 +475,7 @@ def filter_third_parties_with_gpt():
     # Normalize/deduplicate before filtering
     third_parties = normalize_third_party_names(third_parties)
     # Filter out company being audited and parent
-    company_json_path = os.path.join('data', 'json', 'company_result.json')
+    company_json_path = str(config.JSON_DIR / 'company_result.json')
     try:
         with open(company_json_path, 'r', encoding='utf-8') as cf:
             company_data = json.load(cf)
@@ -392,12 +537,15 @@ def elevate_and_group_control_ids(json_path=OUTPUT_JSON_PATH):
             control_ids = [c.get('third_party_control_id') for c in controls if c.get('third_party_control_id')]
             unique_ids = sorted(set(control_ids))
             entry['third_party_control_ids'] = ','.join(unique_ids) if unique_ids else None
-            # Rebuild controls with only seq and desc, renumber seq if needed
+            # Rebuild controls with only seq and desc, renumber seq if needed, and filter out instructional artifacts
             new_controls = []
             seq_counter = 1
             for c in controls:
                 desc = c.get('third_party_control_desc')
                 if desc is not None:
+                    desc_stripped = str(desc).strip().lower()
+                    if 'repeat for each control' in desc_stripped or desc_stripped.startswith('//'):
+                        continue  # skip instructional artifacts
                     new_controls.append({
                         'third_party_control_seq': seq_counter,
                         'third_party_control_desc': desc
@@ -411,6 +559,8 @@ def elevate_and_group_control_ids(json_path=OUTPUT_JSON_PATH):
 def calculate_common_so(entry, so_list):
     name = (entry.get('third_party_name') or '').strip().lower()
     return 'Yes' if any(name == so.strip().lower() for so in so_list) else 'No'
+
+__all__ = ["extract_subservice_orgs"]
 
 if __name__ == '__main__':
     extract_subservice_orgs()

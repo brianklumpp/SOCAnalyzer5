@@ -9,19 +9,17 @@ import requests
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-SECTION_JSON_PATH = os.path.join('data', 'json', 'section_results.json')
-PDF_TXT_PATH = os.path.join('data', 'output', 'output.txt')
-OUTPUT_JSON_PATH = os.path.join('data', 'json', 'cuec_result.json')
-LOG_PATH = os.path.join('data', 'logs', 'cuec_extractor.log')
-GPT_LOG_PATH = os.path.join('data', 'logs', 'cuec_gpt.log')
+# Use centralized config paths
+SECTION_JSON_PATH = config.SECTION_JSON_PATH
+PDF_TXT_PATH = config.PDF_TXT_PATH
+OUTPUT_JSON_PATH = config.JSON_DIR / "cuec_result.json"
+GPT_LOG_PATH = config.LOGS_DIR / "cuec_gpt.log"
 
-# Always start fresh for log files
-with open(LOG_PATH, 'w', encoding='utf-8') as log_reset:
-    log_reset.write('')
-logging.basicConfig(filename=LOG_PATH, level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
-
+logger = logging.getLogger(__name__)
+# Always start fresh for GPT log file
+os.makedirs(GPT_LOG_PATH.parent, exist_ok=True)
 with open(GPT_LOG_PATH, 'w', encoding='utf-8') as gptlog:
-    gptlog.write('')  # Reset GPT log
+    gptlog.write('')
 
 CUEC_KEYWORDS = config.CUEC_KEYWORDS
 CUEC_EXTRACTION_PROMPT = config.CUEC_EXTRACTION_PROMPT
@@ -120,7 +118,7 @@ def extract_cuecs():
         txt_lines = f.readlines()
     if start_line and end_line:
         text = extract_text_for_lines(txt_lines, start_line, end_line)
-        chunk_size = getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000)
+        chunk_size = min(getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000), 1500)  # Lowered for safety
         overlap = getattr(config, 'TEXT_OVERLAP', 1000)
         chunks = chunk_text_with_overlap(text, chunk_size, overlap)
         chunk_line_refs = []
@@ -146,7 +144,7 @@ def extract_cuecs():
         page_chunks = {}
         for line, page in text_with_refs:
             page_chunks.setdefault(page, []).append(line)
-        chunk_size = getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000)
+        chunk_size = min(getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000), 1500)  # Lowered for safety
         overlap = getattr(config, 'TEXT_OVERLAP', 1000)
         chunks = []
         chunk_line_refs = []
@@ -159,11 +157,12 @@ def extract_cuecs():
                 chunk_line_refs.append(line_num)
                 line_num += len(chunk.splitlines())
     cuec_results = []
+    bad_chunks = []
     seq = 1
     tsc_criteria = getattr(config, 'TSC_CRITERIA', [])
     coso_criteria = getattr(config, 'COSO_2013_CRITERIA', [])
     # Load company names from company_result.json
-    company_json_path = os.path.join('data', 'json', 'company_result.json')
+    company_json_path = str(config.JSON_DIR / 'company_result.json')
     try:
         with open(company_json_path, 'r', encoding='utf-8') as f:
             company_info = json.load(f)
@@ -226,10 +225,40 @@ def extract_cuecs():
             company_names=company_names_str,
             parent_company_names=parent_company_names_str
         )
-        response = gpt_extract(prompt)
-        with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
-            gptlog.write(f'CHUNK {idx} PROMPT:\n{prompt}\nRESPONSE:\n{response}\n---\n')
-        logging.debug(f'Chunk {idx} response: {response}')
+        # Automated retry logic for truncated responses
+        max_retries = 2
+        min_chunk_size = 500
+        cur_chunk = chunk
+        response = None
+        for attempt in range(max_retries + 1):
+            response = gpt_extract(CUEC_EXTRACTION_PROMPT.format(
+                text=cur_chunk,
+                company_names=company_names_str,
+                parent_company_names=parent_company_names_str
+            ))
+            # Log full prompt and response for debugging
+            with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
+                gptlog.write(f'CHUNK {idx} ATTEMPT {attempt+1} PROMPT:\n{prompt}\nRESPONSE:\n{response}\n---\n')
+            logging.debug(f'Chunk {idx} attempt {attempt+1} response: {response}')
+            logging.info(f'Chunk {idx} attempt {attempt+1} GPT response length: {len(response) if response else 0}')
+            # Heuristic: consider response truncated if it ends with an open array/object or is very close to max length
+            is_truncated = False
+            if response:
+                resp_strip = response.strip()
+                if resp_strip.endswith(',') or resp_strip.endswith('[') or resp_strip.endswith('{') or resp_strip.endswith('...'):
+                    is_truncated = True
+                # Also, if response is very long (e.g., >3500 chars), likely truncated
+                if len(resp_strip) > 3500:
+                    is_truncated = True
+            if not response or not is_truncated:
+                break
+            # If truncated and chunk is still large, split and retry
+            if len(cur_chunk) > min_chunk_size:
+                mid = len(cur_chunk) // 2
+                # Try left half first, then right half in next retry
+                cur_chunk = cur_chunk[:mid] if attempt == 0 else cur_chunk[mid:]
+            else:
+                break
         if not response:
             return [], seq
         try:
@@ -250,11 +279,43 @@ def extract_cuecs():
                 if array_match:
                     return array_match.group(1)
                 return text
+            # Try direct parse
             try:
                 data = json.loads(clean_response)
-            except Exception:
+            except Exception as e1:
+                # Try to extract a valid JSON object/array
                 json_sub = extract_json(clean_response)
-                data = json.loads(json_sub)
+                try:
+                    data = json.loads(json_sub)
+                except Exception as e2:
+                    # Try to repair unterminated array (common GPT truncation)
+                    repaired = json_sub
+                    if not repaired.strip().endswith(']') and repaired.strip().startswith('['):
+                        repaired = repaired.strip() + ']'
+                    try:
+                        data = json.loads(repaired)
+                    except Exception as e3:
+                        # Try to recover as much as possible: find all valid JSON objects in the text
+                        objs = re.findall(r'\{[^}]*\}', clean_response)
+                        data = [json.loads(obj) for obj in objs if obj.strip().startswith('{')]
+                        if not data:
+                            # Log the bad chunk and response for inspection
+                            bad_chunk_info = {
+                                'chunk_index': idx,
+                                'chunk_text': chunk[:500],
+                                'gpt_response': response[:1000],
+                                'error': f"e1: {e1}; e2: {e2}; e3: {e3}",
+                                'response_length': len(response) if response else 0,
+                                'chunk_size': len(chunk),
+                                'prompt_length': len(prompt)
+                            }
+                            logging.error(f"Failed to parse GPT response as JSON. Raw response: {response}")
+                            with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
+                                gptlog.write(f"\n--- BAD CHUNK {idx} ---\nCHUNK TEXT (truncated):\n{chunk[:500]}\nGPT RESPONSE (truncated):\n{response[:1000]}\nERRORS: e1: {e1}; e2: {e2}; e3: {e3}\nRESPONSE LENGTH: {len(response) if response else 0}\nCHUNK SIZE: {len(chunk)}\nPROMPT LENGTH: {len(prompt)}\n")
+                            # Add to bad_chunks for frontend flagging
+                            bad_chunks.append(bad_chunk_info)
+                            return [], seq
+            # Handle dict with cuecs/excluded
             if isinstance(data, dict) and ('cuecs' in data or 'excluded' in data):
                 cuecs = data.get('cuecs', [])
                 excluded = data.get('excluded', [])
@@ -400,7 +461,7 @@ def extract_cuecs():
     # DEBUG: Log cuec_results after mode/median filtering
     logging.info(f"DEBUG: cuec_results after mode/median filtering: {len(cuec_results)} items")
     # Consolidate and deduplicate with GPT in batches
-    cuec_results = batch_consolidate_cuecs_with_gpt(cuec_results)
+    cuec_results = batch_consolidate_cuecs_with_gpt(cuec_results, bad_chunks=bad_chunks)
     # DEBUG: Log cuec_results after batch consolidation
     logging.info(f"DEBUG: cuec_results after batch_consolidate_cuecs_with_gpt: {len(cuec_results)} items")
     # --- POST-CONSOLIDATION: Re-map and re-attach all calculated fields for every CUEC ---
@@ -461,16 +522,199 @@ def extract_cuecs():
     cuec_results = sort_cuecs_by_confidence_and_seq(cuec_results)
     # DEBUG: Log cuec_results after sorting
     logging.info(f"DEBUG: cuec_results after sorting: {len(cuec_results)} items")
+
+    # --- POST-EXTRACTION ANALYSIS: Rescue Check for Bad Chunks ---
+    def fuzzy_match(a, b):
+        # Use SequenceMatcher for fuzzy ratio (0-1)
+        return SequenceMatcher(None, a, b).ratio()
+
+
+    rescue_report = []
+    output_txt_path = str(config.OUTPUT_DIR / "output.txt") if hasattr(config, 'OUTPUT_DIR') else os.path.join(os.path.dirname(OUTPUT_JSON_PATH), '..', 'output', 'output.txt')
+    output_txt_lines = []
+    output_txt = ''
+    if os.path.exists(output_txt_path):
+        with open(output_txt_path, 'r', encoding='utf-8') as f:
+            output_txt = f.read()
+            output_txt_lines = output_txt.splitlines()
+
+
+    recovered_cuecs = []
+    if bad_chunks:
+        for bad in bad_chunks:
+            bad_descs = []
+            # Try to extract possible cuec_descriptions from the bad chunk text (if JSON-like)
+            try:
+                matches = re.findall(r'"cuec_description"\s*:\s*"([^"]+)"', bad.get('chunk_text', ''))
+                bad_descs.extend(matches)
+            except Exception:
+                pass
+            if not bad_descs and bad.get('chunk_text'):
+                bad_descs.append(bad['chunk_text'][:100])
+            for bad_desc in bad_descs:
+                found = False
+                exact_match = None
+                fuzzy_best = None
+                fuzzy_score = 0.0
+                for good in cuec_results:
+                    good_desc = good.get('cuec_description', '')
+                    if not good_desc:
+                        continue
+                    if bad_desc.strip() == good_desc.strip():
+                        exact_match = good_desc
+                        found = True
+                        break
+                    score = fuzzy_match(bad_desc.strip(), good_desc.strip())
+                    if score > fuzzy_score:
+                        fuzzy_score = score
+                        fuzzy_best = good_desc
+                if found:
+                    rescue_report.append({
+                        'bad_chunk_desc': bad_desc,
+                        'rescue_type': 'exact',
+                        'matched_desc': exact_match,
+                        'confidence_pct': 100
+                    })
+                    continue
+                elif fuzzy_score > 0.7:
+                    rescue_report.append({
+                        'bad_chunk_desc': bad_desc,
+                        'rescue_type': 'fuzzy',
+                        'matched_desc': fuzzy_best,
+                        'confidence_pct': int(round(fuzzy_score * 100))
+                    })
+                    continue
+                # Try to recover from output.txt as last resort (multi-line aware)
+                output_txt_match = None
+                output_txt_score = 0.0
+                # Search for best match in output.txt using sliding window of up to 3 lines
+                bad_desc_norm = bad_desc.strip().replace('\n', ' ')
+                output_txt_lines_clean = [l.strip() for l in output_txt_lines]
+                for i in range(len(output_txt_lines_clean)):
+                    for window in range(1, 4):
+                        candidate = ' '.join(output_txt_lines_clean[i:i+window]).replace('\n', ' ').strip()
+                        if not candidate:
+                            continue
+                        # Exact match
+                        if bad_desc_norm == candidate:
+                            output_txt_match = candidate
+                            output_txt_score = 1.0
+                            break
+                        # Fuzzy match
+                        score = fuzzy_match(bad_desc_norm, candidate)
+                        if score > output_txt_score:
+                            output_txt_score = score
+                            output_txt_match = candidate
+                    if output_txt_score == 1.0:
+                        break
+                if output_txt_score > 0.7:
+                    rescue_type = 'output_txt_fuzzy' if output_txt_score < 1.0 else 'output_txt_exact'
+                    rescue_report.append({
+                        'bad_chunk_desc': bad_desc,
+                        'rescue_type': rescue_type,
+                        'matched_desc': output_txt_match,
+                        'confidence_pct': int(round(output_txt_score * 100))
+                    })
+                    # Add to recovered_cuecs if confidence > 90%
+                    if output_txt_score >= 0.9:
+                        recovered_cuecs.append({
+                            'cuec_description': output_txt_match,
+                            'cuec_source': 'recovered_from_output_txt',
+                            'cuec_confidence': round(output_txt_score, 3),
+                            'cuec_confidence_justification': ['Recovered from output.txt with confidence {:.1f}%'.format(output_txt_score*100)]
+                        })
+                else:
+                    rescue_report.append({
+                        'bad_chunk_desc': bad_desc,
+                        'rescue_type': 'unmatched',
+                        'matched_desc': None,
+                        'confidence_pct': int(round(output_txt_score * 100))
+                    })
+        logging.info("CUEC POST-EXTRACTION RESCUE ANALYSIS:")
+        for entry in rescue_report:
+            logging.info(f"Bad chunk desc: {entry['bad_chunk_desc'][:80]}... | Rescue: {entry['rescue_type']} | Confidence: {entry['confidence_pct']}% | Matched: {entry['matched_desc'][:80] if entry['matched_desc'] else None}")
+
+    # Add high-confidence recovered CUECs to output
+    if recovered_cuecs:
+        # Optionally, deduplicate by description
+        existing_descs = set((c.get('cuec_description','') or '').strip() for c in cuec_results)
+        for rc in recovered_cuecs:
+            if rc['cuec_description'] and rc['cuec_description'].strip() not in existing_descs:
+                cuec_results.append(rc)
+                existing_descs.add(rc['cuec_description'].strip())
+
+
+    output_obj = {'cuecs': cuec_results}
+    if bad_chunks:
+        output_obj['bad_chunks'] = bad_chunks
+        output_obj['bad_chunk_rescue_report'] = rescue_report
+        output_obj['bad_chunk_count'] = len(bad_chunks)  # type: ignore  # pylance: ignore
+        output_obj['rescued_chunk_count'] = len([r for r in rescue_report if r.get('confidence_pct', 0) >= 90])  # type: ignore  # pylance: ignore
+        output_obj['unrecoverable_chunks'] = [r for r in rescue_report if r.get('rescue_type') == 'unmatched']  # type: ignore  # pylance: ignore
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
-        json.dump({'cuecs': cuec_results}, f, indent=2, ensure_ascii=False)
+        json.dump(output_obj, f, indent=2, ensure_ascii=False)
     logging.info(f'CUEC extraction result: {cuec_results}')
 
-def batch_consolidate_cuecs_with_gpt(cuec_results, max_per_batch=5, max_rounds=5):
+    # --- Post-extraction analysis: Check if CUECs from bad chunks were rescued by overlap ---
+    def analyze_bad_chunks_coverage(cuec_results, bad_chunks):
+        print("\n=== CUEC Bad Chunk Rescue Analysis ===")
+        # Build set of all successful CUEC descriptions (lowercased, stripped)
+        successful_descs = set((c.get('cuec_description', '') or '').strip().lower() for c in cuec_results if c.get('cuec_description'))
+        # For fuzzy matching, keep a list
+        successful_descs_list = [(c.get('cuec_description', ''), c) for c in cuec_results if c.get('cuec_description')]
+        from difflib import SequenceMatcher
+        for idx, bad in enumerate(bad_chunks):
+            chunk_text = bad.get('chunk_text', '')
+            print(f"\n--- Bad Chunk {idx} ---")
+            print(f"Chunk index: {bad.get('chunk_index')}")
+            print(f"Error: {bad.get('error')}")
+            # Heuristic: try to extract possible CUEC descriptions from the chunk text (look for quoted lines, or lines with 'responsible', etc.)
+            possible_cuecs = []
+            for line in chunk_text.split('\n'):
+                line_strip = line.strip()
+                if not line_strip:
+                    continue
+                # Look for lines that look like CUEC descriptions
+                if 'responsible' in line_strip.lower() or 'must' in line_strip.lower() or 'required' in line_strip.lower() or 'ensure' in line_strip.lower():
+                    possible_cuecs.append(line_strip)
+                # Or lines in quotes
+                elif line_strip.startswith('"') and line_strip.endswith('"'):
+                    possible_cuecs.append(line_strip.strip('"'))
+            if not possible_cuecs:
+                print("No candidate CUEC descriptions found in bad chunk text.")
+                continue
+            for cuec_desc in possible_cuecs:
+                cuec_desc_norm = cuec_desc.strip().lower()
+                found_exact = cuec_desc_norm in successful_descs
+                if found_exact:
+                    print(f"[EXACT MATCH] CUEC rescued: '{cuec_desc}'")
+                else:
+                    # Fuzzy match: find best match in successful_descs_list
+                    best_score = 0.0
+                    best_match = None
+                    for desc, c in successful_descs_list:
+                        score = SequenceMatcher(None, cuec_desc_norm, desc.strip().lower()).ratio()
+                        if score > best_score:
+                            best_score = score
+                            best_match = desc
+                    if best_score > 0.7:
+                        print(f"[FUZZY MATCH] CUEC rescued: '{cuec_desc}' ~ '{best_match}' (confidence: {int(best_score*100)}%)")
+                    else:
+                        print(f"[NOT RESCUED] CUEC not found: '{cuec_desc}' (best fuzzy match: '{best_match}', confidence: {int(best_score*100)}%)")
+        print("\n=== End of Rescue Analysis ===\n")
+
+    if bad_chunks:
+        analyze_bad_chunks_coverage(cuec_results, bad_chunks)
+
+def batch_consolidate_cuecs_with_gpt(cuec_results, max_per_batch=5, max_rounds=5, bad_chunks=None):
     """
     Iteratively consolidates CUECs in batches to avoid GPT input size limits.
+    If a batch fails consolidation, adds a bad_chunk entry for frontend flagging.
     """
     import math
     from concurrent.futures import ThreadPoolExecutor, as_completed
+    if bad_chunks is None:
+        bad_chunks = []
     round_num = 1
     prev_count = -1
     current = cuec_results
@@ -479,64 +723,125 @@ def batch_consolidate_cuecs_with_gpt(cuec_results, max_per_batch=5, max_rounds=5
         batches = [current[i:i+max_per_batch] for i in range(0, len(current), max_per_batch)]
         consolidated = []
         with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [executor.submit(consolidate_cuecs_with_gpt, batch) for batch in batches]
-            for future in as_completed(futures):
+            futures = [executor.submit(consolidate_cuecs_with_gpt, batch, 1, bad_chunks) for batch in batches]
+            for future, batch in zip(as_completed(futures), batches):
                 result = future.result()
+                if result == batch:
+                    bad_chunks.append({
+                        'chunk_index': None,
+                        'chunk_text': json.dumps(batch, ensure_ascii=False)[:500],
+                        'gpt_response': '',
+                        'error': 'Failed to consolidate batch with GPT',
+                        'response_length': 0,
+                        'chunk_size': len(json.dumps(batch, ensure_ascii=False)),
+                        'prompt_length': None,
+                        'consolidation': True
+                    })
                 consolidated.extend(result)
         current = consolidated
         round_num += 1
-    # Final pass on all if still too many, or just return
     if len(current) > max_per_batch:
-        current = consolidate_cuecs_with_gpt(current)
+        result = consolidate_cuecs_with_gpt(current, 1, bad_chunks)
+        if result == current:
+            bad_chunks.append({
+                'chunk_index': None,
+                'chunk_text': json.dumps(current, ensure_ascii=False)[:500],
+                'gpt_response': '',
+                'error': 'Failed to consolidate final batch with GPT',
+                'response_length': 0,
+                'chunk_size': len(json.dumps(current, ensure_ascii=False)),
+                'prompt_length': None,
+                'consolidation': True
+            })
+        current = result
     return current
 
 def sort_cuecs_by_confidence_and_seq(cuec_list):
     return sorted(cuec_list, key=lambda c: (-c.get('cuec_confidence', 0), c.get('cuec_seq', 0)))
 
-def consolidate_cuecs_with_gpt(cuec_list, min_batch_size=1):
+def consolidate_cuecs_with_gpt(cuec_list, min_batch_size=1, bad_chunks=None):
     """
     Consolidate and deduplicate CUECs using GPT, logging all prompts and responses.
     If parsing fails, recursively split the batch until it succeeds or reaches min_batch_size.
     """
     import json
     import logging
-    from app import config
-    from app.gpt_client import gpt_extract
-    
-    # Prepare prompt
+    from .. import config
+    if bad_chunks is None:
+        bad_chunks = []
     cuecs_json = json.dumps(cuec_list, ensure_ascii=False, indent=2)
     prompt = config.CUEC_CONSOLIDATION_PROMPT.format(cuecs=cuecs_json)
-    
-    # Log prompt
     with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
         gptlog.write(f"\n--- CUEC CONSOLIDATION PROMPT ---\n{prompt}\n")
     logging.info(f"Sending CUEC consolidation prompt to GPT. Batch size: {len(cuec_list)}")
-    
-    # Call GPT
     try:
         response = gpt_extract(prompt)
         if not response:
             raise ValueError("GPT returned no response")
-        # Log response
-        with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
-            gptlog.write(f"\n--- CUEC CONSOLIDATION RESPONSE ---\n{response}\n")
-        # Parse response
-        data = json.loads(response)
-        if not isinstance(data, list):
-            raise ValueError("GPT did not return a list of CUECs")
-        return data
     except Exception as e:
-        logging.error(f"Failed to consolidate CUECs with GPT: {e}")
+        logging.error(f"Error during GPT extraction: {e}")
         with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
-            gptlog.write(f"\n--- CUEC CONSOLIDATION ERROR ---\n{e}\n")
-        # Recursive fallback: split batch if possible
-        if len(cuec_list) > min_batch_size:
-            mid = len(cuec_list) // 2
-            left = consolidate_cuecs_with_gpt(cuec_list[:mid], min_batch_size)
-            right = consolidate_cuecs_with_gpt(cuec_list[mid:], min_batch_size)
-            return left + right
-        # Return input unchanged if error and cannot split further
+            gptlog.write(f"\n--- CUEC CONSOLIDATION GPT ERROR ---\n{e}\n")
+        bad_chunks.append({
+            'chunk_index': None,
+            'chunk_text': json.dumps(cuec_list, ensure_ascii=False)[:500],
+            'gpt_response': '',
+            'error': f'Consolidation GPT error: {e}',
+            'response_length': 0,
+            'chunk_size': len(json.dumps(cuec_list, ensure_ascii=False)),
+            'prompt_length': len(prompt),
+            'consolidation': True
+        })
         return cuec_list
+    with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
+        gptlog.write(f"\n--- CUEC CONSOLIDATION RESPONSE ---\n{response}\n")
+    try:
+        data = json.loads(response)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for v in data.values():
+                if isinstance(v, list):
+                    return v
+        raise ValueError("GPT did not return a list of CUECs")
+    except Exception as e:
+        import re
+        array_match = re.search(r'(\[.*?\])', response, re.DOTALL)
+        if array_match:
+            json_sub = array_match.group(1)
+            try:
+                data = json.loads(json_sub)
+                if isinstance(data, list):
+                    return data
+            except Exception as e2:
+                repaired = json_sub
+                if not repaired.strip().endswith(']'):
+                    repaired = repaired.strip() + ']'
+                try:
+                    data = json.loads(repaired)
+                    if isinstance(data, list):
+                        return data
+                except Exception:
+                    pass
+        logging.error(f"Failed to parse GPT response as JSON array: {e}\nRaw response: {response}")
+        with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
+            gptlog.write(f"\n--- CUEC CONSOLIDATION JSON ERROR ---\n{e}\nRAW RESPONSE:\n{response}\n")
+        bad_chunks.append({
+            'chunk_index': None,
+            'chunk_text': json.dumps(cuec_list, ensure_ascii=False)[:500],
+            'gpt_response': response[:1000],
+            'error': f'Consolidation parse error: {e}',
+            'response_length': len(response) if response else 0,
+            'chunk_size': len(json.dumps(cuec_list, ensure_ascii=False)),
+            'prompt_length': len(prompt),
+            'consolidation': True
+        })
+    if len(cuec_list) > min_batch_size:
+        mid = len(cuec_list) // 2
+        left = consolidate_cuecs_with_gpt(cuec_list[:mid], min_batch_size, bad_chunks)
+        right = consolidate_cuecs_with_gpt(cuec_list[mid:], min_batch_size, bad_chunks)
+        return left + right
+    return cuec_list
 
 def get_openai_embedding(text):
     """
@@ -599,3 +904,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+__all__ = ["extract_cuecs"]
