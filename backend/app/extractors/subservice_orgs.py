@@ -1,12 +1,13 @@
 
+
 import os
 import json
 import logging
-from .. import config
-from ..gpt_client import gpt_extract
 import time
 import re
 from difflib import SequenceMatcher
+from .. import config
+from ..gpt_client import gpt_extract
 from ..config import HEURISTIC_EXCLUDE_KEYWORDS, THIRD_PARTY_ALIAS_MAP, SO_KEYWORDS, SUBSERVICE_ORG_GPT_FILTER_PROMPT, SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT
 
 # Use centralized config paths
@@ -457,7 +458,7 @@ def filter_third_parties_with_gpt():
     Post-processes extracted third parties using GPT to filter out non-companies (frameworks, departments, generic terms, software, etc.).
     Logs exclusions with reasons. Overwrites the JSON with filtered results.
     """
-    from ..gpt_client import gpt_extract
+    # gpt_extract already imported at top
     
     INPUT_JSON_PATH = OUTPUT_JSON_PATH
     FILTER_LOG_PATH = os.path.join('data', 'logs', 'subservice_orgs_filter.log')

@@ -1,8 +1,11 @@
 
+
+# --- All imports at the top (PEP8 best practice) ---
 import os
 import json
 import logging
 from typing import Dict, Any, List, Optional, Tuple
+from collections import Counter
 from .. import config
 from ..gpt_client import gpt_extract
 

@@ -1,14 +1,476 @@
 
-# --- Report API endpoint ---
-from fastapi import HTTPException
-from fastapi import FastAPI, Depends
 
-
+import os
+import sys
+import uuid
+import json as _json
+import shutil
+import threading
+import time
+import datetime
+import logging
+import traceback
+import pathlib
+import asyncio
+import sqlalchemy
+import sqlalchemy.dialects.postgresql as pg_dialect
+import redis.asyncio as redis
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, UploadFile, File, APIRouter
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional, Dict, Any
 from sqlalchemy.future import select
-from app.models import ScanHistory, Company, Control, CUEC, SubserviceOrg, Product, Setting
-from app.database import get_db
+from sqlalchemy.exc import SQLAlchemyError
+from dataclasses import dataclass
+from .models import ScanHistory, Company, Control, CUEC, SubserviceOrg, Product, Setting, Base
+from .database import engine, get_db
+from .analyze import analyze_pdf_file
+from .config import REDIS_URL
+
+@dataclass
+class FieldMapping:
+    json_field: str
+    orm_field: str
+    db_column: str
+
+# Company mapping
+COMPANY_FIELD_MAPPINGS = [
+    FieldMapping("company", "name", "name"),
+    FieldMapping("name", "name", "name"),
+    FieldMapping("parent_company", "parent_company", "parent_company"),
+    FieldMapping("confidence", "confidence", "confidence"),
+]
+
+# Control mapping
+CONTROL_FIELD_MAPPINGS = [
+    FieldMapping("control_id", "control_id", "control_id"),
+    FieldMapping("control_desc", "description", "description"),
+    FieldMapping("description", "description", "description"),
+    FieldMapping("control_test", "control_test", "control_test"),
+    FieldMapping("control_test_results", "control_test_results", "control_test_results"),
+    FieldMapping("control_page_ref", "control_page_ref", "control_page_ref"),
+    FieldMapping("control_line_ref", "control_line_ref", "control_line_ref"),
+    FieldMapping("control_gpt_opinion", "control_gpt_opinion", "control_gpt_opinion"),
+    FieldMapping("control_gpt_reasoning", "control_gpt_reasoning", "control_gpt_reasoning"),
+]
+
+# CUEC mapping
+CUEC_FIELD_MAPPINGS = [
+    FieldMapping("cuec_seq", "cuec_seq", "cuec_seq"),
+    FieldMapping("cuec_id", "cuec_tsc_id", "cuec_tsc_id"),
+    FieldMapping("cuec_tsc_id", "cuec_tsc_id", "cuec_tsc_id"),
+    FieldMapping("cuec_description", "cuec_description", "cuec_description"),
+    FieldMapping("cuec_desc", "cuec_description", "cuec_description"),
+    FieldMapping("description", "cuec_description", "cuec_description"),
+    FieldMapping("cuec_line_ref", "cuec_line_ref", "cuec_line_ref"),
+    FieldMapping("cuec_confidence", "cuec_confidence", "cuec_confidence"),
+    FieldMapping("cuec_gpt_opinion", "cuec_gpt_opinion", "cuec_gpt_opinion"),
+    FieldMapping("cuec_distance_from_cuec_keywords", "cuec_distance_from_cuec_keywords", "cuec_distance_from_cuec_keywords"),
+    FieldMapping("cuec_gpt_reasoning", "cuec_gpt_reasoning", "cuec_gpt_reasoning"),
+    FieldMapping("cuec_framework_alignment", "cuec_framework_alignment", "cuec_framework_alignment"),
+    FieldMapping("cuec_framework_alignment_id", "cuec_framework_alignment_id", "cuec_framework_alignment_id"),
+    FieldMapping("cuec_justification", "cuec_justification", "cuec_justification"),
+    FieldMapping("cuec_coso_id", "cuec_coso_id", "cuec_coso_id"),
+    FieldMapping("cuec_tsc_similarity", "cuec_tsc_similarity", "cuec_tsc_similarity"),
+    FieldMapping("cuec_coso_similarity", "cuec_coso_similarity", "cuec_coso_similarity"),
+    FieldMapping("cuec_tsc_confidence_pct", "cuec_tsc_confidence_pct", "cuec_tsc_confidence_pct"),
+    FieldMapping("cuec_coso_confidence_pct", "cuec_coso_confidence_pct", "cuec_coso_confidence_pct"),
+    FieldMapping("cuec_closest_framework", "cuec_closest_framework", "cuec_closest_framework"),
+    FieldMapping("cuec_confidence_justification", "cuec_confidence_justification", "cuec_confidence_justification"),
+]
+
+# SubserviceOrg mapping
+SUBORG_FIELD_MAPPINGS = [
+    FieldMapping("third_party_name", "name", "name"),
+    FieldMapping("name", "name", "name"),
+    FieldMapping("third_party_confidence", "confidence", "confidence"),
+    FieldMapping("confidence", "confidence", "confidence"),
+]
+
+# Product mapping
+PRODUCT_FIELD_MAPPINGS = [
+    FieldMapping("product", "name", "name"),
+    FieldMapping("name", "name", "name"),
+]
+
+# --- Mapping print/validation functions ---
+def print_entity_mapping(entity_name, mappings, json_data, scan_id=None):
+    msg_lines = [f"\n[{entity_name} Mapping]"]
+    for mapping in mappings:
+        value = json_data.get(mapping.json_field)
+        msg_lines.append(f"JSON: {mapping.json_field} → ORM: {mapping.orm_field} → DB: {mapping.db_column} | Value: {value}")
+    if scan_id is not None:
+        msg_lines.append(f"scan_id → scan_id → scan_id | Value: {scan_id}")
+    msg = "\n".join(msg_lines)
+    print(msg)
+    logging.error(msg)
+
+def log_db_verification(entity_name, db_objs):
+    if not db_objs:
+        logging.error(f"[DB VERIFY] {entity_name}: No records found after insert.")
+        print(f"[DB VERIFY] {entity_name}: No records found after insert.")
+        return
+    for obj in db_objs:
+        fields = vars(obj)
+        # Remove SQLAlchemy internal state
+        fields = {k: v for k, v in fields.items() if not k.startswith('_')}
+        msg = f"[DB VERIFY] {entity_name}: " + ", ".join(f"{k}={v}" for k, v in fields.items())
+        logging.error(msg)
+        print(msg)
+
+def build_kwargs_from_mapping(mappings, json_data, scan_id=None):
+    kwargs = {}
+    for mapping in mappings:
+        if mapping.orm_field not in kwargs:
+            value = json_data.get(mapping.json_field)
+            if value is not None:
+                kwargs[mapping.orm_field] = value
+    if scan_id is not None:
+        kwargs["scan_id"] = scan_id
+    return kwargs
 
 app = FastAPI()
+
+# Enable CORS for frontend (move this up to the first app instance)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for local development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Set up backend error logging (move this up to the first app instance)
+import pathlib
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+os.makedirs(PROJECT_ROOT / 'data/logs', exist_ok=True)
+backend_log_path = str(PROJECT_ROOT / 'data/logs/backend_errors.log')
+# Clear the log file at startup
+with open(backend_log_path, 'w', encoding='utf-8'):
+    pass
+# Set up a human-readable log format
+log_format = '\n%(asctime)s | %(levelname)s | %(module)s | %(message)s\n' + ('-'*80)
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.ERROR)
+# Remove all handlers first (avoid duplicate logs on reload)
+for handler in root_logger.handlers[:]:
+    root_logger.removeHandler(handler)
+file_handler = logging.FileHandler(backend_log_path, encoding='utf-8')
+file_handler.setFormatter(logging.Formatter(log_format))
+root_logger.addHandler(file_handler)
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(logging.Formatter(log_format))
+root_logger.addHandler(stream_handler)
+
+# --- TEST: Insert combined_result.json into DB for fast iteration ---
+test_router = APIRouter()
+
+@test_router.post("/test/insert_combined_result")
+async def test_insert_combined_result(db=Depends(get_db)):
+    """
+    Loads data/json/combined_result.json and inserts a ScanHistory and all related entities.
+    Returns a summary of what was inserted.
+    """
+    # Load the combined result (always resolve from project root)
+    project_root = pathlib.Path(__file__).resolve().parents[2]
+    combined_path = project_root / "data" / "json" / "combined_result.json"
+    with open(combined_path, "r", encoding="utf-8") as f:
+        result = _json.load(f)
+
+    # --- PATCH: Normalize all relevant entities for backend compatibility ---
+    # Company normalization
+    if "company" in result:
+        if isinstance(result["company"], str):
+            result["company"] = {"name": result["company"]}
+        for key in ["parent_company", "confidence"]:
+            if key in result:
+                result["company"][key] = result[key]
+                del result[key]
+
+    # Product normalization
+    if "product" in result:
+        if isinstance(result["product"], str):
+            result["product"] = {"name": result["product"]}
+        for key in ["confidence"]:
+            if key in result:
+                if isinstance(result["product"], dict):
+                    result["product"][key] = result[key]
+                    del result[key]
+
+    # Auditor normalization
+    if "auditor" in result:
+        if isinstance(result["auditor"], str):
+            result["auditor"] = {"name": result["auditor"]}
+        for key in ["confidence"]:
+            if key in result:
+                if isinstance(result["auditor"], dict):
+                    result["auditor"][key] = result[key]
+                    del result[key]
+
+    # Subservice orgs/third_parties normalization
+    if "subservice_orgs" in result and isinstance(result["subservice_orgs"], list):
+        for idx, org in enumerate(result["subservice_orgs"]):
+            if isinstance(org, str):
+                result["subservice_orgs"][idx] = {"name": org}
+            for key in ["confidence"]:
+                if key in result and isinstance(result["subservice_orgs"][idx], dict):
+                    result["subservice_orgs"][idx][key] = result[key]
+        for key in ["confidence"]:
+            if key in result:
+                del result[key]
+
+    # Insert Company first, get company_id
+    from .models import Scan
+    company_id = None
+    company_obj = None
+    company_info = result.get("company")
+    if company_info:
+        if isinstance(company_info, str):
+            company_info = {"name": company_info}
+        for key in ["parent_company", "confidence"]:
+            if key in result and key not in company_info:
+                company_info[key] = result[key]
+        if company_info.get("company") or company_info.get("name"):
+            print_entity_mapping("Company", COMPANY_FIELD_MAPPINGS, company_info)
+            company_kwargs = build_kwargs_from_mapping(COMPANY_FIELD_MAPPINGS, company_info)
+            company_kwargs["scan_id"] = None  # Will update after scan insert
+            company_obj = Company(**company_kwargs)
+            db.add(company_obj)
+            await db.commit()
+            await db.refresh(company_obj)
+            company_id = company_obj.id
+            # Post-insert verification
+            from sqlalchemy.future import select as _select
+            company_db = (await db.execute(_select(Company).where(Company.id == company_id))).scalars().all()
+            log_db_verification("Company", company_db)
+
+    # Insert ScanHistory
+    scan_history = ScanHistory(
+        timestamp=datetime.datetime.now(),
+        filename="test_combined_result.json",
+        results=result
+    )
+    db.add(scan_history)
+    await db.commit()
+    await db.refresh(scan_history)
+    scan_history_id = scan_history.id
+    from typing import Dict, Any
+    summary: Dict[str, Any] = {"scan_id": scan_history_id}
+
+    # Extract product name
+    product = None
+    product_info = result.get("product")
+    if product_info and isinstance(product_info, dict):
+        product = product_info.get("product") or product_info.get("name")
+
+    # Extract report_date
+    report_date = None
+    report_date_info = result.get("report_date")
+    if report_date_info:
+        if isinstance(report_date_info, dict):
+            report_date = report_date_info.get("report_date")
+        elif isinstance(report_date_info, str):
+            report_date = report_date_info
+        if report_date:
+            try:
+                report_date = datetime.datetime.fromisoformat(report_date)
+            except Exception:
+                report_date = None
+
+    # Extract coverage_start and coverage_end (robust to both top-level and nested)
+    coverage_start = None
+    coverage_end = None
+    # Prefer top-level if present
+    if "start_date" in result:
+        coverage_start = result["start_date"]
+    elif "coverage_period" in result and isinstance(result["coverage_period"], dict):
+        coverage_start = result["coverage_period"].get("start_date")
+    if "end_date" in result:
+        coverage_end = result["end_date"]
+    elif "coverage_period" in result and isinstance(result["coverage_period"], dict):
+        coverage_end = result["coverage_period"].get("end_date")
+    # Parse to datetime if present
+    if coverage_start:
+        try:
+            coverage_start = datetime.datetime.fromisoformat(coverage_start)
+        except Exception:
+            coverage_start = None
+    if coverage_end:
+        try:
+            coverage_end = datetime.datetime.fromisoformat(coverage_end)
+        except Exception:
+            coverage_end = None
+
+    # Get extracted text (if available)
+    extracted_text = None
+    if "sections" in result and isinstance(result["sections"], list) and result["sections"]:
+        extracted_text = result["sections"][0].get("snippet")
+
+    # pdf_file: set to None or a placeholder for now
+    pdf_file = None
+    pdf_filename = scan_history.filename
+
+    # gpt_cost, gpt_model, estimated_time_seconds
+    gpt_cost = result.get("gpt_cost")
+    gpt_model = result.get("gpt_model")
+    estimated_time_seconds = result.get("estimated_time_seconds")
+
+    # Insert Scan row with company_id
+    scan_row = Scan(
+        company_id=company_id,
+        product=product,
+        scan_date=scan_history.timestamp,
+        report_date=report_date,
+        coverage_start=coverage_start,
+        coverage_end=coverage_end,
+        pdf_file=pdf_file,
+        pdf_filename=pdf_filename,
+        extracted_text=extracted_text,
+        result_json=result,
+        gpt_cost=gpt_cost,
+        gpt_model=gpt_model,
+        estimated_time_seconds=estimated_time_seconds
+    )
+    db.add(scan_row)
+    await db.commit()
+    await db.refresh(scan_row)
+    scan_id = scan_row.id
+    summary["scan_table_id"] = scan_id
+
+    # Update company.scan_id to point to this scan (if company was inserted)
+    if company_obj is not None and company_id is not None:
+        company_obj.scan_id = scan_id
+        db.add(company_obj)
+        await db.commit()
+    # --- Insert Company (centralized mapping) ---
+    company_info = result.get("company")
+    # PATCH: Accept both string and dict for company_info, and move top-level fields if present
+    if company_info:
+        if isinstance(company_info, str):
+            company_info = {"name": company_info}
+        # Move top-level parent_company/confidence into company_info if present
+        for key in ["parent_company", "confidence"]:
+            if key in result and key not in company_info:
+                company_info[key] = result[key]
+        if company_info.get("company") or company_info.get("name"):
+            print_entity_mapping("Company", COMPANY_FIELD_MAPPINGS, company_info, scan_id)
+            company_kwargs = build_kwargs_from_mapping(COMPANY_FIELD_MAPPINGS, company_info, scan_id)
+            db.add(Company(**company_kwargs))
+            await db.commit()
+            # Post-insert verification
+            from sqlalchemy.future import select as _select
+            company_db = (await db.execute(_select(Company).where(Company.scan_id == scan_id))).scalars().all()
+            log_db_verification("Company", company_db)
+            # Only assign if not None, to avoid type errors in summary dict
+            company_name = company_kwargs.get("name")
+            if company_name is not None:
+                summary["company"] = str(company_name)
+
+    # --- Insert Controls ---
+    # Support both legacy ("controls") and new ("controls") formats
+    controls = []
+    if "controls" in result:
+        controls_section = result.get("controls", {})
+        if isinstance(controls_section, dict):
+            controls = controls_section.get("controls", [])
+        elif isinstance(controls_section, list):
+            controls = controls_section
+    elif "controls" in result:
+        controls = result["controls"]
+    for ctrl in controls:
+        print_entity_mapping("Control", CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
+        control_kwargs = build_kwargs_from_mapping(CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
+        db.add(Control(**control_kwargs))
+    if controls:
+        await db.commit()
+        from sqlalchemy.future import select as _select
+        controls_db = (await db.execute(_select(Control).where(Control.scan_id == scan_id))).scalars().all()
+        log_db_verification("Control", controls_db)
+    summary["controls_count"] = int(len(controls))  # type: ignore
+
+    # --- Insert CUECs ---
+    # Support both legacy ("cuecs") and new ("cuecs") formats
+    cuecs = []
+    if "cuecs" in result:
+        cuecs_section = result.get("cuecs", {})
+        if isinstance(cuecs_section, dict):
+            cuecs = cuecs_section.get("cuecs", [])
+        elif isinstance(cuecs_section, list):
+            cuecs = cuecs_section
+    elif "cuecs" in result:
+        cuecs = result["cuecs"]
+    for cuec in cuecs:
+        print_entity_mapping("CUEC", CUEC_FIELD_MAPPINGS, cuec, scan_id)
+        cuec_kwargs = build_kwargs_from_mapping(CUEC_FIELD_MAPPINGS, cuec, scan_id)
+        # Patch: Ensure cuec_confidence_justification is always a string
+        if "cuec_confidence_justification" in cuec_kwargs and isinstance(cuec_kwargs["cuec_confidence_justification"], list):
+            cuec_kwargs["cuec_confidence_justification"] = _json.dumps(cuec_kwargs["cuec_confidence_justification"])
+        db.add(CUEC(**cuec_kwargs))
+    if cuecs:
+        await db.commit()
+        from sqlalchemy.future import select as _select
+        cuecs_db = (await db.execute(_select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
+        log_db_verification("CUEC", cuecs_db)
+    summary["cuecs_count"] = int(len(cuecs))  # type: ignore
+
+    # --- Insert Subservice Orgs ---
+    # Support legacy ("subservice_orgs"), new ("subservice_orgs"), and flattened "third_parties" formats
+    suborgs = []
+    if "subservice_orgs" in result:
+        suborgs_section = result.get("subservice_orgs", {})
+        if isinstance(suborgs_section, dict):
+            suborgs = suborgs_section.get("third_parties", [])
+        elif isinstance(suborgs_section, list):
+            suborgs = suborgs_section
+    elif "subservice_orgs" in result:
+        suborgs = result["subservice_orgs"]
+    elif "third_parties" in result and isinstance(result["third_parties"], list):
+        suborgs = result["third_parties"]
+    for org in suborgs:
+        org_data = org if isinstance(org, dict) else {"name": org}
+        print_entity_mapping("SubserviceOrg", SUBORG_FIELD_MAPPINGS, org_data, scan_id)
+        suborg_kwargs = build_kwargs_from_mapping(SUBORG_FIELD_MAPPINGS, org_data, scan_id)
+        db.add(SubserviceOrg(**suborg_kwargs))
+    if suborgs:
+        await db.commit()
+        from sqlalchemy.future import select as _select
+        suborgs_db = (await db.execute(_select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
+        log_db_verification("SubserviceOrg", suborgs_db)
+    summary["subservice_orgs_count"] = int(len(suborgs))
+
+    # --- Insert Product ---
+    product_info = result.get("product")
+    if product_info and isinstance(product_info, dict):
+        print_entity_mapping("Product", PRODUCT_FIELD_MAPPINGS, product_info, scan_id)
+        product_kwargs = build_kwargs_from_mapping(PRODUCT_FIELD_MAPPINGS, product_info, scan_id)
+        db.add(Product(**product_kwargs))
+        await db.commit()
+        from sqlalchemy.future import select as _select
+        product_db = (await db.execute(_select(Product).where(Product.scan_id == scan_id))).scalars().all()
+        log_db_verification("Product", product_db)
+        product_name = product_kwargs.get("name")
+        if product_name is not None:
+            summary["product"] = str(product_name)
+
+    await db.commit()
+    return summary
+
+app.include_router(test_router)
+
+if __name__ == "__main__" and sys.argv[-1] == "test_insert_combined_result":
+    async def _main():
+        # Use a dummy dependency context
+        class DummyDepends:
+            async def __aenter__(self):
+                return await get_db().__anext__()
+            async def __aexit__(self, exc_type, exc, tb):
+                pass
+        async with DummyDepends() as db:
+            result = await test_insert_combined_result(db)
+            print("Inserted test combined_result.json:", result)
+    asyncio.run(_main())
+
+
 
 @app.get("/report/{scan_id}")
 async def get_report(scan_id: int, db=Depends(get_db)):
@@ -30,10 +492,14 @@ async def get_report(scan_id: int, db=Depends(get_db)):
     auditor = results.get("auditor", {})
     coverage_period = results.get("coverage_period", {})
     report_date = results.get("report_date", {})
+    def extract_bad_chunks(section):
+        if isinstance(section, dict):
+            return section.get("bad_chunks", [])
+        return []
     bad_chunks = {
-        "cuecs": results.get("cuecs", {}).get("bad_chunks", []),
-        "controls": results.get("controls", {}).get("bad_chunks", []),
-        "subservice_orgs": results.get("subservice_orgs", {}).get("bad_chunks", [])
+        "cuecs": extract_bad_chunks(results.get("cuecs")),
+        "controls": extract_bad_chunks(results.get("controls")),
+        "subservice_orgs": extract_bad_chunks(results.get("subservice_orgs"))
     }
 
     # Compose response
@@ -59,16 +525,6 @@ async def get_report(scan_id: int, db=Depends(get_db)):
         "bad_chunks": bad_chunks,
         "raw_results": results
     }
-# --- In-memory job system for background extraction jobs ---
-import uuid
-from threading import Thread
-
-
-# --- Persistent Job Storage using Redis ---
-
-import redis.asyncio as redis
-from .config import REDIS_URL
-import json as _json
 
 
 async def get_job(job_id, redis_client=None):
@@ -216,8 +672,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request, Depends, UploadFile, File
 from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError
-from app.models import ScanHistory, Setting, Base
-from app.database import engine, get_db
+from .models import ScanHistory, Setting, Base
+from .database import engine, get_db
 from .analyze import analyze_pdf_file
 import threading
 import time
@@ -230,41 +686,9 @@ import datetime
 import logging
 import traceback
 
-app = FastAPI()
-# Enable CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for local development
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-# Set up backend error logging
-import pathlib
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-os.makedirs(PROJECT_ROOT / 'data/logs', exist_ok=True)
-backend_log_path = str(PROJECT_ROOT / 'data/logs/backend_errors.log')
-# Clear the log file at startup
-with open(backend_log_path, 'w', encoding='utf-8'):
-    pass
-# Set up a human-readable log format
-log_format = '\n%(asctime)s | %(levelname)s | %(module)s | %(message)s\n' + ('-'*80)
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.ERROR)
-# Remove all handlers first (avoid duplicate logs on reload)
-for handler in root_logger.handlers[:]:
-    root_logger.removeHandler(handler)
-file_handler = logging.FileHandler(backend_log_path, encoding='utf-8')
-file_handler.setFormatter(logging.Formatter(log_format))
-root_logger.addHandler(file_handler)
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(logging.Formatter(log_format))
-root_logger.addHandler(stream_handler)
+# ...existing code...
 
-
-
-# New endpoint: start background analysis job
 @app.post("/analyze/")
 async def analyze_pdf_bg(file: UploadFile = File(...), db=Depends(get_db)):
     temp_dir = "data/tmp"
@@ -284,7 +708,7 @@ async def analyze_pdf_bg(file: UploadFile = File(...), db=Depends(get_db)):
         "filename": filename
     })
     # Start background thread
-    thread = Thread(target=run_analysis_job, args=(job_id, temp_pdf_path, filename, db))
+    thread = threading.Thread(target=run_analysis_job, args=(job_id, temp_pdf_path, filename, db))
     thread.start()
     return {"job_id": job_id}
 
@@ -323,70 +747,132 @@ async def get_job_result(job_id: str, db=Depends(get_db)):
         return {"error": "Job not found"}
     if not job.get("done"):
         return {"error": "Job not finished yet"}
-    if job.get("error"):
-        return {"error": job.get("error"), "partial_result": job.get("result")}
 
-    # Persist result to DB if not already saved
+    # Always try to persist result to DB if not already saved, even for partial/warning/error results
     if not job.get("db_saved") and job.get("result"):
         try:
             import sqlalchemy, datetime
+            import logging
             from app.models import ScanHistory, Company, Control, CUEC, SubserviceOrg, Product
             result = job.get("result")
             # Insert ScanHistory
+            # Insert ScanHistory (for record, not for scan_id foreign key)
             scan_history = ScanHistory(
                 timestamp=datetime.datetime.now(),
                 filename=job.get("filename"),
                 results=result
             )
             db.add(scan_history)
-            db.commit()
-            db.refresh(scan_history)
-            scan_id = scan_history.id
+            await db.commit()
+            await db.refresh(scan_history)
+            scan_history_id = scan_history.id
+
+            # Insert Scan (get scan_id for all child entities)
+            from app.models import Scan
+            product = None
+            product_info = result.get("product")
+            if product_info and isinstance(product_info, dict):
+                product = product_info.get("product") or product_info.get("name")
+            scan_row = Scan(
+                company_id=None,
+                product=product,
+                scan_date=scan_history.timestamp,
+                report_date=None,
+                coverage_start=None,
+                coverage_end=None,
+                pdf_file=None,
+                pdf_filename=scan_history.filename,
+                extracted_text=None,
+                result_json=result,
+                gpt_cost=result.get("gpt_cost"),
+                gpt_model=result.get("gpt_model"),
+                estimated_time_seconds=result.get("estimated_time_seconds")
+            )
+            db.add(scan_row)
+            await db.commit()
+            await db.refresh(scan_row)
+            scan_id = scan_row.id
+            logging.error(f"[DB] Inserted Scan id={scan_id}")
+
             # --- Insert Company ---
             company_info = result.get("company")
-            if company_info and company_info.get("company"):
+            if company_info and (company_info.get("company") or company_info.get("name")):
                 db.add(Company(
-                    name=company_info["company"],
+                    name=company_info.get("company") or company_info.get("name"),
                     parent_company=company_info.get("parent_company"),
-                    confidence=company_info.get("confidence"),
                     scan_id=scan_id
                 ))
+                logging.error(f"[DB] Inserted Company for scan_id={scan_id}")
+
             # --- Insert Controls ---
-            controls = result.get("controls", {}).get("controls", [])
+            controls_section = result.get("controls", {})
+            logging.error(f"[DB] controls_section: {controls_section}")
+            controls = []
+            if isinstance(controls_section, dict):
+                controls = controls_section.get("controls", [])
+            elif isinstance(controls_section, list):
+                controls = controls_section
             for ctrl in controls:
                 db.add(Control(
                     control_id=ctrl.get("control_id"),
-                    description=ctrl.get("control_desc"),
+                    description=ctrl.get("control_desc") or ctrl.get("description"),
                     scan_id=scan_id
                 ))
+            if controls:
+                logging.error(f"[DB] Inserted {len(controls)} Controls for scan_id={scan_id}")
+
             # --- Insert CUECs ---
-            cuecs = result.get("cuecs", {}).get("cuecs", [])
+            cuecs_section = result.get("cuecs", {})
+            logging.error(f"[DB] cuecs_section: {cuecs_section}")
+            cuecs = []
+            if isinstance(cuecs_section, dict):
+                cuecs = cuecs_section.get("cuecs", [])
+            elif isinstance(cuecs_section, list):
+                cuecs = cuecs_section
             for cuec in cuecs:
                 db.add(CUEC(
                     cuec_id=cuec.get("cuec_id"),
-                    description=cuec.get("cuec_desc"),
+                    description=cuec.get("cuec_desc") or cuec.get("description"),
                     scan_id=scan_id
                 ))
+            if cuecs:
+                logging.error(f"[DB] Inserted {len(cuecs)} CUECs for scan_id={scan_id}")
+
             # --- Insert Subservice Orgs ---
-            suborgs = result.get("subservice_orgs", {}).get("subservice_orgs", [])
+            suborgs_section = result.get("subservice_orgs", {})
+            logging.error(f"[DB] suborgs_section: {suborgs_section}")
+            suborgs = []
+            # subservice_orgs may be a dict with 'third_parties' or a list
+            if isinstance(suborgs_section, dict):
+                suborgs = suborgs_section.get("third_parties", [])
+            elif isinstance(suborgs_section, list):
+                suborgs = suborgs_section
             for org in suborgs:
                 db.add(SubserviceOrg(
-                    name=org.get("name") or org,
+                    name=org.get("third_party_name") if isinstance(org, dict) else org,
                     scan_id=scan_id
                 ))
+            if suborgs:
+                logging.error(f"[DB] Inserted {len(suborgs)} SubserviceOrgs for scan_id={scan_id}")
+
             # --- Insert Product ---
-            product_info = result.get("product")
             if product_info and isinstance(product_info, dict):
                 db.add(Product(
                     name=product_info.get("product") or product_info.get("name"),
                     scan_id=scan_id
                 ))
-            db.commit()
+                logging.error(f"[DB] Inserted Product for scan_id={scan_id}")
+            await db.commit()
             job["db_saved"] = True
             await set_job(job_id, job)
+            logging.error(f"[DB] All entities committed for scan_id={scan_id}")
         except Exception as db_exc:
             import logging
-            logging.error(f"DB error persisting job result: {db_exc}")
+            logging.error(f"DB error persisting job result: {db_exc}\nTraceback: {traceback.format_exc()}")
+
+    # If there was an error, return it along with any partial result
+    if job.get("error"):
+        return {"error": job.get("error"), "partial_result": job.get("result")}
     return {"results": job.get("result")}
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from typing import Optional
@@ -395,8 +881,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request, Depends, UploadFile, File
 from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError
-from app.models import ScanHistory, Setting, Base
-from app.database import engine, get_db
+from .models import ScanHistory, Setting, Base
+from .database import engine, get_db
 from .analyze import analyze_pdf_file
 import threading
 import time
@@ -528,5 +1014,5 @@ async def init_models():
         await conn.run_sync(Base.metadata.create_all)
 
 import sys
-if __name__ == "__main__" and sys.argv[0].endswith("main.py"):
+if __name__ == "__main__" and sys.argv[0].endswith("main.py") and sys.argv[-1] != "test_insert_combined_result":
     asyncio.get_event_loop().run_until_complete(init_models())

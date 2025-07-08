@@ -1,7 +1,9 @@
 
+
 import os
 import json
 import logging
+import re
 from .. import config
 from ..gpt_client import gpt_extract
 
@@ -70,7 +72,6 @@ def extract_report_date():
             result['explanation'] = f'Failed to parse GPT response: {e}'
         # Fallback: try to extract report_date from raw response if missing
         if not result['report_date'] and response:
-            import re
             date_patterns = [
                 r"['\"]?report_date['\"]?\s*[:=]\s*['\"]([0-9]{4}-[0-9]{2}-[0-9]{2})['\"]",
                 r"([0-9]{2}/[0-9]{2}/[0-9]{4})",

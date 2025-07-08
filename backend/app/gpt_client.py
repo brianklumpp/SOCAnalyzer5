@@ -1,4 +1,8 @@
+
+# --- All imports at the top (PEP8 best practice) ---
 import os
+import json
+import pathlib
 import openai
 from dotenv import load_dotenv
 from .config import (

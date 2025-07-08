@@ -1,11 +1,6 @@
-# Centralized configuration for SOCAnalyzer backend
 
-
-# Configuration for SOCAnalyzer5
+# --- All imports at the top (PEP8 best practice) ---
 import os
-
-
-# --- Centralized Path Configuration ---
 import pathlib
 
 # --- Redis Configuration ---

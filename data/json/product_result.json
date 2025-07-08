@@ -1,10 +1,10 @@
 {
-  "product": "SimpleLegal Legal Spend and Matter Management Software System",
+  "product": "SimpleLegal",
   "confidence": 0.9,
   "raw_gpt_responses": [
-    "{\n  \"product\": \"SimpleLegal Legal Spend and Matter Management Software System\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text explicitly mentions the 'Legal Spend and Matter Management Software System' provided by SimpleLegal, Inc., describing its features and services in detail.\"\n}",
+    "{\n  \"product\": \"SimpleLegal\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text repeatedly mentions SimpleLegal as the company providing the Legal Spend and Matter Management Software System.\"\n}",
     "{\n  \"product\": \"SimpleLegal Legal Spend and Matter Management Software System\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text specifically mentions the Legal Spend and Matter Management Software System provided by SimpleLegal.\"\n}",
-    "{\n  \"product\": \"SimpleLegal\",\n  \"confidence\": 1,\n  \"explanation\": \"The text consistently refers to 'SimpleLegal' as the product/service/system being audited.\"\n}",
+    "{\n  \"product\": \"SimpleLegal\",\n  \"confidence\": 1,\n  \"explanation\": \"The text consistently refers to the product/service/system as SimpleLegal throughout the document.\"\n}",
     "{\n  \"product\": \"Legal Spend and Matter Management Software System\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions the 'Legal Spend and Matter Management Software System' as the product being audited.\"\n}"
   ]
 }

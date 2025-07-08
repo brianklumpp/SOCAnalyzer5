@@ -1,3 +1,11 @@
+
+# --- All imports at the top (PEP8 best practice) ---
+import os
+import json
+import logging
+import traceback
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .extractors.auditor import extract_auditor_from_report
 from .extractors.company import extract_company_from_report
 from .extractors.control_extractor import extract_controls
@@ -6,11 +14,11 @@ from .extractors.subservice_orgs import extract_subservice_orgs
 from .extractors.product import extract_product_from_report
 from .extractors.report_date import extract_report_date
 from .extractors.coverage_period import extract_coverage_period
-import logging
-import traceback
+from .pdf_handler import extract_text_from_pdf, find_section_candidates
+from .config import SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE
+
 
 def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json', progress_callback=None, checklist_callback=None):
-
     logger = logging.getLogger(__name__)
 
     # Always resolve data paths relative to the project root
@@ -86,14 +94,14 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             {"name": "file_uploaded", "status": "pending"},
             {"name": "text_extracted", "status": "pending"},
             {"name": "sections_extracted", "status": "pending"},
-            {"name": "company", "status": "pending"},
-            {"name": "auditor", "status": "pending"},
-            {"name": "controls", "status": "pending"},
-            {"name": "cuecs", "status": "pending"},
-            {"name": "subservice_orgs", "status": "pending"},
-            {"name": "product", "status": "pending"},
-            {"name": "report_date", "status": "pending"},
-            {"name": "coverage_period", "status": "pending"},
+            {"name": "company_extraction", "status": "pending"},
+            {"name": "auditor_extraction", "status": "pending"},
+            {"name": "control_extraction", "status": "pending"},
+            {"name": "cuec_extraction", "status": "pending"},
+            {"name": "subservice_orgs_extraction", "status": "pending"},
+            {"name": "product_extraction", "status": "pending"},
+            {"name": "report_date_extraction", "status": "pending"},
+            {"name": "coverage_period_extraction", "status": "pending"},
         ]
         # 0: file_uploaded
         checklist[0]["status"] = "done"
@@ -113,16 +121,16 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             return {"error": f"Required file {output_json_path} not found before running extractors."}
         # --- Run company and auditor sequentially (prerequisites) ---
         prereq_steps = [
-            (3, "company", extract_company_from_report, "Running company extractor...", 30),
-            (4, "auditor", extract_auditor_from_report, "Running auditor extractor...", 40),
+            (3, "company_extraction", extract_company_from_report, "Running company extractor...", 30),
+            (4, "auditor_extraction", extract_auditor_from_report, "Running auditor extractor...", 40),
         ]
         parallel_steps = [
-            (5, "controls", extract_controls, "Running controls extractor...", 50),
-            (6, "cuecs", extract_cuecs, "Running CUECs extractor...", 60),
-            (7, "subservice_orgs", extract_subservice_orgs, "Running subservice orgs extractor...", 70),
-            (8, "product", extract_product_from_report, "Running product extractor...", 80),
-            (9, "report_date", extract_report_date, "Running report date extractor...", 90),
-            (10, "coverage_period", extract_coverage_period, "Running coverage period extractor...", 95),
+            (5, "control_extraction", extract_controls, "Running controls extractor...", 50),
+            (6, "cuec_extraction", extract_cuecs, "Running CUECs extractor...", 60),
+            (7, "subservice_orgs_extraction", extract_subservice_orgs, "Running subservice orgs extractor...", 70),
+            (8, "product_extraction", extract_product_from_report, "Running product extractor...", 80),
+            (9, "report_date_extraction", extract_report_date, "Running report date extractor...", 90),
+            (10, "coverage_period_extraction", extract_coverage_period, "Running coverage period extractor...", 95),
         ]
         # Run prerequisites sequentially
         for idx, key, func, status, pct in prereq_steps:
@@ -182,7 +190,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                         except Exception as e2:
                             logger.error(f"Failed to load partial result for {key}: {e2}")
                 # If there are bad_chunks, mark as done_with_warnings
-                if key in ('controls', 'cuecs'):
+                if key in ('control_extraction', 'cuec_extraction'):
                     bad_chunk_count = 0
                     if res and isinstance(res, dict):
                         bad_chunk_count = res.get('bad_chunk_count', 0)
@@ -230,6 +238,30 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             update_checklist(checklist)
         update_progress(100, "Analysis complete.")
         logger.debug(f"Final results: {results}")
+
+        # --- Always merge in control_result.json and cuec_result.json if present and not already populated ---
+        for key, fname in [
+            ("control_extraction", "data/json/control_result.json"),
+            ("cuec_extraction", "data/json/cuec_result.json")
+        ]:
+            if (not results.get(key)) or (isinstance(results.get(key), dict) and not results[key]):
+                fpath = data_path(fname)
+                if os.path.isfile(fpath):
+                    try:
+                        with open(fpath, 'r', encoding='utf-8') as pf:
+                            results[key] = json.load(pf)
+                        logger.info(f"Merged {fname} into results['{key}'] for combined_result.json.")
+                    except Exception as e:
+                        logger.error(f"Failed to merge {fname} into results['{key}']: {e}")
+
+        # --- Write combined extraction result to a file for troubleshooting ---
+        try:
+            combined_result_path = data_path('data/json/combined_result.json')
+            with open(combined_result_path, 'w', encoding='utf-8') as f:
+                json.dump(results, f, indent=2, ensure_ascii=False)
+            logger.info(f"Combined extraction result written to {combined_result_path}")
+        except Exception as e:
+            logger.error(f"Failed to write combined_result.json: {e}\n{traceback.format_exc()}")
         return results
     except Exception as e:
         logger.error(f"analyze_pdf_file failed: {e}\n{traceback.format_exc()}")

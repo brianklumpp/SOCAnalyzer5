@@ -1,13 +1,17 @@
+
+# All imports at the top
 import os
 import json
 import logging
+import re
+import time
+import requests
+import math
+import numpy as np  # type: ignore  # pylance: ignore-reportMissingImports
+from difflib import SequenceMatcher
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .. import config
 from ..gpt_client import gpt_extract
-import re
-from difflib import SequenceMatcher
-import requests
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Use centralized config paths
 SECTION_JSON_PATH = config.SECTION_JSON_PATH
@@ -270,7 +274,6 @@ def extract_cuecs():
             if clean_response.endswith('```'):
                 clean_response = clean_response[:-3]
             clean_response = clean_response.strip()
-            import re
             def extract_json(text):
                 obj_match = re.search(r'(\{.*?\})', text, re.DOTALL)
                 if obj_match:
@@ -711,8 +714,6 @@ def batch_consolidate_cuecs_with_gpt(cuec_results, max_per_batch=5, max_rounds=5
     Iteratively consolidates CUECs in batches to avoid GPT input size limits.
     If a batch fails consolidation, adds a bad_chunk entry for frontend flagging.
     """
-    import math
-    from concurrent.futures import ThreadPoolExecutor, as_completed
     if bad_chunks is None:
         bad_chunks = []
     round_num = 1
@@ -764,9 +765,6 @@ def consolidate_cuecs_with_gpt(cuec_list, min_batch_size=1, bad_chunks=None):
     Consolidate and deduplicate CUECs using GPT, logging all prompts and responses.
     If parsing fails, recursively split the batch until it succeeds or reaches min_batch_size.
     """
-    import json
-    import logging
-    from .. import config
     if bad_chunks is None:
         bad_chunks = []
     cuecs_json = json.dumps(cuec_list, ensure_ascii=False, indent=2)
@@ -805,7 +803,6 @@ def consolidate_cuecs_with_gpt(cuec_list, min_batch_size=1, bad_chunks=None):
                     return v
         raise ValueError("GPT did not return a list of CUECs")
     except Exception as e:
-        import re
         array_match = re.search(r'(\[.*?\])', response, re.DOTALL)
         if array_match:
             json_sub = array_match.group(1)
@@ -870,7 +867,6 @@ def get_openai_embedding(text):
     raise RuntimeError(f'Failed to get embedding for text: {text}')
 
 def cosine_similarity(vec1, vec2):
-    import numpy as np  # type: ignore  # pylance: ignore-reportMissingImports
     v1 = np.array(vec1)
     v2 = np.array(vec2)
     return float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))

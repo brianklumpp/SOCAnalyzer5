@@ -1,3 +1,4 @@
+
 """
 Extractor for tested controls in the SOC report (Control_Descriptions section).
 - Multi-threaded, chunked, and GPT-assisted extraction.
@@ -5,27 +6,62 @@ Extractor for tested controls in the SOC report (Control_Descriptions section).
 - Output: JSON with all required fields for each control.
 """
 
+
+# --- All imports at the top (PEP8 best practice) ---
 import os
 import json
 import logging
-from .. import config
-from ..gpt_client import gpt_extract
-from difflib import SequenceMatcher
-import requests
 import time
+import datetime
+import requests
+from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Use centralized config paths
-SECTION_JSON_PATH = config.SECTION_JSON_PATH
-PDF_TXT_PATH = config.PDF_TXT_PATH
-OUTPUT_JSON_PATH = config.CONTROL_JSON_PATH
-GPT_LOG_PATH = config.CONTROL_GPT_LOG_PATH
+try:
+    from .. import config
+    from ..gpt_client import gpt_extract
+except Exception as import_err:
+    print(f"[CONTROL_EXTRACTOR] Import error: {import_err}")
+    raise
 
-logger = logging.getLogger(__name__)
-# Always start fresh for GPT log file
-os.makedirs(GPT_LOG_PATH.parent, exist_ok=True)
-with open(GPT_LOG_PATH, 'w', encoding='utf-8') as gptlog:
-    gptlog.write('')
+
+# Use centralized config paths
+try:
+    SECTION_JSON_PATH = config.SECTION_JSON_PATH
+    PDF_TXT_PATH = config.PDF_TXT_PATH
+    OUTPUT_JSON_PATH = config.CONTROL_JSON_PATH
+    GPT_LOG_PATH = config.CONTROL_GPT_LOG_PATH
+except Exception as config_err:
+    print(f"[CONTROL_EXTRACTOR] Config error: {config_err}")
+    logging.error(f"[CONTROL_EXTRACTOR] Config error: {config_err}")
+    raise
+
+
+# --- Logger configuration: ensure logs are always written ---
+try:
+    # Always create the log directory relative to project root
+    log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../data/logs'))
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, 'control_extractor.log')
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s %(message)s',
+        handlers=[
+            logging.FileHandler(log_file_path, encoding='utf-8', mode='a'),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__)
+    print(f"[CONTROL_EXTRACTOR] Logger configured. Log file: {log_file_path}")
+    logging.info(f"[CONTROL_EXTRACTOR] Logger configured. Log file: {log_file_path}")
+    # Always start fresh for GPT log file
+    os.makedirs(GPT_LOG_PATH.parent, exist_ok=True)
+    with open(GPT_LOG_PATH, 'w', encoding='utf-8') as gptlog:
+        gptlog.write('')
+except Exception as log_err:
+    print(f"[CONTROL_EXTRACTOR] Logger setup error: {log_err}")
+    logging.error(f"[CONTROL_EXTRACTOR] Logger setup error: {log_err}")
+    raise
 
 # --- Helper functions (chunking, embedding, similarity, etc.) ---
 def load_json(path):
@@ -81,25 +117,46 @@ def cosine_similarity(vec1, vec2):
     return float(np.dot(v1, v2_) / (np.linalg.norm(v1) * np.linalg.norm(v2_)))
 
 def map_control_to_frameworks(control_desc, tsc_criteria, coso_criteria):
-    cuec_emb = get_openai_embedding(control_desc)
+    import logging
+    if not tsc_criteria:
+        logging.error("TSC criteria list is empty! Cannot map control to TSC framework.")
+    if not coso_criteria:
+        logging.error("COSO criteria list is empty! Cannot map control to COSO framework.")
+    try:
+        cuec_emb = get_openai_embedding(control_desc)
+    except Exception as e:
+        logging.error(f"Failed to get embedding for control_desc: {control_desc[:80]}... Error: {e}")
+        return None, None, -1, -1
     # TSC
     best_tsc_id = None
     best_tsc_sim = -1
     for crit in tsc_criteria:
-        emb = get_openai_embedding(crit['description'])
-        sim = cosine_similarity(cuec_emb, emb)
-        if sim > best_tsc_sim:
-            best_tsc_sim = sim
-            best_tsc_id = crit['id']
+        try:
+            emb = get_openai_embedding(crit['description'])
+            sim = cosine_similarity(cuec_emb, emb)
+            if sim > best_tsc_sim:
+                best_tsc_sim = sim
+                best_tsc_id = crit['id']
+        except Exception as e:
+            logging.error(f"Failed to get embedding or similarity for TSC criteria: {crit.get('id', 'unknown')}. Error: {e}")
+            continue
     # COSO
     best_coso_id = None
     best_coso_sim = -1
     for crit in coso_criteria:
-        emb = get_openai_embedding(crit['description'])
-        sim = cosine_similarity(cuec_emb, emb)
-        if sim > best_coso_sim:
-            best_coso_sim = sim
-            best_coso_id = crit['id']
+        try:
+            emb = get_openai_embedding(crit['description'])
+            sim = cosine_similarity(cuec_emb, emb)
+            if sim > best_coso_sim:
+                best_coso_sim = sim
+                best_coso_id = crit['id']
+        except Exception as e:
+            logging.error(f"Failed to get embedding or similarity for COSO criteria: {crit.get('id', 'unknown')}. Error: {e}")
+            continue
+    if best_tsc_id is None:
+        logging.warning(f"No TSC match found for control: {control_desc[:80]}...")
+    if best_coso_id is None:
+        logging.warning(f"No COSO match found for control: {control_desc[:80]}...")
     return best_tsc_id, best_coso_id, best_tsc_sim, best_coso_sim
 
 def get_tsc_section(tsc_id):
@@ -155,6 +212,7 @@ def extract_controls():
         logging.info(f'CHUNK {idx} LENGTH: {len(chunk)}. PREVIEW: {chunk[:300]!r}')
     tsc_criteria = getattr(config, 'TSC_CRITERIA', [])
     coso_criteria = getattr(config, 'COSO_2013_CRITERIA', [])
+    logging.info(f"Loaded {len(tsc_criteria)} TSC criteria and {len(coso_criteria)} COSO criteria.")
     results = []
     bad_chunks = []
     def process_chunk(idx, chunk):
@@ -280,28 +338,110 @@ def extract_controls():
         ctrl['control_soc_domain'] = get_tsc_domain(tsc_id) or get_coso_domain(coso_id)
         logging.info(f'CONTROL {ctrl.get("control_seq")}: ID={ctrl.get("control_id")}, DESC={desc[:80]}, TSC_ID={tsc_id}, COSO_ID={coso_id}, TSC_SIM={tsc_sim}, COSO_SIM={coso_sim}')
 
-    # Batch consolidate and re-map calculated fields if needed, with robust bad_chunks collection
-    results_sorted = results
-    try:
-        results_sorted = batch_consolidate_controls_with_gpt(results_sorted, bad_chunks=bad_chunks)
-    except Exception as e:
-        logging.error(f'Error during control consolidation: {e}')
-        bad_chunks.append({
-            'chunk_index': None,
-            'chunk_text': json.dumps(results_sorted, ensure_ascii=False)[:500],
-            'gpt_response': '',
-            'error': f'Consolidation error: {e}',
-            'response_length': 0,
-            'chunk_size': len(json.dumps(results_sorted, ensure_ascii=False)),
-            'prompt_length': None,
-            'consolidation': True
-        })
+    # --- Deduplicate controls by control_id and control_desc before consolidation ---
+    def deduplicate_controls(controls):
+        seen_ids = set()
+        seen_descs = set()
+        deduped = []
+        for ctrl in controls:
+            cid = ctrl.get('control_id')
+            desc = (ctrl.get('control_desc') or '').strip()
+            if cid and cid not in seen_ids:
+                seen_ids.add(cid)
+                deduped.append(ctrl)
+            elif not cid and desc and desc not in seen_descs:
+                seen_descs.add(desc)
+                deduped.append(ctrl)
+        return deduped
+
+    results_sorted = deduplicate_controls(results)
+    logging.info(f"Deduplicated controls: {len(results)} -> {len(results_sorted)}")
+
+
+    # --- Local alignment/merging of controls without control_id ---
+
+    # --- Improved partial fragment matching logic ---
+    controls_with_id = [c for c in results_sorted if c.get('control_id')]
+    controls_no_id = [c for c in results_sorted if not c.get('control_id')]
+    aligned_results = []
+    for ctrl in controls_with_id:
+        ctrl['control_status'] = 'complete'
+        aligned_results.append(ctrl)
+
+    # Build a set of all control_test fields from controls_with_id for quick lookup
+    control_tests_set = set()
+    for main in controls_with_id:
+        test_txt = (main.get('control_test') or '').strip()
+        if test_txt:
+            control_tests_set.add(test_txt)
+
+    for frag in controls_no_id:
+        frag_desc = (frag.get('control_desc') or '').strip()
+        if not frag_desc:
+            frag['control_status'] = 'partial - no match'
+            aligned_results.append(frag)
+            continue
+
+        # New step: If the fragment's control_desc matches any control_test, mark as likely test language
+        # Use exact match or high similarity (>=0.9)
+        likely_test = False
+        for test_txt in control_tests_set:
+            if frag_desc == test_txt:
+                likely_test = True
+                break
+            # Fuzzy match if not exact
+            if len(frag_desc) > 20 and len(test_txt) > 20:
+                sim = SequenceMatcher(None, frag_desc, test_txt).ratio()
+                if sim >= 0.9:
+                    likely_test = True
+                    break
+        if likely_test:
+            frag['control_status'] = 'partial - likely test language'
+            aligned_results.append(frag)
+            continue
+
+        # 1. Filter controls_with_id for those whose control_desc contains the fragment's control_desc
+        matches = [main for main in controls_with_id if frag_desc in (main.get('control_desc') or '')]
+
+        if len(matches) == 1:
+            # Reconcile: fill in missing fields in the primary from the partial
+            main = matches[0]
+            updated = False
+            for k, v in frag.items():
+                if (k not in main or main[k] in (None, '', [])) and v not in (None, '', []):
+                    main[k] = v
+                    updated = True
+            frag['control_status'] = f"partial - matched with {main.get('control_id')}"
+            frag['merged_to_control_id'] = main.get('control_id')
+            aligned_results.append(frag)
+            continue
+
+        # 2. If multiple matches, try to narrow by tsc/coso id
+        if len(matches) > 1:
+            tsc_id = frag.get('control_tsc_id')
+            coso_id = frag.get('control_coso_id')
+            narrowed = [m for m in matches if (not tsc_id or m.get('control_tsc_id') == tsc_id) and (not coso_id or m.get('control_coso_id') == coso_id)]
+            if len(narrowed) == 1:
+                main = narrowed[0]
+                updated = False
+                for k, v in frag.items():
+                    if (k not in main or main[k] in (None, '', [])) and v not in (None, '', []):
+                        main[k] = v
+                        updated = True
+                frag['control_status'] = f"partial - matched with {main.get('control_id')}"
+                frag['merged_to_control_id'] = main.get('control_id')
+                aligned_results.append(frag)
+                continue
+
+        # 3. If still ambiguous or no match, mark as no match
+        frag['control_status'] = 'partial - no match'
+        aligned_results.append(frag)
 
     # Sort results by control_id (None/empty last)
     def control_id_sort_key(ctrl):
         cid = ctrl.get('control_id')
         return (cid is None or cid == '', str(cid))
-    results_sorted = sorted(results_sorted, key=control_id_sort_key)
+    results_sorted = sorted(aligned_results, key=control_id_sort_key)
 
     # --- POST-EXTRACTION ANALYSIS: Rescue Check for Bad Chunks ---
     import re
@@ -381,6 +521,19 @@ def extract_controls():
         for entry in rescue_report:
             logging.info(f"Bad chunk desc: {entry['bad_chunk_desc'][:80]}... | Rescue: {entry['rescue_type']} | Confidence: {entry['confidence_pct']}% | Matched: {entry['matched_desc'][:80] if entry['matched_desc'] else None}")
 
+    # --- Ensure all required fields are present for every control ---
+    REQUIRED_FIELDS = [
+        'control_seq', 'control_id', 'control_desc', 'control_test', 'control_test_results',
+        'control_page_ref', 'control_line_ref', 'control_gpt_opinion', 'control_gpt_reasoning',
+        'control_tsc_id', 'control_coso_id', 'control_tsc_similarity', 'control_coso_similarity',
+        'control_tsc_confidence_pct', 'control_coso_confidence_pct', 'control_closest_framework',
+        'control_tsc_section', 'control_coso_section', 'control_soc_domain'
+    ]
+    for ctrl in results_sorted:
+        for field in REQUIRED_FIELDS:
+            if field not in ctrl:
+                ctrl[field] = None
+
     output_obj = {'controls': results_sorted}
     if bad_chunks:
         output_obj['bad_chunks'] = bad_chunks
@@ -404,43 +557,59 @@ def batch_consolidate_controls_with_gpt(control_results, max_per_batch=5, max_ro
     round_num = 1
     prev_count = -1
     current = control_results
-    while len(current) > max_per_batch and round_num <= max_rounds and len(current) != prev_count:
-        prev_count = len(current)
-        batches = [current[i:i+max_per_batch] for i in range(0, len(current), max_per_batch)]
-        consolidated = []
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [executor.submit(consolidate_controls_with_gpt, batch, 1, bad_chunks) for batch in batches]
-            for future, batch in zip(as_completed(futures), batches):
-                result = future.result()
-                if result == batch:
+    # Retry logic: reduce batch size if context error occurs
+    min_batch_size = 1
+    retry_batch_size = max_per_batch
+    while True:
+        try:
+            round_num = 1
+            prev_count = -1
+            current = control_results
+            while len(current) > retry_batch_size and round_num <= max_rounds and len(current) != prev_count:
+                prev_count = len(current)
+                batches = [current[i:i+retry_batch_size] for i in range(0, len(current), retry_batch_size)]
+                consolidated = []
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    futures = [executor.submit(consolidate_controls_with_gpt, batch, min_batch_size, bad_chunks) for batch in batches]
+                    for future, batch in zip(as_completed(futures), batches):
+                        result = future.result()
+                        if result == batch:
+                            bad_chunks.append({
+                                'chunk_index': None,
+                                'chunk_text': json.dumps(batch, ensure_ascii=False)[:500],
+                                'gpt_response': '',
+                                'error': 'Failed to consolidate batch with GPT',
+                                'response_length': 0,
+                                'chunk_size': len(json.dumps(batch, ensure_ascii=False)),
+                                'prompt_length': None,
+                                'consolidation': True
+                            })
+                        consolidated.extend(result)
+                current = consolidated
+                round_num += 1
+            if len(current) > retry_batch_size:
+                result = consolidate_controls_with_gpt(current, min_batch_size, bad_chunks)
+                if result == current:
                     bad_chunks.append({
                         'chunk_index': None,
-                        'chunk_text': json.dumps(batch, ensure_ascii=False)[:500],
+                        'chunk_text': json.dumps(current, ensure_ascii=False)[:500],
                         'gpt_response': '',
-                        'error': 'Failed to consolidate batch with GPT',
+                        'error': 'Failed to consolidate final batch with GPT',
                         'response_length': 0,
-                        'chunk_size': len(json.dumps(batch, ensure_ascii=False)),
+                        'chunk_size': len(json.dumps(current, ensure_ascii=False)),
                         'prompt_length': None,
                         'consolidation': True
                     })
-                consolidated.extend(result)
-        current = consolidated
-        round_num += 1
-    if len(current) > max_per_batch:
-        result = consolidate_controls_with_gpt(current, 1, bad_chunks)
-        if result == current:
-            bad_chunks.append({
-                'chunk_index': None,
-                'chunk_text': json.dumps(current, ensure_ascii=False)[:500],
-                'gpt_response': '',
-                'error': 'Failed to consolidate final batch with GPT',
-                'response_length': 0,
-                'chunk_size': len(json.dumps(current, ensure_ascii=False)),
-                'prompt_length': None,
-                'consolidation': True
-            })
-        current = result
-    return current
+                current = result
+            return current
+        except Exception as e:
+            import logging
+            if 'context_length_exceeded' in str(e) or 'maximum context length' in str(e):
+                logging.error(f"Context length exceeded during consolidation. Reducing batch size from {retry_batch_size}.")
+                if retry_batch_size > 1:
+                    retry_batch_size = max(1, retry_batch_size // 2)
+                    continue
+            raise
 
 def consolidate_controls_with_gpt(control_list, min_batch_size=1, bad_chunks=None):
     """
@@ -453,6 +622,7 @@ def consolidate_controls_with_gpt(control_list, min_batch_size=1, bad_chunks=Non
     if bad_chunks is None:
         bad_chunks = []
     controls_json = json.dumps(control_list, ensure_ascii=False, indent=2)
+    logging.info(f"Consolidation batch: {len(control_list)} controls, {len(controls_json)} characters.")
     prompt = config.CONTROL_CONSOLIDATION_PROMPT.format(controls=controls_json)
     with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
         gptlog.write(f"\n--- CONTROL CONSOLIDATION PROMPT ---\n{prompt}\n")
@@ -478,8 +648,14 @@ def consolidate_controls_with_gpt(control_list, min_batch_size=1, bad_chunks=Non
         return control_list
     with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
         gptlog.write(f"\n--- CONTROL CONSOLIDATION RESPONSE ---\n{response}\n")
+    import re
+    def remove_trailing_commas(json_str):
+        # Remove trailing commas before } or ]
+        json_str = re.sub(r',\s*([}\]])', r'\1', json_str)
+        return json_str
     try:
-        data = json.loads(response)
+        clean_response = remove_trailing_commas(response)
+        data = json.loads(clean_response)
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
@@ -488,11 +664,11 @@ def consolidate_controls_with_gpt(control_list, min_batch_size=1, bad_chunks=Non
                     return v
         raise ValueError("GPT did not return a list of controls")
     except Exception as e:
-        import re
         array_match = re.search(r'(\[.*?\])', response, re.DOTALL)
         if array_match:
             json_sub = array_match.group(1)
             try:
+                json_sub = remove_trailing_commas(json_sub)
                 data = json.loads(json_sub)
                 if isinstance(data, list):
                     return data
@@ -501,6 +677,7 @@ def consolidate_controls_with_gpt(control_list, min_batch_size=1, bad_chunks=Non
                 if not repaired.strip().endswith(']'):
                     repaired = repaired.strip() + ']'
                 try:
+                    repaired = remove_trailing_commas(repaired)
                     data = json.loads(repaired)
                     if isinstance(data, list):
                         return data
@@ -528,5 +705,21 @@ def consolidate_controls_with_gpt(control_list, min_batch_size=1, bad_chunks=Non
 
 __all__ = ["extract_controls"]
 
+# Only run extract_controls() if executed directly, not on import
 if __name__ == "__main__":
-    extract_controls()
+    # Heartbeat: write to a file to prove script execution
+    try:
+        with open("data/logs/control_extractor_heartbeat.txt", "a", encoding="utf-8") as hb:
+            import datetime
+            hb.write(f"Heartbeat at {datetime.datetime.now().isoformat()}\n")
+    except Exception as hb_err:
+        pass
+    try:
+        print("[CONTROL_EXTRACTOR] Running extract_controls() due to __name__ == '__main__'.")
+        logging.info("[CONTROL_EXTRACTOR] Running extract_controls() due to __name__ == '__main__'.")
+        extract_controls()
+    except Exception as main_err:
+        # Write any exception to a file for debugging
+        with open("data/logs/control_extractor_top_error.txt", "a", encoding="utf-8") as errf:
+            import traceback
+            errf.write(f"Exception at {datetime.datetime.now().isoformat()}:\n{traceback.format_exc()}\n")

@@ -1,7 +1,10 @@
 
+
+# --- All imports at the top (PEP8 best practice) ---
 import os
 import json
 import logging
+import re
 from .. import config
 from ..gpt_client import gpt_extract
 
