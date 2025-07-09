@@ -44,12 +44,24 @@ COMPANY_FIELD_MAPPINGS = [
 # Control mapping
 CONTROL_FIELD_MAPPINGS = [
     FieldMapping("control_id", "control_id", "control_id"),
-    FieldMapping("control_desc", "description", "description"),
-    FieldMapping("description", "description", "description"),
+    FieldMapping("control_desc", "control_desc", "control_desc"),
     FieldMapping("control_test", "control_test", "control_test"),
     FieldMapping("control_test_results", "control_test_results", "control_test_results"),
     FieldMapping("control_page_ref", "control_page_ref", "control_page_ref"),
     FieldMapping("control_line_ref", "control_line_ref", "control_line_ref"),
+    FieldMapping("control_seq", "control_seq", "control_seq"),
+    FieldMapping("control_tsc_id", "control_tsc_id", "control_tsc_id"),
+    FieldMapping("control_coso_id", "control_coso_id", "control_coso_id"),
+    FieldMapping("control_tsc_similarity", "control_tsc_similarity", "control_tsc_similarity"),
+    FieldMapping("control_coso_similarity", "control_coso_similarity", "control_coso_similarity"),
+    FieldMapping("control_tsc_confidence_pct", "control_tsc_confidence_pct", "control_tsc_confidence_pct"),
+    FieldMapping("control_coso_confidence_pct", "control_coso_confidence_pct", "control_coso_confidence_pct"),
+    FieldMapping("control_closest_framework", "control_closest_framework", "control_closest_framework"),
+    FieldMapping("control_tsc_section", "control_tsc_section", "control_tsc_section"),
+    FieldMapping("control_coso_section", "control_coso_section", "control_coso_section"),
+    FieldMapping("control_soc_domain", "control_soc_domain", "control_soc_domain"),
+    FieldMapping("control_status", "control_status", "control_status"),
+    FieldMapping("merged_to_control_id", "merged_to_control_id", "merged_to_control_id"),
     FieldMapping("control_gpt_opinion", "control_gpt_opinion", "control_gpt_opinion"),
     FieldMapping("control_gpt_reasoning", "control_gpt_reasoning", "control_gpt_reasoning"),
 ]
@@ -315,8 +327,9 @@ async def test_insert_combined_result(db=Depends(get_db)):
     gpt_model = result.get("gpt_model")
     estimated_time_seconds = result.get("estimated_time_seconds")
 
-    # Insert Scan row with company_id
+    # Insert Scan row with company_id, force id to match scan_history_id
     scan_row = Scan(
+        id=scan_history_id,  # Force Scan.id to match ScanHistory.id
         company_id=company_id,
         product=product,
         scan_date=scan_history.timestamp,
@@ -367,16 +380,21 @@ async def test_insert_combined_result(db=Depends(get_db)):
                 summary["company"] = str(company_name)
 
     # --- Insert Controls ---
-    # Support both legacy ("controls") and new ("controls") formats
+    # Support both legacy and nested formats
     controls = []
-    if "controls" in result:
+    if "control_extraction" in result and "controls" in result["control_extraction"]:
+        controls = result["control_extraction"]["controls"]
+    elif "controls" in result:
         controls_section = result.get("controls", {})
         if isinstance(controls_section, dict):
             controls = controls_section.get("controls", [])
         elif isinstance(controls_section, list):
             controls = controls_section
-    elif "controls" in result:
-        controls = result["controls"]
+    # Filter out controls that do not have a control_seq (only keep those with a non-null control_seq)
+    controls = [
+        c for c in controls
+        if isinstance(c, dict) and c.get("control_seq") is not None
+    ]
     for ctrl in controls:
         print_entity_mapping("Control", CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
         control_kwargs = build_kwargs_from_mapping(CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
@@ -389,16 +407,16 @@ async def test_insert_combined_result(db=Depends(get_db)):
     summary["controls_count"] = int(len(controls))  # type: ignore
 
     # --- Insert CUECs ---
-    # Support both legacy ("cuecs") and new ("cuecs") formats
+    # Support both legacy and nested formats
     cuecs = []
-    if "cuecs" in result:
+    if "cuec_extraction" in result and "cuecs" in result["cuec_extraction"]:
+        cuecs = result["cuec_extraction"]["cuecs"]
+    elif "cuecs" in result:
         cuecs_section = result.get("cuecs", {})
         if isinstance(cuecs_section, dict):
             cuecs = cuecs_section.get("cuecs", [])
         elif isinstance(cuecs_section, list):
             cuecs = cuecs_section
-    elif "cuecs" in result:
-        cuecs = result["cuecs"]
     for cuec in cuecs:
         print_entity_mapping("CUEC", CUEC_FIELD_MAPPINGS, cuec, scan_id)
         cuec_kwargs = build_kwargs_from_mapping(CUEC_FIELD_MAPPINGS, cuec, scan_id)
@@ -414,16 +432,16 @@ async def test_insert_combined_result(db=Depends(get_db)):
     summary["cuecs_count"] = int(len(cuecs))  # type: ignore
 
     # --- Insert Subservice Orgs ---
-    # Support legacy ("subservice_orgs"), new ("subservice_orgs"), and flattened "third_parties" formats
+    # Support legacy, nested, and flattened formats
     suborgs = []
-    if "subservice_orgs" in result:
+    if "subservice_orgs_extraction" in result and "subservice_orgs" in result["subservice_orgs_extraction"]:
+        suborgs = result["subservice_orgs_extraction"]["subservice_orgs"]
+    elif "subservice_orgs" in result:
         suborgs_section = result.get("subservice_orgs", {})
         if isinstance(suborgs_section, dict):
             suborgs = suborgs_section.get("third_parties", [])
         elif isinstance(suborgs_section, list):
             suborgs = suborgs_section
-    elif "subservice_orgs" in result:
-        suborgs = result["subservice_orgs"]
     elif "third_parties" in result and isinstance(result["third_parties"], list):
         suborgs = result["third_parties"]
     for org in suborgs:
@@ -502,7 +520,7 @@ async def get_report(scan_id: int, db=Depends(get_db)):
         "subservice_orgs": extract_bad_chunks(results.get("subservice_orgs"))
     }
 
-    # Compose response
+    # Compose response with all expected fields for frontend tables
     return {
         "scan_id": scan.id,
         "scan_date": scan.timestamp,
@@ -514,13 +532,55 @@ async def get_report(scan_id: int, db=Depends(get_db)):
         "report_date": report_date,
         "product": product.name if product else None,
         "subservice_organizations": [
-            {"name": org.name} for org in suborgs
+            {"name": org.name, "confidence": getattr(org, "confidence", None)} for org in suborgs
         ],
         "cuecs": [
-            {"cuec_id": c.cuec_id, "description": c.description} for c in cuecs
+            {
+                "cuec_seq": getattr(c, "cuec_seq", None),
+                "cuec_id": getattr(c, "cuec_tsc_id", None),
+                "cuec_tsc_id": getattr(c, "cuec_tsc_id", None),
+                "cuec_description": getattr(c, "cuec_description", None) or getattr(c, "description", None),
+                "cuec_line_ref": getattr(c, "cuec_line_ref", None),
+                "cuec_confidence": getattr(c, "cuec_confidence", None),
+                "cuec_gpt_opinion": getattr(c, "cuec_gpt_opinion", None),
+                "cuec_distance_from_cuec_keywords": getattr(c, "cuec_distance_from_cuec_keywords", None),
+                "cuec_gpt_reasoning": getattr(c, "cuec_gpt_reasoning", None),
+                "cuec_framework_alignment": getattr(c, "cuec_framework_alignment", None),
+                "cuec_framework_alignment_id": getattr(c, "cuec_framework_alignment_id", None),
+                "cuec_justification": getattr(c, "cuec_justification", None),
+                "cuec_coso_id": getattr(c, "cuec_coso_id", None),
+                "cuec_tsc_similarity": getattr(c, "cuec_tsc_similarity", None),
+                "cuec_coso_similarity": getattr(c, "cuec_coso_similarity", None),
+                "cuec_tsc_confidence_pct": getattr(c, "cuec_tsc_confidence_pct", None),
+                "cuec_coso_confidence_pct": getattr(c, "cuec_coso_confidence_pct", None),
+                "cuec_closest_framework": getattr(c, "cuec_closest_framework", None),
+                "cuec_confidence_justification": getattr(c, "cuec_confidence_justification", None),
+            } for c in cuecs
         ],
         "controls": [
-            {"control_id": ctrl.control_id, "description": ctrl.description} for ctrl in controls
+            {k: getattr(ctrl, k, None) for k in [
+                "control_id",
+                "control_desc",
+                "control_test",
+                "control_test_results",
+                "control_page_ref",
+                "control_line_ref",
+                "control_seq",
+                "control_tsc_id",
+                "control_coso_id",
+                "control_tsc_similarity",
+                "control_coso_similarity",
+                "control_tsc_confidence_pct",
+                "control_coso_confidence_pct",
+                "control_closest_framework",
+                "control_tsc_section",
+                "control_coso_section",
+                "control_soc_domain",
+                "control_status",
+                "merged_to_control_id",
+                "control_gpt_opinion",
+                "control_gpt_reasoning"
+            ]} for ctrl in controls
         ],
         "bad_chunks": bad_chunks,
         "raw_results": results
@@ -774,6 +834,7 @@ async def get_job_result(job_id: str, db=Depends(get_db)):
             if product_info and isinstance(product_info, dict):
                 product = product_info.get("product") or product_info.get("name")
             scan_row = Scan(
+                id=scan_history_id,  # Force Scan.id to match ScanHistory.id
                 company_id=None,
                 product=product,
                 scan_date=scan_history.timestamp,
@@ -815,7 +876,26 @@ async def get_job_result(job_id: str, db=Depends(get_db)):
             for ctrl in controls:
                 db.add(Control(
                     control_id=ctrl.get("control_id"),
-                    description=ctrl.get("control_desc") or ctrl.get("description"),
+                    control_desc=ctrl.get("control_desc") or ctrl.get("description"),
+                    control_test=ctrl.get("control_test"),
+                    control_test_results=ctrl.get("control_test_results"),
+                    control_page_ref=ctrl.get("control_page_ref"),
+                    control_line_ref=ctrl.get("control_line_ref"),
+                    control_seq=ctrl.get("control_seq"),
+                    control_tsc_id=ctrl.get("control_tsc_id"),
+                    control_coso_id=ctrl.get("control_coso_id"),
+                    control_tsc_similarity=ctrl.get("control_tsc_similarity"),
+                    control_coso_similarity=ctrl.get("control_coso_similarity"),
+                    control_tsc_confidence_pct=ctrl.get("control_tsc_confidence_pct"),
+                    control_coso_confidence_pct=ctrl.get("control_coso_confidence_pct"),
+                    control_closest_framework=ctrl.get("control_closest_framework"),
+                    control_tsc_section=ctrl.get("control_tsc_section"),
+                    control_coso_section=ctrl.get("control_coso_section"),
+                    control_soc_domain=ctrl.get("control_soc_domain"),
+                    control_status=ctrl.get("control_status"),
+                    merged_to_control_id=ctrl.get("merged_to_control_id"),
+                    control_gpt_opinion=ctrl.get("control_gpt_opinion"),
+                    control_gpt_reasoning=ctrl.get("control_gpt_reasoning"),
                     scan_id=scan_id
                 ))
             if controls:

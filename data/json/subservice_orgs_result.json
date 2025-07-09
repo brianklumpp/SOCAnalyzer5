@@ -14,7 +14,7 @@
     {
       "third_party_name": "Onit, Inc.",
       "third_party_description": "Parent company of SimpleLegal, responsible for various control activities",
-      "third_party_page_ref": "Page 10",
+      "third_party_page_ref": "Page 10,page 1",
       "third_party_confidence": 0.8,
       "distance_from_so_keywords": 0,
       "likely_so": "Yes",
@@ -23,26 +23,357 @@
       "source_context": "\n9 \nSECTION III \nDESCRIPTION OF THE \nLEGAL SPEND AND \nMATTER MANAGEMENT \nSOFTWARE SYSTEM \n\n=== PAGE 10 ===\n\n10 \nDESCRIPTION OF THE LEGAL SPEND AND  \nMATTER MANAGEMENT SOFTWARE SYSTEM \nCompany Background \nSimpleLegal, Inc. (“SimpleLegal” or “the Company”) is a company founded in 2013 that provides a modern, \nSoftware as a Service (SaaS)-based legal operations management solution that streamlines the way corporate \nlegal departments manage their matters, track and interpret legal spend, and collaborate with vendors and law \nfirms. SimpleLegal combines e-Billing, spend management, matter management, knowledge management, and \nvendor management, along with reporting and analytics, into one comprehensive application to optimize legal \noperations and the management of the entire legal department. The Company was a result of a 10-year-old \nconsulting business where the co-founders provided data analytics services to companies spending hundreds of \nmillions of dollars per year in legal expense"
     },
     {
-      "third_party_name": "SimpleLegal",
-      "third_party_description": "Provides e-Billing, spend management, matter management, knowledge management, vendor management, reporting, and analytics for legal operations.",
-      "third_party_page_ref": null,
-      "third_party_confidence": 0.9,
-      "distance_from_so_keywords": 0,
-      "likely_so": "Yes",
-      "common_so": "Yes",
-      "third_party_controls": null,
-      "source_context": "orate with vendors and law \nfirms. SimpleLegal combines e-Billing, spend management, matter management, knowledge management, and \nvendor management, along with reporting and analytics, into one comprehensive application to optimize legal \noperations and the management of the entire legal department. The Company was a result of a 10-year-old \nconsulting business where the co-founders provided data analytics services to companies spending hundreds of \nmillions of dollars per year in legal expenses. \nIndustries served by SimpleLegal include Financial Services, Investment and Private Equity, Business to \nBusiness (B2B) and Business to Consumer (B2C) Software, High-Growth Tech, Public Banks, Manufacturing, \nHealthcare, Retail and Consumer Packaged Goods (CPG), and Educational institutions. \nThe Company is a subsidiary of Onit, Inc. The parent company is responsible for various control activities, as \nnoted in this report, which should be reviewed in conjunction with the Onit SOC 2 Type 2 r"
-    },
-    {
       "third_party_name": "Onit",
       "third_party_description": "Provider of corporate governance, human resources and personnel management, employee training and development, physical security and office management, endpoint security, and workstation management services.",
-      "third_party_page_ref": "SOC 2 report,PAGE 18,PAGE 18,https://www.onit.com/",
+      "third_party_page_ref": "SOC 2 report,PAGE 18,PAGE 18",
       "third_party_confidence": 0.9,
-      "distance_from_so_keywords": 0,
+      "distance_from_so_keywords": 3,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": null,
       "source_context": "eport for details where \nthe SimpleLegal system relies on Onit’s controls and processes. In particular, Onit is responsible for corporate \ngovernance, human resources and personnel management, employee training and development, physical \nsecurity and office management, endpoint security, and workstation management. \nDescription of Services Provided \nSimpleLegal is simple to configure, quick to deploy, and easy to use and adapt. Our solution enables customers \nto better support their legal operations and helps them extend these benefits to the broader organization. \nSimpleLegal offers the following core functions: \ne-Billing & Spend Management \nEnd-to-end control over how legal departments manage invoices, budgets, accruals, and more, so legal teams \ncan proactively drive cost-efficiencies. \nKey features include: \n• \nInvoice management \n• \nAutomated billing guideline and discount enforcement \n• \nAI-powered invoice reviews \n• \nSupport for Alternative Fee Arrangements (AFAs) \n• \nFlexible "
+    },
+    {
+      "third_party_name": "SimpleLegal",
+      "third_party_description": "Legal operations management software provider",
+      "third_party_page_ref": "Description of System section,Page 12,Page 12,N/A,Description of System section,PAGE 13,PAGE 13,Description of System section,N/A,Description of System section,Description of System section,Description of System section,Description of System section,Description of System section,Page 21,Section IV, 'Testing Matrices',Page 22,Page 22,PAGE 22,PAGE 23,Page 23,Description of System section,https://www.simplelegal.com/,https://www.simplelegal.com/,https://www.simplelegal.com/",
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "e-Billing & Spend Management"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Matter Management"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Vendor Management"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Security principles within the fundamental designs of the Legal Spend and Matter Management Software System"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Security principles within the fundamental designs of the Legal Spend and Matter Management Software System"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Use of encryption technologies to protect customer data both at rest and in transit"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Security principles within the fundamental designs of the Legal Spend and Matter Management Software System"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Use of encryption technologies to protect customer data both at rest and in transit"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Summary of significant privacy and related security requirements common to most agreements"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Summary of significant privacy and related security requirements mandated by law, regulation, an industry, or a market"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Purposes, uses, and disclosures of personal information as permitted by user entity agreements"
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Statement on information retention period"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Establish operational requirements"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Communicate requirements in policies, procedures, and contracts"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Document information security policies and procedures"
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Document standard operating procedures"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Maintain and update policies and procedures at least annually"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Require employees to acknowledge understanding of policies and procedures upon hire"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Management is briefed on regulatory and industry changes affecting the services provided."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Executive management meetings are held to discuss major initiatives and issues that affect the business."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Organizational charts are in place to communicate key areas of authority and responsibility."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Organizational charts are communicated to employees and updated as needed."
+        },
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": "SimpleLegal’s Vice President, Compliance and Security is designated as the Security Officer."
+        },
+        {
+          "third_party_control_seq": 6,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The Security Officer is responsible for developing, maintaining, and enforcing SimpleLegal’s information security policies with input from other relevant business units."
+        },
+        {
+          "third_party_control_seq": 7,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The information security policies are reviewed as needed by the Security Officer."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Organizational charts in place to communicate key areas of authority and responsibility"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Security Officer designated for implementation and management of security issues"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Monitoring of known incidents, patches, vulnerability assessments, and necessary changes to policies and procedures"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Maintain security, monitor incidents and patches, vulnerability assessments, changes to policies and procedures, information security awareness training, background screening, access provisioning, least privilege principle, quarterly access reviews"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Maintains a documented Change Management Policy"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Maintains a documented Change Management Policy"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Utilizes a ticketing system to document change control procedures"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Utilizes version control software to maintain source code versions"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Maintains a documented Change Management Policy"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Utilizes a ticketing system for change control procedures"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Utilizes version control software for source code management"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Implement patch management process"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Review and apply vendor recommended operating system patches"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Validate patch installations and reboots"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Identifies sources of confidential information and maintains controls to safeguard it"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Has controls in place to ensure PII data is encrypted at rest and in transit"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Controls in place to ensure PII data is encrypted at rest and in transit"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Implemented a consent management framework in its infrastructure to comply with data subject requests"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Maintains a Privacy Policy outlining data collection, storage, consent, and control over personal information"
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Implements methods of communication to ensure employees understand roles, responsibilities, and adherence to controls"
+        },
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Employees sign an Employee Acknowledgement Form regarding the SimpleLegal Employee Handbook"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Maintains a Privacy Policy"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Implements methods of communication for employees"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Provides training and awareness programs for security"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Proactive incident identification and response services"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Regular monitoring of network health and capacity planning"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Monitoring applications generate alerts when predefined thresholds are exceeded"
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Monitoring of security access violations"
+        },
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Monitoring policies and procedures for addressing issues relating to outages of critical services"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Utilizes a suite of monitoring tools for proactive incident identification and response services"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Maintains risk and issues register for ongoing monitoring procedures"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Controls to dictate the use of encryption for all interactions outside the boundaries of SimpleLegal’s Legal Spend and Matter Management Software System"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "SimpleLegal receives and reviews the AWS SOC 2 Type 2 report annually."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Through its operational activities, SimpleLegal monitors the services performed by AWS to determine whether operations and controls expected to be implemented at the subservice organization are functioning effectively."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "SimpleLegal also has communication with the subservice organization to monitor compliance with the service agreements, stay up to date on planned changes at the hosting."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Receiving and reviewing AWS SOC 2 Type 2 report annually"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Monitoring services performed by AWS"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Communication with subservice organization to monitor compliance and planned changes"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "P1.1",
+          "third_party_control_desc": "The entity provides notice to data subjects about its privacy practices to meet the entity’s objectives related to privacy."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "P2.1",
+          "third_party_control_desc": "The entity communicates choices available regarding the collection, use, retention, disclosure, and disposal of personal information to the data subjects and the consequences, if any, of each choice."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": "P3.2",
+          "third_party_control_desc": "For information requiring explicit consent, the entity communicates the need for such consent as well as the consequences of a failure to provide consent for the request for personal information and obtains the consent prior to the collection of the information to meet the entity’s objectives related to privacy."
+        }
+      ],
+      "source_context": "ions and helps them extend these benefits to the broader organization. \nSimpleLegal offers the following core functions: \ne-Billing & Spend Management \nEnd-to-end control over how legal departments manage invoices, budgets, accruals, and more, so legal teams \ncan proactively drive cost-efficiencies. \nKey features include: \n• \nInvoice management \n• \nAutomated billing guideline and discount enforcement \n• \nAI-powered invoice reviews \n• \nSupport for Alternative Fee Arrangements (AFAs) \n• \nFlexible workflow configurations \n• \nTimekeeper management \n• \nAutomated accruals management \n• \nBudget creation and management \n• \nDedicated, no-cost vendor portal to submit invoices (CounselGO) \nMatter Management \nA single place to create, manage, and collaborate on legal projects that fundamentally transforms the way legal \nteams – and external vendors – complete day to day tasks. \nKey features include: \n• \nCentral matter repository \n• \nLegal Requests to automate and manage legal service intake via cu"
     },
     {
       "third_party_name": "CounselGO",
@@ -50,8 +381,8 @@
       "third_party_page_ref": "PAGE 11,PAGE 11",
       "third_party_confidence": 0.9,
       "distance_from_so_keywords": 2,
-      "likely_so": "No",
-      "common_so": "No",
+      "likely_so": "Yes",
+      "common_so": "Yes",
       "third_party_controls": [],
       "source_context": "workflow configurations \n• \nTimekeeper management \n• \nAutomated accruals management \n• \nBudget creation and management \n• \nDedicated, no-cost vendor portal to submit invoices (CounselGO) \nMatter Management \nA single place to create, manage, and collaborate on legal projects that fundamentally transforms the way legal \nteams – and external vendors – complete day to day tasks. \nKey features include: \n• \nCentral matter repository \n• \nLegal Requests to automate and manage legal service intake via customizable templated forms \n• \nCustomizable templates for matter creation \n• \nFull scale document management system (DMS) with integration abilities to major DMS systems \n• \nConfidential Matters support \n=== PAGE 11 ===\n\n11 \n• \nCustomizable approval workflows on matters \n• \nTrack and report on unlimited custom attributes \n• \nBudgeting tools including budget requests, refreshes, and enforcement \nVendor Management \nLeverages data to objectively evaluate law firm and vendor performance, improve rel"
     },
@@ -60,21 +391,27 @@
       "third_party_description": "Platform for comparing law firm rates and performance",
       "third_party_page_ref": "PAGE 11,PAGE 11",
       "third_party_confidence": 0.8,
-      "distance_from_so_keywords": 2,
-      "likely_so": "No",
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
       "common_so": "No",
       "third_party_controls": [],
       "source_context": "workflow configurations \n• \nTimekeeper management \n• \nAutomated accruals management \n• \nBudget creation and management \n• \nDedicated, no-cost vendor portal to submit invoices (CounselGO) \nMatter Management \nA single place to create, manage, and collaborate on legal projects that fundamentally transforms the way legal \nteams – and external vendors – complete day to day tasks. \nKey features include: \n• \nCentral matter repository \n• \nLegal Requests to automate and manage legal service intake via customizable templated forms \n• \nCustomizable templates for matter creation \n• \nFull scale document management system (DMS) with integration abilities to major DMS systems \n• \nConfidential Matters support \n=== PAGE 11 ===\n\n11 \n• \nCustomizable approval workflows on matters \n• \nTrack and report on unlimited custom attributes \n• \nBudgeting tools including budget requests, refreshes, and enforcement \nVendor Management \nLeverages data to objectively evaluate law firm and vendor performance, improve rel"
     },
     {
       "third_party_name": "Tableau",
-      "third_party_description": "Data visualization software",
+      "third_party_description": "Business intelligence software that allows users to create interactive and shareable dashboards.",
       "third_party_page_ref": null,
       "third_party_confidence": 0.9,
-      "distance_from_so_keywords": 2,
-      "likely_so": "No",
-      "common_so": "No",
-      "third_party_controls": [],
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
       "source_context": "ationships, and simplify \nsourcing decisions. \nKey features include: \n• \nIntuitive portal for error-free invoice submission by law firms and vendors (CounselGO) \n• \nCompare law firm rates and performance and refine who you work with (Vendor Surveys) \n• \nUnified global view of vendors \n• \nWorld-class, dedicated support for vendors \nKnowledge Management \nImproves the way legal teams create, share, and find information for quicker access to key intel to boost \nproductivity and make better decisions. \nKey features include: \n• \nEasily find information with quick and global searches \n• \nIdentify who has worked a matter and in what capacity \n• \nIdentify and track related matters to streamline work \n• \nFull-text search of matter documents \nReporting & Analytics \nUncover the valuable information hidden in data so legal teams have the intelligence needed to make strategic \nbusiness decisions quicker and easier. \nKey features include: \n• \nStandard reports that align with legal analytics best prac"
     },
     {
@@ -100,57 +437,56 @@
       "source_context": "tices and industry standards \n• \nEasy-to-use ad hoc report builder for on-the-fly insights \n• \nCustomized reports to meet internal requirements \n• \nAdvanced reports with dynamic dashboards and presentation-ready data visuals (integration with \nTableau) \n• \nRobust dashboards and ability to drill into the data on every page \n• \nEasily export reports for further analysis \nApplication Programming Interface & Integrations \nConnect with the tools you rely on most to ensure a seamless workflow. SimpleLegal offers pre-built integrations \nas well as the flexibility for other systems to integrate via the Application Programming Interface (API). \nKey features include: \n• \nPre-built integrations with commonly used applications, including leading finance systems, time tracking \nsoftware, document and Internet protocol (IP) management solutions, and more \n• \nCustom integrations via the Representational State Transfer (REST) API that can be easily configured \nwith the help of internal Information Tec"
     },
     {
-      "third_party_name": "consulting partners",
-      "third_party_description": "Third-party consulting firms that work closely with SimpleLegal to understand customer requirements and support design, build, and deployment",
+      "third_party_name": "SimpleLegal Professional Services",
+      "third_party_description": "Provides turnkey system solutions and assistance in transforming business requirements into functional configurations.",
       "third_party_page_ref": null,
       "third_party_confidence": 0.8,
-      "distance_from_so_keywords": 1,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Assist in transforming business requirements into functional configurations"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Work with customer's project team in project design, configuration, and deployment"
+        }
+      ],
+      "source_context": "egal offers pre-built integrations \nas well as the flexibility for other systems to integrate via the Application Programming Interface (API). \nKey features include: \n• \nPre-built integrations with commonly used applications, including leading finance systems, time tracking \nsoftware, document and Internet protocol (IP) management solutions, and more \n• \nCustom integrations via the Representational State Transfer (REST) API that can be easily configured \nwith the help of internal Information Technology (IT), a third-party vendor, or the SimpleLegal Professional \nServices team \nProfessional Services \nSimpleLegal can provide a complete turnkey system to meet client needs, or the Company can work in \nconjunction with client personnel to assist in transforming the business requirements into a functional \nconfiguration. Typically, SimpleLegal will work with a customer’s project team and is involved in the aspects of \nproject design, configuration, and deployment. System configuration is typ"
+    },
+    {
+      "third_party_name": "Third-party consulting, implementation service, and data integration service providers",
+      "third_party_description": "Partners with SimpleLegal to build robust solutions to meet customers' needs.",
+      "third_party_page_ref": null,
+      "third_party_confidence": 0.7,
+      "distance_from_so_keywords": 0,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": null,
       "source_context": "egal offers pre-built integrations \nas well as the flexibility for other systems to integrate via the Application Programming Interface (API). \nKey features include: \n• \nPre-built integrations with commonly used applications, including leading finance systems, time tracking \nsoftware, document and Internet protocol (IP) management solutions, and more \n• \nCustom integrations via the Representational State Transfer (REST) API that can be easily configured \nwith the help of internal Information Technology (IT), a third-party vendor, or the SimpleLegal Professional \nServices team \nProfessional Services \nSimpleLegal can provide a complete turnkey system to meet client needs, or the Company can work in \nconjunction with client personnel to assist in transforming the business requirements into a functional \nconfiguration. Typically, SimpleLegal will work with a customer’s project team and is involved in the aspects of \nproject design, configuration, and deployment. System configuration is typ"
     },
     {
-      "third_party_name": "implementation service providers",
-      "third_party_description": "Third-party implementation service providers that SimpleLegal partners with to build robust solutions to meet customers' needs.",
-      "third_party_page_ref": "PAGE 12",
-      "third_party_confidence": 0.7,
-      "distance_from_so_keywords": 2,
+      "third_party_name": "consulting partners",
+      "third_party_description": "Consulting firms that work closely with customers to understand their requirements and support the design, build, and deployment of SimpleLegal",
+      "third_party_page_ref": "Page 12,PAGE 12",
+      "third_party_confidence": 0.8,
+      "distance_from_so_keywords": 0,
       "likely_so": "Yes",
       "common_so": "Yes",
-      "third_party_controls": [
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        }
-      ],
-      "source_context": "ically focused on specific business \nnomenclature, workflows, and matter types. \nIn addition, SimpleLegal partners with a variety of third-party consulting, implementation service, and data \nintegration service providers to build robust solutions to meet customers’ needs. As the need dictates, it is \nrecommended to use of one of the consulting partners that work closely with the customer to understand their \nrequirements, and to support the design, build, and deployment of SimpleLegal. Consulting partners help to \n=== PAGE 12 ===\n\n12 \naugment the customer's internal team to drive more efficient and effective decisions across stakeholder groups. \nThey complement SimpleLegal’s technical expertise, bringing customers deep industry experience and broad \nsolution knowledge, to help solve the problems that their business faces. SimpleLegal works hand-in-hand with \nthe partners throughout joint implementations. \nPrincipal Service Commitments and System Requirements  \nSimpleLegal designs its p"
-    },
-    {
-      "third_party_name": "data integration service providers",
-      "third_party_description": "Third-party data integration service providers that SimpleLegal partners with to build robust solutions to meet customers' needs.",
-      "third_party_page_ref": "PAGE 12",
-      "third_party_confidence": 0.7,
-      "distance_from_so_keywords": 2,
-      "likely_so": "Yes",
-      "common_so": "Yes",
-      "third_party_controls": [
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        }
-      ],
-      "source_context": "ically focused on specific business \nnomenclature, workflows, and matter types. \nIn addition, SimpleLegal partners with a variety of third-party consulting, implementation service, and data \nintegration service providers to build robust solutions to meet customers’ needs. As the need dictates, it is \nrecommended to use of one of the consulting partners that work closely with the customer to understand their \nrequirements, and to support the design, build, and deployment of SimpleLegal. Consulting partners help to \n=== PAGE 12 ===\n\n12 \naugment the customer's internal team to drive more efficient and effective decisions across stakeholder groups. \nThey complement SimpleLegal’s technical expertise, bringing customers deep industry experience and broad \nsolution knowledge, to help solve the problems that their business faces. SimpleLegal works hand-in-hand with \nthe partners throughout joint implementations. \nPrincipal Service Commitments and System Requirements  \nSimpleLegal designs its p"
+      "third_party_controls": null,
+      "source_context": "hnology (IT), a third-party vendor, or the SimpleLegal Professional \nServices team \nProfessional Services \nSimpleLegal can provide a complete turnkey system to meet client needs, or the Company can work in \nconjunction with client personnel to assist in transforming the business requirements into a functional \nconfiguration. Typically, SimpleLegal will work with a customer’s project team and is involved in the aspects of \nproject design, configuration, and deployment. System configuration is typically focused on specific business \nnomenclature, workflows, and matter types. \nIn addition, SimpleLegal partners with a variety of third-party consulting, implementation service, and data \nintegration service providers to build robust solutions to meet customers’ needs. As the need dictates, it is \nrecommended to use of one of the consulting partners that work closely with the customer to understand their \nrequirements, and to support the design, build, and deployment of SimpleLegal. Consultin"
     },
     {
       "third_party_name": "California Privacy Protection Agency (CPPA)",
-      "third_party_description": "Regulatory agency responsible for enforcing privacy laws in California.",
-      "third_party_page_ref": null,
-      "third_party_confidence": 0.8,
-      "distance_from_so_keywords": 2,
-      "likely_so": "Yes",
+      "third_party_description": "Regulatory agency responsible for enforcing privacy laws in California",
+      "third_party_page_ref": "null",
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
       "common_so": "No",
       "third_party_controls": [],
       "source_context": " user entities and any requirements in a particular user entity’s \nagreement that the service organization meets fully or for most user entities, Health Insurance Portability \nand Accountability Act (HIPAA), General Data Protection Regulation (GDPR), SOC examinations, \npenetration testing, etc. \n2. A summary of the significant privacy and related security requirements mandated by law, regulation, an \nindustry, or a market that are not included in user entity agreements but the service organization meets \nfor all or most user entities California Privacy Protection Agency (CPPA). \n3. The purposes, uses, and disclosures of personal information as permitted by user entity agreements and \nbeyond those permitted by such agreements but not prohibited by such agreements and the service \norganization’s commitments regarding the purpose, use, and disclosure of personal information that are \nprohibited by such agreements. \n4. A statement that the information will be retained for a period no longe"
@@ -158,7 +494,7 @@
     {
       "third_party_name": "AWS",
       "third_party_description": "Amazon Web Services (AWS) is a cloud service platform that offers infrastructure as a service (IaaS) solutions.",
-      "third_party_page_ref": "PAGE 13,https://aws.amazon.com/,https://aws.amazon.com/,PAGE 18,PAGE 18,https://aws.amazon.com/,PAGE 20,https://aws.amazon.com/,https://aws.amazon.com/,https://aws.amazon.com/,https://aws.amazon.com/,https://aws.amazon.com/,https://aws.amazon.com/,https://aws.amazon.com/",
+      "third_party_page_ref": "PAGE 13,https://aws.amazon.com/,https://aws.amazon.com/,PAGE 18,PAGE 18,Complementary Subservice Organization Controls section,PAGE 20,https://aws.amazon.com/,https://aws.amazon.com/,https://aws.amazon.com/,https://aws.amazon.com/,https://aws.amazon.com/,https://aws.amazon.com/",
       "third_party_confidence": 0.9,
       "distance_from_so_keywords": 2,
       "likely_so": "Yes",
@@ -172,12 +508,7 @@
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
+          "third_party_control_desc": "Provision and manage physical infrastructure components"
         },
         {
           "third_party_control_seq": 1,
@@ -202,16 +533,6 @@
         {
           "third_party_control_seq": 2,
           "third_party_control_id": "CC7.2",
-          "third_party_control_desc": "Access attempts to"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": "CC6.4",
-          "third_party_control_desc": "Recovery key materials used for disaster recovery processes by Key Management Service (KMS) are physically secured offline so that no single AWS employee can gain access to the key material."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": "CC7.2",
           "third_party_control_desc": "Access attempts to recovery key materials are reviewed by authorized operators on a cadence defined in team documentation."
         },
         {
@@ -227,42 +548,98 @@
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": null
+          "third_party_control_desc": "Replication of critical system components across multiple Availability Zones"
         },
         {
           "third_party_control_seq": 2,
           "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
+          "third_party_control_desc": "Monitoring backups of critical system components for successful replication"
         },
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": null
+          "third_party_control_desc": "Monitoring services performed by AWS to determine whether operations and controls expected to be implemented at the subservice organization are functioning effectively."
         },
         {
           "third_party_control_seq": 2,
           "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
+          "third_party_control_desc": "Communication with the subservice organization to monitor compliance with service agreements, stay up to date on planned changes at the hosting facilities, and communicate any issues or concerns to AWS."
         }
       ],
       "source_context": "ence of a written security program and what industry or other standards it \nis based on. \n10. Other relevant information related to privacy practices deemed appropriate for user entities by the service \norganization. \n=== PAGE 13 ===\n\n13 \nSimpleLegal establishes operational requirements that support the achievement of commitments, relevant laws \nand regulations, and other system requirements. Such requirements are communicated in SimpleLegal’s system \npolicies and procedures, system design documentation, and contracts with customers. Information security \npolicies define an organization-wide approach to how systems and data are protected. These include policies \naround system design, development, and operations, as well as management of internal business systems and \nnetworks. In addition to these policies, standard operating procedures have been documented on how to carry out \nspecific manual and automated processes required in the development and operation of SimpleLegal’s system. \nC"
     },
     {
+      "third_party_name": "Debian",
+      "third_party_description": "Debian is a Unix-like operating system consisting entirely of free software.",
+      "third_party_page_ref": "https://www.debian.org/",
+      "third_party_confidence": 0.8,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Operating system for containers"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "entation, and contracts with customers. Information security \npolicies define an organization-wide approach to how systems and data are protected. These include policies \naround system design, development, and operations, as well as management of internal business systems and \nnetworks. In addition to these policies, standard operating procedures have been documented on how to carry out \nspecific manual and automated processes required in the development and operation of SimpleLegal’s system. \nComponents of the System \nInfrastructure \nPrimary infrastructure used to provide SimpleLegal’s Legal Spend and Matter Management Software System \nincludes the following:  \nHardware \nType \nPurpose \nAWS \nInfrastructure as a \nService (IaaS) \nSimpleLegal hosts its service within AWS cloud service platform \nenvironment and therefore the physical infrastructure components \nare provisioned and managed by AWS. \nSoftware \nPrimary software used to support the Legal Spend and Matter Management Software Syst"
+    },
+    {
+      "third_party_name": "Amazon Linux",
+      "third_party_description": "Amazon Linux is a Linux-based operating system provided by Amazon Web Services for use on their EC2 instances.",
+      "third_party_page_ref": "https://aws.amazon.com/amazon-linux-2/",
+      "third_party_confidence": 0.8,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Operating system for Elastic Kubernetes Service (EKS) Nodes"
+        }
+      ],
+      "source_context": "entation, and contracts with customers. Information security \npolicies define an organization-wide approach to how systems and data are protected. These include policies \naround system design, development, and operations, as well as management of internal business systems and \nnetworks. In addition to these policies, standard operating procedures have been documented on how to carry out \nspecific manual and automated processes required in the development and operation of SimpleLegal’s system. \nComponents of the System \nInfrastructure \nPrimary infrastructure used to provide SimpleLegal’s Legal Spend and Matter Management Software System \nincludes the following:  \nHardware \nType \nPurpose \nAWS \nInfrastructure as a \nService (IaaS) \nSimpleLegal hosts its service within AWS cloud service platform \nenvironment and therefore the physical infrastructure components \nare provisioned and managed by AWS. \nSoftware \nPrimary software used to support the Legal Spend and Matter Management Software Syst"
+    },
+    {
+      "third_party_name": "Ubuntu",
+      "third_party_description": "Ubuntu is a Linux distribution based on Debian and composed mostly of free and open-source software.",
+      "third_party_page_ref": "https://ubuntu.com/",
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Operating system for Web Application"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Operating system for React JavaScript Framework"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "entation, and contracts with customers. Information security \npolicies define an organization-wide approach to how systems and data are protected. These include policies \naround system design, development, and operations, as well as management of internal business systems and \nnetworks. In addition to these policies, standard operating procedures have been documented on how to carry out \nspecific manual and automated processes required in the development and operation of SimpleLegal’s system. \nComponents of the System \nInfrastructure \nPrimary infrastructure used to provide SimpleLegal’s Legal Spend and Matter Management Software System \nincludes the following:  \nHardware \nType \nPurpose \nAWS \nInfrastructure as a \nService (IaaS) \nSimpleLegal hosts its service within AWS cloud service platform \nenvironment and therefore the physical infrastructure components \nare provisioned and managed by AWS. \nSoftware \nPrimary software used to support the Legal Spend and Matter Management Software Syst"
+    },
+    {
       "third_party_name": "Amazon Web Services (AWS)",
       "third_party_description": "Cloud computing platform providing various services including Elastic Kubernetes Service (EKS) Nodes and Relational Database Services (RDS)",
-      "third_party_page_ref": "Description of System section,Description of System section,PAGE 24,Description of System section",
+      "third_party_page_ref": "Page 14,Description of System section,PAGE 24",
       "third_party_confidence": 0.9,
-      "distance_from_so_keywords": 2,
+      "distance_from_so_keywords": 0,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [
@@ -283,36 +660,6 @@
         },
         {
           "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Physical access to data centers is approved by an authorized individual."
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Physical access is revoked within 24 hours of the employee or vendor record being deactivated."
-        },
-        {
-          "third_party_control_seq": 5,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Physical access to data centers is reviewed on a quarterly basis by appropriate personnel."
-        },
-        {
-          "third_party_control_seq": 6,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Closed circuit television cameras (CCTV) are used to monitor server locations in data centers. Images are retained for 90 days, unless limited by legal or contractual obligations."
-        },
-        {
-          "third_party_control_seq": 7,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Access to server locations are managed by electronic access control devices."
-        },
-        {
-          "third_party_control_seq": 8,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Electronic intrusion detection systems are installed within data server locations to monitor, detect, and automatically alert appropriate personnel of security incidents."
-        },
-        {
-          "third_party_control_seq": 9,
           "third_party_control_id": "A1.2",
           "third_party_control_desc": "Amazon-owned data centers are protected by fire detection and suppression systems."
         },
@@ -320,16 +667,6 @@
           "third_party_control_seq": 1,
           "third_party_control_id": "A1.2",
           "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Contracts with third-party colocation service providers"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Periodic reviews of colocation service providers"
         }
       ],
       "source_context": "em are noted in the \ntable below. \n \nSoftware \nOperating System \nPurpose \nLinux \nDebian 12.8 \nOperating System for Containers  \nLinux \nAmazon Linux 2 \nElastic Kubernetes Service (EKS) Nodes \nPython \nUbuntu 18.04 \nWeb Application \nPostgres \nRelational Database Services (RDS)  \nDatabase \nReact \nUbuntu 18.04 \nJavaScript Framework \nPeople \nSimpleLegal maintains a staff of approximately 600 employees across the functional areas of general \nadministration, sales, professional services, customer success, marketing, product management, and research \nand development. The following organizational chart depicts the Company’s corporate structure: \n \nChief Executive \nOfficer\nManagement\nChief Financial \nOfficer\nAccounting & \nFinance\nIT & Operations\nChief Legal \nOfficer\nLegal\nChief People \nOfficer\nHuman \nResources\nChief Customer \nOfficer\nCustomer \nSuccess\nImplementation \nServices\nManaged \nServices\nSupport\nChief Revenue \nOfficer\nMarketing\nKey Sales\nPartner Sales\nRevenue Ops\nSales \nDevelopment\nSales \nE"
@@ -337,13 +674,24 @@
     {
       "third_party_name": "null",
       "third_party_description": "null",
-      "third_party_page_ref": "null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null",
+      "third_party_page_ref": "null,null,null,null,null,null,null,null,null,null,null,null,null,null,null",
       "third_party_confidence": 0.0,
       "distance_from_so_keywords": 0,
       "likely_so": "No",
       "common_so": "No",
       "third_party_controls": [],
       "source_context": "s, marketing, product management, and research \nand development. The following organizational chart depicts the Company’s corporate structure: \n \nChief Executive \nOfficer\nManagement\nChief Financial \nOfficer\nAccounting & \nFinance\nIT & Operations\nChief Legal \nOfficer\nLegal\nChief People \nOfficer\nHuman \nResources\nChief Customer \nOfficer\nCustomer \nSuccess\nImplementation \nServices\nManaged \nServices\nSupport\nChief Revenue \nOfficer\nMarketing\nKey Sales\nPartner Sales\nRevenue Ops\nSales \nDevelopment\nSales \nEngineering\nStrategic Sales\nChief AI Officer\nAI\nVice President, \nProduct\nProduct \nManagement\nVice President, \nTechnology\nEngineering\nQuality \nAssurance\nCompliance\nSecurity & \nCompliance\nDevOps\nCloud Ops\n=== PAGE 14 ===\n\n14 \nAccounting & Finance  \nThe Accounting & Finance department manages financial records, budgeting, and compliance to ensure the \norganization's financial health. It oversees financial reporting, risk management, and strategic planning to support \nbusiness growth and stability. \n"
+    },
+    {
+      "third_party_name": "Cloud Ops",
+      "third_party_description": "Cloud operations team responsible for managing cloud infrastructure and operations",
+      "third_party_page_ref": "PAGE 14",
+      "third_party_confidence": 0.8,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ngineering\nStrategic Sales\nChief AI Officer\nAI\nVice President, \nProduct\nProduct \nManagement\nVice President, \nTechnology\nEngineering\nQuality \nAssurance\nCompliance\nSecurity & \nCompliance\nDevOps\nCloud Ops\n=== PAGE 14 ===\n\n14 \nAccounting & Finance  \nThe Accounting & Finance department manages financial records, budgeting, and compliance to ensure the \norganization's financial health. It oversees financial reporting, risk management, and strategic planning to support \nbusiness growth and stability. \nIT & Operations \nThe IT & Operations department ensures the seamless functioning of corporate technology systems, \ninfrastructure, and business processes to support organizational efficiency. It manages IT services, and \noperational workflows to drive innovation, productivity, and scalability. \nLegal \nThe Legal department provides guidance on compliance, risk management, and regulatory matters to protect the \norganization’s interests. It oversees contracts, disputes, and legal strategies to ensu"
     },
     {
       "third_party_name": "Implementation Services",
@@ -362,8 +710,8 @@
       "third_party_page_ref": null,
       "third_party_confidence": 0.7,
       "distance_from_so_keywords": 0,
-      "likely_so": "Yes",
-      "common_so": "Yes",
+      "likely_so": "No",
+      "common_so": "No",
       "third_party_controls": [],
       "source_context": "IT & Operations \nThe IT & Operations department ensures the seamless functioning of corporate technology systems, \ninfrastructure, and business processes to support organizational efficiency. It manages IT services, and \noperational workflows to drive innovation, productivity, and scalability. \nLegal \nThe Legal department provides guidance on compliance, risk management, and regulatory matters to protect the \norganization’s interests. It oversees contracts, disputes, and legal strategies to ensure lawful and ethical business \noperations. \nHuman Resources \nThe Human Resources department manages recruitment, employee relations, and organizational development to \nfoster a productive and engaged workforce. It oversees benefits, compliance, and workplace culture to support \nboth employee well-being and business success. \nCustomer Success \nProvides consistent contact with established customers and ensures their satisfaction with relevant products. A \nsegment of this team also manages work ti"
     },
@@ -415,7 +763,7 @@
       "third_party_name": "Strategic Sales",
       "third_party_description": "Focuses on building and nurturing relationships with key entities",
       "third_party_page_ref": "PAGE 15",
-      "third_party_confidence": 0.8,
+      "third_party_confidence": 0.7,
       "distance_from_so_keywords": 3,
       "likely_so": "No",
       "common_so": "No",
@@ -425,9 +773,9 @@
     {
       "third_party_name": "AI department",
       "third_party_description": "Develops and integrates artificial intelligence technologies into the Company's solutions to enhance automation, analytics, and decision-making capabilities.",
-      "third_party_page_ref": null,
+      "third_party_page_ref": "null",
       "third_party_confidence": 0.8,
-      "distance_from_so_keywords": 2,
+      "distance_from_so_keywords": 3,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [],
@@ -436,9 +784,9 @@
     {
       "third_party_name": "Product Management team",
       "third_party_description": "Sets priorities for the Company through examining the current workload related to products in every department against pending or upcoming projects.",
-      "third_party_page_ref": null,
+      "third_party_page_ref": "null",
       "third_party_confidence": 0.7,
-      "distance_from_so_keywords": 2,
+      "distance_from_so_keywords": 3,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [],
@@ -447,9 +795,9 @@
     {
       "third_party_name": "Engineering department",
       "third_party_description": "Responsible for designing, developing, and maintaining",
-      "third_party_page_ref": null,
+      "third_party_page_ref": "null",
       "third_party_confidence": 0.7,
-      "distance_from_so_keywords": 2,
+      "distance_from_so_keywords": 3,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [],
@@ -468,19 +816,19 @@
     },
     {
       "third_party_name": "CloudOps",
-      "third_party_description": "CloudOps is a department that ensures 24/7 monitoring of the environment's infrastructure and security. They investigate infrastructure security incidents and escalate issues as needed for further support.",
-      "third_party_page_ref": "PAGE 16",
+      "third_party_description": "Department responsible for ensuring 24/7 monitoring of the environment's infrastructure and security",
+      "third_party_page_ref": "Page 16,PAGE 16",
       "third_party_confidence": 0.9,
       "distance_from_so_keywords": 2,
       "likely_so": "No",
       "common_so": "No",
       "third_party_controls": [],
-      "source_context": "ation and delivery (CI/CD), and \ninfrastructure management to enhance performance, security, and system reliability. \nCloudOps \nThe CloudOps department ensures 24/7 monitoring of the environment's infrastructure and security. They \ninvestigate infrastructure security incidents and escalate issues as needed for further support. \n=== PAGE 16 ===\n\n16 \nData \nData processed by the system is documented in the Description of Services Provided section of this report. The \ndata flowing through SimpleLegal’s infrastructure is restricted to authorized individuals requiring such access, \nincluding the Company’s customer base. Logical access controls described below ensure access is restricted to \nauthorized individuals based on job functions. \nThe following table describes the information included as part of the Legal Spend and Matter Management \nSoftware System: \nClient Data \nReporting \nClients choose the types of data they collect and input \nit into the Legal Spend and Matter Management \nSoftwar"
+      "source_context": "ience across all features. \nSecurity & Compliance  \nThe Security & Compliance department ensures the platform is secure, resilient, and compliant with industry \nregulations and data protection standards. It manages risk, security protocols, and audits to safeguard customer \ndata and maintain regulatory adherence. \nDevOps \nThe DevOps department bridges development and IT operations to ensure efficient, reliable, and scalable \ndeployment of the platform. It focuses on automation, continuous integration and delivery (CI/CD), and \ninfrastructure management to enhance performance, security, and system reliability. \nCloudOps \nThe CloudOps department ensures 24/7 monitoring of the environment's infrastructure and security. They \ninvestigate infrastructure security incidents and escalate issues as needed for further support. \n=== PAGE 16 ===\n\n16 \nData \nData processed by the system is documented in the Description of Services Provided section of this report. The \ndata flowing through SimpleLega"
     },
     {
       "third_party_name": "N/A",
       "third_party_description": null,
-      "third_party_page_ref": "N/A",
+      "third_party_page_ref": "N/A,N/A,N/A,N/A",
       "third_party_confidence": 0.5,
       "distance_from_so_keywords": 0,
       "likely_so": "No",
@@ -489,7 +837,7 @@
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": "Formally documented organizational policy statements and codes of conduct communicate entity values and behavioral standards to personnel"
+          "third_party_control_desc": "Formally, documented organizational policy statements and codes of conduct communicate entity values and behavioral standards to personnel"
         },
         {
           "third_party_control_seq": 2,
@@ -511,8 +859,8 @@
     },
     {
       "third_party_name": "Background Check Provider",
-      "third_party_description": "Company that conducts background checks for employees",
-      "third_party_page_ref": "Page 17",
+      "third_party_description": "Provides background check services for employees",
+      "third_party_page_ref": "PAGE 17",
       "third_party_confidence": 0.9,
       "distance_from_so_keywords": 1,
       "likely_so": "Yes",
@@ -521,7 +869,7 @@
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": "Perform background checks for employees as part of the hiring process"
+          "third_party_control_desc": "Perform background checks for employees as a component of the hiring process"
         }
       ],
       "source_context": " violated the ethics policy may be subject to disciplinary action, up to and \nincluding termination. \nSpecific control activities that the service organization has implemented in this area are described below: \n• \nFormally, documented organizational policy statements and codes of conduct communicate entity values \nand behavioral standards to personnel \n• \nPolicies and procedures require employees sign an acknowledgment form indicating they have been \ngiven access to the employee manual and understand their responsibility for adhering to the policies and \nprocedures contained within the manual \n• \nA confidentiality statement agreeing not to disclose proprietary or confidential information, including client \ninformation, to unauthorized parties is a component of the employee handbook \n• \nBackground checks are performed for employees as a component of the hiring process \n=== PAGE 17 ===\n\n17 \nCommitment to Competence \nThe Company defines competence as the knowledge and skills necessary to "
@@ -529,7 +877,7 @@
     {
       "third_party_name": "SharePoint",
       "third_party_description": "Collaboration platform developed by Microsoft",
-      "third_party_page_ref": "null,N/A",
+      "third_party_page_ref": "null,N/A,N/A",
       "third_party_confidence": 0.9,
       "distance_from_so_keywords": 2,
       "likely_so": "Yes",
@@ -538,38 +886,49 @@
       "source_context": " access the main building entrance and office \n• \nVideo surveillance cameras that provide 24/7 streaming, recording and motion detection \n• \nAlarm systems that automatically connect to security contractors \n• \nShredders to securely dispose of hard-copy documents \nLogical Security \nSimpleLegal has policies and procedures that outline information technology security standards. These \ndocuments are available for review by all employees and contractors through SharePoint. SimpleLegal uses role-\nbased security architecture and requires users of the system to be identified and authenticated prior to the use of \nany system resources. Resources are protected through the use of native system security and add-on software \nproducts that identify and authenticate users and validate access requests against the users’ authorized roles in \naccess control lists.  \nAccountability \nIndividual users are responsible for ensuring that others do not access data or information from their systems. \nUsers need"
     },
     {
-      "third_party_name": "security contractors",
-      "third_party_description": "Companies that provide security services and monitoring",
-      "third_party_page_ref": "null",
-      "third_party_confidence": 0.8,
-      "distance_from_so_keywords": 3,
-      "likely_so": "Yes",
-      "common_so": "Yes",
-      "third_party_controls": [],
-      "source_context": " access the main building entrance and office \n• \nVideo surveillance cameras that provide 24/7 streaming, recording and motion detection \n• \nAlarm systems that automatically connect to security contractors \n• \nShredders to securely dispose of hard-copy documents \nLogical Security \nSimpleLegal has policies and procedures that outline information technology security standards. These \ndocuments are available for review by all employees and contractors through SharePoint. SimpleLegal uses role-\nbased security architecture and requires users of the system to be identified and authenticated prior to the use of \nany system resources. Resources are protected through the use of native system security and add-on software \nproducts that identify and authenticate users and validate access requests against the users’ authorized roles in \naccess control lists.  \nAccountability \nIndividual users are responsible for ensuring that others do not access data or information from their systems. \nUsers need"
-    },
-    {
-      "third_party_name": "Firewalls",
-      "third_party_description": "Firewalls protecting the internal network",
+      "third_party_name": "Version control software provider",
+      "third_party_description": "Provider of version control software used to maintain source code versions and migrate source code through the development process to the production environment.",
       "third_party_page_ref": "PAGE 19",
-      "third_party_confidence": 0.9,
-      "distance_from_so_keywords": 3,
+      "third_party_confidence": 0.8,
+      "distance_from_so_keywords": 2,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": "Firewalls protecting the internal network"
+          "third_party_control_desc": "Maintain source code versions and migrate source code through the development process to the production environment."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Maintain a history of code changes to support rollback capabilities and track changes to developers."
+        }
+      ],
+      "source_context": "ementation of new changes. Quality assurance testing (QAT) and user acceptance testing (UAT) results are \ndocumented and maintained with the associated change request. Development and testing are performed in an \nenvironment that is logically separated from the production environment. Management approves changes prior to \nmigration to the production environment and documents those approvals within the ticketing system.  \nVersion control software is utilized to maintain source code versions and migrate source code through the \ndevelopment process to the production environment. The version control software maintains a history of code \nchanges to support rollback capabilities and tracks changes to developers.  \n=== PAGE 19 ===\n\n19 \nData Communications \nThe Company uses a variety of methods for communication to ensure that significant events and issues are sent \nin a timely manner and that staff understand their role and responsibility over service and controls. These \nmethods include the "
+    },
+    {
+      "third_party_name": "Firewall provider",
+      "third_party_description": "Provider of firewalls used to protect the internal network from external threats.",
+      "third_party_page_ref": "PAGE 19",
+      "third_party_confidence": 0.7,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Protect the internal network from external threats."
         }
       ],
       "source_context": "ementation of new changes. Quality assurance testing (QAT) and user acceptance testing (UAT) results are \ndocumented and maintained with the associated change request. Development and testing are performed in an \nenvironment that is logically separated from the production environment. Management approves changes prior to \nmigration to the production environment and documents those approvals within the ticketing system.  \nVersion control software is utilized to maintain source code versions and migrate source code through the \ndevelopment process to the production environment. The version control software maintains a history of code \nchanges to support rollback capabilities and tracks changes to developers.  \n=== PAGE 19 ===\n\n19 \nData Communications \nThe Company uses a variety of methods for communication to ensure that significant events and issues are sent \nin a timely manner and that staff understand their role and responsibility over service and controls. These \nmethods include the "
     },
     {
       "third_party_name": "Third-party vendor for Vulnerability Scanning",
-      "third_party_description": "Performs scanning on a monthly basis using industry standard technologies and methodology specified by OWASP",
-      "third_party_page_ref": "PAGE 19,Description of System section",
-      "third_party_confidence": 0.9,
+      "third_party_description": "Performs scanning on a monthly basis using industry standard technologies and methodologies specified by OWASP",
+      "third_party_page_ref": "PAGE 19,Description of System section,Description of System section",
+      "third_party_confidence": 0.8,
       "distance_from_so_keywords": 2,
       "likely_so": "Yes",
       "common_so": "Yes",
@@ -593,6 +952,11 @@
           "third_party_control_seq": 3,
           "third_party_control_id": null,
           "third_party_control_desc": "Perform retests and on-demand scans as needed"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
         }
       ],
       "source_context": "igrate source code through the \ndevelopment process to the production environment. The version control software maintains a history of code \nchanges to support rollback capabilities and tracks changes to developers.  \n=== PAGE 19 ===\n\n19 \nData Communications \nThe Company uses a variety of methods for communication to ensure that significant events and issues are sent \nin a timely manner and that staff understand their role and responsibility over service and controls. These \nmethods include the following: \n• \nNew hire training \n• \nOngoing training \n• \nPolicy and process updates \n• \nDepartmental meetings summarizing events and changes \n• \nUse of e-mail systems \nSystem Monitoring \nSimpleLegal performs system monitoring activities to continuously assess the quality of internal control over time \nand ensure that any corrective actions are completed in a timely manner. Examples of system monitoring \nprocesses in place include: \n• \nFirewalls – Firewalls protecting the internal network from t"
@@ -600,9 +964,9 @@
     {
       "third_party_name": "Third-party security firms for Penetration Testing",
       "third_party_description": "Conducts penetration testing using industry standard methodology",
-      "third_party_page_ref": "Description of System section",
-      "third_party_confidence": 0.9,
-      "distance_from_so_keywords": 3,
+      "third_party_page_ref": "Description of System section,Description of System section",
+      "third_party_confidence": 0.8,
+      "distance_from_so_keywords": 2,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [
@@ -610,72 +974,50 @@
           "third_party_control_seq": 1,
           "third_party_control_id": null,
           "third_party_control_desc": "Conduct penetration testing using industry standard methodology"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
         }
       ],
       "source_context": "following: \n• \nNew hire training \n• \nOngoing training \n• \nPolicy and process updates \n• \nDepartmental meetings summarizing events and changes \n• \nUse of e-mail systems \nSystem Monitoring \nSimpleLegal performs system monitoring activities to continuously assess the quality of internal control over time \nand ensure that any corrective actions are completed in a timely manner. Examples of system monitoring \nprocesses in place include: \n• \nFirewalls – Firewalls protecting the internal network from the public network are implemented, configured, \nand managed by the SimpleLegal administration staff. Firewalls utilize access rules to grant or deny \naccess to internal resources.  \n• \nVulnerability Scanning – Scanning is performed by a third-party vendor on a monthly basis in accordance \nwith SimpleLegal policy. The third-party vendor uses industry standard scanning technologies and a \nformal methodology specified by Open Web Application Security Project (OWASP). These technologies \nare customi"
     },
     {
-      "third_party_name": "third-party vendor",
-      "third_party_description": "Performs vulnerability scanning on a monthly basis using industry standard scanning technologies and methodologies specified by OWASP.",
-      "third_party_page_ref": "Description of System section",
-      "third_party_confidence": 0.8,
-      "distance_from_so_keywords": 3,
-      "likely_so": "Yes",
-      "common_so": "Yes",
-      "third_party_controls": [
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Perform vulnerability scanning on a monthly basis"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Use industry standard scanning technologies and methodologies specified by OWASP"
-        }
-      ],
-      "source_context": "he public network are implemented, configured, \nand managed by the SimpleLegal administration staff. Firewalls utilize access rules to grant or deny \naccess to internal resources.  \n• \nVulnerability Scanning – Scanning is performed by a third-party vendor on a monthly basis in accordance \nwith SimpleLegal policy. The third-party vendor uses industry standard scanning technologies and a \nformal methodology specified by Open Web Application Security Project (OWASP). These technologies \nare customized to test the organization's infrastructure and software in an efficient manner while \nminimizing the potential risks associated with active scanning. Retests and on-demand scans are \nperformed on an as needed basis.  \n• \nIntrusion Detection Systems – Provide continuous monitoring of cybersecurity threats. \n• \nPenetration Testing – SimpleLegal hires third-party security firms that use an accepted industry standard \npenetration testing methodology. The third-party vendor’s approach begins with "
-    },
-    {
       "third_party_name": "third-party security firms",
-      "third_party_description": "Conducts penetration testing using accepted industry standard methodologies to identify vulnerabilities and potential unauthorized access.",
-      "third_party_page_ref": "Description of System section,N/A",
-      "third_party_confidence": 0.8,
-      "distance_from_so_keywords": 3,
+      "third_party_description": "External firms specializing in cybersecurity services, including penetration testing.",
+      "third_party_page_ref": "Description of System section",
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 2,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": "Conduct penetration testing using accepted industry standard methodologies"
+          "third_party_control_desc": "Use an accepted industry standard penetration testing methodology."
         },
         {
           "third_party_control_seq": 2,
           "third_party_control_id": null,
-          "third_party_control_desc": "Identify vulnerabilities and potential unauthorized access"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Use accepted industry standard penetration testing methodology."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Perform vulnerability analysis of target system."
+          "third_party_control_desc": "Perform vulnerability analysis of the target system."
         },
         {
           "third_party_control_seq": 3,
           "third_party_control_id": null,
-          "third_party_control_desc": "Attempt to exploit vulnerabilities to determine unauthorized access."
+          "third_party_control_desc": "Attempt to exploit identified vulnerabilities to determine unauthorized access or malicious activity."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Include application layer testing and testing of controls and processes around applications."
         }
       ],
-      "source_context": "he public network are implemented, configured, \nand managed by the SimpleLegal administration staff. Firewalls utilize access rules to grant or deny \naccess to internal resources.  \n• \nVulnerability Scanning – Scanning is performed by a third-party vendor on a monthly basis in accordance \nwith SimpleLegal policy. The third-party vendor uses industry standard scanning technologies and a \nformal methodology specified by Open Web Application Security Project (OWASP). These technologies \nare customized to test the organization's infrastructure and software in an efficient manner while \nminimizing the potential risks associated with active scanning. Retests and on-demand scans are \nperformed on an as needed basis.  \n• \nIntrusion Detection Systems – Provide continuous monitoring of cybersecurity threats. \n• \nPenetration Testing – SimpleLegal hires third-party security firms that use an accepted industry standard \npenetration testing methodology. The third-party vendor’s approach begins with "
+      "source_context": "zed to test the organization's infrastructure and software in an efficient manner while \nminimizing the potential risks associated with active scanning. Retests and on-demand scans are \nperformed on an as needed basis.  \n• \nIntrusion Detection Systems – Provide continuous monitoring of cybersecurity threats. \n• \nPenetration Testing – SimpleLegal hires third-party security firms that use an accepted industry standard \npenetration testing methodology. The third-party vendor’s approach begins with a vulnerability analysis of \nthe target system to determine what vulnerabilities exist on the system that can be exploited via a \npenetration test, simulating a disgruntled/disaffected insider or an attacker that has obtained internal \naccess to the network. Once vulnerabilities are identified, the third-party vendor attempts to exploit the \nvulnerabilities to determine whether unauthorized access or other malicious activity is possible. \nPenetration testing includes application layer testing as"
     },
     {
       "third_party_name": "vendor",
-      "third_party_description": "Operating system patch provider",
+      "third_party_description": "Operating system patch vendor",
       "third_party_page_ref": null,
       "third_party_confidence": 0.8,
       "distance_from_so_keywords": 2,
@@ -685,7 +1027,7 @@
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": "Vendor recommended operating system patches"
+          "third_party_control_desc": "Patch management process"
         }
       ],
       "source_context": " well as testing of controls and processes around \nthe applications. \n• \nPatch Management – SimpleLegal has implemented a patch management process to ensure \ninfrastructure systems are patched in accordance with vendor recommended operating system patches. \nSimpleLegal system owners review proposed operating system patches to determine whether the \npatches are applied. SimpleLegal systems are responsible for determining the risk of applying or not \napplying patches based upon the security and availability impact of those systems and any critical \napplications hosted on them. SimpleLegal staff validate that the patches have been installed and, if \napplicable, that reboots have been completed.  \nProblem Management \nSecurity incidents are reported to the Security and Compliance teams through an internal ticketing application. \nIssues are triaged and tracked using a ticketing system and monitored until resolved. \nData Backup and Recovery \nCustomer data is backed up daily and monitored by o"
@@ -693,7 +1035,7 @@
     {
       "third_party_name": "AWS (Amazon Web Services)",
       "third_party_description": "Cloud computing platform provided by Amazon",
-      "third_party_page_ref": "PAGE 20,PAGE 20",
+      "third_party_page_ref": "PAGE 20,PAGE 20,https://aws.amazon.com/",
       "third_party_confidence": 0.9,
       "distance_from_so_keywords": 1,
       "likely_so": "Yes",
@@ -702,15 +1044,25 @@
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": null
+          "third_party_control_desc": "Monitoring capacity utilization of cloud computing infrastructure"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.4",
+          "third_party_control_desc": "Recovery key materials used for disaster recovery processes by Key Management Service (KMS) are physically secured offline so that no single AWS employee can gain access to the key material."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC7.2",
+          "third_party_control_desc": "Access attempts to"
         }
       ],
       "source_context": "ailability impact of those systems and any critical \napplications hosted on them. SimpleLegal staff validate that the patches have been installed and, if \napplicable, that reboots have been completed.  \nProblem Management \nSecurity incidents are reported to the Security and Compliance teams through an internal ticketing application. \nIssues are triaged and tracked using a ticketing system and monitored until resolved. \nData Backup and Recovery \nCustomer data is backed up daily and monitored by operations personnel for completion and exceptions. In the \nevent of an exception, operations personnel perform troubleshooting to identify the root cause and then re-run the \nbackup job immediately or as part of the next scheduled backup job depending on customer indicated \npreferences within the documented work instructions.  \nBackup data is stored remotely where SimpleLegal personnel have no physical access. The backup infrastructure \nresides on private networks logically segmented from other "
     },
     {
       "third_party_name": "third-party specialists",
-      "third_party_description": "Third-party specialists who conduct background checks for SimpleLegal",
-      "third_party_page_ref": "HR coordinates the performance of background checks with third-party specialists.,page 21,Page 21",
+      "third_party_description": "Third-party specialists who perform background checks for SimpleLegal",
+      "third_party_page_ref": "Description of System section,Page 21,Description of System section",
       "third_party_confidence": 0.8,
       "distance_from_so_keywords": 3,
       "likely_so": "Yes",
@@ -719,7 +1071,7 @@
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": "Conduct background checks for newly hired employees"
+          "third_party_control_desc": "Perform background checks for newly hired employees"
         },
         {
           "third_party_control_seq": 1,
@@ -731,25 +1083,19 @@
     },
     {
       "third_party_name": "vendors",
-      "third_party_description": "External companies that provide goods or services to SimpleLegal",
-      "third_party_page_ref": "null",
+      "third_party_description": "External companies or individuals that provide goods or services to SimpleLegal",
+      "third_party_page_ref": "N/A",
       "third_party_confidence": 0.8,
       "distance_from_so_keywords": 1,
-      "likely_so": "Yes",
-      "common_so": "Yes",
-      "third_party_controls": [
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        }
-      ],
+      "likely_so": "No",
+      "common_so": "No",
+      "third_party_controls": null,
       "source_context": "l recognizes that risk management is a critical component of its operations and contributes to ensuring \ncustomer data is properly protected. SimpleLegal incorporates risk management throughout its business \nprocesses and across the organization. The foundation of this process is management’s knowledge of its \noperations, its close working relationship with its customers and vendors, and its understanding of the space in \nwhich it operates. \nSimpleLegal conducts a risk assessment at least quarterly. The system risk assessment template enables \nSimpleLegal to describe their cause and potential impact and outline mitigation steps to reduce the likelihood and \nimpact. \nIntegration with Risk Assessment \nSimpleLegal addresses risks through the implementation of suitably designed controls to provide reasonable \nassurance that the criteria are met. Because each system and the environment in which it operates is unique, the \ncombination of risks to meeting the criteria and the controls necessa"
     },
     {
       "third_party_name": "Microsoft",
       "third_party_description": "Technology company that develops software, services, and devices",
-      "third_party_page_ref": "N/A",
+      "third_party_page_ref": "N/A,N/A",
       "third_party_confidence": 0.9,
       "distance_from_so_keywords": 2,
       "likely_so": "Yes",
@@ -763,15 +1109,46 @@
       "third_party_page_ref": null,
       "third_party_confidence": 0.9,
       "distance_from_so_keywords": 0,
-      "likely_so": "No",
-      "common_so": "No",
-      "third_party_controls": null,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "User entities are responsible for controls to input complete and accurate information and comply with the operating instructions of the Company’s products and applications."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "User entities are responsible for controls to comply with the operating instructions of the Company’s products and applications."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "User entities are responsible for controls to communicate with the Company regarding failures, incidents, concerns, and other matters when complying with the operating instructions of the Company’s products and applications."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "User entities are responsible for informing the Company of any regulatory issues that may affect the services provided by the Company."
+        },
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": "User entities are responsible for risks related to the use of IT and access to information when granting access to the services provided by the Company."
+        },
+        {
+          "third_party_control_seq": 6,
+          "third_party_control_id": null,
+          "third_party_control_desc": "User entities are responsible for controls to notify the Company in a timely manner when changes are made to technical, billing, or administrative contact information."
+        }
+      ],
       "source_context": " controls, considering the related CUECs identified for the specific \ncriterion. For user entities to rely on the controls reported herein, each user entity must evaluate its own internal \ncontrols to determine whether the identified CUECs have been implemented and are operating effectively.  \nThe user entity controls presented should not be regarded as a comprehensive list of all controls that should be \nemployed by user entities.  \n• \nUser entities are responsible for controls to input complete and accurate information and comply with the \noperating instructions of the Company’s products and applications. \n• \nUser entities are responsible for controls to comply with the operating instructions of the Company’s \nproducts and applications. \n• \nUser entities are responsible for controls to communicate with the Company regarding failures, incidents, \nconcerns, and other matters when complying with the operating instructions of the Company’s products \nand applications. \n• \nUser entities ar"
     },
     {
       "third_party_name": "Amazon",
       "third_party_description": "Amazon Web Services (AWS) provides on-demand cloud computing platforms and APIs to individuals, companies, and governments.",
-      "third_party_page_ref": "PAGE 24",
+      "third_party_page_ref": "PAGE 24,https://aws.amazon.com/",
       "third_party_confidence": 0.9,
       "distance_from_so_keywords": 0,
       "likely_so": "Yes",
@@ -796,6 +1173,31 @@
           "third_party_control_seq": 4,
           "third_party_control_id": null,
           "third_party_control_desc": "Generators for backup power"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "UPS units provide backup power in the event of an electrical failure in Amazon-owned data centers and third-party colocation sites where Amazon maintains the UPS units."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Amazon-owned data centers have generators to provide backup power in case of electrical failure."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Contracts are in place with third-party colocation service providers which include provisions to provide fire suppression systems, air conditioning, UPS units, and redundant power supplies."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Contracts also include provisions requiring communication of incidents or events that impact Amazon assets and/or customers to AWS."
+        },
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": "AWS performs periodic reviews of colocation service providers to validate adherence with AWS security and operational standards."
         }
       ],
       "source_context": "recovery key materials are reviewed by authorized operators on a cadence defined \nin team documentation.  \n• \nPhysical access to data centers is approved by an authorized individual. \n• \nPhysical access is revoked within 24 hours of the employee or vendor record being deactivated. \n• \nPhysical access to data centers is reviewed on a quarterly basis by appropriate personnel. \n• \nClosed circuit television cameras (CCTV) are used to monitor server locations in data centers. Images \nare retained for 90 days, unless limited by legal or contractual obligations. \n• \nAccess to server locations are managed by electronic access control devices. \n• \nElectronic intrusion detection systems are installed within data server locations to monitor, detect, and \nautomatically alert appropriate personnel of security incidents. \n=== PAGE 24 ===\n\n24 \nA1.2 \n• \nAmazon-owned data centers are protected by fire detection and suppression systems. \n• \nAmazon-owned data centers are air conditioned to maintain appro"

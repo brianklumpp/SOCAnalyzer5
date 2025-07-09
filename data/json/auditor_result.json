@@ -4,7 +4,7 @@
   "source_section": "SECTION I. INDEPENDENT SERVICE AUDITOR’S REPORT",
   "source_page": 5,
   "raw_gpt_responses": [
-    "{\n    \"auditor\": \"Assurance | Tax | Advisory | Wealth Management\",\n    \"confidence\": 0.8,\n    \"explanation\": \"The text mentions the auditing firm in the header of the report, indicating that Assurance | Tax | Advisory | Wealth Management performed the SOC 2 examination.\"\n}"
+    "{\n    \"auditor\": \"Assurance | Tax | Advisory | Wealth Management\",\n    \"confidence\": 0.8,\n    \"explanation\": \"The text mentions the auditing firm in the header of the report, indicating that they performed the SOC 2 examination.\"\n}"
   ],
-  "confirmation_explanation": "Fallback: Boulay PLLP is a CPA and advisory firm that provides SOC audits among other services."
+  "confirmation_explanation": "Fallback: Boulay PLLP is a reputable accounting firm that provides audit services, including SOC audits."
 }
