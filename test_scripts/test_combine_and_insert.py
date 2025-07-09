@@ -114,6 +114,7 @@ elif "subservice_orgs" in combined and "subservice_orgs_extraction" in combined:
     if isinstance(combined["subservice_orgs"], list) and isinstance(combined["subservice_orgs_extraction"], list):
         combined["subservice_orgs"] += [c for c in combined["subservice_orgs_extraction"] if c not in combined["subservice_orgs"]]
     del combined["subservice_orgs_extraction"]
+    
 
 
 # Filter out controls that do not have a control_seq (only keep those with a non-null control_seq)

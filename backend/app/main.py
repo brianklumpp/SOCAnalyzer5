@@ -493,10 +493,15 @@ if __name__ == "__main__" and sys.argv[-1] == "test_insert_combined_result":
 @app.get("/report/{scan_id}")
 async def get_report(scan_id: int, db=Depends(get_db)):
     # Fetch scan history (for scan date, filename, and full results JSON)
-    scan = await db.execute(select(ScanHistory).where(ScanHistory.id == scan_id))
-    scan = scan.scalar_one_or_none()
-    if not scan:
+    scan_history = await db.execute(select(ScanHistory).where(ScanHistory.id == scan_id))
+    scan_history = scan_history.scalar_one_or_none()
+    if not scan_history:
         raise HTTPException(status_code=404, detail="Scan not found")
+
+    # Fetch Scan table row for coverage fields
+    from .models import Scan
+    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
+    scan_row = scan_row.scalar_one_or_none()
 
     # Fetch all related entities
     company = (await db.execute(select(Company).where(Company.scan_id == scan_id))).scalars().first()
@@ -506,7 +511,7 @@ async def get_report(scan_id: int, db=Depends(get_db)):
     product = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
 
     # Extract additional fields from the results JSON if present
-    results = scan.results or {}
+    results = scan_history.results or {}
     auditor = results.get("auditor", {})
     coverage_period = results.get("coverage_period", {})
     report_date = results.get("report_date", {})
@@ -522,13 +527,15 @@ async def get_report(scan_id: int, db=Depends(get_db)):
 
     # Compose response with all expected fields for frontend tables
     return {
-        "scan_id": scan.id,
-        "scan_date": scan.timestamp,
-        "filename": scan.filename,
+        "scan_id": scan_history.id,
+        "scan_date": scan_history.timestamp,
+        "filename": scan_history.filename,
         "company": company.name if company else None,
         "parent_company": company.parent_company if company else None,
         "auditor": auditor,
         "coverage_period": coverage_period,
+        "coverage_start": getattr(scan_row, "coverage_start", None) if scan_row else None,
+        "coverage_end": getattr(scan_row, "coverage_end", None) if scan_row else None,
         "report_date": report_date,
         "product": product.name if product else None,
         "subservice_organizations": [
