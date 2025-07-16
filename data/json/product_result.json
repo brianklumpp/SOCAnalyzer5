@@ -1,10 +1,13 @@
 {
-  "product": "SimpleLegal Legal Spend and Matter Management Software System",
-  "confidence": 0.9,
+  "product": "Okta Identity as a Service",
+  "confidence": 1,
   "raw_gpt_responses": [
-    "{\n  \"product\": \"SimpleLegal Legal Spend and Matter Management Software System\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text explicitly mentions the 'Legal Spend and Matter Management Software System' provided by SimpleLegal, Inc., describing its features and services in detail.\"\n}",
-    "{\n  \"product\": \"SimpleLegal Legal Spend and Matter Management Software System\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text specifically mentions the Legal Spend and Matter Management Software System provided by SimpleLegal.\"\n}",
-    "{\n    \"product\": \"SimpleLegal\",\n    \"confidence\": 1,\n    \"explanation\": \"The text consistently refers to 'SimpleLegal' as the product/service/system being audited.\"\n}",
-    "{\n  \"product\": \"Legal Spend and Matter Management Software System\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text repeatedly refers to the 'Legal Spend and Matter Management Software System' as the product/service/system being audited.\"\n}"
+    "{\n  \"product\": \"Okta Identity as a Service\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions 'Okta Identity as a Service' multiple times and provides detailed descriptions of its features and capabilities.\"\n}",
+    "{\n  \"product\": \"Okta Identity as a Service\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text specifically mentions Okta's web-based application that provides secure identity management and single sign-on, along with details about its infrastructure and supporting tools.\"\n}",
+    "{\n  \"product\": \"Okta\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions Okta multiple times as the company being audited.\"\n}",
+    "{\n  \"product\": \"Okta\",\n  \"confidence\": 1,\n  \"explanation\": \"The text repeatedly mentions Okta as the company being audited, indicating that Okta is the product/service/system being assessed in the SOC 2 report.\"\n}",
+    "{\n  \"product\": \"Okta Identity as a Service\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text mentions Okta Identity as a Service multiple times in relation to access management, authentication, and monitoring.\"\n}",
+    "{\n  \"product\": \"Okta Identity as a Service\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions 'Okta's Identity as a Service (IDaaS) System' multiple times, indicating that the product being audited is Okta Identity as a Service.\"\n}",
+    "{\n    \"product\": \"Okta\",\n    \"confidence\": 0.9,\n    \"explanation\": \"The text explicitly mentions Okta, Inc. as the organization being audited.\"\n}"
   ]
 }

@@ -1,5 +1,18 @@
 {
-    "editor.accessibilitySupport": "off",
-    "editor.autoClosingQuotes": "never",
-    "editor.experimentalGpuAcceleration": "off"
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.git": true,
+    "**/.venv": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/__pycache__": true
+  },
+  "python.analysis.indexing": true,  // reduce Pylance indexing
+  "editor.smoothScrolling": true,   
+  "git.enabled": true,  // optional - can re-enable as needed
+  "workbench.tree.indent": 10,
+  "editor.accessibilitySupport": "off",
+  "editor.autoClosingQuotes": "never",
+  "editor.experimentalGpuAcceleration": "off"
 }

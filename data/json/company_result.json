@@ -1,8 +1,9 @@
 {
-  "company": "SimpleLegal, Inc.",
-  "parent_company": "Onit, Inc.",
+  "company": "Okta, Inc.",
+  "parent_company": null,
   "confidence": 1,
   "raw_gpt_responses": [
-    "{\n  \"company\": \"SimpleLegal, Inc.\",\n  \"parent_company\": \"Onit, Inc.\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly states 'Todd Pagni, Vice President, Security and Compliance, Onit, Inc.' as part of the management's assertion, indicating that SimpleLegal, Inc. is a subsidiary of Onit, Inc.\"\n}"
+    "{\n    \"company\": \"Okta, Inc.\",\n    \"parent_company\": null,\n    \"confidence\": 1,\n    \"explanation\": \"The text explicitly mentions 'Okta, Inc.' as the company being audited, with no mention of a parent company.\"\n}",
+    "{\n    \"company\": \"ABC Corporation\",\n    \"parent_company\": \"XYZ Holdings\",\n    \"confidence\": 0.9,\n    \"explanation\": \"The text explicitly mentions 'ABC Corporation' as the company being audited and 'XYZ Holdings' as the parent company.\"\n}"
   ]
 }

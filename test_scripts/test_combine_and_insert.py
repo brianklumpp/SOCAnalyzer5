@@ -134,9 +134,17 @@ print("subservice_orgs count:", len(combined.get("subservice_orgs", [])))
 # --- PATCH: Normalize all relevant entities for backend compatibility ---
 # Company normalization
 if "company" in combined:
+    # Normalize to dict with name
     if isinstance(combined["company"], str):
         combined["company"] = {"name": combined["company"]}
-    for key in ["parent_company", "confidence"]:
+    elif isinstance(combined["company"], dict) and "name" not in combined["company"]:
+        # If dict but missing name, try to find a name field
+        for k in ["company_name", "org_name", "organization", "value"]:
+            if k in combined["company"]:
+                combined["company"]["name"] = combined["company"][k]
+                break
+    # Move top-level fields into company dict
+    for key in ["parent_company", "confidence", "company_name", "org_name", "organization"]:
         if key in combined:
             combined["company"][key] = combined[key]
             del combined[key]
@@ -145,34 +153,63 @@ if "company" in combined:
 if "product" in combined:
     if isinstance(combined["product"], str):
         combined["product"] = {"name": combined["product"]}
-    for key in ["confidence"]:
+    elif isinstance(combined["product"], dict) and "name" not in combined["product"]:
+        for k in ["product_name", "value"]:
+            if k in combined["product"]:
+                combined["product"]["name"] = combined["product"][k]
+                break
+    for key in ["confidence", "product_name"]:
         if key in combined:
             if isinstance(combined["product"], dict):
                 combined["product"][key] = combined[key]
-                del combined[key]
+            del combined[key]
 
 # Auditor normalization
 if "auditor" in combined:
     if isinstance(combined["auditor"], str):
         combined["auditor"] = {"name": combined["auditor"]}
-    for key in ["confidence"]:
+    elif isinstance(combined["auditor"], dict) and "name" not in combined["auditor"]:
+        for k in ["auditor_name", "value"]:
+            if k in combined["auditor"]:
+                combined["auditor"]["name"] = combined["auditor"][k]
+                break
+    for key in ["confidence", "auditor_name"]:
         if key in combined:
             if isinstance(combined["auditor"], dict):
                 combined["auditor"][key] = combined[key]
-                del combined[key]
+            del combined[key]
 
 # Subservice orgs/third_parties normalization
 if "subservice_orgs" in combined and isinstance(combined["subservice_orgs"], list):
     for idx, org in enumerate(combined["subservice_orgs"]):
         if isinstance(org, str):
             combined["subservice_orgs"][idx] = {"name": org}
+        elif isinstance(org, dict) and "name" not in org:
+            for k in ["org_name", "third_party_name", "value"]:
+                if k in org:
+                    combined["subservice_orgs"][idx]["name"] = org[k]
+                    break
         # Move any top-level fields that should be in each org dict
-        for key in ["confidence"]:
+        for key in ["confidence", "org_name", "third_party_name"]:
             if key in combined and isinstance(combined["subservice_orgs"][idx], dict):
                 combined["subservice_orgs"][idx][key] = combined[key]
     # Optionally remove the top-level field if it was meant for all
-    for key in ["confidence"]:
+    for key in ["confidence", "org_name", "third_party_name"]:
         if key in combined:
+            del combined[key]
+# Coverage period normalization
+if "coverage_period" in combined:
+    if isinstance(combined["coverage_period"], str):
+        combined["coverage_period"] = {"period": combined["coverage_period"]}
+    elif isinstance(combined["coverage_period"], dict) and "period" not in combined["coverage_period"]:
+        for k in ["start_date", "end_date", "value"]:
+            if k in combined["coverage_period"]:
+                combined["coverage_period"]["period"] = combined["coverage_period"][k]
+                break
+    for key in ["start_date", "end_date", "confidence"]:
+        if key in combined:
+            if isinstance(combined["coverage_period"], dict):
+                combined["coverage_period"][key] = combined[key]
             del combined[key]
 
 # Write combined_result.json

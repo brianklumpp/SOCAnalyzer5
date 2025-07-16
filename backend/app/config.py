@@ -1,4 +1,3 @@
-
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import pathlib
@@ -109,7 +108,7 @@ COVERAGE_PERIOD_EXTRACTION_PROMPT = (
 ENV_PATH = str(PROJECT_ROOT / '.env')
 
 # Default model to use
-DEFAULT_GPT_MODEL = 'gpt-3.5-turbo'
+DEFAULT_GPT_MODEL = 'gpt-4o'
 
 # Default generation parameters
 DEFAULT_TEMPERATURE = 0.0
@@ -166,7 +165,7 @@ SECTION_TOPICS = {
     ],
     "Service_Auditor_Report": [
         "Independent Service Auditor's Report", "Independent Service Auditor's Report on a SOC Examination", "Independent Service Auditor's Assurance Report",
-        "Auditor Report", "Auditor's Report", "Independent Auditor Report", "Service Auditor Report", "Service Auditor's Report", "Independent Service Auditor", "Auditor’s Report"
+        "Auditor Report", "Auditor's Report", "Independent Auditor Report", "Service Auditor Report", "Service Auditor's Report", "Independent Service Auditor", "Auditor's Report"
     ],
     "Description_of_System": [
         "Description of the System", "system description", "description of system", "[COMPANY] Description of System"
@@ -360,18 +359,18 @@ TSC_CRITERIA = [
     {"id": "P2.1", "description": "The entity provides notice to data subjects about its privacy practices.", "domain": "Privacy"},
     {"id": "P3.1", "description": "The entity provides data subjects with choices regarding the collection, use, and disclosure of personal information.", "domain": "Privacy"},
     {"id": "P3.2", "description": "The entity obtains explicit consent from data subjects for the collection, use, and disclosure of personal information.", "domain": "Privacy"},
-    {"id": "P4.1", "description": "The entity collects and uses personal information for purposes identified in the entity’s privacy notice.", "domain": "Privacy"},
+    {"id": "P4.1", "description": "The entity collects and uses personal information for purposes identified in the entity's privacy notice.", "domain": "Privacy"},
     {"id": "P5.1", "description": "The entity provides data subjects with access to their personal information for review and correction.", "domain": "Privacy"},
-    {"id": "P6.1", "description": "The entity discloses personal information to third parties only for purposes identified in the entity’s privacy notice.", "domain": "Privacy"},
+    {"id": "P6.1", "description": "The entity discloses personal information to third parties only for purposes identified in the entity's privacy notice.", "domain": "Privacy"},
     {"id": "P7.1", "description": "The entity implements controls to protect the quality and integrity of personal information.", "domain": "Privacy"},
     {"id": "P8.1", "description": "The entity implements controls to protect the retention and disposal of personal information.", "domain": "Privacy"},
     {"id": "P9.1", "description": "The entity implements controls to protect the transfer of personal information.", "domain": "Privacy"},
     {"id": "P10.1", "description": "The entity implements controls to protect the monitoring and enforcement of privacy practices.", "domain": "Privacy"},
-    {"id": "Conf1.1", "description": "The entity identifies and maintains confidential information to meet the entity’s objectives.", "domain": "Confidentiality"},
-    {"id": "Conf1.2", "description": "The entity disposes of confidential information to meet the entity’s objectives.", "domain": "Confidentiality"},
+    {"id": "Conf1.1", "description": "The entity identifies and maintains confidential information to meet the entity's objectives.", "domain": "Confidentiality"},
+    {"id": "Conf1.2", "description": "The entity disposes of confidential information to meet the entity's objectives.", "domain": "Confidentiality"},
     {"id": "Conf1.3", "description": "The entity protects confidential information from unauthorized disclosure.", "domain": "Confidentiality"},
     {"id": "Conf1.4", "description": "The entity protects confidential information from unauthorized use.", "domain": "Confidentiality"},
-    {"id": "PI1.1", "description": "The entity defines processing specifications to meet the entity’s objectives.", "domain": "Processing Integrity"},
+    {"id": "PI1.1", "description": "The entity defines processing specifications to meet the entity's objectives.", "domain": "Processing Integrity"},
     {"id": "PI1.2", "description": "The entity implements controls to achieve processing objectives and detect and correct processing errors.", "domain": "Processing Integrity"},
     {"id": "PI1.3", "description": "The entity implements controls to protect processing from unauthorized modification.", "domain": "Processing Integrity"},
     {"id": "PI1.4", "description": "The entity implements controls to ensure system output is complete, accurate, and timely.", "domain": "Processing Integrity"},
@@ -528,18 +527,25 @@ control_soc_domains = {
 
 # Prompt for extracting tested controls from the Control_Descriptions section
 CONTROL_EXTRACTION_PROMPT = (
-    "You are an expert at reading SOC reports. Given the following text, extract all controls tested. "
+    "You are an expert in analyzing SOC 2 reports. Your task is to extract control activities from the provided text. A control activity is a specific action or set of actions designed to mitigate risks and ensure the achievement of objectives."
     "Controls may be listed under section headings (such as COSO or TSC sections), and control IDs may appear in many formats: e.g., 'CC9.1', 'CC 9.1', 'CC.9.1', '9.1', or as a section like 'CC9.0' with controls listed as 1, 2, 3, etc. "
-    "Do your best to distinguish between section IDs and control IDs, and capture the most specific control ID for each control. "
-    "For each control, extract the following fields as accurately as possible: \n"
-    "- control_id: (string, the control's unique identifier as shown in the report, or null if not found)\n"
-    "- control_desc: (string, the description of the control—what the company is supposed to comply with)\n"
-    "- control_test: (string, what the auditor tested to determine design and operating effectiveness)\n"
-    "- control_test_results: (string, the results of the test, e.g., 'No exceptions noted', 'No deviations noted', or a description of any exceptions or findings)\n"
-    "- control_page_ref: (int, page number if available, else null)\n"
-    "- control_line_ref: (int, line number in the text where the control was found)\n"
-    "If you cannot find a value, use null. Output a JSON array, one object per control. Do not include any explanation, markdown, or extra text.\n"
-    "Text:\n{text}\n"
+    "Control IDs may also not follow the COSO or TSC format, and may be listed as 'Control 1', 'Control 2', etc. "
+    "Do your best to distinguish between section IDs, COSO and TSC control IDs, and capture the most specific control ID for each control. "
+    "For each control activity, provide a JSON object with the following fields: \n"
+    "- \"control_id\": (string(s), unique identifier(s) for the control, or null if not available)\n"
+    "- \"control_desc\": (string, a detailed description of the control activity)\n"
+    "- \"control_test\": (string, a description of how the control is tested, or null if not available)\n"
+    "- \"control_test_results\": (string, the results of the control test, or null if not available)\n"
+    "- control_page_ref: (string, the page number(s) where the control is found, or null if not available)\n"
+    "- control_line_ref: (integer, the line number in the text where the control is found)\n"
+    "If you cannot find a value for a field, use null.\n"
+
+    "Example of a control activity:\n"
+    "- \"control_desc\": \"The entity restricts logical access to information assets to authorized personnel.\"\n"
+    "- \"control_test\": \"Review of access logs and user permissions.\"\n"
+    "- \"control_test_results\": \"No unauthorized access detected.\"\n"
+
+    "Text to analyze:\n{text}\n"
 )
 
 # Prompt for consolidating and deduplicating extracted controls
@@ -549,3 +555,15 @@ CONTROL_CONSOLIDATION_PROMPT = (
     "Output a single JSON array, one object per control, with these fields: control_seq, control_id, control_desc, control_test, control_test_results, control_page_ref, control_line_ref, control_gpt_opinion, control_gpt_reasoning.\n"
     "Do not include any explanation, markdown, or extra text.\n\nExtracted Controls:\n{controls}\n"
 )
+
+# Refine CHUNK_ANALYSIS_PROMPT to emphasize using content directly from the text
+
+CHUNK_ANALYSIS_PROMPT = """
+You are analyzing a section of a SOC report. Your task is to identify logical breakpoints in the text where control sections start and end. Use only the information provided in the text and do not infer or assume additional details. Look for patterns such as control IDs, descriptions, test procedures, and results. Provide a list of character positions in the text where these breakpoints occur.
+"""
+
+# Refine SEGMENT_CLASSIFICATION_PROMPT to emphasize using content directly from the text
+
+SEGMENT_CLASSIFICATION_PROMPT = """
+You are analyzing a section of a SOC report. Your task is to classify each segment of text into one of the following categories: control ID, control description, test procedure, test result. Use only the information provided in the text and do not infer or assume additional details. Provide a structured representation of the classified segments.
+"""

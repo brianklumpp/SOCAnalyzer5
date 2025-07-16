@@ -560,6 +560,8 @@ def batch_consolidate_controls_with_gpt(control_results, max_per_batch=5, max_ro
     # Retry logic: reduce batch size if context error occurs
     min_batch_size = 1
     retry_batch_size = max_per_batch
+    max_retries = 10
+    retries = 0
     while True:
         try:
             round_num = 1
@@ -608,7 +610,15 @@ def batch_consolidate_controls_with_gpt(control_results, max_per_batch=5, max_ro
                 logging.error(f"Context length exceeded during consolidation. Reducing batch size from {retry_batch_size}.")
                 if retry_batch_size > 1:
                     retry_batch_size = max(1, retry_batch_size // 2)
+                    retries += 1
+                    if retries >= max_retries:
+                        logging.error("Maximum retries reached in batch_consolidate_controls_with_gpt. Aborting to prevent infinite loop.")
+                        break
                     continue
+                else:
+                    # Already at minimum batch size, abort to prevent infinite loop
+                    logging.error("Context length exceeded at minimum batch size. Aborting to prevent infinite loop.")
+                    break
             raise
 
 def consolidate_controls_with_gpt(control_list, min_batch_size=1, bad_chunks=None):

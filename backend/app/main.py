@@ -183,295 +183,360 @@ async def test_insert_combined_result(db=Depends(get_db)):
     Loads data/json/combined_result.json and inserts a ScanHistory and all related entities.
     Returns a summary of what was inserted.
     """
+    import logging
     # Load the combined result (always resolve from project root)
     project_root = pathlib.Path(__file__).resolve().parents[2]
     combined_path = project_root / "data" / "json" / "combined_result.json"
-    with open(combined_path, "r", encoding="utf-8") as f:
-        result = _json.load(f)
+    try:
+        with open(combined_path, "r", encoding="utf-8") as f:
+            result = _json.load(f)
+    except Exception as e:
+        logging.exception(f"Failed to load combined_result.json: {e}")
+        raise
 
     # --- PATCH: Normalize all relevant entities for backend compatibility ---
-    # Company normalization
-    if "company" in result:
-        if isinstance(result["company"], str):
-            result["company"] = {"name": result["company"]}
-        for key in ["parent_company", "confidence"]:
-            if key in result:
-                result["company"][key] = result[key]
-                del result[key]
-
-    # Product normalization
-    if "product" in result:
-        if isinstance(result["product"], str):
-            result["product"] = {"name": result["product"]}
-        for key in ["confidence"]:
-            if key in result:
-                if isinstance(result["product"], dict):
-                    result["product"][key] = result[key]
+    try:
+        # Company normalization
+        if "company" in result:
+            if isinstance(result["company"], str):
+                result["company"] = {"name": result["company"]}
+            elif isinstance(result["company"], dict) and "name" not in result["company"]:
+                for k in ["company_name", "org_name", "organization", "value"]:
+                    if k in result["company"]:
+                        result["company"]["name"] = result["company"][k]
+                        break
+            for key in ["parent_company", "confidence", "company_name", "org_name", "organization"]:
+                if key in result:
+                    result["company"][key] = result[key]
                     del result[key]
 
-    # Auditor normalization
-    if "auditor" in result:
-        if isinstance(result["auditor"], str):
-            result["auditor"] = {"name": result["auditor"]}
-        for key in ["confidence"]:
-            if key in result:
-                if isinstance(result["auditor"], dict):
-                    result["auditor"][key] = result[key]
+        # Product normalization
+        if "product" in result:
+            if isinstance(result["product"], str):
+                result["product"] = {"name": result["product"]}
+            elif isinstance(result["product"], dict) and "name" not in result["product"]:
+                for k in ["product_name", "value"]:
+                    if k in result["product"]:
+                        result["product"]["name"] = result["product"][k]
+                        break
+            for key in ["confidence", "product_name"]:
+                if key in result:
+                    if isinstance(result["product"], dict):
+                        result["product"][key] = result[key]
                     del result[key]
 
-    # Subservice orgs/third_parties normalization
-    if "subservice_orgs" in result and isinstance(result["subservice_orgs"], list):
-        for idx, org in enumerate(result["subservice_orgs"]):
-            if isinstance(org, str):
-                result["subservice_orgs"][idx] = {"name": org}
-            for key in ["confidence"]:
-                if key in result and isinstance(result["subservice_orgs"][idx], dict):
-                    result["subservice_orgs"][idx][key] = result[key]
-        for key in ["confidence"]:
-            if key in result:
-                del result[key]
+        # Auditor normalization
+        if "auditor" in result:
+            if isinstance(result["auditor"], str):
+                result["auditor"] = {"name": result["auditor"]}
+            elif isinstance(result["auditor"], dict) and "name" not in result["auditor"]:
+                for k in ["auditor_name", "value"]:
+                    if k in result["auditor"]:
+                        result["auditor"]["name"] = result["auditor"][k]
+                        break
+            for key in ["confidence", "auditor_name"]:
+                if key in result:
+                    if isinstance(result["auditor"], dict):
+                        result["auditor"][key] = result[key]
+                    del result[key]
 
-    # Insert Company first, get company_id
-    from .models import Scan
-    company_id = None
-    company_obj = None
-    company_info = result.get("company")
-    if company_info:
-        if isinstance(company_info, str):
-            company_info = {"name": company_info}
-        for key in ["parent_company", "confidence"]:
-            if key in result and key not in company_info:
-                company_info[key] = result[key]
-        if company_info.get("company") or company_info.get("name"):
-            print_entity_mapping("Company", COMPANY_FIELD_MAPPINGS, company_info)
-            company_kwargs = build_kwargs_from_mapping(COMPANY_FIELD_MAPPINGS, company_info)
-            company_kwargs["scan_id"] = None  # Will update after scan insert
-            company_obj = Company(**company_kwargs)
+        # Subservice orgs/third_parties normalization
+        if "subservice_orgs" in result and isinstance(result["subservice_orgs"], list):
+            for idx, org in enumerate(result["subservice_orgs"]):
+                if isinstance(org, str):
+                    result["subservice_orgs"][idx] = {"name": org}
+                elif isinstance(org, dict) and "name" not in org:
+                    for k in ["org_name", "third_party_name", "value"]:
+                        if k in org:
+                            result["subservice_orgs"][idx]["name"] = org[k]
+                            break
+                for key in ["confidence", "org_name", "third_party_name"]:
+                    if key in result and isinstance(result["subservice_orgs"][idx], dict):
+                        result["subservice_orgs"][idx][key] = result[key]
+            for key in ["confidence", "org_name", "third_party_name"]:
+                if key in result:
+                    del result[key]
+
+        # Coverage period normalization
+        if "coverage_period" in result:
+            if isinstance(result["coverage_period"], str):
+                result["coverage_period"] = {"period": result["coverage_period"]}
+            elif isinstance(result["coverage_period"], dict) and "period" not in result["coverage_period"]:
+                for k in ["start_date", "end_date", "value"]:
+                    if k in result["coverage_period"]:
+                        result["coverage_period"]["period"] = result["coverage_period"][k]
+                        break
+            for key in ["start_date", "end_date", "confidence"]:
+                if key in result:
+                    if isinstance(result["coverage_period"], dict):
+                        result["coverage_period"][key] = result[key]
+                    del result[key]
+
+        # Insert Company first, get company_id
+        from .models import Scan
+        company_id = None
+        company_obj = None
+        company_info = result.get("company")
+        if company_info:
+            if isinstance(company_info, str):
+                company_info = {"name": company_info}
+            for key in ["parent_company", "confidence"]:
+                if key in result and key not in company_info:
+                    company_info[key] = result[key]
+            if company_info.get("company") or company_info.get("name"):
+                print_entity_mapping("Company", COMPANY_FIELD_MAPPINGS, company_info)
+                company_kwargs = build_kwargs_from_mapping(COMPANY_FIELD_MAPPINGS, company_info)
+                company_kwargs["scan_id"] = None  # Will update after scan insert
+                company_obj = Company(**company_kwargs)
+                db.add(company_obj)
+                await db.commit()
+                await db.refresh(company_obj)
+                company_id = company_obj.id
+                # Post-insert verification
+                from sqlalchemy.future import select as _select
+                company_db = (await db.execute(_select(Company).where(Company.id == company_id))).scalars().all()
+                log_db_verification("Company", company_db)
+
+        # Insert ScanHistory
+        scan_history = ScanHistory(
+            timestamp=datetime.datetime.now(),
+            filename="test_combined_result.json",
+            results=result
+        )
+        db.add(scan_history)
+        await db.commit()
+        await db.refresh(scan_history)
+        scan_history_id = scan_history.id
+        from typing import Dict, Any
+        summary: Dict[str, Any] = {"scan_id": scan_history_id}
+
+        # Extract product name
+        product = None
+        product_info = result.get("product")
+        if product_info and isinstance(product_info, dict):
+            product = product_info.get("product") or product_info.get("name")
+
+        # Extract report_date
+        report_date = None
+        report_date_info = result.get("report_date")
+        if report_date_info:
+            if isinstance(report_date_info, dict):
+                report_date = report_date_info.get("report_date")
+            elif isinstance(report_date_info, str):
+                report_date = report_date_info
+            if report_date:
+                try:
+                    report_date = datetime.datetime.fromisoformat(report_date)
+                except Exception:
+                    report_date = None
+
+        # Extract coverage_start and coverage_end (robust to both top-level and nested)
+        coverage_start = None
+        coverage_end = None
+        # Prefer top-level if present
+        if "start_date" in result:
+            coverage_start = result["start_date"]
+        elif "coverage_period" in result and isinstance(result["coverage_period"], dict):
+            coverage_start = result["coverage_period"].get("start_date")
+        if "end_date" in result:
+            coverage_end = result["end_date"]
+        elif "coverage_period" in result and isinstance(result["coverage_period"], dict):
+            coverage_end = result["coverage_period"].get("end_date")
+        # Parse to datetime if present
+        if coverage_start:
+            try:
+                coverage_start = datetime.datetime.fromisoformat(coverage_start)
+            except Exception:
+                coverage_start = None
+        if coverage_end:
+            try:
+                coverage_end = datetime.datetime.fromisoformat(coverage_end)
+            except Exception:
+                coverage_end = None
+
+        # Get extracted text (if available)
+        extracted_text = None
+        if "sections" in result and isinstance(result["sections"], list) and result["sections"]:
+            extracted_text = result["sections"][0].get("snippet")
+
+        # pdf_file: set to None or a placeholder for now
+        pdf_file = None
+        pdf_filename = scan_history.filename
+
+        # gpt_cost, gpt_model, estimated_time_seconds
+        gpt_cost = result.get("gpt_cost")
+        gpt_model = result.get("gpt_model")
+        estimated_time_seconds = result.get("estimated_time_seconds")
+
+        # Insert Scan row with company_id, force id to match scan_history_id
+        scan_row = Scan(
+            id=scan_history_id,  # Force Scan.id to match ScanHistory.id
+            company_id=company_id,
+            product=product,
+            scan_date=scan_history.timestamp,
+            report_date=report_date,
+            coverage_start=coverage_start,
+            coverage_end=coverage_end,
+            pdf_file=pdf_file,
+            pdf_filename=pdf_filename,
+            extracted_text=extracted_text,
+            result_json=result,
+            gpt_cost=gpt_cost,
+            gpt_model=gpt_model,
+            estimated_time_seconds=estimated_time_seconds
+        )
+        db.add(scan_row)
+        await db.commit()
+        await db.refresh(scan_row)
+        scan_id = scan_row.id
+        summary["scan_table_id"] = scan_id
+
+        # Update company.scan_id to point to this scan (if company was inserted)
+        if company_obj is not None and company_id is not None:
+            company_obj.scan_id = scan_id
             db.add(company_obj)
             await db.commit()
-            await db.refresh(company_obj)
-            company_id = company_obj.id
-            # Post-insert verification
-            from sqlalchemy.future import select as _select
-            company_db = (await db.execute(_select(Company).where(Company.id == company_id))).scalars().all()
-            log_db_verification("Company", company_db)
+        # --- Insert Company (centralized mapping) ---
+        company_info = result.get("company")
+        # PATCH: Accept both string and dict for company_info, and move top-level fields if present
+        if company_info:
+            if isinstance(company_info, str):
+                company_info = {"name": company_info}
+            # Move top-level parent_company/confidence into company_info if present
+            for key in ["parent_company", "confidence"]:
+                if key in result and key not in company_info:
+                    company_info[key] = result[key]
+            if company_info.get("company") or company_info.get("name"):
+                print_entity_mapping("Company", COMPANY_FIELD_MAPPINGS, company_info, scan_id)
+                company_kwargs = build_kwargs_from_mapping(COMPANY_FIELD_MAPPINGS, company_info, scan_id)
+                db.add(Company(**company_kwargs))
+                await db.commit()
+                # Post-insert verification
+                from sqlalchemy.future import select as _select
+                company_db = (await db.execute(_select(Company).where(Company.scan_id == scan_id))).scalars().all()
+                log_db_verification("Company", company_db)
+                # Only assign if not None, to avoid type errors in summary dict
+                company_name = company_kwargs.get("name")
+                if company_name is not None:
+                    summary["company"] = str(company_name)
 
-    # Insert ScanHistory
-    scan_history = ScanHistory(
-        timestamp=datetime.datetime.now(),
-        filename="test_combined_result.json",
-        results=result
-    )
-    db.add(scan_history)
-    await db.commit()
-    await db.refresh(scan_history)
-    scan_history_id = scan_history.id
-    from typing import Dict, Any
-    summary: Dict[str, Any] = {"scan_id": scan_history_id}
-
-    # Extract product name
-    product = None
-    product_info = result.get("product")
-    if product_info and isinstance(product_info, dict):
-        product = product_info.get("product") or product_info.get("name")
-
-    # Extract report_date
-    report_date = None
-    report_date_info = result.get("report_date")
-    if report_date_info:
-        if isinstance(report_date_info, dict):
-            report_date = report_date_info.get("report_date")
-        elif isinstance(report_date_info, str):
-            report_date = report_date_info
-        if report_date:
+        # --- Insert Controls ---
+        # Support both legacy and nested formats
+        controls = []
+        if "control_extraction" in result and "controls" in result["control_extraction"]:
+            controls = result["control_extraction"]["controls"]
+        elif "controls" in result:
+            controls_section = result.get("controls", {})
+            if isinstance(controls_section, dict):
+                controls = controls_section.get("controls", [])
+            elif isinstance(controls_section, list):
+                controls = controls_section
+        # Filter out controls that do not have a control_seq (only keep those with a non-null control_seq)
+        controls = [
+            c for c in controls
+            if isinstance(c, dict) and c.get("control_seq") is not None
+        ]
+        for ctrl in controls:
             try:
-                report_date = datetime.datetime.fromisoformat(report_date)
-            except Exception:
-                report_date = None
-
-    # Extract coverage_start and coverage_end (robust to both top-level and nested)
-    coverage_start = None
-    coverage_end = None
-    # Prefer top-level if present
-    if "start_date" in result:
-        coverage_start = result["start_date"]
-    elif "coverage_period" in result and isinstance(result["coverage_period"], dict):
-        coverage_start = result["coverage_period"].get("start_date")
-    if "end_date" in result:
-        coverage_end = result["end_date"]
-    elif "coverage_period" in result and isinstance(result["coverage_period"], dict):
-        coverage_end = result["coverage_period"].get("end_date")
-    # Parse to datetime if present
-    if coverage_start:
-        try:
-            coverage_start = datetime.datetime.fromisoformat(coverage_start)
-        except Exception:
-            coverage_start = None
-    if coverage_end:
-        try:
-            coverage_end = datetime.datetime.fromisoformat(coverage_end)
-        except Exception:
-            coverage_end = None
-
-    # Get extracted text (if available)
-    extracted_text = None
-    if "sections" in result and isinstance(result["sections"], list) and result["sections"]:
-        extracted_text = result["sections"][0].get("snippet")
-
-    # pdf_file: set to None or a placeholder for now
-    pdf_file = None
-    pdf_filename = scan_history.filename
-
-    # gpt_cost, gpt_model, estimated_time_seconds
-    gpt_cost = result.get("gpt_cost")
-    gpt_model = result.get("gpt_model")
-    estimated_time_seconds = result.get("estimated_time_seconds")
-
-    # Insert Scan row with company_id, force id to match scan_history_id
-    scan_row = Scan(
-        id=scan_history_id,  # Force Scan.id to match ScanHistory.id
-        company_id=company_id,
-        product=product,
-        scan_date=scan_history.timestamp,
-        report_date=report_date,
-        coverage_start=coverage_start,
-        coverage_end=coverage_end,
-        pdf_file=pdf_file,
-        pdf_filename=pdf_filename,
-        extracted_text=extracted_text,
-        result_json=result,
-        gpt_cost=gpt_cost,
-        gpt_model=gpt_model,
-        estimated_time_seconds=estimated_time_seconds
-    )
-    db.add(scan_row)
-    await db.commit()
-    await db.refresh(scan_row)
-    scan_id = scan_row.id
-    summary["scan_table_id"] = scan_id
-
-    # Update company.scan_id to point to this scan (if company was inserted)
-    if company_obj is not None and company_id is not None:
-        company_obj.scan_id = scan_id
-        db.add(company_obj)
-        await db.commit()
-    # --- Insert Company (centralized mapping) ---
-    company_info = result.get("company")
-    # PATCH: Accept both string and dict for company_info, and move top-level fields if present
-    if company_info:
-        if isinstance(company_info, str):
-            company_info = {"name": company_info}
-        # Move top-level parent_company/confidence into company_info if present
-        for key in ["parent_company", "confidence"]:
-            if key in result and key not in company_info:
-                company_info[key] = result[key]
-        if company_info.get("company") or company_info.get("name"):
-            print_entity_mapping("Company", COMPANY_FIELD_MAPPINGS, company_info, scan_id)
-            company_kwargs = build_kwargs_from_mapping(COMPANY_FIELD_MAPPINGS, company_info, scan_id)
-            db.add(Company(**company_kwargs))
-            await db.commit()
-            # Post-insert verification
+                print_entity_mapping("Control", CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
+                control_kwargs = build_kwargs_from_mapping(CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
+                db.add(Control(**control_kwargs))
+            except Exception as e:
+                logging.exception(f"Failed to insert control: {ctrl}\nError: {e}")
+        if controls:
+            try:
+                await db.commit()
+            except Exception as e:
+                logging.exception(f"Failed to commit controls. Error: {e}")
             from sqlalchemy.future import select as _select
-            company_db = (await db.execute(_select(Company).where(Company.scan_id == scan_id))).scalars().all()
-            log_db_verification("Company", company_db)
-            # Only assign if not None, to avoid type errors in summary dict
-            company_name = company_kwargs.get("name")
-            if company_name is not None:
-                summary["company"] = str(company_name)
+            controls_db = (await db.execute(_select(Control).where(Control.scan_id == scan_id))).scalars().all()
+            log_db_verification("Control", controls_db)
+        summary["controls_count"] = int(len(controls))  # type: ignore
 
-    # --- Insert Controls ---
-    # Support both legacy and nested formats
-    controls = []
-    if "control_extraction" in result and "controls" in result["control_extraction"]:
-        controls = result["control_extraction"]["controls"]
-    elif "controls" in result:
-        controls_section = result.get("controls", {})
-        if isinstance(controls_section, dict):
-            controls = controls_section.get("controls", [])
-        elif isinstance(controls_section, list):
-            controls = controls_section
-    # Filter out controls that do not have a control_seq (only keep those with a non-null control_seq)
-    controls = [
-        c for c in controls
-        if isinstance(c, dict) and c.get("control_seq") is not None
-    ]
-    for ctrl in controls:
-        print_entity_mapping("Control", CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
-        control_kwargs = build_kwargs_from_mapping(CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
-        db.add(Control(**control_kwargs))
-    if controls:
+        # --- Insert CUECs ---
+        # Support both legacy and nested formats
+        cuecs = []
+        if "cuec_extraction" in result and "cuecs" in result["cuec_extraction"]:
+            cuecs = result["cuec_extraction"]["cuecs"]
+        elif "cuecs" in result:
+            cuecs_section = result.get("cuecs", {})
+            if isinstance(cuecs_section, dict):
+                cuecs = cuecs_section.get("cuecs", [])
+            elif isinstance(cuecs_section, list):
+                cuecs = cuecs_section
+        for cuec in cuecs:
+            try:
+                print_entity_mapping("CUEC", CUEC_FIELD_MAPPINGS, cuec, scan_id)
+                cuec_kwargs = build_kwargs_from_mapping(CUEC_FIELD_MAPPINGS, cuec, scan_id)
+                # Patch: Ensure cuec_confidence_justification is always a string
+                if "cuec_confidence_justification" in cuec_kwargs and isinstance(cuec_kwargs["cuec_confidence_justification"], list):
+                    cuec_kwargs["cuec_confidence_justification"] = _json.dumps(cuec_kwargs["cuec_confidence_justification"])
+                db.add(CUEC(**cuec_kwargs))
+            except Exception as e:
+                logging.exception(f"Failed to insert cuec: {cuec}\nError: {e}")
+        if cuecs:
+            try:
+                await db.commit()
+            except Exception as e:
+                logging.exception(f"Failed to commit cuecs. Error: {e}")
+            from sqlalchemy.future import select as _select
+            cuecs_db = (await db.execute(_select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
+            log_db_verification("CUEC", cuecs_db)
+        summary["cuecs_count"] = int(len(cuecs))  # type: ignore
+
+        # --- Insert Subservice Orgs ---
+        # Support legacy, nested, and flattened formats
+        suborgs = []
+        if "subservice_orgs_extraction" in result and "subservice_orgs" in result["subservice_orgs_extraction"]:
+            suborgs = result["subservice_orgs_extraction"]["subservice_orgs"]
+        elif "subservice_orgs" in result:
+            suborgs_section = result.get("subservice_orgs", {})
+            if isinstance(suborgs_section, dict):
+                suborgs = suborgs_section.get("third_parties", [])
+            elif isinstance(suborgs_section, list):
+                suborgs = suborgs_section
+        elif "third_parties" in result and isinstance(result["third_parties"], list):
+            suborgs = result["third_parties"]
+        for org in suborgs:
+            try:
+                org_data = org if isinstance(org, dict) else {"name": org}
+                print_entity_mapping("SubserviceOrg", SUBORG_FIELD_MAPPINGS, org_data, scan_id)
+                suborg_kwargs = build_kwargs_from_mapping(SUBORG_FIELD_MAPPINGS, org_data, scan_id)
+                db.add(SubserviceOrg(**suborg_kwargs))
+            except Exception as e:
+                logging.exception(f"Failed to insert subservice org: {org}\nError: {e}")
+        if suborgs:
+            try:
+                await db.commit()
+            except Exception as e:
+                logging.exception(f"Failed to commit subservice orgs. Error: {e}")
+            from sqlalchemy.future import select as _select
+            suborgs_db = (await db.execute(_select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
+            log_db_verification("SubserviceOrg", suborgs_db)
+        summary["subservice_orgs_count"] = int(len(suborgs))
+
+        # --- Insert Product ---
+        product_info = result.get("product")
+        if product_info and isinstance(product_info, dict):
+            try:
+                print_entity_mapping("Product", PRODUCT_FIELD_MAPPINGS, product_info, scan_id)
+                product_kwargs = build_kwargs_from_mapping(PRODUCT_FIELD_MAPPINGS, product_info, scan_id)
+                db.add(Product(**product_kwargs))
+                await db.commit()
+                from sqlalchemy.future import select as _select
+                product_db = (await db.execute(_select(Product).where(Product.scan_id == scan_id))).scalars().all()
+                log_db_verification("Product", product_db)
+                product_name = product_kwargs.get("name")
+                if product_name is not None:
+                    summary["product"] = str(product_name)
+            except Exception as e:
+                logging.exception(f"Failed to insert product: {product_info}\nError: {e}")
+
         await db.commit()
-        from sqlalchemy.future import select as _select
-        controls_db = (await db.execute(_select(Control).where(Control.scan_id == scan_id))).scalars().all()
-        log_db_verification("Control", controls_db)
-    summary["controls_count"] = int(len(controls))  # type: ignore
-
-    # --- Insert CUECs ---
-    # Support both legacy and nested formats
-    cuecs = []
-    if "cuec_extraction" in result and "cuecs" in result["cuec_extraction"]:
-        cuecs = result["cuec_extraction"]["cuecs"]
-    elif "cuecs" in result:
-        cuecs_section = result.get("cuecs", {})
-        if isinstance(cuecs_section, dict):
-            cuecs = cuecs_section.get("cuecs", [])
-        elif isinstance(cuecs_section, list):
-            cuecs = cuecs_section
-    for cuec in cuecs:
-        print_entity_mapping("CUEC", CUEC_FIELD_MAPPINGS, cuec, scan_id)
-        cuec_kwargs = build_kwargs_from_mapping(CUEC_FIELD_MAPPINGS, cuec, scan_id)
-        # Patch: Ensure cuec_confidence_justification is always a string
-        if "cuec_confidence_justification" in cuec_kwargs and isinstance(cuec_kwargs["cuec_confidence_justification"], list):
-            cuec_kwargs["cuec_confidence_justification"] = _json.dumps(cuec_kwargs["cuec_confidence_justification"])
-        db.add(CUEC(**cuec_kwargs))
-    if cuecs:
-        await db.commit()
-        from sqlalchemy.future import select as _select
-        cuecs_db = (await db.execute(_select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
-        log_db_verification("CUEC", cuecs_db)
-    summary["cuecs_count"] = int(len(cuecs))  # type: ignore
-
-    # --- Insert Subservice Orgs ---
-    # Support legacy, nested, and flattened formats
-    suborgs = []
-    if "subservice_orgs_extraction" in result and "subservice_orgs" in result["subservice_orgs_extraction"]:
-        suborgs = result["subservice_orgs_extraction"]["subservice_orgs"]
-    elif "subservice_orgs" in result:
-        suborgs_section = result.get("subservice_orgs", {})
-        if isinstance(suborgs_section, dict):
-            suborgs = suborgs_section.get("third_parties", [])
-        elif isinstance(suborgs_section, list):
-            suborgs = suborgs_section
-    elif "third_parties" in result and isinstance(result["third_parties"], list):
-        suborgs = result["third_parties"]
-    for org in suborgs:
-        org_data = org if isinstance(org, dict) else {"name": org}
-        print_entity_mapping("SubserviceOrg", SUBORG_FIELD_MAPPINGS, org_data, scan_id)
-        suborg_kwargs = build_kwargs_from_mapping(SUBORG_FIELD_MAPPINGS, org_data, scan_id)
-        db.add(SubserviceOrg(**suborg_kwargs))
-    if suborgs:
-        await db.commit()
-        from sqlalchemy.future import select as _select
-        suborgs_db = (await db.execute(_select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
-        log_db_verification("SubserviceOrg", suborgs_db)
-    summary["subservice_orgs_count"] = int(len(suborgs))
-
-    # --- Insert Product ---
-    product_info = result.get("product")
-    if product_info and isinstance(product_info, dict):
-        print_entity_mapping("Product", PRODUCT_FIELD_MAPPINGS, product_info, scan_id)
-        product_kwargs = build_kwargs_from_mapping(PRODUCT_FIELD_MAPPINGS, product_info, scan_id)
-        db.add(Product(**product_kwargs))
-        await db.commit()
-        from sqlalchemy.future import select as _select
-        product_db = (await db.execute(_select(Product).where(Product.scan_id == scan_id))).scalars().all()
-        log_db_verification("Product", product_db)
-        product_name = product_kwargs.get("name")
-        if product_name is not None:
-            summary["product"] = str(product_name)
-
-    await db.commit()
-    return summary
+        return summary
+    except Exception as e:
+        logging.exception(f"Exception during test_insert_combined_result: {e}")
+        raise
 
 app.include_router(test_router)
 
