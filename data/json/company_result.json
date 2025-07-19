@@ -3,7 +3,7 @@
   "parent_company": null,
   "confidence": 1,
   "raw_gpt_responses": [
-    "{\n    \"company\": \"Okta, Inc.\",\n    \"parent_company\": null,\n    \"confidence\": 1,\n    \"explanation\": \"The text explicitly mentions 'Okta, Inc.' as the company being audited, with no mention of a parent company.\"\n}",
-    "{\n    \"company\": \"ABC Corporation\",\n    \"parent_company\": \"XYZ Holdings\",\n    \"confidence\": 0.9,\n    \"explanation\": \"The text explicitly mentions 'ABC Corporation' as the company being audited and 'XYZ Holdings' as the parent company.\"\n}"
+    "{\n    \"company\": \"Okta, Inc.\",\n    \"parent_company\": null,\n    \"confidence\": 1,\n    \"explanation\": \"The text explicitly mentions 'Okta, Inc.' as the company being audited, but does not provide any information about a parent company.\"\n}",
+    "{\n    \"company\": \"ABC Corporation\",\n    \"parent_company\": null,\n    \"confidence\": 1,\n    \"explanation\": \"The text explicitly mentions 'ABC Corporation' as the company being audited without any reference to a parent company.\"\n}"
   ]
 }

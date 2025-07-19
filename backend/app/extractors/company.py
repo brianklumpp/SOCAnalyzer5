@@ -1,5 +1,3 @@
-
-
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import json
@@ -69,13 +67,15 @@ def extract_company_from_report():
     for topic in ("Management_Assertion", "Service_Auditor_Report"):
         section = next((s for s in section_results if s.get('topic') == topic), None)
         if section:
-            start_line = section.get('line')
+            start_line = section.get('start_line')
             end_line = section.get('end_line')
             if start_line and end_line:
                 text_sections.append(extract_text_for_lines(txt_lines, start_line, end_line))
-            else:
+            elif section.get('DOC_page_ref') is not None and section.get('end_DOC_page_ref') is not None:
                 pages = list(range(section['DOC_page_ref'], section['end_DOC_page_ref'] + 1))
                 text_sections.append(extract_text_for_pages(txt_lines, pages))
+            else:
+                logging.error('DOC_page_ref or end_DOC_page_ref is None for section: {}'.format(topic))
     text = '\n'.join(text_sections)
     chunks = chunk_text(text)
     prompt = config.COMPANY_EXTRACTION_PROMPT
@@ -83,7 +83,7 @@ def extract_company_from_report():
     for idx, chunk in enumerate(chunks):
         full_prompt = prompt.format(text=chunk)
         logging.debug(f'Prompt chunk {idx}: {full_prompt[:500]}...')
-        response = gpt_extract(full_prompt)
+        response = gpt_extract(full_prompt, 'company_extractor')
         logging.debug(f'GPT response chunk {idx}: {response}')
         responses.append(response)
     company = None

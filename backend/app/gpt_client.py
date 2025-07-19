@@ -1,4 +1,3 @@
-
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import json
@@ -7,7 +6,8 @@ import openai
 from dotenv import load_dotenv
 from .config import (
     OUTPUT_TEXT_FILE, GPT_PROMPTS, ENV_PATH, DEFAULT_GPT_MODEL, GPT_MODELS,
-    DEFAULT_TEMPERATURE, DEFAULT_TOP_P, CHARS_PER_TOKEN, DEFAULT_CHUNK_SIZE, TEXT_OVERLAP
+    DEFAULT_TEMPERATURE, DEFAULT_TOP_P, CHARS_PER_TOKEN, DEFAULT_CHUNK_SIZE, TEXT_OVERLAP,
+    GPT_MODEL_SETTINGS
 )
 
 def load_api_key():
@@ -54,12 +54,18 @@ def run_gpt_inquiry(prompt_key, input_file=OUTPUT_TEXT_FILE, model=DEFAULT_GPT_M
         responses.append(response.choices[0].message.content)
     return "\n\n---\n\n".join(responses)
 
-def gpt_extract(prompt, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P):
+def gpt_extract(prompt, extractor_name):
     api_key = load_api_key()
     openai.api_key = api_key
+    model = GPT_MODELS.get(extractor_name, DEFAULT_GPT_MODEL)
+    model_settings = GPT_MODEL_SETTINGS.get(model, {})
+    max_tokens = model_settings.get('max_tokens', 2048)
+    temperature = model_settings.get('temperature', DEFAULT_TEMPERATURE)
+    top_p = model_settings.get('top_p', DEFAULT_TOP_P)
     response = openai.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens,
         temperature=temperature,
         top_p=top_p
     )

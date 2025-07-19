@@ -4,7 +4,7 @@
   "source_section": "Section 2: Independent Service Auditor’s Assurance Report",
   "source_page": 5,
   "raw_gpt_responses": [
-    "{\n    \"auditor\": \"Ernst & Young LLP\",\n    \"confidence\": 1,\n    \"explanation\": \"The text clearly states that the Service Auditor's Assurance Report was conducted by Ernst & Young LLP.\"\n}"
+    "{\n    \"auditor\": \"Ernst & Young LLP\",\n    \"confidence\": 1,\n    \"explanation\": \"The text clearly states that the audit was conducted by Ernst & Young LLP, as a member firm of Ernst & Young Global Limited.\"\n}"
   ],
-  "confirmation_explanation": "Ernst & Young LLP is a well-known auditing firm that provides SOC audits among other services."
+  "confirmation_explanation": "Ernst & Young LLP is a well-known auditing firm that provides a wide range of audit services, including SOC audits."
 }

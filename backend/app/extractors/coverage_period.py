@@ -1,5 +1,3 @@
-
-
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import json
@@ -42,22 +40,25 @@ def extract_coverage_period():
     if not auditor_section:
         logging.error('No Service_Auditor_Report section found.')
         return None
-    start_line = auditor_section.get('line')
+    start_line = auditor_section.get('start_line')
     end_line = auditor_section.get('end_line')
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
     if start_line and end_line:
         text = extract_text_for_lines(txt_lines, start_line, end_line)
-    else:
+    elif auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
         start = auditor_section['DOC_page_ref']
         end = auditor_section['end_DOC_page_ref']
         pages = list(range(start, end + 1))
         text = extract_text_for_pages(txt_lines, pages)
+    else:
+        logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section.')
+        return None
     # Get first 20 non-empty lines (to cover both Type 1 and Type 2 language)
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     first_lines = '\n'.join(lines[:20])
     prompt = config.COVERAGE_PERIOD_EXTRACTION_PROMPT.format(text=first_lines)
-    response = gpt_extract(prompt)
+    response = gpt_extract(prompt, 'coverage_period_extractor')
     result = {'type': None, 'start_date': None, 'end_date': None, 'explanation': '', 'raw_gpt_response': response}
     if not response:
         logging.error('No response from GPT.')

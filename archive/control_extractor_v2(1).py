@@ -55,9 +55,7 @@ def dynamic_chunking(text, initial_chunk_size=3000):
         "Identify the single numeric character position in the text where each control section header starts. "
         "Do not infer or assume any details not present in the text."
     )
-    logging.info(f"[GPT PROMPT][dynamic_chunking]: {prompt}")
-    response = gpt_extract(prompt, "control_extractor_v2")
-    logging.info(f"[GPT RAW RESPONSE][dynamic_chunking]: {response}")
+    response = gpt_extract(prompt, 'control_extractor')
 
     if not response:
         logging.error('Empty GPT response for chunking. Using default chunk size.')
@@ -111,9 +109,7 @@ def classify_text_segments(chunk):
     Use GPT to classify text segments within a chunk.
     """
     prompt = config.SEGMENT_CLASSIFICATION_PROMPT.format(text=chunk, context="SOC report control section")
-    logging.info(f"[GPT PROMPT][classify_text_segments]: {prompt}")
-    response = gpt_extract(prompt, "control_extractor_v2")
-    logging.info(f"[GPT RAW RESPONSE][classify_text_segments]: {response}")
+    response = gpt_extract(prompt, 'control_extractor')
 
     if not response:
         logging.error('Empty GPT response for classification. Returning empty segments.')
@@ -196,83 +192,29 @@ def structure_json_records(classified_segments):
 
 # Update extract_controls_v2 to use JSON structuring
 
-def extract_controls_v2():
+def extract_controls_v2(file_path):
     """
-    Main function to extract controls using the new strategic approach, matching the old extractor's interface.
-    Uses config.PDF_TXT_PATH and config.SECTION_JSON_PATH for input, and config.CONTROL_JSON_PATH for output.
+    Main function to extract controls using the new strategic approach.
+    Accepts a file path to the SOC report.
     """
-    # Load section details from JSON
-    with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as json_file:
-        sections = json.load(json_file)
-    
-    # Find the Control_Descriptions section
-    control_section = next((section for section in sections if section["topic"] == "Control_Descriptions"), None)
-    
-    if control_section:
-        start_line = control_section.get("start_line")
-        end_line = control_section.get("end_line")
-    else:
-        logging.error("Control_Descriptions section not found in section_results.json")
-        return
+    txt_lines = load_text_lines(file_path)
+    section_results = load_json(SECTION_JSON_PATH)
+    ctrl_section = find_control_section(section_results)
+    if not ctrl_section:
+        logging.error('No Control_Descriptions section found.')
+        return None
 
-    file_path = str(config.PDF_TXT_PATH)
-    results = []
-    lines_per_chunk = 100
+    start_line, end_line = ctrl_section.get('start_line'), ctrl_section.get('end_line')
+    text = extract_text_for_lines(txt_lines, start_line, end_line)
 
-    # Load the text from the specified file
-    with open(file_path, 'r', encoding='utf-8') as f:
-        txt_lines = f.readlines()
+    chunks = dynamic_chunking(text)
+    logging.info(f'Dynamic chunking produced {len(chunks)} chunks.')
 
-    # Reset the output file at the start of each run
-    with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as json_file:
-        json_file.write('[\n')
+    all_json_records = process_chunks(chunks, txt_lines)
 
-    first = True
-    while start_line < end_line:
-        retry = False
-        for chunk in extract_control_chunks(file_path, start_line, lines_per_chunk=lines_per_chunk):
-            try:
-                logging.info(f"Processing chunk starting at line {start_line}")
-                result, new_start_line, retry = process_chunk_with_gpt(chunk, start_line, txt_lines, results)
-                logging.info(f"New Start Line Result: {result}")
-                logging.info(f"New Start Line: {new_start_line}")
-                if result:
-                    results.append(result)
-                    start_line = new_start_line
-                    logging.info(f"Appended result. Total results: {len(results)}")
-                    # Write each control as soon as it is found
-                    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-                        if not first:
-                            json_file.write(',\n')
-                        json.dump(result, json_file, ensure_ascii=False, indent=2)
-                        first = False
-                    logging.info(f"Wrote control to {config.CONTROL_JSON_PATH}")
-                    break  # Move to the next chunk after processing one control
-                if retry:
-                    lines_per_chunk += 25  # Increase chunk size for retry
-                    logging.info(f"Retrying with larger chunk size: {lines_per_chunk}")
-                    break  # Retry with the same start_line
-                if config.CONTROL_TESTING_ENABLED and start_line > config.CONTROL_TESTING_MAX_LINE:
-                    logging.info(f"Start line {start_line} exceeds test limit ({config.CONTROL_TESTING_MAX_LINE}). Stopping processing.")
-                    # Close the JSON array
-                    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-                        json_file.write('\n]\n')
-                    break  # Ensure the outer loop also stops
-            except Exception as e:
-                logging.error(f"Error processing chunk: {e}")
-                break
-        if config.CONTROL_TESTING_ENABLED and start_line > config.CONTROL_TESTING_MAX_LINE:
-            logging.info(f"Start line {start_line} exceeds test limit ({config.CONTROL_TESTING_MAX_LINE}). Stopping processing.")
-            # Close the JSON array
-            with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-                json_file.write('\n]\n')
-            break  # Ensure the outer loop also stops
+    write_json_output(all_json_records, OUTPUT_JSON_PATH)
+    logging.info(f'Control extraction v2 completed. Total controls extracted: {len(all_json_records)}')
 
-    # Final log of results
-    logging.info(f"Final results: {results}")
-    # Close the JSON array at the end if not already closed
-    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-        json_file.write('\n]\n')
 
 def load_text_lines(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -280,56 +222,15 @@ def load_text_lines(file_path):
 
 
 def find_control_section(section_results):
-    return next((s for s in section_results if s.get('topic') == 'Control_Descriptions'), None)
+    return next((s for s in section_results if s.get("topic") == "Control_Descriptions"), None)
 
 
 def process_chunks(chunks, txt_lines):
     all_json_records = []
-    tsc_criteria = getattr(config, 'TSC_CRITERIA', [])
-    coso_criteria = getattr(config, 'COSO_2013_CRITERIA', [])
-    seq = 1
     for idx, chunk in enumerate(chunks):
         logging.info(f'Processing chunk {idx}: {chunk[:200]}...')
         classified_segments = classify_text_segments(chunk)
         json_records = structure_json_records(classified_segments)
-        for ctrl in json_records:
-            desc = ctrl.get('control_desc', None)
-            if not desc or not isinstance(desc, str) or not desc.strip():
-                logging.warning(f"Skipping control with missing or empty control_desc: {ctrl}")
-                ctrl['control_seq'] = None
-                ctrl['control_tsc_id'] = None
-                ctrl['control_coso_id'] = None
-                ctrl['control_tsc_similarity'] = None
-                ctrl['control_coso_similarity'] = None
-                ctrl['control_tsc_confidence_pct'] = None
-                ctrl['control_coso_confidence_pct'] = None
-                ctrl['control_closest_framework'] = 'Undetermined'
-                ctrl['control_tsc_section'] = None
-                ctrl['control_coso_section'] = None
-                ctrl['control_soc_domain'] = None
-                ctrl['control_status'] = 'partial - no match'
-                continue
-            tsc_id, coso_id, tsc_sim, coso_sim = map_control_to_frameworks(desc, tsc_criteria, coso_criteria)
-            ctrl['control_seq'] = seq
-            seq += 1
-            ctrl['control_tsc_id'] = tsc_id
-            ctrl['control_coso_id'] = coso_id
-            ctrl['control_tsc_similarity'] = tsc_sim
-            ctrl['control_coso_similarity'] = coso_sim
-            ctrl['control_tsc_confidence_pct'] = int(round(100 * (tsc_sim + 1) / 2)) if tsc_sim != -1 else None
-            ctrl['control_coso_confidence_pct'] = int(round(100 * (coso_sim + 1) / 2)) if coso_sim != -1 else None
-            if tsc_sim > coso_sim:
-                ctrl['control_closest_framework'] = 'TSC'
-            elif coso_sim > tsc_sim:
-                ctrl['control_closest_framework'] = 'COSO'
-            elif tsc_sim == coso_sim and tsc_sim != -1:
-                ctrl['control_closest_framework'] = 'Equal'
-            else:
-                ctrl['control_closest_framework'] = 'Undetermined'
-            ctrl['control_tsc_section'] = get_tsc_section(tsc_id)
-            ctrl['control_coso_section'] = get_coso_section(coso_id)
-            ctrl['control_soc_domain'] = get_tsc_domain(tsc_id) or get_coso_domain(coso_id)
-            ctrl['control_status'] = 'complete' if ctrl.get('control_id') else 'partial - no match'
         all_json_records.extend(json_records)
     return all_json_records
 
@@ -361,8 +262,7 @@ def verify_next_control_start_with_gpt(suggested_start, previous_controls, txt_l
         f"Text to verify: {context_text}"
     )
     logging.info(f"GPT Prompt for verification: {prompt}")
-    response = gpt_extract(prompt, "control_extractor_v2")
-    logging.info(f"[GPT RAW RESPONSE][verify_next_control_start_with_gpt]: {response}")
+    response = gpt_extract(prompt, 'control_extractor')
     logging.info(f"GPT Response for verification: {response}")
 
     # Parse the response to determine if the suggested start is valid
@@ -374,15 +274,10 @@ def verify_next_control_start_with_gpt(suggested_start, previous_controls, txt_l
 
 
 def process_chunk_with_gpt(chunk, start_line, txt_lines, previous_controls):
-    # Ensure the prompt is formatted with the actual chunk and start_line
-    prompt = config.CONTROL_EXTRACTION_PROMPT.format(
-        text=f"Below is the text to analyze. Do not ask for more text. Only analyze what is provided.\n\n{chunk}",
-        start_line=start_line
-    )
-    logging.info(f"[GPT PROMPT][process_chunk_with_gpt][start_line={start_line}]: {prompt}")
+    prompt = get_gpt_prompt(chunk, start_line)
+    logging.info(f"Processing chunk starting at line {start_line}")
     try:
-        response_text = gpt_extract(prompt, "control_extractor_v2")
-        logging.info(f"[GPT RAW RESPONSE][process_chunk_with_gpt][start_line={start_line}]: {response_text}")
+        response_text = gpt_extract(prompt, 'control_extractor')
         control_data, _, _ = parse_gpt_response(response_text)
 
         if not control_data.get('control_id') or not control_data.get('control_desc') or not control_data.get('control_test_results'):
@@ -446,9 +341,8 @@ def process_chunk_with_gpt(chunk, start_line, txt_lines, previous_controls):
             # Implement fallback mechanism here if needed
             start_line = control_data['end_line']
 
-        # Replace hard-coded test limit with config variables
-        if config.CONTROL_TESTING_ENABLED and start_line > config.CONTROL_TESTING_MAX_LINE:
-            logging.info(f"Start line {start_line} exceeds test limit ({config.CONTROL_TESTING_MAX_LINE}). Stopping processing.")
+        if start_line > 2000:
+            logging.info(f"Start line {start_line} exceeds test limit. Stopping processing.")
             return control_data, start_line, False
 
         logging.info(f"Processed control ending at line {control_data['end_line']}")
@@ -513,8 +407,7 @@ def infer_next_control_start(chunk, current_position):
         f"Text snippet: {context_snippet}"
     )
     logging.info(f"GPT Prompt for next control start: {prompt}")  # Log the prompt with context_snippet
-    response = gpt_extract(prompt, "control_extractor_v2")
-    logging.info(f"[GPT RAW RESPONSE][infer_next_control_start]: {response}")
+    response = gpt_extract(prompt, 'control_extractor')
     logging.info(f"GPT Response for next control start: {response}")
     
     # Parse the response to find the suggested start position
@@ -530,20 +423,20 @@ def infer_next_control_start(chunk, current_position):
 
 def main():
     # Load section details from JSON
-    with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as json_file:
+    with open('data/json/section_results.json', 'r', encoding='utf-8') as json_file:
         sections = json.load(json_file)
     
     # Find the Control_Descriptions section
     control_section = next((section for section in sections if section["topic"] == "Control_Descriptions"), None)
     
     if control_section:
-        start_line = control_section.get("start_line")
-        end_line = control_section.get("end_line")
+        start_line = control_section["start_line"]
+        end_line = control_section["end_line"]
     else:
         logging.error("Control_Descriptions section not found in section_results.json")
         return
 
-    file_path = str(config.PDF_TXT_PATH)
+    file_path = 'data/output/output.txt'
     results = []
     lines_per_chunk = 100
 
@@ -551,11 +444,6 @@ def main():
     with open(file_path, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
 
-    # Reset the output file at the start of each run
-    with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as json_file:
-        json_file.write('[\n')
-
-    first = True
     while start_line < end_line:
         retry = False
         for chunk in extract_control_chunks(file_path, start_line, lines_per_chunk=lines_per_chunk):
@@ -568,39 +456,27 @@ def main():
                     results.append(result)
                     start_line = new_start_line
                     logging.info(f"Appended result. Total results: {len(results)}")
-                    # Write each control as soon as it is found
-                    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-                        if not first:
-                            json_file.write(',\n')
-                        json.dump(result, json_file, ensure_ascii=False, indent=2)
-                        first = False
-                    logging.info(f"Wrote control to {config.CONTROL_JSON_PATH}")
+                    # Write results incrementally
+                    with open('data/output/control_extraction_results.json', 'w', encoding='utf-8') as json_file:
+                        json.dump(results, json_file, ensure_ascii=False, indent=4)
+                    logging.info("Results written to data/output/control_extraction_results.json")
                     break  # Move to the next chunk after processing one control
                 if retry:
                     lines_per_chunk += 25  # Increase chunk size for retry
                     logging.info(f"Retrying with larger chunk size: {lines_per_chunk}")
                     break  # Retry with the same start_line
-                if config.CONTROL_TESTING_ENABLED and start_line > config.CONTROL_TESTING_MAX_LINE:
-                    logging.info(f"Start line {start_line} exceeds test limit ({config.CONTROL_TESTING_MAX_LINE}). Stopping processing.")
-                    # Close the JSON array
-                    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-                        json_file.write('\n]\n')
-                    break  # Ensure the outer loop also stops
+                if start_line > 2000:
+                    logging.info(f"Start line {start_line} exceeds test limit. Stopping processing.")
+                    return  # Stop processing when the test limit is reached
             except Exception as e:
                 logging.error(f"Error processing chunk: {e}")
                 break
-        if config.CONTROL_TESTING_ENABLED and start_line > config.CONTROL_TESTING_MAX_LINE:
-            logging.info(f"Start line {start_line} exceeds test limit ({config.CONTROL_TESTING_MAX_LINE}). Stopping processing.")
-            # Close the JSON array
-            with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-                json_file.write('\n]\n')
+        if start_line > 2000:
+            logging.info(f"Start line {start_line} exceeds test limit. Stopping processing.")
             break  # Ensure the outer loop also stops
 
     # Final log of results
     logging.info(f"Final results: {results}")
-    # Close the JSON array at the end if not already closed
-    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-        json_file.write('\n]\n')
 
 def load_json(path):
     with open(path, 'r', encoding='utf-8') as f:
@@ -612,6 +488,69 @@ def extract_text_for_lines(txt_lines, start_line, end_line):
     Extract text from the specified start to end line numbers.
     """
     return ''.join(txt_lines[start_line-1:end_line])
+
+
+def get_gpt_prompt(chunk, start_line):
+    prompt = f"""
+    Your task is to extract detailed control information from the provided text and return it in JSON format. The text is structured in sections, 
+    and your focus should be on identifying and extracting specific elements related to a control. Follow the 
+    instructions carefully to ensure accurate extraction without inferring any information not explicitly stated in 
+    the text.
+
+    Instructions:
+
+    1. Identify Control IDs for a Single Control:
+       - Look for one or more control IDs, which may appear as random strings of letters, numbers, periods, dashes, 
+       or TSC IDs.
+       - Control IDs are unique identifiers for the control and are usually followed by a description.
+       - If you find multiple control IDs separated by descriptive text, you should only extract the first set.  The
+       next set of IDs will be for either a different control or other references which may be used later for 
+       another purpose.
+
+    2. Extract Control Description:
+       - Identify and extract 1-5 sentences or a bulleted list that describes the control. Usually follows the control ID.
+       - The description should provide a clear understanding of the control's purpose and implementation.
+
+    3. Identify Additional Control References:
+       - Look for one or more additional reference strings related to the control, such as series of digits or strings.
+       - These references are usually separated by text from the control IDs or control description and may appear 
+       in different parts of the text.
+
+    4. Extract Comments on Testing:
+       - Identify sentences that describe what was tested, examined, viewed, or reviewed.
+       - These comments provide insight into the testing process and methodology.
+
+    5. Extract Test Results:
+       - Look for statements indicating test results, such as notes on deviations, findings, gaps, or errors.
+       - If no deviations or errors are found, note the absence of such findings.
+       - This is usually the last section of the control section.  Anything after this is either not part of the control, 
+       is a different control, or is a different section of the report.  Do not include anything after this as it will 
+       likely be extracted as part of the next chunk of content being processed.
+
+    6. Provide the Ending Line Number:
+       - After extracting the control information, provide the line number where this control information ends.
+       - This will be used to determine the starting position for the next chunk.
+
+    7. Provide an Initial Confidence Score and Justification:
+       - Provide a confidence score between 0 and 1 indicating how confident you are that the extracted information represents a control.
+       - Include a brief justification for your confidence score, explaining why you believe this is a control.
+
+    Return the extracted information in the following JSON format:
+    {{
+        "control_id": "",
+        "control_desc": "",
+        "control_test": "",
+        "control_test_results": "",
+        "additional_references": [],
+        "end_line": 0,
+        "control_confidence": 0.0,
+        "control_gpt_conf_justification": ""
+    }}
+
+    Text to analyze (starting at line {start_line}):
+    {chunk}
+    """
+    return prompt
 
 
 def extract_control_chunks(file_path, start_line, lines_per_chunk=50):
@@ -634,106 +573,6 @@ def extract_control_chunks(file_path, start_line, lines_per_chunk=50):
             if not chunk.strip():  # Stop if the chunk is empty
                 break
             yield chunk
-
-# --- Ported helper functions from control_extractor.py ---
-_embedding_cache = {}
-def get_openai_embedding(text):
-    global _embedding_cache
-    if text in _embedding_cache:
-        return _embedding_cache[text]
-    import requests, time
-    headers = {
-        'Authorization': f'Bearer {os.getenv("OPENAI_API_KEY")}',
-        'Content-Type': 'application/json',
-    }
-    data = {
-        'input': text,
-        'model': getattr(config, 'OPENAI_EMBEDDING_MODEL', 'text-embedding-ada-002'),
-    }
-    for attempt in range(3):
-        try:
-            resp = requests.post('https://api.openai.com/v1/embeddings', headers=headers, json=data)
-            resp.raise_for_status()
-            embedding = resp.json()['data'][0]['embedding']
-            _embedding_cache[text] = embedding
-            return embedding
-        except Exception as e:
-            time.sleep(1 + attempt)
-    raise RuntimeError(f'Failed to get embedding for text: {text}')
-
-def cosine_similarity(vec1, vec2):
-    import numpy as np
-    v1 = np.array(vec1)
-    v2_ = np.array(vec2)
-    return float(np.dot(v1, v2_) / (np.linalg.norm(v1) * np.linalg.norm(v2_)))
-
-def map_control_to_frameworks(control_desc, tsc_criteria, coso_criteria):
-    import logging
-    if not tsc_criteria:
-        logging.error("TSC criteria list is empty! Cannot map control to TSC framework.")
-    if not coso_criteria:
-        logging.error("COSO criteria list is empty! Cannot map control to COSO framework.")
-    try:
-        cuec_emb = get_openai_embedding(control_desc)
-    except Exception as e:
-        logging.error(f"Failed to get embedding for control_desc: {control_desc[:80]}... Error: {e}")
-        return None, None, -1, -1
-    # TSC
-    best_tsc_id = None
-    best_tsc_sim = -1
-    for crit in tsc_criteria:
-        try:
-            emb = get_openai_embedding(crit['description'])
-            sim = cosine_similarity(cuec_emb, emb)
-            if sim > best_tsc_sim:
-                best_tsc_sim = sim
-                best_tsc_id = crit['id']
-        except Exception as e:
-            logging.error(f"Failed to get embedding or similarity for TSC criteria: {crit.get('id', 'unknown')}. Error: {e}")
-            continue
-    # COSO
-    best_coso_id = None
-    best_coso_sim = -1
-    for crit in coso_criteria:
-        try:
-            emb = get_openai_embedding(crit['description'])
-            sim = cosine_similarity(cuec_emb, emb)
-            if sim > best_coso_sim:
-                best_coso_sim = sim
-                best_coso_id = crit['id']
-        except Exception as e:
-            logging.error(f"Failed to get embedding or similarity for COSO criteria: {crit.get('id', 'unknown')}. Error: {e}")
-            continue
-    if best_tsc_id is None:
-        logging.warning(f"No TSC match found for control: {control_desc[:80]}...")
-    if best_coso_id is None:
-        logging.warning(f"No COSO match found for control: {control_desc[:80]}...")
-    return best_tsc_id, best_coso_id, best_tsc_sim, best_coso_sim
-
-def get_tsc_section(tsc_id):
-    for section, ids in getattr(config, 'control_tsc_sections', {}).items():
-        if tsc_id in ids:
-            return section
-    return None
-
-def get_coso_section(coso_id):
-    for section, ids in getattr(config, 'control_coso_sections', {}).items():
-        if coso_id in ids:
-            return section
-    return None
-
-def get_tsc_domain(tsc_id):
-    for domain, prefixes in getattr(config, 'control_tsc_domain', {}).items():
-        for prefix in prefixes:
-            if tsc_id and tsc_id.startswith(prefix):
-                return domain
-    return None
-
-def get_coso_domain(coso_id):
-    for crit in getattr(config, 'COSO_2013_CRITERIA', []):
-        if crit['id'] == coso_id:
-            return crit['component']
-    return None
 
 if __name__ == "__main__":
     main() 

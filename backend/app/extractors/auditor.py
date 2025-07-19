@@ -1,5 +1,3 @@
-
-
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import json
@@ -81,17 +79,20 @@ def extract_auditor_from_report():
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
     text_sections = [extract_title_page(txt_lines)]
-    start_line = auditor_section.get('line')
-    end_line = auditor_section.get('end_line')
-    if start_line and end_line:
-        text_sections.append(extract_text_for_lines(txt_lines, start_line, end_line))
-    else:
-        pages = set([1])
-        start = auditor_section['DOC_page_ref']
-        end = auditor_section['end_DOC_page_ref']
-        pages.update(range(start, end + 1))
-        pages = sorted(pages)
-        text_sections.append(extract_text_for_pages(txt_lines, pages))
+    if auditor_section:
+        start_line = auditor_section.get('start_line')
+        end_line = auditor_section.get('end_line')
+        if start_line and end_line:
+            text_sections.append(extract_text_for_lines(txt_lines, start_line, end_line))
+        elif auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
+            pages = set([1])
+            start = auditor_section['DOC_page_ref']
+            end = auditor_section['end_DOC_page_ref']
+            pages.update(range(start, end + 1))
+            pages = sorted(pages)
+            text_sections.append(extract_text_for_pages(txt_lines, pages))
+        else:
+            logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section.')
     text = '\n'.join(text_sections)
     # Chunk text
     chunks = chunk_text(text)
@@ -104,7 +105,7 @@ def extract_auditor_from_report():
             company_line=company_line
         )
         logging.debug(f'Prompt chunk {idx}: {full_prompt[:500]}...')
-        response = gpt_extract(full_prompt)
+        response = gpt_extract(full_prompt, 'auditor_extractor')
         logging.debug(f'GPT response chunk {idx}: {response}')
         responses.append(response)
     # Parse responses (simple: take first non-empty auditor name)
@@ -178,7 +179,7 @@ def confirm_auditor_with_followup(auditor_name: str, text: str) -> Tuple[Optiona
         "If you are not sure, set 'is_auditor' to false and confidence to 0."
     )
     from ..gpt_client import gpt_extract
-    response = gpt_extract(followup_prompt)
+    response = gpt_extract(followup_prompt, 'auditor_extractor')
     try:
         if not response:
             raise ValueError('No response from GPT')

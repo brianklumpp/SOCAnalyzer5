@@ -1,4 +1,3 @@
-
 # All imports at the top
 import os
 import json
@@ -11,13 +10,22 @@ import numpy as np  # type: ignore  # pylance: ignore-reportMissingImports
 from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .. import config
-from ..gpt_client import gpt_extract
+from ..gpt_client import gpt_extract, load_api_key
 
 # Use centralized config paths
 SECTION_JSON_PATH = config.SECTION_JSON_PATH
 PDF_TXT_PATH = config.PDF_TXT_PATH
 OUTPUT_JSON_PATH = config.JSON_DIR / "cuec_result.json"
 GPT_LOG_PATH = config.LOGS_DIR / "cuec_gpt.log"
+
+# Configure logging to overwrite the log file each time the script runs
+CUEC_EXTRACTOR_LOG_PATH = config.LOGS_DIR / "cuec_extractor.log"
+logging.basicConfig(
+    filename=str(CUEC_EXTRACTOR_LOG_PATH),
+    filemode='w',  # Overwrite the log file
+    level=logging.INFO,  # Set to INFO to reduce log verbosity
+    format='%(asctime)s [CUEC_EXTRACTOR] %(levelname)s %(message)s',
+)
 
 logger = logging.getLogger(__name__)
 # Always start fresh for GPT log file
@@ -28,7 +36,6 @@ with open(GPT_LOG_PATH, 'w', encoding='utf-8') as gptlog:
 CUEC_KEYWORDS = config.CUEC_KEYWORDS
 CUEC_EXTRACTION_PROMPT = config.CUEC_EXTRACTION_PROMPT
 OPENAI_EMBEDDING_MODEL = getattr(config, 'OPENAI_EMBEDDING_MODEL', 'text-embedding-ada-002')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 OPENAI_EMBEDDING_URL = 'https://api.openai.com/v1/embeddings'
 
 _embedding_cache = {}
@@ -116,50 +123,39 @@ def extract_cuecs():
     if not desc_section:
         logging.error('No Description_of_System section found.')
         return None
-    start_line = desc_section.get('line')
-    end_line = desc_section.get('end_line')
+    start_line, end_line = desc_section.get('start_line'), desc_section.get('end_line')
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
-    if start_line and end_line:
-        text = extract_text_for_lines(txt_lines, start_line, end_line)
-        chunk_size = min(getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000), 1500)  # Lowered for safety
-        overlap = getattr(config, 'TEXT_OVERLAP', 1000)
-        chunks = chunk_text_with_overlap(text, chunk_size, overlap)
-        chunk_line_refs = []
-        char_count = 0
-        for chunk in chunks:
-            chunk_start = text.find(chunk)
-            if chunk_start == -1:
-                chunk_line = None
-            else:
-                char_count = 0
-                chunk_line = 1
-                for i, line in enumerate(txt_lines):
-                    char_count += len(line)
-                    if char_count >= chunk_start:
-                        chunk_line = i + 1
-                        break
-            chunk_line_refs.append(chunk_line)
+    chunk_line_refs = []
+    chunks = []
+    if desc_section:
+        start_line = desc_section.get('start_line')
+        end_line = desc_section.get('end_line')
+        if start_line and end_line:
+            text_with_refs = extract_text_for_lines(txt_lines, start_line, end_line)
+            logging.info(f"[DEBUG] Extracted text length: {len(text_with_refs)} | Preview: {text_with_refs[:300]}")
+        elif desc_section.get('DOC_page_ref') is not None and desc_section.get('end_DOC_page_ref') is not None:
+            start = desc_section['DOC_page_ref']
+            end = desc_section['end_DOC_page_ref']
+            pages = list(range(start, end + 1))
+            text_with_refs = extract_text_for_pages_with_refs(txt_lines, pages)
+            logging.info(f"[DEBUG] Extracted text (by pages) length: {len(text_with_refs)} | Preview: {str(text_with_refs)[:300]}")
+        else:
+            logging.error('DOC_page_ref or end_DOC_page_ref is None for description section.')
+    # Add chunking debug log
+    if isinstance(text_with_refs, str):
+        chunk_size = 1000
+        overlap = 200
+        logging.info(f"[DEBUG] Using chunk_size={chunk_size}, overlap={overlap} for CUEC extraction.")
+        chunks = chunk_text_with_overlap(text_with_refs, chunk_size, overlap)
+        logging.info(f"[DEBUG] Number of chunks created: {len(chunks)}")
+    elif isinstance(text_with_refs, list):
+        # If using page-based extraction, treat each page as a chunk
+        chunks = [t[0] for t in text_with_refs]
+        logging.info(f"[DEBUG] Number of page-based chunks created: {len(chunks)}")
     else:
-        start = desc_section['DOC_page_ref']
-        end = desc_section['end_DOC_page_ref']
-        pages = list(range(start, end + 1))
-        text_with_refs = extract_text_for_pages_with_refs(txt_lines, pages)
-        page_chunks = {}
-        for line, page in text_with_refs:
-            page_chunks.setdefault(page, []).append(line)
-        chunk_size = min(getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000), 1500)  # Lowered for safety
-        overlap = getattr(config, 'TEXT_OVERLAP', 1000)
-        chunks = []
-        chunk_line_refs = []
-        line_num = 1
-        for page, lines in page_chunks.items():
-            page_text = ''.join(lines)
-            page_chunks_list = chunk_text_with_overlap(page_text, chunk_size, overlap)
-            for chunk in page_chunks_list:
-                chunks.append(chunk)
-                chunk_line_refs.append(line_num)
-                line_num += len(chunk.splitlines())
+        logging.error("[DEBUG] Unexpected type for text_with_refs.")
+    logging.info("[DEBUG] Entering main chunk processing loop for CUEC extraction.")
     cuec_results = []
     bad_chunks = []
     seq = 1
@@ -224,6 +220,7 @@ def extract_cuecs():
     def process_chunk(idx, chunk, chunk_line_refs, seq, tsc_criteria, coso_criteria):
         # This is the body of your current for idx, chunk in enumerate(chunks): loop
         # Returns filtered_data, seq
+        logging.debug(f"[CUEC] Chunk {idx}: start_line={start_line}, end_line={end_line}, chunk_len={len(chunk)}, chunk_preview={chunk[:200]!r}")
         prompt = CUEC_EXTRACTION_PROMPT.format(
             text=chunk,
             company_names=company_names_str,
@@ -239,7 +236,7 @@ def extract_cuecs():
                 text=cur_chunk,
                 company_names=company_names_str,
                 parent_company_names=parent_company_names_str
-            ))
+            ), 'cuec_extractor')
             # Log full prompt and response for debugging
             with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
                 gptlog.write(f'CHUNK {idx} ATTEMPT {attempt+1} PROMPT:\n{prompt}\nRESPONSE:\n{response}\n---\n')
@@ -343,10 +340,17 @@ def extract_cuecs():
                     if desc_snippet and desc_snippet.lower() in line.lower():
                         found_line = i + 1
                         break
-                if found_line is not None and chunk_line_refs[idx] is not None:
-                    cuec['cuec_line_ref'] = chunk_line_refs[idx] + found_line - 1
-                else:
-                    cuec['cuec_line_ref'] = chunk_line_refs[idx] if idx < len(chunk_line_refs) else None
+                # Patch: Make line reference assignment non-fatal and index safe
+                try:
+                    if found_line is not None and idx < len(chunk_line_refs) and chunk_line_refs[idx] is not None:
+                        cuec['cuec_line_ref'] = chunk_line_refs[idx] + found_line - 1
+                    elif idx < len(chunk_line_refs):
+                        cuec['cuec_line_ref'] = chunk_line_refs[idx]
+                    else:
+                        cuec['cuec_line_ref'] = None
+                except Exception as e:
+                    logging.error(f"[PATCH] Error assigning cuec_line_ref in process_chunk: {e}")
+                    cuec['cuec_line_ref'] = None
                 cuec.pop('cuec_page_ref', None)
                 tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(cuec.get('cuec_description', ''), tsc_criteria, coso_criteria)
                 # Always set both TSC and COSO IDs for output
@@ -409,6 +413,10 @@ def extract_cuecs():
         except Exception as e:
             logging.error(f'Failed to parse GPT response for chunk {idx}: {response} | Error: {e}')
             return [], seq
+    # Prepare output file for streaming
+    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+        f.write('[\n')
+    first = True
     # Multi-threaded chunk processing
     cuec_results = []
     seq = 1
@@ -416,115 +424,56 @@ def extract_cuecs():
         futures = [executor.submit(process_chunk, idx, chunk, chunk_line_refs, seq, tsc_criteria, coso_criteria) for idx, chunk in enumerate(chunks)]
         for future in as_completed(futures):
             filtered_data, seq = future.result()
-            cuec_results.extend(filtered_data)
-    # DEBUG: Log initial cuec_results after chunk processing
-    logging.info(f"DEBUG: cuec_results after chunk processing: {len(cuec_results)} items")
-    # Filter out CUECs whose line_ref is not within a page or two of the majority (use mode instead of median)
-    line_refs = [c.get('cuec_line_ref') for c in cuec_results if c.get('cuec_line_ref') is not None]
-    logging.info(f"CUEC post-processing: line_refs={line_refs} (total={len(line_refs)})")
-    # Bin-based mode calculation for cuec_line_ref
-    BIN_SIZE = 40
-    if line_refs:
-        line_refs_sorted = sorted(line_refs)
-        max_count = 0
-        mode_center = None
-        for i, ref in enumerate(line_refs_sorted):
-            # Count how many refs are within BIN_SIZE of this ref
-            count = sum(1 for r in line_refs_sorted if abs(r - ref) <= BIN_SIZE)
-            if count > max_count:
-                max_count = count
-                # Set mode to the center of the window
-                window = [r for r in line_refs_sorted if abs(r - ref) <= BIN_SIZE]
-                mode_center = int(sum(window) / len(window)) if window else ref
-        mode_line = mode_center if mode_center is not None else line_refs_sorted[len(line_refs_sorted)//2]
-        logging.info(f"CUEC post-processing: bin_mode_line={mode_line} (bin size=+/-{BIN_SIZE}, max_count={max_count})")
-        before_count = len(cuec_results)
-        # Instead of filtering out, adjust confidence
-        for c in cuec_results:
-            if c.get('cuec_line_ref') is not None and abs(c['cuec_line_ref'] - mode_line) <= BIN_SIZE * 2:
-                # Inside the bounds: increase confidence by 0.1
-                old_conf = c.get('cuec_confidence', 0)
-                c['cuec_confidence'] = round(old_conf + 0.1, 3)
-                just = c.get('cuec_confidence_justification', [])
-                if not isinstance(just, list):
-                    just = [str(just)]
-                just.append(f"+0.1: cuec_line_ref within ±{BIN_SIZE*2} of mode ({mode_line})")
-                c['cuec_confidence_justification'] = just
-            else:
-                # Outside the bounds: reduce confidence by 0.2
-                old_conf = c.get('cuec_confidence', 0)
-                c['cuec_confidence'] = round(old_conf - 0.2, 3)
-                just = c.get('cuec_confidence_justification', [])
-                if not isinstance(just, list):
-                    just = [str(just)]
-                just.append(f"-0.2: cuec_line_ref outside ±{BIN_SIZE*2} of mode ({mode_line})")
-                c['cuec_confidence_justification'] = just
-        # Log the confidence adjustment
-        logging.info(f"CUEC post-processing: confidence adjusted for all cuecs based on bin mode check")
-    # DEBUG: Log cuec_results after mode/median filtering
-    logging.info(f"DEBUG: cuec_results after mode/median filtering: {len(cuec_results)} items")
-    # Consolidate and deduplicate with GPT in batches
-    cuec_results = batch_consolidate_cuecs_with_gpt(cuec_results, bad_chunks=bad_chunks)
-    # DEBUG: Log cuec_results after batch consolidation
-    logging.info(f"DEBUG: cuec_results after batch_consolidate_cuecs_with_gpt: {len(cuec_results)} items")
-    # --- POST-CONSOLIDATION: Re-map and re-attach all calculated fields for every CUEC ---
-    tsc_criteria = getattr(config, 'TSC_CRITERIA', [])
-    coso_criteria = getattr(config, 'COSO_2013_CRITERIA', [])
-    for cuec in cuec_results:
-        desc = cuec.get('cuec_description', '')
-        # Always set both TSC and COSO IDs and similarities
-        tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, tsc_criteria, coso_criteria)
-        cuec['cuec_tsc_id'] = tsc_id
-        cuec['cuec_coso_id'] = coso_id
-        cuec['cuec_tsc_similarity'] = tsc_sim
-        cuec['cuec_coso_similarity'] = coso_sim
-        cuec['cuec_tsc_confidence_pct'] = int(round(100 * (tsc_sim + 1) / 2)) if tsc_sim != -1 else None
-        cuec['cuec_coso_confidence_pct'] = int(round(100 * (coso_sim + 1) / 2)) if coso_sim != -1 else None
-        # Add closest framework field
-        if tsc_sim > coso_sim:
-            cuec['cuec_closest_framework'] = 'TSC'
-        elif coso_sim > tsc_sim:
-            cuec['cuec_closest_framework'] = 'COSO'
-        elif tsc_sim == coso_sim and tsc_sim != -1:
-            cuec['cuec_closest_framework'] = 'Equal'
-        else:
-            cuec['cuec_closest_framework'] = 'Undetermined'
-        # Framework alignment fields for backward compatibility
-        if tsc_id and coso_id:
-            cuec['cuec_framework_alignment'] = 'TSC'
-            cuec['cuec_framework_alignment_id'] = tsc_id
-        elif tsc_id:
-            cuec['cuec_framework_alignment'] = 'TSC'
-            cuec['cuec_framework_alignment_id'] = tsc_id
-        elif coso_id:
-            cuec['cuec_framework_alignment'] = 'COSO'
-            cuec['cuec_framework_alignment_id'] = coso_id
-        else:
-            cuec['cuec_framework_alignment'] = 'Undetermined'
-            cuec['cuec_framework_alignment_id'] = None
-        # Ensure every CUEC has cuec_confidence_justification
-        if 'cuec_confidence_justification' not in cuec or not cuec['cuec_confidence_justification']:
-            justification = [f"Base score: 0.1"]
-            gpt_opinion = cuec.get('cuec_gpt_opinion', '').lower()
-            if gpt_opinion == 'yes':
-                justification.append("+0.1: cuec_gpt_opinion is 'yes'")
-            elif gpt_opinion == 'no':
-                justification.append("-0.2: cuec_gpt_opinion is 'no'")
-            if cuec.get('cuec_distance_from_cuec_keywords', 999) < 5:
-                justification.append(f"+0.1: cuec_distance_from_cuec_keywords < 5 (actual: {cuec.get('cuec_distance_from_cuec_keywords')})")
-            desc_lower = (cuec.get('cuec_description', '') or '').lower()
-            if any(kw in desc_lower for kw in CUEC_KEYWORDS):
-                justification.append("+0.2: CUEC keyword present in description")
-            # Framework alignment check now includes cuec_framework_alignment_id and general alignment
-            if cuec.get('cuec_tsc_id') or cuec.get('cuec_coso_id') or cuec.get('cuec_framework_alignment_id'):
-                justification.append("+0.2: Framework alignment found (TSC, COSO, or other ID)")
-            else:
-                justification.append("-0.1: Framework alignment undetermined")
-            cuec['cuec_confidence_justification'] = justification
-    # Sort by confidence descending, then by cuec_seq ascending
-    cuec_results = sort_cuecs_by_confidence_and_seq(cuec_results)
-    # DEBUG: Log cuec_results after sorting
-    logging.info(f"DEBUG: cuec_results after sorting: {len(cuec_results)} items")
+            for cuec in filtered_data:
+                # Patch: Make embedding failures non-fatal
+                try:
+                    desc = cuec.get('cuec_description', '')
+                    tsc_id, coso_id, tsc_sim, coso_sim = None, None, -1, -1
+                    try:
+                        tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, tsc_criteria, coso_criteria)
+                    except Exception as emb_err:
+                        logging.error(f"[PATCH] Embedding error for CUEC: {desc[:80]}... | {emb_err}")
+                    cuec['cuec_tsc_id'] = tsc_id
+                    cuec['cuec_coso_id'] = coso_id
+                    cuec['cuec_tsc_similarity'] = tsc_sim
+                    cuec['cuec_coso_similarity'] = coso_sim
+                    cuec['cuec_tsc_confidence_pct'] = int(round(100 * (tsc_sim + 1) / 2)) if tsc_sim != -1 else None
+                    cuec['cuec_coso_confidence_pct'] = int(round(100 * (coso_sim + 1) / 2)) if coso_sim != -1 else None
+                    if tsc_sim > coso_sim:
+                        cuec['cuec_closest_framework'] = 'TSC'
+                    elif coso_sim > tsc_sim:
+                        cuec['cuec_closest_framework'] = 'COSO'
+                    elif tsc_sim == coso_sim and tsc_sim != -1:
+                        cuec['cuec_closest_framework'] = 'Equal'
+                    else:
+                        cuec['cuec_closest_framework'] = 'Undetermined'
+                except Exception as e:
+                    logging.error(f"[PATCH] Error in framework mapping for CUEC: {desc[:80]}... | {e}")
+                    cuec['cuec_tsc_id'] = None
+                    cuec['cuec_coso_id'] = None
+                    cuec['cuec_tsc_similarity'] = None
+                    cuec['cuec_coso_similarity'] = None
+                    cuec['cuec_tsc_confidence_pct'] = None
+                    cuec['cuec_coso_confidence_pct'] = None
+                    cuec['cuec_closest_framework'] = 'Undetermined'
+                # Patch: Make line reference assignment non-fatal
+                try:
+                    if 'cuec_line_ref' not in cuec or cuec['cuec_line_ref'] is None:
+                        cuec['cuec_line_ref'] = None
+                except Exception as e:
+                    logging.error(f"[PATCH] Error assigning cuec_line_ref: {e}")
+                    cuec['cuec_line_ref'] = None
+                cuec_results.append(cuec)
+                # Streaming write to JSON file
+                with open(OUTPUT_JSON_PATH, 'a', encoding='utf-8') as f:
+                    if not first:
+                        f.write(',\n')
+                    json.dump(cuec, f, ensure_ascii=False, indent=2)
+                    first = False
+                logging.info(f"[PATCH] Wrote CUEC seq={cuec.get('cuec_seq')} to {OUTPUT_JSON_PATH}")
+    # Close the JSON array at the end
+    with open(OUTPUT_JSON_PATH, 'a', encoding='utf-8') as f:
+        f.write('\n]\n')
 
     # --- POST-EXTRACTION ANALYSIS: Rescue Check for Bad Chunks ---
     def fuzzy_match(a, b):
@@ -773,7 +722,7 @@ def consolidate_cuecs_with_gpt(cuec_list, min_batch_size=1, bad_chunks=None):
         gptlog.write(f"\n--- CUEC CONSOLIDATION PROMPT ---\n{prompt}\n")
     logging.info(f"Sending CUEC consolidation prompt to GPT. Batch size: {len(cuec_list)}")
     try:
-        response = gpt_extract(prompt)
+        response = gpt_extract(prompt, 'cuec_extractor')
         if not response:
             raise ValueError("GPT returned no response")
     except Exception as e:
@@ -848,7 +797,7 @@ def get_openai_embedding(text):
     if text in _embedding_cache:
         return _embedding_cache[text]
     headers = {
-        'Authorization': f'Bearer {OPENAI_API_KEY}',
+        'Authorization': f'Bearer {load_api_key()}',
         'Content-Type': 'application/json',
     }
     data = {
@@ -861,6 +810,7 @@ def get_openai_embedding(text):
             resp.raise_for_status()
             embedding = resp.json()['data'][0]['embedding']
             _embedding_cache[text] = embedding
+            time.sleep(0.2)  # Add delay to avoid rate limits
             return embedding
         except Exception as e:
             time.sleep(1 + attempt)

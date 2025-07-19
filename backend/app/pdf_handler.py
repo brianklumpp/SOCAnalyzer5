@@ -1,4 +1,3 @@
-
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import re
@@ -10,12 +9,14 @@ import sys
 import unicodedata
 import string
 import json
+from . import config
 from .config import (
     SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE, GPT_PROMPTS, SECTION_TOPICS, WATERMARK_PATTERNS, REGEX_PATTERNS,
     PRIORITY_KEYWORDS_MANAGEMENT_ASSERTION, PRIORITY_KEYWORDS_SERVICE_AUDITOR_REPORT, PRIORITY_KEYWORDS_DESCRIPTION_OF_SYSTEM, PRIORITY_KEYWORDS_CONTROL_DESCRIPTIONS,
     DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P
 )
 from .gpt_client import run_gpt_inquiry, load_api_key
+import argparse
 
 def load_api_key():
     load_dotenv()
@@ -129,6 +130,11 @@ def extract_toc_with_gpt(text, model="gpt-3.5-turbo", temperature=0.0, top_p=1.0
         top_p=top_p
     )
     content = response.choices[0].message.content
+    # --- Debug: Log raw GPT response for TOC extraction ---
+    gpt_raw_log_path = str(pathlib.Path(__file__).resolve().parents[2] / 'data/logs/toc_gpt_raw_response.log')
+    with open(gpt_raw_log_path, 'w', encoding='utf-8') as gpt_log:
+        gpt_log.write('Raw GPT Response from extract_toc_with_gpt:\n')
+        gpt_log.write(str(response) + '\n')
     return content.strip() if content else ""
 
 def is_incomplete_sentence(line):
@@ -205,7 +211,7 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
         toc_text = extract_toc_with_gpt(text[:20000], model, temperature, top_p)
         toc_lines = [line.strip() for line in toc_text.splitlines() if line.strip() and 'TOC NOT FOUND' not in line]
         toc_lines = join_multiline_toc_entries(toc_lines)
-        toc_headings = extract_toc_headings_and_pages_with_gpt(toc_text, model, temperature, top_p)
+        toc_headings = extract_toc_headings_and_pages_with_gpt(toc_text, model='gpt-3.5-turbo', temperature=0.0, top_p=0.0)
         lines = text.splitlines()
         toc_page, toc_detect_method = detect_toc_page(
             lines, max_pages=5, gpt_fallback_fn=gpt_find_toc_page, model=model, temperature=temperature, top_p=top_p
@@ -229,7 +235,53 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
             search_start_line = 0  # Fallback: search from start if not found
         doc_page_offset = toc_page  # Keep doc_page_offset logic unchanged
         results = {}
+        # --- Section-specific logging for troubleshooting ---
+        section_log_map = {
+            'Management_Assertion': str(config.LOGS_DIR / 'management_assertion.log'),
+            'Service_Auditor_Report': str(config.LOGS_DIR / 'service_auditor_report.log'),
+            'Description_of_System': str(config.LOGS_DIR / 'description_of_system.log'),
+            'Control_Descriptions': str(config.LOGS_DIR / 'control_descriptions.log'),
+        }
+        # Clear section logs at the start of each run
+        for log_path in section_log_map.values():
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            open(log_path, "w").close()
+        # --- Debug: Log normalized TOC headings and priority keywords for each topic ---
+        debug_log_path = str(PROJECT_ROOT / 'data/logs/toc_normalization_debug.log')
+        with open(debug_log_path, 'w', encoding='utf-8') as debug_log:
+            debug_log.write('Normalized TOC Headings:\n')
+            for heading, page_ref, raw_toc in toc_headings:
+                heading_norm = aggressive_normalize(heading)
+                debug_log.write(f"  TOC: '{heading}' => '{heading_norm}'\n")
+            debug_log.write('\n')
+            for topic, keywords in SECTION_TOPICS.items():
+                debug_log.write(f"Topic: {topic}\n")
+                debug_log.write('  Priority Keywords (normalized):\n')
+                if topic == 'Management_Assertion':
+                    priority_keywords = PRIORITY_KEYWORDS_MANAGEMENT_ASSERTION
+                elif topic == 'Service_Auditor_Report':
+                    priority_keywords = PRIORITY_KEYWORDS_SERVICE_AUDITOR_REPORT
+                elif topic == 'Description_of_System':
+                    priority_keywords = PRIORITY_KEYWORDS_DESCRIPTION_OF_SYSTEM
+                else:
+                    priority_keywords = []
+                for pk in priority_keywords:
+                    pk_norm = aggressive_normalize(pk)
+                    debug_log.write(f"    '{pk}' => '{pk_norm}'\n")
+                debug_log.write('\n')
+        # --- Debug: Log raw TOC text and parsed TOC headings ---
+        toc_debug_log_path = str(PROJECT_ROOT / 'data/logs/toc_extraction_debug.log')
+        with open(toc_debug_log_path, 'w', encoding='utf-8') as toc_debug_log:
+            toc_debug_log.write('Raw TOC text from extract_toc_with_gpt:\n')
+            toc_debug_log.write(toc_text + '\n\n')
+            try:
+                toc_debug_log.write('Parsed TOC headings from extract_toc_headings_and_pages_with_gpt:\n')
+                for heading, page_ref, raw_toc in toc_headings:
+                    toc_debug_log.write(f"  Heading: '{heading}' | Page: {page_ref} | Raw: '{raw_toc}'\n")
+            except Exception as e:
+                toc_debug_log.write(f"Error parsing TOC headings: {e}\n")
         for topic, keywords in SECTION_TOPICS.items():
+            log_path = section_log_map.get(topic)
             # --- Collect all TOC candidates that match priority keyword logic ---
             priority_candidates = []
             for heading, page_ref, raw_toc in toc_headings:
@@ -268,7 +320,7 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                     if (
                         'independentserviceauditor' in heading_norm or
                         'serviceauditorreport' in heading_norm or
-                        'serviceauditor’sreport' in heading_norm or
+                        "serviceauditor'sreport" in heading_norm or
                         'serviceauditorsreport' in heading_norm
                     ):
                         best_toc, best_page_ref, best_raw_toc, _, _ = (heading, page_ref, raw_toc, length, is_main_section)
@@ -342,13 +394,11 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                     continue
                 if search_pages and candidate_page not in search_pages:
                     continue
-                # Try joining up to 8 consecutive lines (including short lines, not just non-blank)
                 for n in range(1, lookahead_lines+1):
                     joined_lines = []
                     j = i
                     while j < len(lines) and len(joined_lines) < n:
                         line = lines[j].strip()
-                        # Skip page number lines, but allow short lines
                         if is_page_number_line(line):
                             j += 1
                             continue
@@ -358,19 +408,14 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                         continue
                     candidate = ' '.join(joined_lines)
                     candidate_core = core_heading_norm(candidate)
-                    gpt_log.write(f"[DEBUG-NORM] TOC: '{best_toc}' | heading_core: '{heading_core}' | candidate: '{candidate}' | candidate_core: '{candidate_core}'\n")
                     if heading_core:
                         fuzzy_score = fuzz.ratio(heading_core, candidate_core)
                     else:
                         fuzzy_score = 0
-                    threshold = 85  # Ensure threshold is always defined for fuzzy match
-                    # Remove overly restrictive keyword checks for all main sections
-                    # For all main sections, allow any candidate, but prefer those with high fuzzy match
-                    # Skip lines that look like TOC/Other
-                    if candidate.upper().startswith('TABLE OF CONTENTS') or candidate.upper().startswith('CONTENTS'):
-                        gpt_log.write(f"[DEBUG] SKIP TOC/Other: '{candidate}'\n")
-                        continue
-                    gpt_log.write(f"[DEBUG] Topic: {topic} | i: {i} | n: {n} | candidate: '{candidate}' | candidate_core: '{candidate_core}' | heading_core: '{heading_core}' | fuzzy_score: {fuzzy_score}\n")
+                    threshold = 85
+                    # Disabled: logging each candidate to reduce log file size
+                    # if fuzzy_score > 70:
+                    #     logf.write(f"[CANDIDATE] Topic: {topic} | i: {i} | n: {n} | candidate: '{candidate}' | candidate_core: '{candidate_core}' | heading_core: '{heading_core}' | fuzzy_score: {fuzzy_score}\n")
                     if fuzzy_score > threshold:
                         confidence = fuzzy_score
                         if expected_doc_page is not None and candidate_page == expected_doc_page:
@@ -402,7 +447,6 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                     j = i
                     while j < len(lines) and len(joined_lines) < n:
                         line = lines[j].strip()
-                        # Skip page number lines and blank lines
                         if is_page_number_line(line) or not line:
                             j += 1
                             continue
@@ -412,6 +456,10 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                         continue
                     candidate_joined = ' '.join(joined_lines)
                     candidate_core = core_heading_norm(candidate_joined)
+                    # Disabled: logging each candidate for exact match to reduce log file size
+                    # if log_path:
+                    #     with open(log_path, "a", encoding="utf-8") as logf:
+                    #         logf.write(f"[EXACT] Topic: {topic} | i: {i} | n: {n} | candidate_joined: '{candidate_joined}' | candidate_core: '{candidate_core}' | heading_core: '{heading_core}'\n")
                     if heading_core and candidate_core == heading_core:
                         best_exact_line = i + 1
                         best_exact_page = get_page_for_line(lines, i)
@@ -485,7 +533,7 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                 'clean_heading': best_toc.strip() if best_toc else None,
                 'TOC_page_ref': toc_page_ref,
                 'DOC_page_ref': doc_page_ref,
-                'line': best_candidate_line if found else None,
+                'start_line': best_candidate_line if found else None,
                 'confidence': best_confidence if found else 0,
                 'gpt_reason': best_candidate_reason if found else 'Not found',
                 'offset': best_candidate_offset if found else None,
@@ -493,12 +541,34 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                 'type': 'mapped',
                 'level': section_level
             }
+            # --- Section-specific logging for troubleshooting ---
+            section_log_map = {
+                'Management_Assertion': str(config.LOGS_DIR / 'management_assertion.log'),
+                'Service_Auditor_Report': str(config.LOGS_DIR / 'service_auditor_report.log'),
+                'Description_of_System': str(config.LOGS_DIR / 'description_of_system.log'),
+                'Control_Descriptions': str(config.LOGS_DIR / 'control_descriptions.log'),
+            }
+            log_path = section_log_map.get(topic)
+            if log_path:
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                with open(log_path, "a", encoding="utf-8") as logf:
+                    logf.write(f"Section: {topic}\n")
+                    logf.write(f"Found: {found}\n")
+                    logf.write(f"Best candidate: {best_candidate}\n")
+                    logf.write(f"Best candidate line: {best_candidate_line}\n")
+                    logf.write(f"Best candidate page: {best_candidate_page}\n")
+                    logf.write(f"Best candidate reason: {best_candidate_reason}\n")
+                    logf.write(f"Best confidence: {best_confidence}\n")
+                    logf.write(f"TOC heading: {best_toc}\n")
+                    logf.write(f"TOC page ref: {best_page_ref}\n")
+                    logf.write(f"TOC raw: {best_raw_toc}\n")
+                    logf.write(f"---\n")
     # --- Section END detection logic using mapped section starts ---
     section_list = list(results.values())
     def safe(x, key):
         v = x.get(key)
         return v if v is not None else float('inf')
-    section_list.sort(key=lambda x: (safe(x, 'DOC_page_ref'), safe(x, 'line'), safe(x, 'offset')))
+    section_list.sort(key=lambda x: (safe(x, 'DOC_page_ref'), safe(x, 'start_line'), safe(x, 'offset')))
 
     # --- Add unmapped TOC entries as 'other' sections ---
     mapped_toc_page_refs = set(s['TOC_page_ref'] for s in section_list if s.get('TOC_page_ref') is not None)
@@ -593,7 +663,7 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                 'clean_heading': heading.strip(),
                 'TOC_page_ref': page_ref,
                 'DOC_page_ref': doc_page_ref,
-                'line': found_line,
+                'start_line': found_line,
                 'confidence': 0,
                 'gpt_reason': 'Unmapped TOC entry',
                 'offset': 0,
@@ -603,19 +673,19 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
             })
             last_section_end_line = found_line
     for section in section_list:
-        if section.get('line') is None:
-            section['line'] = 0
+        if section.get('start_line') is None:
+            section['start_line'] = 0
         if section.get('offset') is None:
             section['offset'] = 0
         if section.get('snippet') is None:
             section['snippet'] = ''
-    section_list.sort(key=lambda x: (safe(x, 'DOC_page_ref'), safe(x, 'line'), safe(x, 'offset')))
+    section_list.sort(key=lambda x: (safe(x, 'DOC_page_ref'), safe(x, 'start_line'), safe(x, 'offset')))
 
     # --- Identify main and 'other' sections for boundary assignment ---
     def is_main_or_other_section(section):
         return section.get('level') == 'first' and section.get('type') in ['mapped', 'other']
     main_or_other_sections = [s for s in section_list if is_main_or_other_section(s)]
-    main_or_other_sections.sort(key=lambda x: (safe(x, 'DOC_page_ref'), safe(x, 'line'), safe(x, 'offset')))
+    main_or_other_sections.sort(key=lambda x: (safe(x, 'DOC_page_ref'), safe(x, 'start_line'), safe(x, 'offset')))
 
     # --- Assign ends for all mapped sections (not just main/other) ---
     for idx, section in enumerate(section_list):
@@ -636,9 +706,9 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                     except Exception:
                         continue
             section['end_DOC_page_ref'] = last_page
-        section['end_line'] = (next_section.get('line') or section.get('line') or len(lines)) - 1 if next_section else len(lines)
-        if section.get('line') is not None and section['end_line'] < section['line']:
-            section['end_line'] = section['line']
+        section['end_line'] = (next_section.get('start_line') or section.get('start_line') or len(lines)) - 1 if next_section else len(lines)
+        if section.get('start_line') is not None and section['end_line'] < section['start_line']:
+            section['end_line'] = section['start_line']
         section['end_offset'] = (next_section.get('offset') or section.get('offset') or sum(len(l)+1 for l in lines)) - 1 if next_section else sum(len(l)+1 for l in lines)
         if section.get('offset') is not None and section['end_offset'] < section['offset']:
             section['end_offset'] = section['offset']
@@ -713,19 +783,13 @@ def extract_toc_headings_and_pages(toc_lines):
                 results.append((line, None, line))
     return results
 
-def extract_toc_headings_and_pages_with_gpt(toc_text, model="gpt-3.5-turbo", temperature=0.0, top_p=1.0):
+def extract_toc_headings_and_pages_with_gpt(toc_text, model='gpt-3.5-turbo', temperature=0.0, top_p=0.0):
     """
     Use GPT to extract (heading, page_ref) pairs from the TOC text.
     Returns a list of (heading, page_ref, raw) tuples.
     """
     import openai, json
-    prompt = (
-        "Given the following Table of Contents, extract all MAIN section headings (not sub-entries) "
-        "and their page numbers. Return a JSON array of objects with 'heading' and 'page' fields. "
-        "Do not include sub-entries or subsections. Example output: "
-        "[{'heading': 'Section I – Assertion of Management', 'page': 1}, ...] "
-        "\n\nTOC:\n" + toc_text
-    )
+    prompt = GPT_PROMPTS['extract_toc_headings_and_pages'].format(toc_text=toc_text)
     api_key = load_api_key()
     openai.api_key = api_key
     response = openai.chat.completions.create(
@@ -766,11 +830,14 @@ def detect_toc_page(lines, max_pages=5, gpt_fallback_fn=None, model=DEFAULT_GPT_
     i = 0
     while i < scan_limit:
         line = lines[i].strip().lower()
+        print(f"[DEBUG] Checking line {i}: '{line}'")  # Debug log
         # Single-line 'table of contents'
         if 'table of contents' in line:
+            print(f"[DEBUG] Single-line TOC detected at line {i}")  # Debug log
             return get_page_for_line(lines, i), 'single-line'
         # Single-line 'contents' as heading
         if line == 'contents':
+            print(f"[DEBUG] Single-line 'contents' detected at line {i}")  # Debug log
             return get_page_for_line(lines, i), 'contents-alone'
         # Multi-line: 'table', 'of', 'contents' (allow blank lines)
         if line == 'table':
@@ -782,13 +849,16 @@ def detect_toc_page(lines, max_pages=5, gpt_fallback_fn=None, model=DEFAULT_GPT_
                 while k < scan_limit and not lines[k].strip():
                     k += 1
                 if k < scan_limit and lines[k].strip().lower() == 'contents':
+                    print(f"[DEBUG] Multi-line TOC detected starting at line {i}")  # Debug log
                     return get_page_for_line(lines, i), 'multi-line'
         i += 1
     # Fallback: use GPT if provided
     if gpt_fallback_fn is not None:
         toc_page = gpt_fallback_fn(lines, max_pages, model, temperature, top_p)
         if toc_page:
+            print(f"[DEBUG] GPT fallback TOC detected at page {toc_page}")  # Debug log
             return toc_page, 'gpt-fallback'
+    print("[DEBUG] TOC not found, defaulting to page 1")  # Debug log
     return 1, 'not-found'
 
 def gpt_find_toc_page(lines, max_pages, model, temperature, top_p):
@@ -929,29 +999,33 @@ def aggressive_normalize(s):
 def is_page_number_line(line):
     return bool(re.match(r'^\d{1,4}$', line.strip()))
 
+def main():
+    parser = argparse.ArgumentParser(description="Extract sections from a SOC report PDF.")
+    parser.add_argument("pdf_path", help="Path to the SOC report PDF file.")
+    args = parser.parse_args()
+
+    # Extract text from the PDF
+    output_text_path = "data/output/output.txt"
+    os.makedirs(os.path.dirname(output_text_path), exist_ok=True)
+    extract_text_from_pdf(args.pdf_path, output_text_path)
+
+    # Read the extracted text
+    with open(output_text_path, 'r', encoding='utf-8') as f:
+        text = f.read()
+
+    # Find section candidates
+    section_candidates = find_section_candidates(text)
+    print("Section Candidates:", section_candidates)
+
+    # Write section candidates to section_results.json
+    section_json_path = str(config.SECTION_JSON_PATH)
+    os.makedirs(os.path.dirname(section_json_path), exist_ok=True)
+    with open(section_json_path, 'w', encoding='utf-8') as jf:
+        json.dump(section_candidates, jf, indent=2)
+    print(f"Section results written to {section_json_path}")
+
 if __name__ == "__main__":
-    import sys
-    soc2_dir = SOC2_REPORTS_DIR
-    output_file = OUTPUT_TEXT_FILE
-    pdf_path = None
-    if len(sys.argv) > 1:
-        # Use the provided PDF filename (just the name, not path)
-        pdf_name = sys.argv[1]
-        candidate = os.path.join(soc2_dir, pdf_name)
-        if os.path.exists(candidate):
-            pdf_path = candidate
-        else:
-            print(f"File {candidate} not found.")
-            sys.exit(1)
-    else:
-        # Default: first PDF in soc2_reports
-        pdf_files = [f for f in os.listdir(soc2_dir) if f.lower().endswith('.pdf')]
-        if not pdf_files:
-            print("No PDF files found in soc2_reports.")
-            sys.exit(1)
-        pdf_path = os.path.join(soc2_dir, pdf_files[0])
-    extract_text_from_pdf(pdf_path, output_file)
-    print(f"Extracted text from {pdf_path} to {output_file}")
+    main()
 
 # Explicitly export main functions for import
 __all__ = ["extract_text_from_pdf", "find_section_candidates"]

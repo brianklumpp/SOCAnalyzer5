@@ -1,5 +1,3 @@
-
-
 import os
 import sys
 import uuid
@@ -15,6 +13,7 @@ import asyncio
 import sqlalchemy
 import sqlalchemy.dialects.postgresql as pg_dialect
 import redis.asyncio as redis
+import redis as sync_redis
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, UploadFile, File, APIRouter
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -173,6 +172,36 @@ root_logger.addHandler(file_handler)
 stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(logging.Formatter(log_format))
 root_logger.addHandler(stream_handler)
+
+# Set up separate log files for each section
+section_log_paths = {
+    'Management_Assertion': str(PROJECT_ROOT / 'data/logs/management_assertion.log'),
+    'Service_Auditor_Report': str(PROJECT_ROOT / 'data/logs/service_auditor_report.log'),
+    'Description_of_System': str(PROJECT_ROOT / 'data/logs/description_of_system.log'),
+    'Control_Descriptions': str(PROJECT_ROOT / 'data/logs/control_descriptions.log')
+}
+
+# Initialize log files
+for path in section_log_paths.values():
+    with open(path, 'w', encoding='utf-8'):
+        pass
+
+# Function to get logger for a specific section
+def get_section_logger(section_name):
+    log_path = section_log_paths.get(section_name)
+    if not log_path:
+        return None
+    logger = logging.getLogger(section_name)
+    if not logger.hasHandlers():
+        file_handler = logging.FileHandler(log_path, encoding='utf-8')
+        file_handler.setFormatter(logging.Formatter(log_format))
+        logger.addHandler(file_handler)
+    return logger
+
+# Example usage
+management_assertion_logger = get_section_logger('Management_Assertion')
+if management_assertion_logger:
+    management_assertion_logger.info('This is a test log for Management Assertion section.')
 
 # --- TEST: Insert combined_result.json into DB for fast iteration ---
 test_router = APIRouter()
@@ -684,11 +713,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
     import logging
     import asyncio
     import threading
-    logging.error(f"[DEBUG] [run_analysis_job] Thread: {threading.current_thread().name}, job_id={job_id}")
+    # logging.error(f"[DEBUG] [run_analysis_job] Thread: {threading.current_thread().name}, job_id={job_id}")
     def progress_callback(percent, status=None):
-        import threading
-        import redis as sync_redis
-        logging.error(f"[DEBUG] [progress_callback:_update] Thread: {threading.current_thread().name}, job_id={job_id}")
+        # logging.info(f"[INFO] progress_callback: job_id={job_id}, percent={percent}, status={status}")
         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
         job_json = redis_client.get(f"job:{job_id}")
         if isinstance(job_json, str):
@@ -701,11 +728,8 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
         job.pop("done", None)
         job.pop("error", None)
         redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
-        logging.error(f"[DEBUG] progress_callback: job_id={job_id}, percent={percent}, status={status}")
 
     def checklist_callback(extractor_statuses):
-        import threading
-        import redis as sync_redis
         logging.error(f"[DEBUG] [checklist_callback:_update] Thread: {threading.current_thread().name}, job_id={job_id}")
         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
         job_json = redis_client.get(f"job:{job_id}")
@@ -721,11 +745,25 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
         logging.error(f"[DEBUG] checklist_callback: job_id={job_id}, checklist={extractor_statuses}")
     try:
         from .analyze import analyze_pdf_file
+        redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
+        # Check for cancellation before starting
+        job_json = redis_client.get(f"job:{job_id}")
+        if job_json and isinstance(job_json, str):
+            job = _json.loads(job_json)
+            if job.get("cancelled"):
+                raise Exception("Scan cancelled by user")
+        # Run the analysis, but check for cancellation after each major step
         results = analyze_pdf_file(
             temp_pdf_path,
             progress_callback=progress_callback,
             checklist_callback=checklist_callback
         )
+        # Check for cancellation after analysis
+        job_json = redis_client.get(f"job:{job_id}")
+        if job_json and isinstance(job_json, str):
+            job = _json.loads(job_json)
+            if job.get("cancelled"):
+                raise Exception("Scan cancelled by user")
         async def _update():
             redis_client = _get_redis()
             logging.error(f"[DEBUG] [result_update:_update] Thread: {threading.current_thread().name}, job_id={job_id}, redis_client={id(redis_client)}")
@@ -848,19 +886,19 @@ async def analyze_pdf_bg(file: UploadFile = File(...), db=Depends(get_db)):
 @app.get("/analyze/status/{job_id}")
 async def get_job_status(job_id: str):
     import logging
-    print(f"[PRINT] get_job_status called for job_id={job_id}")
-    logging.error(f"[DEBUG] get_job_status: called for job_id={job_id}")
+    # Remove or downgrade excessive logging for status checks
+    # print(f"[PRINT] get_job_status called for job_id={job_id}")
+    logging.info(f"[INFO] get_job_status: called for job_id={job_id}")
     job = await get_job(job_id)
     if not job:
-        print(f"[PRINT] get_job_status: job_id={job_id} NOT FOUND")
-        logging.error(f"[DEBUG] get_job_status: job_id={job_id} NOT FOUND")
+        # print(f"[PRINT] get_job_status: job_id={job_id} NOT FOUND")
+        logging.error(f"[ERROR] get_job_status: job_id={job_id} NOT FOUND")
         return {"error": "Job not found"}
-    # Add detailed logging of the full job state
-    print(f"[PRINT] get_job_status: job_id={job_id}, job={job}")
-    logging.error(f"[DEBUG] get_job_status: job_id={job_id}, job={job}")
-    # Log each field individually for clarity
-    print(f"[PRINT] get_job_status fields: progress={job.get('progress')}, checklist={job.get('checklist')}, status={job.get('status')}, done={job.get('done')}, error={job.get('error')}, filename={job.get('filename')}")
-    logging.error(f"[DEBUG] get_job_status fields: progress={job.get('progress')}, checklist={job.get('checklist')}, status={job.get('status')}, done={job.get('done')}, error={job.get('error')}, filename={job.get('filename')}")
+    # Remove detailed job state logging for status checks
+    # print(f"[PRINT] get_job_status: job_id={job_id}, job={job}")
+    # logging.info(f"[INFO] get_job_status: job_id={job_id}, job={job}")
+    # print(f"[PRINT] get_job_status fields: progress={job.get('progress')}, checklist={job.get('checklist')}, status={job.get('status')}, done={job.get('done')}, error={job.get('error')}, filename={job.get('filename')}")
+    # logging.info(f"[INFO] get_job_status fields: progress={job.get('progress')}, checklist={job.get('checklist')}, status={job.get('status')}, done={job.get('done')}, error={job.get('error')}, filename={job.get('filename')}")
     return {
         "status": job.get("status"),
         "progress": job.get("progress"),
@@ -885,7 +923,7 @@ async def get_job_result(job_id: str, db=Depends(get_db)):
         try:
             import sqlalchemy, datetime
             import logging
-            from app.models import ScanHistory, Company, Control, CUEC, SubserviceOrg, Product
+            from .models import ScanHistory, Company, Control, CUEC, SubserviceOrg, Product
             result = job.get("result")
             # Insert ScanHistory
             # Insert ScanHistory (for record, not for scan_id foreign key)
@@ -900,7 +938,7 @@ async def get_job_result(job_id: str, db=Depends(get_db)):
             scan_history_id = scan_history.id
 
             # Insert Scan (get scan_id for all child entities)
-            from app.models import Scan
+            from .models import Scan
             product = None
             product_info = result.get("product")
             if product_info and isinstance(product_info, dict):
@@ -1026,26 +1064,6 @@ async def get_job_result(job_id: str, db=Depends(get_db)):
     if job.get("error"):
         return {"error": job.get("error"), "partial_result": job.get("result")}
     return {"results": job.get("result")}
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from typing import Optional
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Request, Depends, UploadFile, File
-from sqlalchemy.future import select
-from sqlalchemy.exc import SQLAlchemyError
-from .models import ScanHistory, Setting, Base
-from .database import engine, get_db
-from .analyze import analyze_pdf_file
-import threading
-import time
-import sqlalchemy
-import sqlalchemy.dialects.postgresql as pg_dialect
-import asyncio
-import os
-import shutil
-import datetime
-import logging
-import traceback
 
 # Set up backend error logging
 import pathlib
@@ -1168,3 +1186,13 @@ async def init_models():
 import sys
 if __name__ == "__main__" and sys.argv[0].endswith("main.py") and sys.argv[-1] != "test_insert_combined_result":
     asyncio.get_event_loop().run_until_complete(init_models())
+
+@app.post("/analyze/cancel/{job_id}")
+async def cancel_job(job_id: str):
+    redis_client = _get_redis()
+    job_json = await get_job(job_id, redis_client)
+    if not job_json:
+        return JSONResponse({"error": "Job not found"}, status_code=404)
+    job_json["cancelled"] = True
+    await set_job(job_id, job_json, redis_client)
+    return {"status": "cancelled"}

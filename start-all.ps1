@@ -21,7 +21,7 @@ if ($redisRunning) {
 }
 
 # Start backend (FastAPI) on all interfaces for WebSocket compatibility (FORCE SINGLE WORKER for debugging)
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1" -WorkingDirectory "$PSScriptRoot\backend"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --workers 1" -WorkingDirectory "$PSScriptRoot"
 
 # Start frontend (React, production build)
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "npx serve -s build" -WorkingDirectory "$PSScriptRoot\frontend"

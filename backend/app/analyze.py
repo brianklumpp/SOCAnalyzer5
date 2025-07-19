@@ -1,4 +1,3 @@
-
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import json
@@ -8,18 +7,51 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .extractors.auditor import extract_auditor_from_report
 from .extractors.company import extract_company_from_report
-from .extractors.control_extractor import extract_controls
+from .extractors.control_extractor_v2 import extract_controls_v2
 from .extractors.cuec_extractor import extract_cuecs
 from .extractors.subservice_orgs import extract_subservice_orgs
 from .extractors.product import extract_product_from_report
 from .extractors.report_date import extract_report_date
 from .extractors.coverage_period import extract_coverage_period
 from .pdf_handler import extract_text_from_pdf, find_section_candidates
-from .config import SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE
+from . import config
+import glob
 
 
 def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json', progress_callback=None, checklist_callback=None):
     logger = logging.getLogger(__name__)
+
+    # --- Reset logs and JSON outputs at the start of each run ---
+    # List of files to clear
+    files_to_clear = [
+        str(config.JSON_DIR / 'section_results.json'),
+        str(config.JSON_DIR / 'control_result.json'),
+        str(config.JSON_DIR / 'cuec_result.json'),
+        str(config.JSON_DIR / 'auditor_result.json'),
+        str(config.JSON_DIR / 'company_result.json'),
+        str(config.JSON_DIR / 'product_result.json'),
+        str(config.JSON_DIR / 'report_date_result.json'),
+        str(config.JSON_DIR / 'coverage_period_result.json'),
+        str(config.JSON_DIR / 'subservice_orgs_result.json'),
+        str(config.JSON_DIR / 'combined_result.json'),
+        str(config.LOGS_DIR / 'control_gpt.log'),
+        str(config.LOGS_DIR / 'cuec_extractor.log'),
+        str(config.LOGS_DIR / 'backend_errors.log'),
+        str(config.LOGS_DIR / 'section_gpt_responses.log'),
+        str(config.LOGS_DIR / 'control_extractor.log'),
+        str(config.LOGS_DIR / 'subservice_orgs_extractor.log'),
+        str(config.LOGS_DIR / 'product_extractor.log'),
+        str(config.LOGS_DIR / 'auditor_extractor.log'),
+        str(config.LOGS_DIR / 'company_extractor.log'),
+        str(config.LOGS_DIR / 'coverage_period_extractor.log'),
+        str(config.LOGS_DIR / 'report_date_extractor.log'),
+    ]
+    for f in files_to_clear:
+        try:
+            with open(f, 'w', encoding='utf-8') as clearf:
+                clearf.truncate(0)
+        except Exception:
+            pass  # Ignore if file does not exist yet
 
     # Always resolve data paths relative to the project root
     PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -69,13 +101,20 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 if offset in (None, -1):
                     offset = text.find(heading)
                 section['offset'] = offset if offset is not None and offset >= 0 else 0
-                section['line'] = offset_to_line(text, section['offset']) if section['offset'] is not None and section['offset'] >= 0 else 0
+                section['start_line'] = offset_to_line(text, section['offset']) if section['offset'] is not None and section['offset'] >= 0 else 0
+                # Remove old 'line' field if present
+                if 'line' in section:
+                    del section['line']
                 section['snippet'] = get_text_snippet(text, section['offset']) if section['offset'] is not None and section['offset'] >= 0 else ''
+                # Set 'end_line' if not present and possible (e.g., from next section or known logic)
+                # (Leave as-is if already set)
             else:
                 if section.get('offset') is None:
                     section['offset'] = 0
-                if section.get('line') is None:
-                    section['line'] = 0
+                if section.get('start_line') is None:
+                    section['start_line'] = 0
+                if 'line' in section:
+                    del section['line']
                 if section.get('snippet') is None:
                     section['snippet'] = ''
         # Always write section_results.json before running extractors
@@ -125,7 +164,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             (4, "auditor_extraction", extract_auditor_from_report, "Running auditor extractor...", 40),
         ]
         parallel_steps = [
-            (5, "control_extraction", extract_controls, "Running controls extractor...", 50),
+            (5, "control_extraction", extract_controls_v2, "Running controls extractor...", 50),
             (6, "cuec_extraction", extract_cuecs, "Running CUECs extractor...", 60),
             (7, "subservice_orgs_extraction", extract_subservice_orgs, "Running subservice orgs extractor...", 70),
             (8, "product_extraction", extract_product_from_report, "Running product extractor...", 80),
@@ -314,26 +353,32 @@ def main():
 
     # Add text snippets and line numbers, but preserve all other fields
     for section in section_results:
-        # Only update/add offset, line, snippet; preserve all other fields
         if section.get('confidence', 0) > 0 and section.get('clean_heading') is not None:
             heading = section['clean_heading']
             offset = section.get('offset', None)
             if offset in (None, -1):
                 offset = text.find(heading)
             section['offset'] = offset if offset is not None and offset >= 0 else 0
-            section['line'] = offset_to_line(text, section['offset']) if section['offset'] is not None and section['offset'] >= 0 else 0
+            section['start_line'] = offset_to_line(text, section['offset']) if section['offset'] is not None and section['offset'] >= 0 else 0
+            # Remove old 'line' field if present
+            if 'line' in section:
+                del section['line']
             section['snippet'] = get_text_snippet(text, section['offset']) if section['offset'] is not None and section['offset'] >= 0 else ''
+            # Set 'end_line' if not present and possible (e.g., from next section or known logic)
+            # (Leave as-is if already set)
         else:
             if section.get('offset') is None:
                 section['offset'] = 0
-            if section.get('line') is None:
-                section['line'] = 0
+            if section.get('start_line') is None:
+                section['start_line'] = 0
+            if 'line' in section:
+                del section['line']
             if section.get('snippet') is None:
                 section['snippet'] = ''
     # Print details to console
     print("\nSection details:")
     for section in section_results:
-        print(f"Topic: {section.get('topic')} | Offset: {section.get('offset')} | Line: {section.get('line')} | Confidence: {section.get('confidence')}%\nSnippet:\n{section.get('snippet')}\n{'-'*60}")
+        print(f"Topic: {section.get('topic')} | Offset: {section.get('offset')} | Line: {section.get('start_line')} | Confidence: {section.get('confidence')}%\nSnippet:\n{section.get('snippet')}\n{'-'*60}")
     if args.json:
         with open(args.json, 'w', encoding='utf-8') as jf:
             json.dump(section_results, jf, indent=2)

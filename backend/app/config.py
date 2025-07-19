@@ -57,7 +57,14 @@ GPT_PROMPTS = {
         "Only consider a heading if it appears on its own line, not as part of a paragraph. "
         "If yes, reply 'Yes, absolute line X: [exact heading text]' where X is the line number in the full document (not just this chunk) and [exact heading text] is the heading as it appears. "
         "If not, reply 'No, does not contain section start.'\n\nChunk:\n{chunk}"
-    )
+    ),
+    'extract_toc_headings_and_pages': (
+        "Given the following Table of Contents, extract all MAIN section headings (not sub-entries) "
+        "and their page numbers. Respond ONLY with a JSON array of objects with 'heading' and 'page' fields. "
+        "Do not include sub-entries or subsections. Example output: "
+        "[{{\"heading\": \"Section I – Assertion of Management\", \"page\": 1}}, {{\"heading\": \"Section II – Service Auditor's Report\", \"page\": 3}}]" 
+        "\n\nTOC:\n{toc_text}"
+    ),
 }
 
 # Prompt for extracting the auditor firm from the auditor section
@@ -145,18 +152,17 @@ TOTAL_PRIMARY_SIZE = PRIMARY_CHUNK_SIZE * 3  # Allow for multiple primary sectio
 TOTAL_DESCRIPTION_SIZE = DESCRIPTION_CHUNK_SIZE * 3  # Allow for multiple description sections
 TEXT_OVERLAP = 1000  # Characters of overlap between chunks for context preservation
 
-# Supported GPT models and their default settings (now after chunk size constants)
+# Configuration for GPT models
 GPT_MODELS = {
-    'gpt-4o': {
-        'max_tokens': 4096,
-        'chunk_size': DEFAULT_CHUNK_SIZE,  # Use calculated default chunk size
-        'overlap': TEXT_OVERLAP
-    },
-    'gpt-3.5-turbo': {
-        'max_tokens': 4096,
-        'chunk_size': DEFAULT_CHUNK_SIZE,
-        'overlap': TEXT_OVERLAP
-    }
+    'control_extractor': 'gpt-4o',
+    'control_extractor_v2': 'gpt-4o',
+    'company_extractor': 'gpt-3.5-turbo',
+    'auditor_extractor': 'gpt-3.5-turbo',
+    'product_extractor': 'gpt-3.5-turbo',
+    'report_date_extractor': 'gpt-3.5-turbo',
+    'coverage_period_extractor': 'gpt-3.5-turbo',
+    'cuec_extractor': 'gpt-3.5-turbo',
+    'subservice_orgs_extractor': 'gpt-3.5-turbo'
 }
 
 SECTION_TOPICS = {
@@ -526,27 +532,65 @@ control_soc_domains = {
 }
 
 # Prompt for extracting tested controls from the Control_Descriptions section
-CONTROL_EXTRACTION_PROMPT = (
-    "You are an expert in analyzing SOC 2 reports. Your task is to extract control activities from the provided text. A control activity is a specific action or set of actions designed to mitigate risks and ensure the achievement of objectives."
-    "Controls may be listed under section headings (such as COSO or TSC sections), and control IDs may appear in many formats: e.g., 'CC9.1', 'CC 9.1', 'CC.9.1', '9.1', or as a section like 'CC9.0' with controls listed as 1, 2, 3, etc. "
-    "Control IDs may also not follow the COSO or TSC format, and may be listed as 'Control 1', 'Control 2', etc. "
-    "Do your best to distinguish between section IDs, COSO and TSC control IDs, and capture the most specific control ID for each control. "
-    "For each control activity, provide a JSON object with the following fields: \n"
-    "- \"control_id\": (string(s), unique identifier(s) for the control, or null if not available)\n"
-    "- \"control_desc\": (string, a detailed description of the control activity)\n"
-    "- \"control_test\": (string, a description of how the control is tested, or null if not available)\n"
-    "- \"control_test_results\": (string, the results of the control test, or null if not available)\n"
-    "- control_page_ref: (string, the page number(s) where the control is found, or null if not available)\n"
-    "- control_line_ref: (integer, the line number in the text where the control is found)\n"
-    "If you cannot find a value for a field, use null.\n"
+CONTROL_EXTRACTION_PROMPT = """
+Your task is to extract detailed control information from the provided text and return it in JSON format. The text is structured in sections, 
+and your focus should be on identifying and extracting specific elements related to a control. Follow the 
+instructions carefully to ensure accurate extraction without inferring any information not explicitly stated in 
+the text.
 
-    "Example of a control activity:\n"
-    "- \"control_desc\": \"The entity restricts logical access to information assets to authorized personnel.\"\n"
-    "- \"control_test\": \"Review of access logs and user permissions.\"\n"
-    "- \"control_test_results\": \"No unauthorized access detected.\"\n"
+Instructions:
 
-    "Text to analyze:\n{text}\n"
-)
+1. Identify Control IDs for a Single Control:
+   - Look for one or more control IDs, which may appear as random strings of letters, numbers, periods, dashes, 
+   or TSC IDs.
+   - Control IDs are unique identifiers for the control and are usually followed by a description.
+   - If you find multiple control IDs separated by descriptive text, you should only extract the first set.  The
+   next set of IDs will be for either a different control or other references which may be used later for 
+   another purpose.
+
+2. Extract Control Description:
+   - Identify and extract 1-5 sentences or a bulleted list that describes the control. Usually follows the control ID.
+   - The description should provide a clear understanding of the control's purpose and implementation.
+
+3. Identify Additional Control References:
+   - Look for one or more additional reference strings related to the control, such as series of digits or strings.
+   - These references are usually separated by text from the control IDs or control description and may appear 
+   in different parts of the text.
+
+4. Extract Comments on Testing:
+   - Identify sentences that describe what was tested, examined, viewed, or reviewed.
+   - These comments provide insight into the testing process and methodology.
+
+5. Extract Test Results:
+   - Look for statements indicating test results, such as notes on deviations, findings, gaps, or errors.
+   - If no deviations or errors are found, note the absence of such findings.
+   - This is usually the last section of the control section.  Anything after this is either not part of the control, 
+   is a different control, or is a different section of the report.  Do not include anything after this as it will 
+   likely be extracted as part of the next chunk of content being processed.
+
+6. Provide the Ending Line Number:
+   - After extracting the control information, provide the line number where this control information ends.
+   - This will be used to determine the starting position for the next chunk.
+
+7. Provide an Initial Confidence Score and Justification:
+   - Provide a confidence score between 0 and 1 indicating how confident you are that the extracted information represents a control.
+   - Include a brief justification for your confidence score, explaining why you believe this is a control.
+
+Return the extracted information in the following JSON format:
+{{
+    "control_id": "",
+    "control_desc": "",
+    "control_test": "",
+    "control_test_results": "",
+    "additional_references": [],
+    "end_line": 0,
+    "control_confidence": 0.0,
+    "control_gpt_conf_justification": ""
+}}
+
+Text to analyze (starting at line {start_line}):
+{text}
+"""
 
 # Prompt for consolidating and deduplicating extracted controls
 CONTROL_CONSOLIDATION_PROMPT = (
@@ -567,3 +611,32 @@ You are analyzing a section of a SOC report. Your task is to identify logical br
 SEGMENT_CLASSIFICATION_PROMPT = """
 You are analyzing a section of a SOC report. Your task is to classify each segment of text into one of the following categories: control ID, control description, test procedure, test result. Use only the information provided in the text and do not infer or assume additional details. Provide a structured representation of the classified segments.
 """
+
+DYNAMIC_CHUNKING_PROMPT = (
+    "Identify the single numeric character position in the text where each control section header starts. "
+    "Do not infer or assume any details not present in the text."
+)
+
+SEGMENT_CLASSIFICATION_PROMPT = (
+    "You are an expert at analyzing SOC reports. Given the following text, classify each segment as 'control_id', 'control_description', 'test_procedure', or 'test_result'. "
+    "Return a JSON array of objects, each with keys: 'type' and 'text'. "
+    "If no segments are found, return an empty array."
+)
+
+# Model-specific settings
+GPT_MODEL_SETTINGS = {
+    'gpt-4o': {
+        'max_tokens': 4096,
+        'temperature': 0,
+        'top_p': 0
+    },
+    'gpt-3.5': {
+        'max_tokens': 2048,
+        'temperature': 0,
+        'top_p': 0
+    }
+}
+
+# --- Control Extraction Testing Config ---
+CONTROL_TESTING_ENABLED = True  # Set to False to disable test mode and process the full file
+CONTROL_TESTING_MAX_LINE = 2000  # Only process up to this line number when testing is enabled

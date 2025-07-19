@@ -1,5 +1,3 @@
-
-
 import os
 import json
 import logging
@@ -67,7 +65,7 @@ def extract_subservice_orgs():
     if not desc_section:
         logging.error('No Description_of_System section found.')
         return None
-    start_line = desc_section.get('line')
+    start_line = desc_section.get('start_line')
     end_line = desc_section.get('end_line')
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
@@ -90,7 +88,7 @@ def extract_subservice_orgs():
             text=chunk
         )
         logging.debug(f'Chunk {idx} prompt: {prompt[:500]}...')
-        response = gpt_extract(prompt)
+        response = gpt_extract(prompt, 'subservice_orgs_extractor')
         logging.debug(f'Chunk {idx} response: {response}')
         # Log response length for truncation analysis
         logging.info(f'Chunk {idx} GPT response length: {len(response) if response else 0}')
@@ -496,7 +494,7 @@ def filter_third_parties_with_gpt():
         prompt = SUBSERVICE_ORG_GPT_FILTER_PROMPT.format(name=name, desc=desc, context=context)
         response = ""
         try:
-            response = gpt_extract(prompt)
+            response = gpt_extract(prompt, 'subservice_orgs_extractor')
             with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
                 gptlog.write(f'PROMPT:\n{prompt}\nRESPONSE:\n{response}\n---\n')
             if response:
