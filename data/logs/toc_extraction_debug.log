@@ -1,14 +1,22 @@
 Raw TOC text from extract_toc_with_gpt:
-TABLE OF CONTENTS 
-Section 1: Okta’s Management Assertion .............................................................. 1 
-Section 2: Independent Service Auditor’s Assurance Report .................................. 3 
-Section 3: Description of Okta’s Identity as a Service (“IDaaS”) System Relevant to 
-Security, Availability, and Confidentiality .............................................................. 9 
-Section 4: Okta’s Controls, Trust Service Criteria, Service Auditor’s Test of 
-Controls, and Test Results ................................................................................. 43
+Contents 
+
+2 
+I. 
+Independent Service Auditor’s Report on a SOC 2 Examination......................................................................................................... 3 
+II. 
+Assertion of Adobe Incorporated Management .................................................................................................................................................8 
+III. 
+Adobe Incorporated’s Description of Its Experience Cloud System ............................................................................................... 10 
+IV. 
+Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests ............................................................. 46 
+V. 
+Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent 
+Service Auditor’s Report on a SOC 2 Examination ........................................................................................................................................ 112
 
 Parsed TOC headings from extract_toc_headings_and_pages_with_gpt:
-  Heading: 'Section 1: Okta’s Management Assertion' | Page: 1 | Raw: 'Section 1: Okta’s Management Assertion'
-  Heading: 'Section 2: Independent Service Auditor’s Assurance Report' | Page: 3 | Raw: 'Section 2: Independent Service Auditor’s Assurance Report'
-  Heading: 'Section 3: Description of Okta’s Identity as a Service (“IDaaS”) System Relevant to Security, Availability, and Confidentiality' | Page: 9 | Raw: 'Section 3: Description of Okta’s Identity as a Service (“IDaaS”) System Relevant to Security, Availability, and Confidentiality'
-  Heading: 'Section 4: Okta’s Controls, Trust Service Criteria, Service Auditor’s Test of Controls, and Test Results' | Page: 43 | Raw: 'Section 4: Okta’s Controls, Trust Service Criteria, Service Auditor’s Test of Controls, and Test Results'
+  Heading: 'Independent Service Auditor’s Report on a SOC 2 Examination' | Page: 3 | Raw: 'Independent Service Auditor’s Report on a SOC 2 Examination'
+  Heading: 'Assertion of Adobe Incorporated Management' | Page: 8 | Raw: 'Assertion of Adobe Incorporated Management'
+  Heading: 'Adobe Incorporated’s Description of Its Experience Cloud System' | Page: 10 | Raw: 'Adobe Incorporated’s Description of Its Experience Cloud System'
+  Heading: 'Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests' | Page: 46 | Raw: 'Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests'
+  Heading: 'Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent Service Auditor’s Report on a SOC 2 Examination' | Page: 112 | Raw: 'Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent Service Auditor’s Report on a SOC 2 Examination'

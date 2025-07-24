@@ -1,5 +1,5 @@
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, LargeBinary
+from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, LargeBinary, Boolean
 import datetime
 
 Base = declarative_base()
@@ -21,14 +21,10 @@ class Scan(Base):
     gpt_cost = Column(Float)
     gpt_model = Column(String(128))
     estimated_time_seconds = Column(Float)
-
-
-class ScanHistory(Base):
-    __tablename__ = "scan_history"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
-    filename = Column(String(256), nullable=False)
-    results = Column(JSON, nullable=False)
+    auditor = Column(Text)
+    gpt_usage_details = Column(JSON)
+    executive_summary = Column(JSON)
+    executive_summary_stale = Column(Boolean, default=False)  # Flag when summary needs regeneration
 
 # --- Entity tables for extracted data ---
 class Company(Base):
@@ -63,7 +59,10 @@ class Control(Base):
     merged_to_control_id = Column(String(128))
     control_gpt_opinion = Column(Text)
     control_gpt_reasoning = Column(Text)
+    control_confidence = Column(Float)
+    confidence_calc = Column(Text)
     scan_id = Column(Integer)
+    annotation = Column(Text)
 
 class CUEC(Base):
     __tablename__ = "cuec"
@@ -87,14 +86,25 @@ class CUEC(Base):
     cuec_closest_framework = Column(String(128))
     cuec_confidence_justification = Column(Text)
     scan_id = Column(Integer)
+    annotation = Column(Text)
+    control_strength = Column(String(32))  # High, Medium, Low
 
 class SubserviceOrg(Base):
     __tablename__ = "subservice_org"
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(256))
     confidence = Column(Float)
-    # Add more fields here if present in JSON in the future
     scan_id = Column(Integer)
+    third_party_description = Column(Text)
+    third_party_page_ref = Column(Text)
+    third_party_confidence = Column(Float)
+    distance_from_so_keywords = Column(Float)
+    likely_so = Column(String(64))
+    common_so = Column(String(64))
+    source_context = Column(Text)
+    confidence_justification = Column(Text)
+    third_party_controls = Column(JSON)
+    annotation = Column(Text)
 
 class Product(Base):
     __tablename__ = "product"

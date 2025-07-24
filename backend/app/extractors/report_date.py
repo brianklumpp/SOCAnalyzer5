@@ -34,6 +34,9 @@ def extract_text_for_lines(txt_lines, start_line, end_line):
     return ''.join(txt_lines[start_line-1:end_line])
 
 def extract_report_date():
+    # Reset output file at the start of extraction
+    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+        f.write('{}\n')
     section_results = load_json(SECTION_JSON_PATH)
     auditor_section = next((s for s in section_results if s.get('topic') == 'Service_Auditor_Report'), None)
     if not auditor_section:

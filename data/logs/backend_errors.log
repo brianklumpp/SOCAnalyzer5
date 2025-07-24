@@ -1,267 +1,1060 @@
 
-2025-07-19 02:34:07,146 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-1 (run_analysis_job), job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:38:45,218 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-2 (run_analysis_job), job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:07,155 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'pending'}, {'name': 'sections_extracted', 'status': 'pending'}, {'name': 'company_extraction', 'status': 'pending'}, {'name': 'auditor_extraction', 'status': 'pending'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
+2025-07-24 03:38:45,231 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'pending'}, {'name': 'sections_extracted', 'status': 'pending'}, {'name': 'company_extraction', 'status': 'pending'}, {'name': 'auditor_extraction', 'status': 'pending'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:07,156 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-1 (run_analysis_job), job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:38:45,232 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-2 (run_analysis_job), job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:07,164 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'pending'}, {'name': 'company_extraction', 'status': 'pending'}, {'name': 'auditor_extraction', 'status': 'pending'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
+2025-07-24 03:38:45,240 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'pending'}, {'name': 'company_extraction', 'status': 'pending'}, {'name': 'auditor_extraction', 'status': 'pending'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:07,165 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-1 (run_analysis_job), job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:38:45,242 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-2 (run_analysis_job), job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:07,173 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'pending'}, {'name': 'auditor_extraction', 'status': 'pending'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
+2025-07-24 03:38:45,253 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'pending'}, {'name': 'auditor_extraction', 'status': 'pending'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:08,785 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-1 (run_analysis_job), job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:38:46,612 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-2 (run_analysis_job), job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:08,796 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'pending'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
+2025-07-24 03:38:46,629 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'pending'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:10,512 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-1 (run_analysis_job), job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:38:49,491 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-2 (run_analysis_job), job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:10,526 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
+2025-07-24 03:38:49,507 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'pending'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:11,722 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-0_4, job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:38:50,636 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-3_4, job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:11,733 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
+2025-07-24 03:38:50,647 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'pending'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:12,192 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-0_5, job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:38:51,024 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-3_5, job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:12,206 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
+2025-07-24 03:38:51,038 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'pending'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:17,902 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-0_3, job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:38:57,085 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-3_3, job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:34:17,913 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'done'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
+2025-07-24 03:38:57,103 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'done'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:35:07,271 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-0_0, job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:40:46,606 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-3_1, job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:35:07,284 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'done'}, {'name': 'cuec_extraction', 'status': 'pending'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'done'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
+2025-07-24 03:40:46,624 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'done'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'done'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:36:20,407 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-0_1, job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 03:54:14,506 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-3_2, job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:36:20,420 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'done'}, {'name': 'cuec_extraction', 'status': 'done'}, {'name': 'subservice_orgs_extraction', 'status': 'pending'}, {'name': 'product_extraction', 'status': 'done'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
+2025-07-24 03:54:14,522 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'pending'}, {'name': 'cuec_extraction', 'status': 'done'}, {'name': 'subservice_orgs_extraction', 'status': 'done'}, {'name': 'product_extraction', 'status': 'done'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:41:28,622 | ERROR | subservice_orgs | Failed to parse GPT response for chunk 168: [
-  {
-    "third_party_name": "Okta",
-    "third_party_description": "Identity and access management service provider",
-    "third_party_page_ref": "Description of System section",
-    "third_party_confidence": 0.9,
-    "distance_from_so_keywords": 1,
-    "likely_so": "Yes",
-    "common_so": "Yes",
-    "third_party_controls": [
-      {
-        "third_party_control_seq": 1,
-        "third_party_control_id": "CC2.3",
-        "third_party_control_desc": "User entities are responsible for staying informed of new features and functionality by reviewing Okta’s updates and release notes."
-      },
-      {
-        "third_party_control_seq": 2,
-        "third_party_control_id": "CC6.1",
-        "third_party_control_desc": "User entities are responsible for maintaining appropriate policies and procedures supporting the appropriate use and access services provided by Okta."
-      }
-      // Repeat for each control...
-    ]
-  }
-] | Error: Expecting ',' delimiter: line 14 column 8 (char 592)
+2025-07-24 04:01:40,294 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-3_0, job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,466 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: ThreadPoolExecutor-0_2, job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 04:01:40,298 | ERROR | main | [DEBUG] checklist_callback: job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'done'}, {'name': 'cuec_extraction', 'status': 'done'}, {'name': 'subservice_orgs_extraction', 'status': 'done'}, {'name': 'product_extraction', 'status': 'done'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,479 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'done'}, {'name': 'cuec_extraction', 'status': 'done'}, {'name': 'subservice_orgs_extraction', 'status': 'done'}, {'name': 'product_extraction', 'status': 'done'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
+[STANDARDIZED RESULT VALIDATION]
+controls: list, len=157
+cuecs: list, len=70
+subservice_orgs: list, len=20
+product: type=<class 'str'>
+auditor: type=<class 'str'>
+company: type=<class 'str'>
+report_date: type=<class 'str'>
+coverage_period: dict, keys=['type', 'start_date', 'end_date', 'explanation', 'raw_gpt_response']
+Full standardized results keys: ['controls', 'cuecs', 'subservice_orgs', 'product', 'auditor', 'company', 'report_date', 'coverage_period', 'sections']
+
+2025-07-24 04:01:40,411 | ERROR | main | [DEBUG] [result_update] No running event loop, creating new one.
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,480 | ERROR | main | [DEBUG] [checklist_callback:_update] Thread: Thread-1 (run_analysis_job), job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944
+2025-07-24 04:01:40,412 | ERROR | main | [DEBUG] [result_update] Before run_until_complete, loop: 1917488913360
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,488 | ERROR | main | [DEBUG] checklist_callback: job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, checklist=[{'name': 'file_uploaded', 'status': 'done'}, {'name': 'text_extracted', 'status': 'done'}, {'name': 'sections_extracted', 'status': 'done'}, {'name': 'company_extraction', 'status': 'done'}, {'name': 'auditor_extraction', 'status': 'done'}, {'name': 'control_extraction', 'status': 'done'}, {'name': 'cuec_extraction', 'status': 'done'}, {'name': 'subservice_orgs_extraction', 'status': 'done'}, {'name': 'product_extraction', 'status': 'done'}, {'name': 'report_date_extraction', 'status': 'done'}, {'name': 'coverage_period_extraction', 'status': 'done'}]
+2025-07-24 04:01:40,412 | ERROR | main | [DEBUG] [result_update:_update] Thread: Thread-2 (run_analysis_job), job_id=5f549f1f-f5ad-4cae-b99b-4c80ceba6715, redis_client=1917412766928
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,508 | ERROR | analyze | Failed to merge data/json/control_result.json into results['control_extraction']: Extra data: line 147 column 1 (char 16118)
+2025-07-24 04:01:40,465 | ERROR | main | [DEBUG] [result_update] After run_until_complete, loop: 1917488913360
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,547 | ERROR | main | [DEBUG] [result_update] No running event loop, creating new one.
+2025-07-24 04:01:40,467 | ERROR | main | [DEBUG] [result_update] Closed event loop: 1917488913360
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,550 | ERROR | main | [DEBUG] [result_update] Before run_until_complete, loop: 1861653756368
+2025-07-24 04:01:43,146 | INFO | base | BEGIN (implicit)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,551 | ERROR | main | [DEBUG] [result_update:_update] Thread: Thread-1 (run_analysis_job), job_id=0637cc9f-2d9a-45d7-9dbc-62d2e34c4944, redis_client=1861662354128
+2025-07-24 04:01:43,148 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan ORDER BY scan.scan_date DESC 
+ LIMIT $1::INTEGER
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,569 | ERROR | main | [DEBUG] [result_update] After run_until_complete, loop: 1861653756368
+2025-07-24 04:01:43,149 | INFO | base | [cached since 4387s ago] (20,)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:02,569 | ERROR | main | [DEBUG] [result_update] Closed event loop: 1861653756368
+2025-07-24 04:01:43,318 | INFO | base | ROLLBACK
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:05,014 | INFO | base | BEGIN (implicit)
+2025-07-24 04:02:33,713 | INFO | base | BEGIN (implicit)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:05,025 | INFO | base | INSERT INTO scan_history (timestamp, filename, results) VALUES ($1::TIMESTAMP WITHOUT TIME ZONE, $2::VARCHAR, $3::JSON) RETURNING scan_history.id
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,026 | INFO | base | [generated in 0.00627s] (datetime.datetime(2025, 7, 19, 2, 42, 5, 13453), 'Okta.pdf', '{"sections": [{"topic": "Management_Assertion", "clean_heading": "Section 1: Okta\\u2019s Management Assertion", "TOC_page_ref": 1, "DOC_page_ref": 3 ... (257531 characters truncated) ... entities to rely on the controls reported herein, each user entity must ", "rescue_type": "unmatched", "matched_desc": null, "confidence_pct": 32}]}}')
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,066 | INFO | base | COMMIT
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,071 | INFO | base | BEGIN (implicit)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,075 | INFO | base | SELECT scan_history.id, scan_history.timestamp, scan_history.filename, scan_history.results 
-FROM scan_history 
-WHERE scan_history.id = $1::INTEGER
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,076 | INFO | base | [generated in 0.00119s] (39,)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,098 | INFO | base | INSERT INTO scan (id, company_id, product, scan_date, report_date, coverage_start, coverage_end, pdf_file, pdf_filename, extracted_text, result_json, gpt_cost, gpt_model, estimated_time_seconds) VALUES ($1::INTEGER, $2::INTEGER, $3::VARCHAR, $4::TIMESTAMP WITHOUT TIME ZONE, $5::TIMESTAMP WITHOUT TIME ZONE, $6::TIMESTAMP WITHOUT TIME ZONE, $7::TIMESTAMP WITHOUT TIME ZONE, $8::BYTEA, $9::VARCHAR, $10::VARCHAR, $11::JSON, $12::FLOAT, $13::VARCHAR, $14::FLOAT)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,099 | INFO | base | [generated in 0.00600s] (39, None, None, datetime.datetime(2025, 7, 19, 2, 42, 5, 13453), None, None, None, None, 'Okta.pdf', None, '{"sections": [{"topic": "Management_Assertion", "clean_heading": "Section 1: Okta\\u2019s Management Assertion", "TOC_page_ref": 1, "DOC_page_ref": 3 ... (257531 characters truncated) ... entities to rely on the controls reported herein, each user entity must ", "rescue_type": "unmatched", "matched_desc": null, "confidence_pct": 32}]}}', None, None, None)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,133 | INFO | base | COMMIT
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,138 | INFO | base | BEGIN (implicit)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,142 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds 
+2025-07-24 04:02:33,715 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
 FROM scan 
 WHERE scan.id = $1::INTEGER
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:05,143 | INFO | base | [generated in 0.00130s] (39,)
+2025-07-24 04:02:33,716 | INFO | base | [cached since 3449s ago] (17,)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:05,156 | ERROR | main | [DB] Inserted Scan id=39
+2025-07-24 04:02:33,717 | INFO | base | BEGIN (implicit)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:05,157 | ERROR | main | [DB] controls_section: {}
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,158 | ERROR | main | [DB] cuecs_section: {}
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,159 | ERROR | main | [DB] suborgs_section: {}
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,159 | INFO | base | COMMIT
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,218 | ERROR | main | [DB] All entities committed for scan_id=39
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,255 | INFO | base | BEGIN (implicit)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,256 | INFO | base | SELECT scan_history.id, scan_history.timestamp, scan_history.filename, scan_history.results 
-FROM scan_history ORDER BY scan_history.timestamp DESC 
- LIMIT $1::INTEGER
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,257 | INFO | base | [cached since 500.9s ago] (20,)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:05,965 | INFO | base | ROLLBACK
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:41,270 | INFO | base | BEGIN (implicit)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:41,273 | INFO | base | SELECT scan_history.id, scan_history.timestamp, scan_history.filename, scan_history.results 
-FROM scan_history 
-WHERE scan_history.id = $1::INTEGER
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:41,274 | INFO | base | [generated in 0.00151s] (39,)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:41,278 | INFO | base | BEGIN (implicit)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:41,279 | INFO | base | SELECT scan_history.id, scan_history.timestamp, scan_history.filename, scan_history.results 
-FROM scan_history ORDER BY scan_history.timestamp DESC 
- LIMIT $1::INTEGER
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:41,280 | INFO | base | [cached since 537s ago] (20,)
---------------------------------------------------------------------------------
-
-2025-07-19 02:42:41,304 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds 
+2025-07-24 04:02:33,718 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
 FROM scan 
 WHERE scan.id = $1::INTEGER
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,305 | INFO | base | [generated in 0.00149s] (39,)
+2025-07-24 04:02:33,718 | INFO | base | [cached since 3449s ago] (17,)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,314 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+2025-07-24 04:02:33,720 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,721 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan ORDER BY scan.scan_date DESC 
+ LIMIT $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,721 | INFO | base | [cached since 4437s ago] (20,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,745 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
 FROM company 
 WHERE company.scan_id = $1::INTEGER
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,314 | INFO | base | [generated in 0.00054s] (39,)
+2025-07-24 04:02:33,746 | INFO | base | [cached since 3449s ago] (17,)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,341 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.scan_id 
+2025-07-24 04:02:33,749 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
 FROM control 
 WHERE control.scan_id = $1::INTEGER
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,345 | INFO | base | [generated in 0.00409s] (39,)
+2025-07-24 04:02:33,750 | INFO | base | [cached since 3449s ago] (17,)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,377 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id 
+2025-07-24 04:02:33,759 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,760 | INFO | base | [cached since 3449s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,761 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
 FROM cuec 
 WHERE cuec.scan_id = $1::INTEGER
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,378 | INFO | base | [generated in 0.00133s] (39,)
+2025-07-24 04:02:33,762 | INFO | base | [cached since 3449s ago] (17,)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,398 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id 
+2025-07-24 04:02:33,767 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,768 | INFO | base | [cached since 3449s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,769 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
 FROM subservice_org 
 WHERE subservice_org.scan_id = $1::INTEGER
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,400 | INFO | base | [generated in 0.00219s] (39,)
+2025-07-24 04:02:33,769 | INFO | base | [cached since 3449s ago] (17,)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,420 | INFO | base | SELECT product.id, product.name, product.scan_id 
+2025-07-24 04:02:33,771 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,771 | INFO | base | [cached since 3449s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,773 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,773 | INFO | base | [cached since 3449s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,774 | INFO | base | SELECT product.id, product.name, product.scan_id 
 FROM product 
 WHERE product.scan_id = $1::INTEGER
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,421 | INFO | base | [generated in 0.00142s] (39,)
+2025-07-24 04:02:33,775 | INFO | base | [cached since 3449s ago] (17,)
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:41,467 | INFO | base | ROLLBACK
+2025-07-24 04:02:33,776 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
 --------------------------------------------------------------------------------
 
-2025-07-19 02:42:42,078 | INFO | base | ROLLBACK
+2025-07-24 04:02:33,777 | INFO | base | [cached since 3449s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:33,823 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:44,892 | INFO | base | UPDATE scan SET executive_summary=$1::JSON WHERE scan.id = $2::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:44,894 | INFO | base | [cached since 3453s ago] ('{"about_company": "Adobe Incorporated is a leading software company known for its innovative solutions in digital media and marketing. The Experience ... (3780 characters truncated) ... processing errors."}, {"control_id": "PI1.5", "deviation_summary": "The entity implements controls to protect the integrity of system processing."}]}', 17)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:44,917 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:44,922 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:44,924 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:44,925 | INFO | base | [cached since 3460s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:44,945 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:44,947 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:44,948 | INFO | base | [cached since 3460s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,004 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,005 | INFO | base | [cached since 3460s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,015 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,016 | INFO | base | [cached since 3460s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,037 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,037 | INFO | base | [cached since 3460s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,076 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,077 | INFO | base | [cached since 3460s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,080 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,643 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,651 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,652 | INFO | base | [cached since 3461s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,858 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,865 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,866 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan ORDER BY scan.scan_date DESC 
+ LIMIT $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:45,867 | INFO | base | [cached since 4449s ago] (20,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:02:46,514 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,533 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,535 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER AND subservice_org.name = $2::VARCHAR
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,536 | INFO | base | [cached since 3458s ago] (17, 'GitHub')
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,542 | INFO | base | UPDATE subservice_org SET confidence=$1::FLOAT, confidence_justification=$2::VARCHAR WHERE subservice_org.id = $3::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,544 | INFO | base | [cached since 3458s ago] (0, '["+0.4: in common subservice orgs list", "+0.1: likely_so is Yes", "+0.1: common_so is Yes", "GPT-4o review failed: Expecting value: line 1 column 1  ... (534 characters truncated) ... the trust service criteria related to security, availability, and confidentiality.\\"\\\\n}\\\\n```\'"]; Manually ignored in UI - confidence set to 0', 420)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,549 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,550 | INFO | base | [cached since 3516s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,599 | INFO | base | UPDATE scan SET executive_summary_stale=$1::BOOLEAN WHERE scan.id = $2::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,600 | INFO | base | [cached since 3459s ago] (True, 17)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,606 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,734 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,737 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,737 | INFO | base | [cached since 3516s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,795 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,796 | INFO | base | [cached since 3516s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,800 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,801 | INFO | base | [cached since 3516s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,812 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,813 | INFO | base | [cached since 3516s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,820 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,821 | INFO | base | [cached since 3516s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,832 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:40,833 | INFO | base | [cached since 3516s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:41,029 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,673 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,674 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER AND subservice_org.name = $2::VARCHAR
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,676 | INFO | base | [cached since 3461s ago] (17, 'GitLab')
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,683 | INFO | base | UPDATE subservice_org SET confidence=$1::FLOAT, confidence_justification=$2::VARCHAR WHERE subservice_org.id = $3::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,684 | INFO | base | [cached since 3461s ago] (0, '["Filtered by GPT: This is a software service offering for source code management and deployment.", "+0.4: in common subservice orgs list", "+0.1: li ... (532 characters truncated) ... uld impact the security, availability, or confidentiality of the services offered.\\"\\\\n}\\\\n```\'"]; Manually ignored in UI - confidence set to 0', 421)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,687 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,688 | INFO | base | [cached since 3518s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,749 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,875 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,876 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,877 | INFO | base | [cached since 3518s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,937 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,937 | INFO | base | [cached since 3518s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,940 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,941 | INFO | base | [cached since 3518s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,950 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,951 | INFO | base | [cached since 3518s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,954 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,956 | INFO | base | [cached since 3518s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,959 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:42,960 | INFO | base | [cached since 3518s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:43,156 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,687 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,689 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER AND subservice_org.name = $2::VARCHAR
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,690 | INFO | base | [cached since 3467s ago] (17, 'Workday')
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,696 | INFO | base | UPDATE subservice_org SET confidence=$1::FLOAT, confidence_justification=$2::VARCHAR WHERE subservice_org.id = $3::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,698 | INFO | base | [cached since 3467s ago] (0, '["+0.4: in common subservice orgs list", "+0.1: likely_so is Yes", "+0.1: common_so is Yes", "GPT-4o review failed: Expecting value: line 1 column 1  ... (393 characters truncated) ... mpacts the security, availability, and confidentiality of the company\\\\\'s data.\\"\\\\n}\\\\n```\'"]; Manually ignored in UI - confidence set to 0', 423)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,702 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,703 | INFO | base | [cached since 3524s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,760 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,875 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,882 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,883 | INFO | base | [cached since 3524s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,928 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,931 | INFO | base | [cached since 3524s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,934 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,936 | INFO | base | [cached since 3524s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,943 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,945 | INFO | base | [cached since 3524s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,948 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,949 | INFO | base | [cached since 3524s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,953 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:48,954 | INFO | base | [cached since 3524s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:03:49,143 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,516 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,517 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER AND subservice_org.name = $2::VARCHAR
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,519 | INFO | base | [cached since 3505s ago] (17, 'Atlassian')
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,526 | INFO | base | UPDATE subservice_org SET confidence=$1::FLOAT, confidence_justification=$2::VARCHAR WHERE subservice_org.id = $3::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,527 | INFO | base | [cached since 3505s ago] (0, '["+0.4: in common subservice orgs list", "+0.1: likely_so is Yes", "+0.1: common_so is Yes", "GPT-4o review failed: Expecting value: line 1 column 1  ... (487 characters truncated) ... ed as third-party software rather than subservice organizations in a SOC 2 report.\\"\\\\n}\\\\n```\'"]; Manually ignored in UI - confidence set to 0', 424)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,531 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,532 | INFO | base | [cached since 3563s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,578 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,697 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,699 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,700 | INFO | base | [cached since 3563s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,767 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,769 | INFO | base | [cached since 3563s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,772 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,772 | INFO | base | [cached since 3563s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,783 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,785 | INFO | base | [cached since 3563s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,790 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,793 | INFO | base | [cached since 3563s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,798 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:27,800 | INFO | base | [cached since 3563s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:28,019 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,058 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,060 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER AND subservice_org.name = $2::VARCHAR
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,061 | INFO | base | [cached since 3508s ago] (17, 'datadog')
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,067 | INFO | base | UPDATE subservice_org SET confidence=$1::FLOAT, confidence_justification=$2::VARCHAR WHERE subservice_org.id = $3::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,068 | INFO | base | [cached since 3508s ago] (0, '["Filtered by GPT: This is a software product, not a company.", "+0.4: in common subservice orgs list", "+0.1: likely_so is Yes", "+0.1: common_so is ... (408 characters truncated) ... ation if its services are integral to the organization\\\\\'s control environment.\\"\\\\n}\\\\n```\'"]; Manually ignored in UI - confidence set to 0', 425)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,074 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,075 | INFO | base | [cached since 3565s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,111 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,223 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,225 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,226 | INFO | base | [cached since 3566s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,273 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,275 | INFO | base | [cached since 3566s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,278 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,280 | INFO | base | [cached since 3566s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,291 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,292 | INFO | base | [cached since 3565s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,296 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,298 | INFO | base | [cached since 3565s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,304 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,305 | INFO | base | [cached since 3565s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:30,486 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,726 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,728 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER AND subservice_org.name = $2::VARCHAR
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,729 | INFO | base | [cached since 3511s ago] (17, 'pagerduty')
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,734 | INFO | base | UPDATE subservice_org SET confidence=$1::FLOAT, confidence_justification=$2::VARCHAR WHERE subservice_org.id = $3::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,735 | INFO | base | [cached since 3511s ago] (0, '["Filtered by GPT: This is a software, not a company.", "+0.4: in common subservice orgs list", "+0.1: likely_so is Yes", "+0.1: common_so is Yes", " ... (549 characters truncated) ... ely to be categorized as a third-party tool rather than a subservice organization.\\"\\\\n}\\\\n```\'"]; Manually ignored in UI - confidence set to 0', 426)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,738 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,739 | INFO | base | [cached since 3568s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,786 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,909 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,911 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,913 | INFO | base | [cached since 3568s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,968 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,969 | INFO | base | [cached since 3568s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,973 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,975 | INFO | base | [cached since 3568s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,983 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,984 | INFO | base | [cached since 3568s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,987 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,988 | INFO | base | [cached since 3568s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,992 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:32,993 | INFO | base | [cached since 3568s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:33,192 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,282 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,284 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER AND subservice_org.name = $2::VARCHAR
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,285 | INFO | base | [cached since 3514s ago] (17, 'ServiceNow')
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,290 | INFO | base | UPDATE subservice_org SET confidence=$1::FLOAT, confidence_justification=$2::VARCHAR WHERE subservice_org.id = $3::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,291 | INFO | base | [cached since 3514s ago] (0, '["+0.4: in common subservice orgs list", "+0.1: likely_so is Yes", "+0.1: common_so is Yes", "GPT-4o review failed: Expecting value: line 1 column 1  ... (345 characters truncated) ... vice criteria, it could be considered a subservice organization in a SOC 2 report.\\"\\\\n}\\\\n```\'"]; Manually ignored in UI - confidence set to 0', 427)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,294 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,295 | INFO | base | [cached since 3572s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,351 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,473 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,474 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,475 | INFO | base | [cached since 3572s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,530 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,531 | INFO | base | [cached since 3572s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,535 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,537 | INFO | base | [cached since 3572s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,546 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,547 | INFO | base | [cached since 3572s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,551 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,552 | INFO | base | [cached since 3572s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,557 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,558 | INFO | base | [cached since 3572s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:36,756 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:38,874 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:38,875 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER AND subservice_org.name = $2::VARCHAR
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:38,876 | INFO | base | [cached since 3517s ago] (17, 'splunk')
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:38,880 | INFO | base | UPDATE subservice_org SET confidence=$1::FLOAT, confidence_justification=$2::VARCHAR WHERE subservice_org.id = $3::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:38,882 | INFO | base | [cached since 3517s ago] (0, '["Filtered by GPT: This is a log aggregation and analysis platform, not a company.", "+0.4: in common subservice orgs list", "+0.1: likely_so is Yes" ... (554 characters truncated) ... nt, particularly in the areas of security, availability, and processing integrity.\\"\\\\n}\\\\n```\'"]; Manually ignored in UI - confidence set to 0', 428)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:38,885 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:38,887 | INFO | base | [cached since 3574s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:38,930 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,055 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,056 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,057 | INFO | base | [cached since 3574s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,113 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,117 | INFO | base | [cached since 3574s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,121 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,122 | INFO | base | [cached since 3574s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,127 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,128 | INFO | base | [cached since 3574s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,131 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,133 | INFO | base | [cached since 3574s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,138 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,140 | INFO | base | [cached since 3574s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:39,351 | INFO | base | ROLLBACK
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,077 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,078 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER AND subservice_org.name = $2::VARCHAR
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,079 | INFO | base | [cached since 3525s ago] (17, 'Okta')
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,083 | INFO | base | UPDATE subservice_org SET confidence=$1::FLOAT, confidence_justification=$2::VARCHAR WHERE subservice_org.id = $3::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,084 | INFO | base | [cached since 3525s ago] (0, '["+0.4: in common subservice orgs list", "+0.1: likely_so is Yes", "+0.1: common_so is Yes", "GPT-4o review failed: Expecting value: line 1 column 1  ... (310 characters truncated) ... inciples of SOC 2, making Okta a likely subservice organization in a SOC 2 report.\\"\\\\n}\\\\n```\'"]; Manually ignored in UI - confidence set to 0', 422)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,089 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,091 | INFO | base | [cached since 3582s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,137 | INFO | base | COMMIT
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,253 | INFO | base | BEGIN (implicit)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,255 | INFO | base | SELECT scan.id, scan.company_id, scan.product, scan.scan_date, scan.report_date, scan.coverage_start, scan.coverage_end, scan.pdf_file, scan.pdf_filename, scan.extracted_text, scan.result_json, scan.gpt_cost, scan.gpt_model, scan.estimated_time_seconds, scan.auditor, scan.gpt_usage_details, scan.executive_summary, scan.executive_summary_stale 
+FROM scan 
+WHERE scan.id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,256 | INFO | base | [cached since 3583s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,312 | INFO | base | SELECT company.id, company.name, company.parent_company, company.confidence, company.scan_id 
+FROM company 
+WHERE company.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,314 | INFO | base | [cached since 3583s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,317 | INFO | base | SELECT control.id, control.control_id, control.control_desc, control.control_test, control.control_test_results, control.control_page_ref, control.control_line_ref, control.control_seq, control.control_tsc_id, control.control_coso_id, control.control_tsc_similarity, control.control_coso_similarity, control.control_tsc_confidence_pct, control.control_coso_confidence_pct, control.control_closest_framework, control.control_tsc_section, control.control_coso_section, control.control_soc_domain, control.control_status, control.merged_to_control_id, control.control_gpt_opinion, control.control_gpt_reasoning, control.control_confidence, control.confidence_calc, control.scan_id, control.annotation 
+FROM control 
+WHERE control.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,318 | INFO | base | [cached since 3583s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,327 | INFO | base | SELECT cuec.id, cuec.cuec_seq, cuec.cuec_tsc_id, cuec.cuec_description, cuec.cuec_line_ref, cuec.cuec_confidence, cuec.cuec_gpt_opinion, cuec.cuec_distance_from_cuec_keywords, cuec.cuec_gpt_reasoning, cuec.cuec_framework_alignment, cuec.cuec_framework_alignment_id, cuec.cuec_justification, cuec.cuec_coso_id, cuec.cuec_tsc_similarity, cuec.cuec_coso_similarity, cuec.cuec_tsc_confidence_pct, cuec.cuec_coso_confidence_pct, cuec.cuec_closest_framework, cuec.cuec_confidence_justification, cuec.scan_id, cuec.annotation, cuec.control_strength 
+FROM cuec 
+WHERE cuec.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,329 | INFO | base | [cached since 3582s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,332 | INFO | base | SELECT subservice_org.id, subservice_org.name, subservice_org.confidence, subservice_org.scan_id, subservice_org.third_party_description, subservice_org.third_party_page_ref, subservice_org.third_party_confidence, subservice_org.distance_from_so_keywords, subservice_org.likely_so, subservice_org.common_so, subservice_org.source_context, subservice_org.confidence_justification, subservice_org.third_party_controls, subservice_org.annotation 
+FROM subservice_org 
+WHERE subservice_org.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,334 | INFO | base | [cached since 3582s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,339 | INFO | base | SELECT product.id, product.name, product.scan_id 
+FROM product 
+WHERE product.scan_id = $1::INTEGER
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,340 | INFO | base | [cached since 3582s ago] (17,)
+--------------------------------------------------------------------------------
+
+2025-07-24 04:04:47,542 | INFO | base | ROLLBACK
 --------------------------------------------------------------------------------

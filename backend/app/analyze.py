@@ -9,7 +9,7 @@ from .extractors.auditor import extract_auditor_from_report
 from .extractors.company import extract_company_from_report
 from .extractors.control_extractor_v2 import extract_controls_v2
 from .extractors.cuec_extractor import extract_cuecs
-from .extractors.subservice_orgs import extract_subservice_orgs
+from .extractors.subservice_orgs import extract_subservice_orgs, filter_third_parties_with_gpt
 from .extractors.product import extract_product_from_report
 from .extractors.report_date import extract_report_date
 from .extractors.coverage_period import extract_coverage_period
@@ -19,6 +19,9 @@ import glob
 
 
 def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json', progress_callback=None, checklist_callback=None):
+    # Reset GPT tracking at start of analysis
+    from .gpt_tracker import reset_tracking, get_usage_summary
+    reset_tracking()
     logger = logging.getLogger(__name__)
 
     # --- Reset logs and JSON outputs at the start of each run ---
@@ -166,7 +169,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         parallel_steps = [
             (5, "control_extraction", extract_controls_v2, "Running controls extractor...", 50),
             (6, "cuec_extraction", extract_cuecs, "Running CUECs extractor...", 60),
-            (7, "subservice_orgs_extraction", extract_subservice_orgs, "Running subservice orgs extractor...", 70),
+            (7, "subservice_orgs_extraction", lambda: (extract_subservice_orgs(), filter_third_parties_with_gpt()), "Running subservice orgs extractor...", 70),
             (8, "product_extraction", extract_product_from_report, "Running product extractor...", 80),
             (9, "report_date_extraction", extract_report_date, "Running report date extractor...", 90),
             (10, "coverage_period_extraction", extract_coverage_period, "Running coverage period extractor...", 95),
@@ -197,7 +200,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             # Update checklist in Redis after each sequential extractor
             update_checklist(checklist)
         # --- Run remaining extractors in parallel threads ---
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        extractor_results = {}
         def run_extractor(idx, key, func, status, pct):
             try:
                 update_progress(pct, status)
@@ -264,44 +267,100 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                         return key, res
                     except Exception as e2:
                         logger.error(f"Failed to load partial result for {key}: {e2}")
-                checklist[idx]["status"] = "error"
-                update_checklist(checklist)
                 return key, None
-        # Map parallel steps to their indices in the checklist
+        # Run all extractors in parallel
         with ThreadPoolExecutor(max_workers=6) as executor:
-            futures = [executor.submit(run_extractor, idx, key, func, status, pct)
-                       for (idx, key, func, status, pct) in parallel_steps]
+            futures = [executor.submit(run_extractor, idx, key, func, status, pct) for idx, key, func, status, pct in parallel_steps]
             for future in as_completed(futures):
                 key, res = future.result()
-                results[key] = res
-            update_checklist(checklist)
+                extractor_results[key] = res
+        # --- Always load extractor outputs from JSON files if present ---
+        extractor_json_map = {
+            'control_extraction': 'data/json/control_result.json',
+            'cuec_extraction': 'data/json/cuec_result.json',
+            'subservice_orgs_extraction': 'data/json/subservice_orgs_result.json',
+            'product_extraction': 'data/json/product_result.json',
+            'auditor_extraction': 'data/json/auditor_result.json',
+            'company_extraction': 'data/json/company_result.json',
+            'report_date_extraction': 'data/json/report_date_result.json',
+            'coverage_period_extraction': 'data/json/coverage_period_result.json',
+        }
+        for ext_key, json_path in extractor_json_map.items():
+            fpath = data_path(json_path)
+            if os.path.isfile(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as pf:
+                        extractor_results[ext_key] = json.load(pf)
+                except Exception as e:
+                    logger.error(f"Failed to load {json_path} for {ext_key}: {e}")
+        # --- FLATTEN AND ENFORCE: Only short keys in final result ---
+        flatten_map = {
+            'control_extraction': ('controls', 'controls'),
+            'cuec_extraction': ('cuecs', 'cuecs'),
+            'subservice_orgs_extraction': ('subservice_orgs', 'third_parties'),
+            'product_extraction': ('product', 'product'),
+            'auditor_extraction': ('auditor', 'auditor'),
+            'company_extraction': ('company', 'company'),
+            'report_date_extraction': ('report_date', 'report_date'),
+            'coverage_period_extraction': ('coverage_period', 'coverage_period'),
+        }
+        standardized_results = {}
+        for ext_key, (short_key, inner_key) in flatten_map.items():
+            val = extractor_results.get(ext_key)
+            if val is not None:
+                if isinstance(val, dict) and inner_key in val:
+                    if short_key == 'controls' and isinstance(val[inner_key], list):
+                        standardized_results[short_key] = [dict(c) for c in val[inner_key]]
+                    else:
+                        standardized_results[short_key] = val[inner_key]
+                else:
+                    standardized_results[short_key] = val
+        # Always include sections
+        standardized_results['sections'] = results.get('sections', [])
+        # --- VALIDATION AND LOGGING ---
+        log_path = str(config.LOGS_DIR / 'backend_errors.log')
+        with open(log_path, 'a', encoding='utf-8') as logf:
+            logf.write('\n[STANDARDIZED RESULT VALIDATION]\n')
+            for key in flatten_map.values():
+                short_key = key[0]
+                val = standardized_results.get(short_key, None)
+                if val is None:
+                    logf.write(f"Missing key: {short_key}\n")
+                else:
+                    if isinstance(val, list):
+                        logf.write(f"{short_key}: list, len={len(val)}\n")
+                    elif isinstance(val, dict):
+                        logf.write(f"{short_key}: dict, keys={list(val.keys())}\n")
+                    else:
+                        logf.write(f"{short_key}: type={type(val)}\n")
+            logf.write(f"Full standardized results keys: {list(standardized_results.keys())}\n")
         update_progress(100, "Analysis complete.")
-        logger.debug(f"Final results: {results}")
-
-        # --- Always merge in control_result.json and cuec_result.json if present and not already populated ---
-        for key, fname in [
-            ("control_extraction", "data/json/control_result.json"),
-            ("cuec_extraction", "data/json/cuec_result.json")
-        ]:
-            if (not results.get(key)) or (isinstance(results.get(key), dict) and not results[key]):
-                fpath = data_path(fname)
-                if os.path.isfile(fpath):
-                    try:
-                        with open(fpath, 'r', encoding='utf-8') as pf:
-                            results[key] = json.load(pf)
-                        logger.info(f"Merged {fname} into results['{key}'] for combined_result.json.")
-                    except Exception as e:
-                        logger.error(f"Failed to merge {fname} into results['{key}']: {e}")
-
+        logger.debug(f"Final standardized results: {standardized_results}")
+        
+        # Add extracted text from output.txt to results
+        try:
+            with open(OUTPUT_TEXT_FILE, 'r', encoding='utf-8') as f:
+                extracted_text = f.read()
+            standardized_results["extracted_text"] = extracted_text
+            logger.debug(f"Added extracted text to results ({len(extracted_text)} characters)")
+        except Exception as e:
+            logger.error(f"Failed to read extracted text from {OUTPUT_TEXT_FILE}: {e}")
+            standardized_results["extracted_text"] = None
+        
+        # Add GPT usage summary to results
+        gpt_summary = get_usage_summary()
+        standardized_results.update(gpt_summary)
+        logger.debug(f"Added GPT usage summary: {gpt_summary['total_calls']} calls, ${gpt_summary['gpt_cost']}")
+        
         # --- Write combined extraction result to a file for troubleshooting ---
         try:
             combined_result_path = data_path('data/json/combined_result.json')
             with open(combined_result_path, 'w', encoding='utf-8') as f:
-                json.dump(results, f, indent=2, ensure_ascii=False)
+                json.dump(standardized_results, f, indent=2, ensure_ascii=False)
             logger.info(f"Combined extraction result written to {combined_result_path}")
         except Exception as e:
             logger.error(f"Failed to write combined_result.json: {e}\n{traceback.format_exc()}")
-        return results
+        return standardized_results
     except Exception as e:
         logger.error(f"analyze_pdf_file failed: {e}\n{traceback.format_exc()}")
         update_progress(100, "Analysis failed.")

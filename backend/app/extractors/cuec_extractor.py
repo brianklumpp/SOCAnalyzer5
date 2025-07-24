@@ -118,6 +118,9 @@ def calculate_distance_from_cuec_keywords(desc):
     return min_dist
 
 def extract_cuecs():
+    # Reset output file at the start of extraction
+    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+        f.write('[]\n')
     section_results = load_json(SECTION_JSON_PATH)
     desc_section = next((s for s in section_results if s.get('topic') == 'Description_of_System'), None)
     if not desc_section:
@@ -330,93 +333,93 @@ def extract_cuecs():
             filtered_data = []
             for cuec in data:
                 desc = cuec.get('cuec_description', '')
-                filtered_data.append(cuec)
-                cuec['cuec_seq'] = seq
-                cuec['cuec_distance_from_cuec_keywords'] = calculate_distance_from_cuec_keywords(desc)
-                desc_snippet = ' '.join(desc.split()[:10])
-                chunk_lines = chunk.splitlines()
-                found_line = None
-                for i, line in enumerate(chunk_lines):
-                    if desc_snippet and desc_snippet.lower() in line.lower():
-                        found_line = i + 1
-                        break
-                # Patch: Make line reference assignment non-fatal and index safe
-                try:
-                    if found_line is not None and idx < len(chunk_line_refs) and chunk_line_refs[idx] is not None:
-                        cuec['cuec_line_ref'] = chunk_line_refs[idx] + found_line - 1
-                    elif idx < len(chunk_line_refs):
-                        cuec['cuec_line_ref'] = chunk_line_refs[idx]
-                    else:
+                if refers_to_company(desc) or refers_to_parent_company(desc):
+                    cuec['cuec_confidence'] = 0
+                    cuec['cuec_confidence_justification'] = cuec.get('cuec_confidence_justification', []) + ["Filtered by heuristic/GPT: {reason}"]
+                else:
+                    filtered_data.append(cuec)
+                    cuec['cuec_seq'] = seq
+                    cuec['cuec_distance_from_cuec_keywords'] = calculate_distance_from_cuec_keywords(desc)
+                    desc_snippet = ' '.join(desc.split()[:10])
+                    chunk_lines = chunk.splitlines()
+                    found_line = None
+                    for i, line in enumerate(chunk_lines):
+                        if desc_snippet and desc_snippet.lower() in line.lower():
+                            found_line = i + 1
+                            break
+                    # Patch: Make line reference assignment non-fatal and index safe
+                    try:
+                        if found_line is not None and idx < len(chunk_line_refs) and chunk_line_refs[idx] is not None:
+                            cuec['cuec_line_ref'] = chunk_line_refs[idx] + found_line - 1
+                        elif idx < len(chunk_line_refs):
+                            cuec['cuec_line_ref'] = chunk_line_refs[idx]
+                        else:
+                            cuec['cuec_line_ref'] = None
+                    except Exception as e:
+                        logging.error(f"[PATCH] Error assigning cuec_line_ref in process_chunk: {e}")
                         cuec['cuec_line_ref'] = None
-                except Exception as e:
-                    logging.error(f"[PATCH] Error assigning cuec_line_ref in process_chunk: {e}")
-                    cuec['cuec_line_ref'] = None
-                cuec.pop('cuec_page_ref', None)
-                tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(cuec.get('cuec_description', ''), tsc_criteria, coso_criteria)
-                # Always set both TSC and COSO IDs for output
-                cuec['cuec_tsc_id'] = tsc_id
-                cuec['cuec_coso_id'] = coso_id
-                cuec['cuec_tsc_similarity'] = tsc_sim
-                cuec['cuec_coso_similarity'] = coso_sim
-                # Add closest framework field
-                if tsc_sim > coso_sim:
-                    cuec['cuec_closest_framework'] = 'TSC'
-                elif coso_sim > tsc_sim:
-                    cuec['cuec_closest_framework'] = 'COSO'
-                elif tsc_sim == coso_sim and tsc_sim != -1:
-                    cuec['cuec_closest_framework'] = 'Equal'
-                else:
-                    cuec['cuec_closest_framework'] = 'Undetermined'
-                # Set framework_alignment fields to indicate the best match, but do not remove either ID
-                if tsc_id and coso_id:
-                    cuec['cuec_framework_alignment'] = 'TSC'
-                    cuec['cuec_framework_alignment_id'] = tsc_id
-                elif tsc_id:
-                    cuec['cuec_framework_alignment'] = 'TSC'
-                    cuec['cuec_framework_alignment_id'] = tsc_id
-                elif coso_id:
-                    cuec['cuec_framework_alignment'] = 'COSO'
-                    cuec['cuec_framework_alignment_id'] = coso_id
-                else:
-                    cuec['cuec_framework_alignment'] = 'Undetermined'
-                    cuec['cuec_framework_alignment_id'] = None
-                conf = 0.3
-                justification = [f"Base score: 0.3"]
-                gpt_opinion = cuec.get('cuec_gpt_opinion', '').lower()
-                if gpt_opinion == 'yes':
-                    conf += 0.1
-                    justification.append("+0.1: cuec_gpt_opinion is 'yes'")
-                elif gpt_opinion == 'no':
-                    conf -= 0.1
-                    justification.append("-0.1: cuec_gpt_opinion is 'no'")
-                if cuec['cuec_distance_from_cuec_keywords'] < 5:
-                    conf += 0.1
-                    justification.append(f"+0.1: cuec_distance_from_cuec_keywords < 5 (actual: {cuec['cuec_distance_from_cuec_keywords']})")
-                desc_lower = (cuec.get('cuec_description', '') or '').lower()
-                if any(kw in desc_lower for kw in CUEC_KEYWORDS):
-                    conf += 0.2
-                    justification.append("+0.2: CUEC keyword present in description")
-                # Framework alignment check now includes cuec_framework_alignment_id
-                if tsc_id or coso_id or cuec.get('cuec_framework_alignment_id'):
-                    conf += 0.2
-                    justification.append("+0.2: Framework alignment found (TSC, COSO, or other ID)")
-                else:
-                    conf -= 0.2
-                    justification.append("-0.2: Framework alignment undetermined")
-                cuec['cuec_confidence'] = round(conf, 3)
-                cuec['cuec_confidence_justification'] = justification
-                # Add percent confidence for TSC and COSO similarity
-                cuec['cuec_tsc_confidence_pct'] = int(round(100 * (tsc_sim + 1) / 2)) if tsc_sim != -1 else None
-                cuec['cuec_coso_confidence_pct'] = int(round(100 * (coso_sim + 1) / 2)) if coso_sim != -1 else None
-                logging.info(f"CUEC seq={cuec['cuec_seq']} confidence scoring: {justification} final={cuec['cuec_confidence']} | GPT reasoning: {cuec.get('cuec_gpt_reasoning', None)}")
+                    cuec.pop('cuec_page_ref', None)
+                    tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(cuec.get('cuec_description', ''), tsc_criteria, coso_criteria)
+                    # Always set both TSC and COSO IDs for output
+                    cuec['cuec_tsc_id'] = tsc_id
+                    cuec['cuec_coso_id'] = coso_id
+                    cuec['cuec_tsc_similarity'] = tsc_sim
+                    cuec['cuec_coso_similarity'] = coso_sim
+                    # Add closest framework field
+                    if tsc_sim > coso_sim:
+                        cuec['cuec_closest_framework'] = 'TSC'
+                    elif coso_sim > tsc_sim:
+                        cuec['cuec_closest_framework'] = 'COSO'
+                    elif tsc_sim == coso_sim and tsc_sim != -1:
+                        cuec['cuec_closest_framework'] = 'Equal'
+                    else:
+                        cuec['cuec_closest_framework'] = 'Undetermined'
+                    # Set framework_alignment fields to indicate the best match, but do not remove either ID
+                    if tsc_id and coso_id:
+                        cuec['cuec_framework_alignment'] = 'TSC'
+                        cuec['cuec_framework_alignment_id'] = tsc_id
+                    elif tsc_id:
+                        cuec['cuec_framework_alignment'] = 'TSC'
+                        cuec['cuec_framework_alignment_id'] = tsc_id
+                    elif coso_id:
+                        cuec['cuec_framework_alignment'] = 'COSO'
+                        cuec['cuec_framework_alignment_id'] = coso_id
+                    else:
+                        cuec['cuec_framework_alignment'] = 'Undetermined'
+                        cuec['cuec_framework_alignment_id'] = None
+                    conf = 0.3
+                    justification = [f"Base score: 0.3"]
+                    gpt_opinion = cuec.get('cuec_gpt_opinion', '').lower()
+                    if gpt_opinion == 'yes':
+                        conf += 0.1
+                        justification.append("+0.1: cuec_gpt_opinion is 'yes'")
+                    elif gpt_opinion == 'no':
+                        conf -= 0.1
+                        justification.append("-0.1: cuec_gpt_opinion is 'no'")
+                    if cuec['cuec_distance_from_cuec_keywords'] < 5:
+                        conf += 0.1
+                        justification.append(f"+0.1: cuec_distance_from_cuec_keywords < 5 (actual: {cuec['cuec_distance_from_cuec_keywords']})")
+                    desc_lower = (cuec.get('cuec_description', '') or '').lower()
+                    if any(kw in desc_lower for kw in CUEC_KEYWORDS):
+                        conf += 0.2
+                        justification.append("+0.2: CUEC keyword present in description")
+                    # Framework alignment check now includes cuec_framework_alignment_id
+                    if tsc_id or coso_id or cuec.get('cuec_framework_alignment_id'):
+                        conf += 0.2
+                        justification.append("+0.2: Framework alignment found (TSC, COSO, or other ID)")
+                    else:
+                        conf -= 0.2
+                        justification.append("-0.2: Framework alignment undetermined")
+                    cuec['cuec_confidence'] = round(conf, 3)
+                    cuec['cuec_confidence_justification'] = justification
+                    # Add percent confidence for TSC and COSO similarity
+                    cuec['cuec_tsc_confidence_pct'] = int(round(100 * (tsc_sim + 1) / 2)) if tsc_sim != -1 else None
+                    cuec['cuec_coso_confidence_pct'] = int(round(100 * (coso_sim + 1) / 2)) if coso_sim != -1 else None
+                    logging.info(f"CUEC seq={cuec['cuec_seq']} confidence scoring: {justification} final={cuec['cuec_confidence']} | GPT reasoning: {cuec.get('cuec_gpt_reasoning', None)}")
             return filtered_data, seq
         except Exception as e:
             logging.error(f'Failed to parse GPT response for chunk {idx}: {response} | Error: {e}')
             return [], seq
-    # Prepare output file for streaming
-    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
-        f.write('[\n')
-    first = True
     # Multi-threaded chunk processing
     cuec_results = []
     seq = 1
@@ -466,10 +469,7 @@ def extract_cuecs():
                 cuec_results.append(cuec)
                 # Streaming write to JSON file
                 with open(OUTPUT_JSON_PATH, 'a', encoding='utf-8') as f:
-                    if not first:
-                        f.write(',\n')
                     json.dump(cuec, f, ensure_ascii=False, indent=2)
-                    first = False
                 logging.info(f"[PATCH] Wrote CUEC seq={cuec.get('cuec_seq')} to {OUTPUT_JSON_PATH}")
     # Close the JSON array at the end
     with open(OUTPUT_JSON_PATH, 'a', encoding='utf-8') as f:

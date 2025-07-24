@@ -57,6 +57,9 @@ def extract_title_page(txt_lines):
     return ''.join(title_page_lines)
 
 def extract_company_from_report():
+    # Reset output file at the start of extraction
+    with open(config.JSON_DIR / 'company_result.json', 'w', encoding='utf-8') as f:
+        f.write('{}\n')
     section_results = load_json(SECTION_JSON_PATH)
     # Use Management Assertion, Service Auditor Report, and title page
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:

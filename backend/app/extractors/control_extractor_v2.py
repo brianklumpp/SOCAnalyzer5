@@ -5,13 +5,15 @@ Enhanced extractor for tested controls in SOC reports using GPT and adaptive tec
 - Implements dynamic chunking and classification of text segments.
 - Uses feedback mechanisms and heuristic rules for improved accuracy.
 - Outputs structured JSON records for each control section.
+- ADDED: Hang prevention safeguards for non-control content
 """
 
 import os
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from backend.app.gpt_client import gpt_extract
+from ..gpt_client import gpt_extract
 import re
 
 try:
@@ -32,12 +34,57 @@ except Exception as config_err:
     raise
 
 # Configure logging to overwrite the log file each time the script runs
+log_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'logs', 'control_extractor_v2.log')
 logging.basicConfig(
-    filename='data/logs/control_extractor_v2.log',
+    filename=log_path,
     filemode='w',  # Overwrite the log file
     level=logging.INFO,  # Set to INFO to reduce log verbosity
     format='%(asctime)s [CONTROL_EXTRACTOR_V2] %(message)s',
 )
+
+# SAFEGUARD: Pattern detection for non-control content
+MAPPING_TABLE_INDICATORS = [
+    r'CC\.\d+\.\d+.*The entity.*\..*[A-Z]{2,3}\.[0-9]',  # TSC criteria mapping
+    r'Criteria.*Criteria Description.*Supporting Control',  # Table headers
+    r'^[A-Z]{1,3}\s*\d+\.\d+.*\s+.*\s+[A-Z]{2,3}-[0-9]',  # Mapping table rows
+    r'Trust.*Service.*Criteria.*Mapped',  # Section headers
+    r'COSO.*Framework.*Mapped',
+    r'^[A-Z]{1,3}\s*\d+\.\d+.*demonstrates.*commitment',  # Standard criteria text
+]
+
+# SAFEGUARD: Use configuration for processing limits
+def get_safeguard_settings():
+    """Get hang prevention settings from config"""
+    return {
+        'enabled': getattr(config, 'CONTROL_HANG_PREVENTION_ENABLED', True),
+        'max_minutes': getattr(config, 'CONTROL_MAX_PROCESSING_MINUTES', 30),
+        'max_failures': getattr(config, 'CONTROL_MAX_CONSECUTIVE_FAILURES', 10),
+        'detect_non_control': getattr(config, 'CONTROL_DETECT_NON_CONTROL_CONTENT', True)
+    }
+
+def detect_non_control_content(text_chunk):
+    """
+    Detect if text chunk contains mapping tables or other non-control content
+    Returns: (is_non_control, reason)
+    """
+    text_sample = text_chunk[:2000]  # Check first 2000 chars
+    
+    for pattern in MAPPING_TABLE_INDICATORS:
+        if re.search(pattern, text_sample, re.IGNORECASE | re.MULTILINE):
+            return True, f"Detected mapping table pattern: {pattern}"
+    
+    # Check for high density of criteria codes (CC.x.x, A.x.x patterns)
+    criteria_matches = re.findall(r'\b[A-Z]{1,3}\.\d+\.\d+\b', text_sample)
+    if len(criteria_matches) > 5:  # More than 5 criteria codes in small sample
+        return True, f"High density of criteria codes: {len(criteria_matches)} found"
+    
+    # Check for table-like structure with consistent formatting
+    lines = text_sample.split('\n')
+    short_lines = [line for line in lines if len(line.strip()) > 10 and len(line.strip()) < 100]
+    if len(short_lines) > 10:  # Many short structured lines suggests tables
+        return True, f"Table-like structure detected: {len(short_lines)} structured lines"
+    
+    return False, None
 
 # Dynamic chunking function
 
@@ -201,6 +248,10 @@ def extract_controls_v2():
     Main function to extract controls using the new strategic approach, matching the old extractor's interface.
     Uses config.PDF_TXT_PATH and config.SECTION_JSON_PATH for input, and config.CONTROL_JSON_PATH for output.
     """
+    # Reset output file at the start of extraction
+    with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as f:
+        f.write('[]\n')
+
     # Load section details from JSON
     with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as json_file:
         sections = json.load(json_file)
@@ -223,22 +274,49 @@ def extract_controls_v2():
     with open(file_path, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
 
-    # Reset the output file at the start of each run
-    with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as json_file:
-        json_file.write('[\n')
-
+    seq = 1  # Add before the while loop
     first = True
+    start_time = time.time()
+    consecutive_failures = 0
+    safeguards = get_safeguard_settings()
+    
     while start_line < end_line:
+        # SAFEGUARD: Check processing time timeout (if enabled)
+        if safeguards['enabled']:
+            elapsed_minutes = (time.time() - start_time) / 60
+            if elapsed_minutes > safeguards['max_minutes']:
+                logging.warning(f"Processing timeout reached ({safeguards['max_minutes']} minutes). Stopping control extraction.")
+                logging.warning(f"Successfully extracted {len(results)} controls before timeout.")
+                break
+                
+            # SAFEGUARD: Check consecutive failures
+            if consecutive_failures >= safeguards['max_failures']:
+                logging.warning(f"Too many consecutive failures ({safeguards['max_failures']}). Stopping control extraction.")
+                logging.warning(f"Successfully extracted {len(results)} controls before failure limit.")
+                break
+        
         retry = False
         for chunk in extract_control_chunks(file_path, start_line, lines_per_chunk=lines_per_chunk):
+            # SAFEGUARD: Check for non-control content (if enabled)
+            if safeguards['enabled'] and safeguards['detect_non_control']:
+                is_non_control, reason = detect_non_control_content(chunk)
+                if is_non_control:
+                    logging.warning(f"Non-control content detected at line {start_line}: {reason}")
+                    logging.warning(f"Stopping control extraction. Successfully extracted {len(results)} controls.")
+                    start_line = end_line  # Force exit from outer while loop
+                    break
             try:
                 logging.info(f"Processing chunk starting at line {start_line}")
                 result, new_start_line, retry = process_chunk_with_gpt(chunk, start_line, txt_lines, results)
                 logging.info(f"New Start Line Result: {result}")
                 logging.info(f"New Start Line: {new_start_line}")
+                
                 if result:
+                    result['control_seq'] = seq  # Assign incrementing control_seq
+                    seq += 1
                     results.append(result)
                     start_line = new_start_line
+                    consecutive_failures = 0  # Reset failure count on success
                     logging.info(f"Appended result. Total results: {len(results)}")
                     # Write each control as soon as it is found
                     with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
@@ -248,6 +326,9 @@ def extract_controls_v2():
                         first = False
                     logging.info(f"Wrote control to {config.CONTROL_JSON_PATH}")
                     break  # Move to the next chunk after processing one control
+                else:
+                    consecutive_failures += 1  # Increment failure count
+                    
                 if retry:
                     lines_per_chunk += 25  # Increase chunk size for retry
                     logging.info(f"Retrying with larger chunk size: {lines_per_chunk}")
@@ -268,11 +349,28 @@ def extract_controls_v2():
                 json_file.write('\n]\n')
             break  # Ensure the outer loop also stops
 
+    # --- PATCH: Penalize subtext/duplicate controls ---
+    for i, ctrl in enumerate(results):
+        cid = ctrl.get('control_id')
+        desc = (ctrl.get('control_desc') or '').strip()
+        if not cid or not desc:
+            continue
+        for j, other in enumerate(results):
+            if i == j:
+                continue
+            if other.get('control_id') == cid:
+                other_desc = (other.get('control_desc') or '').strip()
+                # If this control's desc is a subtext of another with the same id, penalize confidence
+                if desc and other_desc and desc != other_desc and desc in other_desc:
+                    old_conf = ctrl.get('control_confidence', 0)
+                    new_conf = max(0, old_conf - 0.2)
+                    ctrl['control_confidence'] = new_conf
+                    ctrl['confidence_calc'] = (ctrl.get('confidence_calc', '') + f'; -0.2: subtext/possible duplicate of longer control_desc for same control_id').strip('; ')
     # Final log of results
     logging.info(f"Final results: {results}")
-    # Close the JSON array at the end if not already closed
-    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-        json_file.write('\n]\n')
+    # Write the controls as a dictionary with 'controls' key
+    with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as json_file:
+        json.dump({"controls": results}, json_file, ensure_ascii=False, indent=2)
 
 def load_text_lines(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -349,6 +447,10 @@ def verify_next_control_start_with_gpt(suggested_start, previous_controls, txt_l
     :param txt_lines: The text lines of the document.
     :return: Validated start line or None if invalid.
     """
+    if suggested_start is None or suggested_start < 1:
+        logging.warning("suggested_start is None or invalid, cannot verify")
+        return None
+    
     # Extract the sentence or context around the suggested start
     context_snippet = txt_lines[suggested_start-1:suggested_start+2]
     context_text = ' '.join(context_snippet).strip()
@@ -371,6 +473,22 @@ def verify_next_control_start_with_gpt(suggested_start, previous_controls, txt_l
     else:
         logging.info(f"Suggested start at line {suggested_start} is not valid according to GPT.")
         return None
+
+
+def find_nearest_page_ref(txt_lines, line_idx):
+    """
+    Given txt_lines and a 1-based line index, find the nearest '=== PAGE <Number> ===' line before line_idx.
+    Returns the page number as an int, or None if not found.
+    """
+    if line_idx is None or line_idx < 1:
+        return None
+    
+    page_pattern = re.compile(r"=== PAGE (\d+) ===")
+    for i in range(line_idx - 1, -1, -1):
+        match = page_pattern.search(txt_lines[i])
+        if match:
+            return int(match.group(1))
+    return None
 
 
 def process_chunk_with_gpt(chunk, start_line, txt_lines, previous_controls):
@@ -419,14 +537,65 @@ def process_chunk_with_gpt(chunk, start_line, txt_lines, previous_controls):
             confidence_calc.append("-0.1 for control_id in additional_references")
 
         # Check for key test words in control_desc
-        key_test_words = ["examined", "inquired", "ascertained", "inspected", "reviewed"]
+        key_test_words = getattr(config, 'CONTROL_TEST_WORDS', ["examined", "inquired", "ascertained", "inspected", "reviewed"])
         if any(word in control_data['control_desc'] for word in key_test_words):
             control_confidence -= 0.3
-            confidence_calc.append("-0.3 for key test words in control_desc")
+            confidence_calc.append(f"-0.3 for key test words in control_desc ({key_test_words})")
 
         # Update control data with confidence information
         control_data['control_confidence'] = round(max(0, min(1, control_confidence)), 1)  # Ensure confidence is between 0 and 1, rounded to 1 decimal place
         control_data['confidence_calc'] = '; '.join(confidence_calc)
+
+        # --- PATCH: Ensure all required fields are present ---
+        tsc_criteria = getattr(config, 'TSC_CRITERIA', [])
+        coso_criteria = getattr(config, 'COSO_2013_CRITERIA', [])
+        desc = control_data.get('control_desc', '')
+        tsc_id, coso_id, tsc_sim, coso_sim = map_control_to_frameworks(desc, tsc_criteria, coso_criteria)
+        control_data['control_tsc_id'] = tsc_id
+        control_data['control_coso_id'] = coso_id
+        control_data['control_tsc_similarity'] = tsc_sim
+        control_data['control_coso_similarity'] = coso_sim
+        control_data['control_tsc_confidence_pct'] = int(round(100 * (tsc_sim + 1) / 2)) if tsc_sim != -1 else None
+        control_data['control_coso_confidence_pct'] = int(round(100 * (coso_sim + 1) / 2)) if coso_sim != -1 else None
+        if tsc_sim > coso_sim:
+            control_data['control_closest_framework'] = 'TSC'
+        elif coso_sim > tsc_sim:
+            control_data['control_closest_framework'] = 'COSO'
+        elif tsc_sim == coso_sim and tsc_sim != -1:
+            control_data['control_closest_framework'] = 'Equal'
+        else:
+            control_data['control_closest_framework'] = 'Undetermined'
+        control_data['control_tsc_section'] = get_tsc_section(tsc_id)
+        control_data['control_coso_section'] = get_coso_section(coso_id)
+        control_data['control_soc_domain'] = get_tsc_domain(tsc_id) or get_coso_domain(coso_id)
+        control_data['control_status'] = 'complete' if control_data.get('control_id') else 'partial - no match'
+        # Set opinion/reasoning if present in GPT response
+        control_data['control_gpt_opinion'] = control_data.get('control_gpt_opinion', None)
+        control_data['control_gpt_reasoning'] = control_data.get('control_gpt_reasoning', None)
+        # Infer and set control_line_ref and control_page_ref
+        control_data['control_line_ref'] = start_line
+        control_data['control_page_ref'] = find_nearest_page_ref(txt_lines, start_line)
+        # Robust defaulting for any missing fields
+        required_fields = [
+            "control_page_ref",
+            "control_line_ref",
+            "control_tsc_id",
+            "control_coso_id",
+            "control_tsc_similarity",
+            "control_coso_similarity",
+            "control_tsc_confidence_pct",
+            "control_coso_confidence_pct",
+            "control_closest_framework",
+            "control_tsc_section",
+            "control_coso_section",
+            "control_soc_domain",
+            "control_status",
+            "control_gpt_opinion",
+            "control_gpt_reasoning"
+        ]
+        for k in required_fields:
+            if k not in control_data:
+                control_data[k] = None if k != "control_status" else "complete"
 
         lookahead_start = control_data['end_line']
         lookahead_chunk = extract_text_for_lines(txt_lines, lookahead_start, lookahead_start + 100)
@@ -439,7 +608,7 @@ def process_chunk_with_gpt(chunk, start_line, txt_lines, previous_controls):
 
         # Verify the suggested start with GPT
         validated_start = verify_next_control_start_with_gpt(next_control_start, previous_controls, txt_lines)
-        if validated_start:
+        if validated_start is not None:
             start_line = lookahead_start + validated_start - 1
         else:
             logging.info("Suggested start was invalid. Searching for next control.")
@@ -555,6 +724,7 @@ def main():
     with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as json_file:
         json_file.write('[\n')
 
+    seq = 1  # Add before the while loop
     first = True
     while start_line < end_line:
         retry = False
@@ -565,6 +735,8 @@ def main():
                 logging.info(f"New Start Line Result: {result}")
                 logging.info(f"New Start Line: {new_start_line}")
                 if result:
+                    result['control_seq'] = seq  # Assign incrementing control_seq
+                    seq += 1
                     results.append(result)
                     start_line = new_start_line
                     logging.info(f"Appended result. Total results: {len(results)}")
@@ -596,11 +768,28 @@ def main():
                 json_file.write('\n]\n')
             break  # Ensure the outer loop also stops
 
+    # --- PATCH: Penalize subtext/duplicate controls ---
+    for i, ctrl in enumerate(results):
+        cid = ctrl.get('control_id')
+        desc = (ctrl.get('control_desc') or '').strip()
+        if not cid or not desc:
+            continue
+        for j, other in enumerate(results):
+            if i == j:
+                continue
+            if other.get('control_id') == cid:
+                other_desc = (other.get('control_desc') or '').strip()
+                # If this control's desc is a subtext of another with the same id, penalize confidence
+                if desc and other_desc and desc != other_desc and desc in other_desc:
+                    old_conf = ctrl.get('control_confidence', 0)
+                    new_conf = max(0, old_conf - 0.2)
+                    ctrl['control_confidence'] = new_conf
+                    ctrl['confidence_calc'] = (ctrl.get('confidence_calc', '') + f'; -0.2: subtext/possible duplicate of longer control_desc for same control_id').strip('; ')
     # Final log of results
     logging.info(f"Final results: {results}")
-    # Close the JSON array at the end if not already closed
-    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-        json_file.write('\n]\n')
+    # Write the controls as a dictionary with 'controls' key
+    with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as json_file:
+        json.dump({"controls": results}, json_file, ensure_ascii=False, indent=2)
 
 def load_json(path):
     with open(path, 'r', encoding='utf-8') as f:
@@ -611,6 +800,10 @@ def extract_text_for_lines(txt_lines, start_line, end_line):
     """
     Extract text from the specified start to end line numbers.
     """
+    if start_line is None or start_line < 1:
+        start_line = 1
+    if end_line is None or end_line < start_line:
+        end_line = start_line
     return ''.join(txt_lines[start_line-1:end_line])
 
 
@@ -623,6 +816,9 @@ def extract_control_chunks(file_path, start_line, lines_per_chunk=50):
     :param lines_per_chunk: Number of lines per chunk (default is 50).
     :return: Generator yielding chunks of text.
     """
+    if start_line is None or start_line < 1:
+        start_line = 1
+    
     with open(file_path, 'r', encoding='utf-8') as file:
         # Skip lines until the start line
         for _ in range(start_line - 1):

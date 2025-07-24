@@ -61,6 +61,9 @@ def extract_title_page(txt_lines):
     return ''.join(title_page_lines)
 
 def extract_auditor_from_report():
+    # Reset output file at the start of extraction
+    with open(config.JSON_DIR / 'auditor_result.json', 'w', encoding='utf-8') as f:
+        f.write('{}\n')
     # Load section results
     section_results = load_json(SECTION_JSON_PATH)
     # Load company and parent company for exclusion

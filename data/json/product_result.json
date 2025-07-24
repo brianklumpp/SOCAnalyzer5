@@ -1,13 +1,13 @@
 {
-  "product": "Okta Identity as a Service",
+  "product": "Experience Cloud",
   "confidence": 1,
   "raw_gpt_responses": [
-    "{\n  \"product\": \"Okta Identity as a Service\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions 'Okta Identity as a Service' multiple times and provides detailed descriptions of its features and capabilities.\"\n}",
-    "{\n  \"product\": \"Okta Identity as a Service\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text specifically mentions Okta's web-based application that provides secure identity management and single sign-on, along with details about its infrastructure and supporting tools.\"\n}",
-    "{\n  \"product\": \"Okta\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions Okta multiple times in relation to various aspects of the organization's governance and control activities.\"\n}",
-    "{\n  \"product\": \"Okta\",\n  \"confidence\": 1,\n  \"explanation\": \"The text repeatedly mentions Okta as the company being audited, indicating that Okta is the product/service/system being assessed in the SOC 2 report.\"\n}",
-    "{\n  \"product\": \"Okta Identity as a Service\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text mentions Okta Identity as a Service multiple times in relation to access management, authentication, and monitoring.\"\n}",
-    "{\n  \"product\": \"Okta Identity as a Service\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions 'Okta's Identity as a Service (IDaaS) System' multiple times, indicating that the product being audited is Okta Identity as a Service.\"\n}",
-    "{\n  \"product\": \"Okta\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text explicitly mentions Okta as the organization being audited.\"\n}"
+    "{\n  \"product\": \"Experience Cloud\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions 'Adobe Experience Cloud' multiple times as the system being audited.\"\n}",
+    "{\n  \"product\": \"Experience Cloud\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions Adobe's Experience Cloud infrastructure\"\n}",
+    "{\n  \"product\": \"Adobe Experience Cloud\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions Adobe Experience Cloud as the product being audited.\"\n}",
+    "{\n  \"product\": \"Adobe Experience Cloud\",\n  \"confidence\": 1,\n  \"explanation\": \"The text repeatedly mentions Adobe Experience Cloud in relation to various security and access management processes.\"\n}",
+    "{\n  \"product\": \"Adobe Experience Cloud\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions 'Adobe Experience Cloud' multiple times in relation to various operations and asset management.\"\n}",
+    "{\n    \"product\": \"Adobe Experience Cloud\",\n    \"confidence\": 1,\n    \"explanation\": \"The text explicitly mentions Adobe's Experience Cloud multiple times as the product being audited.\"\n}",
+    "{\n  \"product\": \"Experience Cloud\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions 'Adobe Experience Cloud' as the product being audited.\"\n}"
   ]
 }

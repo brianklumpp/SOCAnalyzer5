@@ -55,6 +55,9 @@ def run_gpt_inquiry(prompt_key, input_file=OUTPUT_TEXT_FILE, model=DEFAULT_GPT_M
     return "\n\n---\n\n".join(responses)
 
 def gpt_extract(prompt, extractor_name):
+    import time
+    from .gpt_tracker import track_gpt_call
+    
     api_key = load_api_key()
     openai.api_key = api_key
     model = GPT_MODELS.get(extractor_name, DEFAULT_GPT_MODEL)
@@ -62,14 +65,48 @@ def gpt_extract(prompt, extractor_name):
     max_tokens = model_settings.get('max_tokens', 2048)
     temperature = model_settings.get('temperature', DEFAULT_TEMPERATURE)
     top_p = model_settings.get('top_p', DEFAULT_TOP_P)
-    response = openai.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
-        temperature=temperature,
-        top_p=top_p
-    )
-    return response.choices[0].message.content
+    
+    start_time = time.time()
+    try:
+        response = openai.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p
+        )
+        end_time = time.time()
+        
+        # Safely calculate duration with error checking
+        if start_time is not None and end_time is not None:
+            duration = end_time - start_time
+        else:
+            duration = 0.0
+            import logging
+            logging.warning(f"Timing issue in gpt_extract: start_time={start_time}, end_time={end_time}")
+        
+        # Track usage if response includes token counts
+        if hasattr(response, 'usage') and response.usage:
+            track_gpt_call(
+                model=model,
+                prompt_tokens=response.usage.prompt_tokens,
+                completion_tokens=response.usage.completion_tokens,
+                extractor_name=extractor_name,
+                duration_seconds=duration
+            )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        # Calculate duration even if there was an error
+        end_time = time.time()
+        if start_time is not None and end_time is not None:
+            duration = end_time - start_time
+        else:
+            duration = 0.0
+        
+        # Re-raise the original exception
+        raise e
 
 __all__ = ["gpt_extract", "run_gpt_inquiry", "load_api_key"]
 

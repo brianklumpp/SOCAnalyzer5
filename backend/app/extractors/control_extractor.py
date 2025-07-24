@@ -379,6 +379,23 @@ def extract_controls():
         aligned_results.append(frag)
     results_sorted = sorted(aligned_results, key=control_id_sort_key)
     logging.info(f"Final sorted controls: {len(results_sorted)}")
+    # --- PATCH: Penalize subtext/duplicate controls ---
+    for i, ctrl in enumerate(results_sorted):
+        cid = ctrl.get('control_id')
+        desc = (ctrl.get('control_desc') or '').strip()
+        if not cid or not desc:
+            continue
+        for j, other in enumerate(results_sorted):
+            if i == j:
+                continue
+            if other.get('control_id') == cid:
+                other_desc = (other.get('control_desc') or '').strip()
+                # If this control's desc is a subtext of another with the same id, penalize confidence
+                if desc and other_desc and desc != other_desc and desc in other_desc:
+                    old_conf = ctrl.get('control_confidence', 0)
+                    new_conf = max(0, old_conf - 0.2)
+                    ctrl['control_confidence'] = new_conf
+                    ctrl['confidence_calc'] = (ctrl.get('confidence_calc', '') + f'; -0.2: subtext/possible duplicate of longer control_desc for same control_id').strip('; ')
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
         json.dump(results_sorted, f, ensure_ascii=False, indent=2)
     logging.info(f"Control extraction completed. Results written to {OUTPUT_JSON_PATH}")

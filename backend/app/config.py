@@ -1,6 +1,12 @@
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import pathlib
+from dotenv import load_dotenv
+
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL_ASYNC")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is not set. Please set it in your .env file.")
 
 # --- Redis Configuration ---
 REDIS_URL = os.environ.get("SOCANALYZER_REDIS_URL", "redis://localhost:6379/0")
@@ -64,6 +70,14 @@ GPT_PROMPTS = {
         "Do not include sub-entries or subsections. Example output: "
         "[{{\"heading\": \"Section I – Assertion of Management\", \"page\": 1}}, {{\"heading\": \"Section II – Service Auditor's Report\", \"page\": 3}}]" 
         "\n\nTOC:\n{toc_text}"
+    ),
+    'executive_summary': (
+        "You are a risk analyst for a company. Given the following SOC 2 report statistics and coverage tables, generate an executive summary as a valid JSON object. For the 'about_company' section, use the provided company and product names: company = '{company}', product = '{product}' and give a grade of A, B, C, or D. Always provide plausible, relevant content—never say 'not provided', 'not available', or similar. Do not repeat the input stats or tables in your output.\n\n"
+        "CRITICAL: Analyze the control test results below to identify meaningful deviations. Ignore standard passing language like 'No deviations noted', 'No exceptions noted', 'No gaps noted', etc. Only flag actual issues, exceptions, deficiencies, or problems. Extract the meaningful deviation details and include them in a 'deviations_noted' section.\n\n"
+        "IMPORTANT: Consider the CUEC control strength assessments below when forming key findings and recommendations. These represent our (the company's) responsibilities that have been evaluated for our implementation strength.  Include at least one CUEC in the key findings and recommendations.\n\n"
+        "Respond ONLY with a valid JSON object with these exact keys and types, and no extra text.\n"
+        "{{\n  \"about_company\": <string, a brief narrative about the company '{company}', risk profile with grade A, B, C, or D, and product '{product}' in scope>,\n  \"key_findings\": [<string, one to two sentences per bullet>],\n  \"areas_of_concern\": [<string, one to two sentences per bullet>],\n  \"recommendations\": [<string, one to two sentences per bullet>],\n  \"deviations_noted\": [{{\n    \"control_id\": <string>,\n    \"deviation_summary\": <string, extract only the meaningful issue/exception text, excluding standard passing language>\n  }}]\n}}\n\n"
+        "SOC 2 Executive Summary Stats:\n- Subservice orgs: {suborg_count}\n- CUECs: {cuec_count}\n- TSC coverage: {tsc_covered} of {tsc_total}\n- COSO coverage: {coso_covered} of {coso_total}\n\nTSC Table (by section):\n{tsc_table}\n\nCOSO Table (by section):\n{coso_table}\n\nControl Test Results for Deviation Analysis:\n{control_test_results}\n\nCUEC Control Strength Assessments (High-Confidence CUECs ≥90%):\n{cuec_control_strengths}\n"
     ),
 }
 
@@ -162,7 +176,9 @@ GPT_MODELS = {
     'report_date_extractor': 'gpt-3.5-turbo',
     'coverage_period_extractor': 'gpt-3.5-turbo',
     'cuec_extractor': 'gpt-3.5-turbo',
-    'subservice_orgs_extractor': 'gpt-3.5-turbo'
+    'subservice_orgs_extractor': 'gpt-3.5-turbo',
+    'subservice_orgs_gpt_verify': 'gpt-4o',
+    'executive_summary': 'gpt-4o',
 }
 
 SECTION_TOPICS = {
@@ -214,6 +230,15 @@ FUZZY_SCORE_THRESHOLD_OTHER = 85  # Default for other topics
 HEURISTIC_EXCLUDE_KEYWORDS = [
     'framework', 'operating system', 'standard', 'library', 'project', 'distribution', 'kernel', 'open source',
     'node', 'container', 'image', 'instance', 'os', 'component', 'platform', 'software', 'tool', 'plugin', 'module',
+    'American Institute of Certified Public Accountants', 'American Institute of Certified Public Accountants (AICPA)',
+    'AICPA', 'AICPA SOC 2', 'AICPA SOC 2 Report', 'AICPA SOC 2 Report on a SOC Examination', 'AICPA SOC 2 Report on a SOC Examination on a SOC Examination',
+    'trusted certificate authority (CA)', 'trusted certificate authority', 'certificate authority (CA)', 'certificate authority',
+    'independent auditor', 'independent auditor report', 'independent auditor report on a SOC examination', 'independent auditor report on a SOC examination on a SOC examination',
+    'independent service auditor', 'independent service auditor report', 'independent service auditor report on a SOC examination', 'independent service auditor report on a SOC examination on a SOC examination',
+    'Institute of Internal Auditors', 'Institute of Internal Auditors (IIA)', 'IIA', 'IIA SOC 2', 'IIA SOC 2 Report', 'IIA SOC 2 Report on a SOC Examination', 'IIA SOC 2 Report on a SOC Examination on a SOC Examination',
+    'International Organization for Standardization', 'International Organization for Standardization (ISO)', 'ISO', 'ISO SOC 2', 'ISO SOC 2 Report', 'ISO SOC 2 Report on a SOC Examination', 'ISO SOC 2 Report on a SOC Examination on a SOC Examination',
+    'International Organization for Standardization (ISO)', 'ISO', 'ISO SOC 2', 'ISO SOC 2 Report', 'ISO SOC 2 Report on a SOC Examination', 'ISO SOC 2 Report on a SOC Examination on a SOC Examination',
+    'International Organization for Standardization (ISO)', 'ISO', 'ISO SOC 2', 'ISO SOC 2 Report', 'ISO SOC 2 Report on a SOC Examination', 'ISO SOC 2 Report on a SOC Examination on a SOC Examination',
     # Expanded generic/genericized terms
     'third-party specialist', 'third party specialist', 'specialist', 'consultant', 'contractor', 'team', 'group',
     'staff', 'employee', 'personnel', 'resource', 'service', 'support', 'department', 'division', 'unit', 'office',
@@ -245,12 +270,50 @@ HEURISTIC_EXCLUDE_KEYWORDS = [
 THIRD_PARTY_ALIAS_MAP = {
     'aws': 'Amazon Web Services',
     'amazon web services': 'Amazon Web Services',
-    'gcp': 'Google Cloud Platform',
-    'google cloud platform': 'Google Cloud Platform',
+    'amazon web services (aws)': 'Amazon Web Services',
+    'aws (amazon web services)': 'Amazon Web Services',
+    'amazon': 'Amazon Web Services',
+    'amazon aws': 'Amazon Web Services',
     'microsoft azure': 'Microsoft Azure',
     'azure': 'Microsoft Azure',
-    'ibm cloud': 'IBM Cloud'
-    # Add more as needed
+    'azure (microsoft azure)': 'Microsoft Azure',
+    'microsoft azure (azure)': 'Microsoft Azure',
+    'gcp': 'Google Cloud Platform',
+    'google cloud platform': 'Google Cloud Platform',
+    'google cloud': 'Google Cloud Platform',
+    'google cloud platform (gcp)': 'Google Cloud Platform',
+    'gcp (google cloud platform)': 'Google Cloud Platform',
+    'ibm cloud': 'IBM Cloud',
+    'ibm': 'IBM Cloud',
+    'oracle cloud': 'Oracle Cloud',
+    'oracle': 'Oracle Cloud',
+    'oci': 'Oracle Cloud',
+    'oci (oracle cloud)': 'Oracle Cloud',
+    'oracle cloud infrastructure': 'Oracle Cloud',
+    'salesforce': 'Salesforce',
+    'salesforce.com': 'Salesforce',
+    'workday': 'Workday',
+    'servicenow': 'ServiceNow',
+    'service now': 'ServiceNow',
+    'box': 'Box',
+    'dropbox': 'Dropbox',
+    'zendesk': 'Zendesk',
+    'atlassian': 'Atlassian',
+    'jira': 'Atlassian',
+    'confluence': 'Atlassian',
+    'slack': 'Slack',
+    'github': 'GitHub',
+    'gitlab': 'GitLab',
+    'bitbucket': 'Bitbucket',
+    'okta': 'Okta',
+    'okta, inc.': 'Okta',
+    'okta inc': 'Okta',
+    'okta inc.': 'Okta',
+    'microsoft': 'Microsoft Azure',
+    'microsoft corporation': 'Microsoft Azure',
+    'microsoft cloud': 'Microsoft Azure',
+    'microsoft cloud (azure)': 'Microsoft Azure',
+    # ... add more as needed ...
 }
 
 SO_KEYWORDS = ["subservice", "subservice organization"]
@@ -638,5 +701,47 @@ GPT_MODEL_SETTINGS = {
 }
 
 # --- Control Extraction Testing Config ---
-CONTROL_TESTING_ENABLED = True  # Set to False to disable test mode and process the full file
+CONTROL_TESTING_ENABLED = False  # Set to False to disable test mode and process the full file
 CONTROL_TESTING_MAX_LINE = 2000  # Only process up to this line number when testing is enabled
+
+# Hang prevention safeguards for control extraction
+CONTROL_HANG_PREVENTION_ENABLED = True  # Enable hang prevention safeguards
+CONTROL_MAX_PROCESSING_MINUTES = 30     # Maximum processing time before timeout
+CONTROL_MAX_CONSECUTIVE_FAILURES = 10   # Stop after this many consecutive failures
+CONTROL_DETECT_NON_CONTROL_CONTENT = False  # Detect and stop at mapping tables/non-control content (disabled due to false positives)
+
+# List of key test words to check in control_desc for confidence adjustment
+CONTROL_TEST_WORDS = [
+    "examined",
+    "inquired",
+    "ascertained",
+    "inspected",
+    "evaluated"
+]
+
+TABLE_FIELD_MAP = {
+    "company": ["name", "parent_company", "confidence", "scan_id"],
+    "control": [
+        "control_id", "control_desc", "control_test", "control_test_results", "control_page_ref", "control_line_ref", "control_seq",
+        "control_tsc_id", "control_coso_id", "control_tsc_similarity", "control_coso_similarity", "control_tsc_confidence_pct",
+        "control_coso_confidence_pct", "control_closest_framework", "control_tsc_section", "control_coso_section", "control_soc_domain",
+        "control_status", "merged_to_control_id", "control_gpt_opinion", "control_gpt_reasoning", "control_confidence", "confidence_calc", "scan_id"
+    ],
+    "cuec": [
+        "cuec_seq", "cuec_tsc_id", "cuec_description", "cuec_line_ref", "cuec_confidence", "cuec_gpt_opinion",
+        "cuec_distance_from_cuec_keywords", "cuec_gpt_reasoning", "cuec_framework_alignment", "cuec_framework_alignment_id",
+        "cuec_justification", "cuec_coso_id", "cuec_tsc_similarity", "cuec_coso_similarity", "cuec_tsc_confidence_pct",
+        "cuec_coso_confidence_pct", "cuec_closest_framework", "cuec_confidence_justification", "annotation", "control_strength", "scan_id"
+    ],
+    "subservice_org": ["name", "confidence", "scan_id"],
+    "product": ["name", "scan_id"]
+}
+
+SUBSERVICE_ORG_GPT_VERIFY_PROMPT = (
+    "You are an expert in SOC 2 compliance. "
+    "Is '{name}' (description: '{desc}') a likely subservice organization that would be identified in a SOC 2 report? "
+    "Respond with a JSON object: {{ 'is_likely_subservice_org': true/false, 'reason': '...' }} "
+    "If you are not sure, set 'is_likely_subservice_org' to false."
+)
+
+SUBSERVICE_ORGS_TXT_PATH = str(PROJECT_ROOT / 'backend' / 'app' / 'extractors' / 'subservice_orgs.txt')

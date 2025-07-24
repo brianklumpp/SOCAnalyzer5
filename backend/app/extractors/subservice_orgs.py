@@ -6,7 +6,7 @@ import re
 from difflib import SequenceMatcher
 from .. import config
 from ..gpt_client import gpt_extract
-from ..config import HEURISTIC_EXCLUDE_KEYWORDS, THIRD_PARTY_ALIAS_MAP, SO_KEYWORDS, SUBSERVICE_ORG_GPT_FILTER_PROMPT, SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT
+from ..config import HEURISTIC_EXCLUDE_KEYWORDS, THIRD_PARTY_ALIAS_MAP, SO_KEYWORDS, SUBSERVICE_ORG_GPT_FILTER_PROMPT, SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT, SUBSERVICE_ORG_GPT_VERIFY_PROMPT
 
 # Use centralized config paths
 SECTION_JSON_PATH = config.SECTION_JSON_PATH
@@ -60,6 +60,9 @@ def load_common_so_list(path):
         return [line.strip() for line in f if line.strip()]
 
 def extract_subservice_orgs():
+    # Reset output file at the start of extraction
+    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+        json.dump({"third_parties": []}, f, ensure_ascii=False, indent=2)
     section_results = load_json(SECTION_JSON_PATH)
     desc_section = next((s for s in section_results if s.get('topic') == 'Description_of_System'), None)
     if not desc_section:
@@ -124,19 +127,22 @@ def extract_subservice_orgs():
                 return text
             # Try direct parse
             try:
+                clean_response = clean_gpt_json_response(clean_response)
                 data = json.loads(clean_response)
             except Exception as e1:
                 # Try to extract a valid JSON object/array
                 json_sub = extract_json(clean_response)
                 try:
-                    data = json.loads(json_sub)
+                    clean_response = clean_gpt_json_response(json_sub)
+                    data = json.loads(clean_response)
                 except Exception as e2:
                     # Try to repair unterminated array (common GPT truncation)
                     repaired = json_sub
                     if not repaired.strip().endswith(']') and repaired.strip().startswith('['):
                         repaired = repaired.strip() + ']'
                     try:
-                        data = json.loads(repaired)
+                        clean_response = clean_gpt_json_response(repaired)
+                        data = json.loads(clean_response)
                     except Exception as e3:
                         # Try to recover as much as possible: find all valid JSON objects in the text
                         objs = re.findall(r'\{[^}]*\}', clean_response)
@@ -264,7 +270,7 @@ def extract_subservice_orgs():
         for entry in rescue_report:
             logging.info(f"Bad chunk desc: {entry['bad_chunk_desc'][:80]}... | Rescue: {entry['rescue_type']} | Confidence: {entry['confidence_pct']}% | Matched: {entry['matched_desc'][:80] if entry['matched_desc'] else None}")
 
-    output = {'third_parties': list(seen.values())}
+    output = {'third_parties': ensure_confidence_justification_field(list(seen.values()))}
     if bad_chunks:
         output['bad_chunks'] = bad_chunks
         output['bad_chunk_rescue_report'] = rescue_report
@@ -285,8 +291,26 @@ def normalize_third_party_names(third_parties):
         if not name:
             return None
         key = name.strip().lower()
-        return alias_map.get(key, name.strip())
-
+        # Remove parentheticals and extra spaces
+        key = re.sub(r'\([^)]*\)', '', key).strip()
+        # Remove common suffixes and punctuation
+        key = re.sub(r'[.,]', '', key)
+        key = re.sub(r'\b(inc|llc|ltd|corp|corporation|incorporated|plc|gmbh|sarl|sa|bv|lp|llp|co)\b', '', key)
+        key = key.strip()
+        # Try direct alias map
+        if key in alias_map:
+            return alias_map[key]
+        # Try matching with/without parentheticals
+        key_noparen = re.sub(r'\([^)]*\)', '', key).strip()
+        if key_noparen in alias_map:
+            return alias_map[key_noparen]
+        # Try matching abbreviation in parenthesis
+        abbrev_match = re.search(r'\(([^)]+)\)', name)
+        if abbrev_match:
+            abbrev = abbrev_match.group(1).strip().lower()
+            if abbrev in alias_map:
+                return alias_map[abbrev]
+        return key
     merged = {}
     for entry in third_parties:
         canon = canonical(entry.get('third_party_name'))
@@ -332,8 +356,10 @@ def is_heuristic_excluded(entry, company_names):
             return True
     # Fuzzy match for company/parent
     for cname in company_names:
+        if not cname:
+            continue
         cname = cname.lower()
-        if cname and (cname in name or cname in desc or SequenceMatcher(None, cname, name).ratio() > 0.85):
+        if cname and (cname in name or cname in desc or SequenceMatcher(None, cname, name).ratio() > 0.85 or SequenceMatcher(None, cname, desc).ratio() > 0.85):
             return True
     return False
 
@@ -378,21 +404,29 @@ def calculate_confidence(entry, company_names, so_list, likely_so, common_so, to
     name = (entry.get('third_party_name') or '').strip().lower()
     cleaned_name = clean_company_name(name)
     cleaned_company_names = [clean_company_name(n) for n in company_names if n]
-    # Reduce by 0.8 if name matches company or parent (fuzzy)
+    penalty_applied = False
     for cname in cleaned_company_names:
         if cname and (cname == cleaned_name or cname in cleaned_name or cleaned_name in cname or SequenceMatcher(None, cname, cleaned_name).ratio() > 0.85):
             conf -= 0.8
+            penalty_applied = True
+            entry['confidence_justification'] = entry.get('confidence_justification', []) + [f'-0.8: matches company or parent name ({cname})']
             break
-    if name in {so.strip().lower() for so in so_list}:
+    # Only apply common_so bonus if not penalized for company match
+    if not penalty_applied and name in {so.strip().lower() for so in so_list}:
         conf += 0.4
+        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['+0.4: in common subservice orgs list']
     if likely_so == 'Yes':
         conf += 0.1
+        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['+0.1: likely_so is Yes']
     elif likely_so == 'No':
         conf -= 0.1
-    if common_so == 'Yes':
+        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['-0.1: likely_so is No']
+    if common_so == 'Yes' and not penalty_applied:
         conf += 0.1
+        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['+0.1: common_so is Yes']
     if name in top2_distance_names:
         conf += 0.1
+        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['+0.1: top2 distance name']
     return conf
 
 def postprocess_third_parties(third_parties, company_names, so_list, heuristic_exclusions_log_path=None):
@@ -405,6 +439,8 @@ def postprocess_third_parties(third_parties, company_names, so_list, heuristic_e
     # Find top 2 closest (lowest distance)
     sorted_by_distance = sorted(third_parties, key=lambda x: x['distance_from_so_keywords'])
     top2_distance_names = set((entry.get('third_party_name') or '').strip().lower() for entry in sorted_by_distance[:2])
+    # --- PATCH: Finalize likely_so before confidence calculation ---
+    third_parties = set_likely_so_for_company_and_parent(third_parties, company_names)
     for entry in third_parties:
         name_lower = (entry.get('third_party_name') or '').strip().lower()
         is_common_so = name_lower in so_names_lower
@@ -426,6 +462,7 @@ def postprocess_third_parties(third_parties, company_names, so_list, heuristic_e
             for ex in heuristic_exclusions:
                 logf.write(json.dumps(ex, ensure_ascii=False) + '\n')
     processed.sort(key=lambda x: x.get('third_party_confidence', 0), reverse=True)
+    processed = gpt_verify_likely_subservice_orgs(processed)
     return processed
 
 def clean_company_names(company_names):
@@ -483,7 +520,7 @@ def filter_third_parties_with_gpt():
         company_names = []
     third_parties = filter_company_references(third_parties, company_names)
     # Heuristic and post-processing blocklist
-    so_list = load_common_so_list(os.path.join('app', 'extractors', 'subservice_orgs.txt'))
+    so_list = load_common_so_list(config.SUBSERVICE_ORGS_TXT_PATH)
     # Enhanced GPT prompt
     filtered = []
     exclusions = []
@@ -498,16 +535,28 @@ def filter_third_parties_with_gpt():
             with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
                 gptlog.write(f'PROMPT:\n{prompt}\nRESPONSE:\n{response}\n---\n')
             if response:
-                result = json.loads(response)
+                clean_response = clean_gpt_json_response(response)
+                result = json.loads(clean_response)
                 if result.get('keep') and result.get('type', '').lower() == 'company':
                     filtered.append(entry)
                 else:
+                    # Instead of excluding, set confidence to 0 and add justification
+                    entry['third_party_confidence'] = 0
+                    entry['confidence_justification'] = entry.get('confidence_justification', []) + [f"Filtered by GPT: {result.get('reason', 'No reason provided')}"]
+                    filtered.append(entry)
                     exclusions.append({'entry': entry, 'reason': result.get('reason', 'No reason provided'), 'type': result.get('type', '')})
             else:
+                # No response from GPT, set confidence to 0 and add justification
+                entry['third_party_confidence'] = 0
+                entry['confidence_justification'] = entry.get('confidence_justification', []) + ["Filtered by GPT: No response from GPT."]
+                filtered.append(entry)
                 exclusions.append({'entry': entry, 'reason': 'No response from GPT.'})
         except Exception as e:
             with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
                 gptlog.write(f'PROMPT:\n{prompt}\nRESPONSE:\n{response}\nERROR: {e}\n---\n')
+            entry['third_party_confidence'] = 0
+            entry['confidence_justification'] = entry.get('confidence_justification', []) + [f"Filtered by GPT: GPT error or parse error: {e}. Response: {response}"]
+            filtered.append(entry)
             exclusions.append({'entry': entry, 'reason': f'GPT error or parse error: {e}. Response: {response}'})
         time.sleep(0.7)  # avoid rate limits
     # Post-process: heuristics, confidence, common_so, distance, sort
@@ -515,13 +564,10 @@ def filter_third_parties_with_gpt():
     # Set likely_so to 'No' for company/parent
     filtered = set_likely_so_for_company_and_parent(filtered, company_names)
     # Write filtered results
-    with open(INPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+    filtered = ensure_confidence_justification_field(filtered)
+    with open(str(OUTPUT_JSON_PATH), 'w', encoding='utf-8') as f:
         json.dump({'third_parties': filtered}, f, indent=2, ensure_ascii=False)
-    # Log exclusions
-    with open(FILTER_LOG_PATH, 'a', encoding='utf-8') as logf:
-        for ex in exclusions:
-            logf.write(json.dumps(ex, ensure_ascii=False) + '\n')
-    logging.info(f"Filtered third parties. Kept: {len(filtered)}. Excluded: {len(exclusions)}. See {FILTER_LOG_PATH} for details. Heuristic exclusions in {HEURISTIC_LOG_PATH}.")
+    logging.info(f"Final filtered subservice orgs written to {OUTPUT_JSON_PATH}. Kept: {len(filtered)}. Excluded: {len(exclusions)}. See {FILTER_LOG_PATH} for details. Heuristic exclusions in {HEURISTIC_LOG_PATH}.")
 
 def elevate_and_group_control_ids(json_path=OUTPUT_JSON_PATH):
     """
@@ -558,6 +604,44 @@ def elevate_and_group_control_ids(json_path=OUTPUT_JSON_PATH):
 def calculate_common_so(entry, so_list):
     name = (entry.get('third_party_name') or '').strip().lower()
     return 'Yes' if any(name == so.strip().lower() for so in so_list) else 'No'
+
+def gpt_verify_likely_subservice_orgs(subservice_orgs):
+    for org in subservice_orgs:
+        conf = org.get('third_party_confidence', 0)
+        if conf >= 0.9:
+            name = org.get('third_party_name', '')
+            desc = org.get('third_party_description', '')
+            prompt = SUBSERVICE_ORG_GPT_VERIFY_PROMPT.format(name=name, desc=desc)
+            try:
+                response = gpt_extract(prompt, 'subservice_orgs_gpt_verify')
+                clean_response = clean_gpt_json_response(response)
+                if not clean_response.strip():
+                    raise ValueError("Empty response from GPT")
+                data = json.loads(clean_response)
+                if data.get('is_likely_subservice_org', False):
+                    # Confirmed: add +0.2
+                    old_conf = org['third_party_confidence']
+                    org['third_party_confidence'] = min(1.0, round(old_conf + 0.2, 3))
+                    org['confidence_justification'] = org.get('confidence_justification', []) + [f"+0.2: GPT-4o review confirms subservice org: {data.get('reason', 'No reason provided')}"]
+                else:
+                    # Not confirmed: subtract 0.2
+                    old_conf = org['third_party_confidence']
+                    org['third_party_confidence'] = max(0, round(old_conf - 0.2, 3))
+                    org['confidence_justification'] = org.get('confidence_justification', []) + [f"-0.2: GPT-4o review: {data.get('reason', 'No reason provided')}"]
+            except Exception as e:
+                org['confidence_justification'] = org.get('confidence_justification', []) + [f"GPT-4o review failed: {e} | Response: {repr(response)}"]
+            time.sleep(0.7)  # avoid rate limits
+    return subservice_orgs
+
+def ensure_confidence_justification_field(third_parties):
+    for entry in third_parties:
+        if 'confidence_justification' not in entry:
+            entry['confidence_justification'] = []
+    return third_parties
+
+def clean_gpt_json_response(response):
+    # Remove lines that start with // (GPT comments)
+    return '\n'.join(line for line in response.splitlines() if not line.strip().startswith('//'))
 
 __all__ = ["extract_subservice_orgs"]
 

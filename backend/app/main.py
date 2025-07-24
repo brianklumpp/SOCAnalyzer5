@@ -20,125 +20,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Dict, Any
 from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError
-from dataclasses import dataclass
-from .models import ScanHistory, Company, Control, CUEC, SubserviceOrg, Product, Setting, Base
+from .models import Company, Control, CUEC, SubserviceOrg, Product, Setting, Base
+from .models import Scan
 from .database import engine, get_db
 from .analyze import analyze_pdf_file
-from .config import REDIS_URL
-
-@dataclass
-class FieldMapping:
-    json_field: str
-    orm_field: str
-    db_column: str
-
-# Company mapping
-COMPANY_FIELD_MAPPINGS = [
-    FieldMapping("company", "name", "name"),
-    FieldMapping("name", "name", "name"),
-    FieldMapping("parent_company", "parent_company", "parent_company"),
-    FieldMapping("confidence", "confidence", "confidence"),
-]
-
-# Control mapping
-CONTROL_FIELD_MAPPINGS = [
-    FieldMapping("control_id", "control_id", "control_id"),
-    FieldMapping("control_desc", "control_desc", "control_desc"),
-    FieldMapping("control_test", "control_test", "control_test"),
-    FieldMapping("control_test_results", "control_test_results", "control_test_results"),
-    FieldMapping("control_page_ref", "control_page_ref", "control_page_ref"),
-    FieldMapping("control_line_ref", "control_line_ref", "control_line_ref"),
-    FieldMapping("control_seq", "control_seq", "control_seq"),
-    FieldMapping("control_tsc_id", "control_tsc_id", "control_tsc_id"),
-    FieldMapping("control_coso_id", "control_coso_id", "control_coso_id"),
-    FieldMapping("control_tsc_similarity", "control_tsc_similarity", "control_tsc_similarity"),
-    FieldMapping("control_coso_similarity", "control_coso_similarity", "control_coso_similarity"),
-    FieldMapping("control_tsc_confidence_pct", "control_tsc_confidence_pct", "control_tsc_confidence_pct"),
-    FieldMapping("control_coso_confidence_pct", "control_coso_confidence_pct", "control_coso_confidence_pct"),
-    FieldMapping("control_closest_framework", "control_closest_framework", "control_closest_framework"),
-    FieldMapping("control_tsc_section", "control_tsc_section", "control_tsc_section"),
-    FieldMapping("control_coso_section", "control_coso_section", "control_coso_section"),
-    FieldMapping("control_soc_domain", "control_soc_domain", "control_soc_domain"),
-    FieldMapping("control_status", "control_status", "control_status"),
-    FieldMapping("merged_to_control_id", "merged_to_control_id", "merged_to_control_id"),
-    FieldMapping("control_gpt_opinion", "control_gpt_opinion", "control_gpt_opinion"),
-    FieldMapping("control_gpt_reasoning", "control_gpt_reasoning", "control_gpt_reasoning"),
-]
-
-# CUEC mapping
-CUEC_FIELD_MAPPINGS = [
-    FieldMapping("cuec_seq", "cuec_seq", "cuec_seq"),
-    FieldMapping("cuec_id", "cuec_tsc_id", "cuec_tsc_id"),
-    FieldMapping("cuec_tsc_id", "cuec_tsc_id", "cuec_tsc_id"),
-    FieldMapping("cuec_description", "cuec_description", "cuec_description"),
-    FieldMapping("cuec_desc", "cuec_description", "cuec_description"),
-    FieldMapping("description", "cuec_description", "cuec_description"),
-    FieldMapping("cuec_line_ref", "cuec_line_ref", "cuec_line_ref"),
-    FieldMapping("cuec_confidence", "cuec_confidence", "cuec_confidence"),
-    FieldMapping("cuec_gpt_opinion", "cuec_gpt_opinion", "cuec_gpt_opinion"),
-    FieldMapping("cuec_distance_from_cuec_keywords", "cuec_distance_from_cuec_keywords", "cuec_distance_from_cuec_keywords"),
-    FieldMapping("cuec_gpt_reasoning", "cuec_gpt_reasoning", "cuec_gpt_reasoning"),
-    FieldMapping("cuec_framework_alignment", "cuec_framework_alignment", "cuec_framework_alignment"),
-    FieldMapping("cuec_framework_alignment_id", "cuec_framework_alignment_id", "cuec_framework_alignment_id"),
-    FieldMapping("cuec_justification", "cuec_justification", "cuec_justification"),
-    FieldMapping("cuec_coso_id", "cuec_coso_id", "cuec_coso_id"),
-    FieldMapping("cuec_tsc_similarity", "cuec_tsc_similarity", "cuec_tsc_similarity"),
-    FieldMapping("cuec_coso_similarity", "cuec_coso_similarity", "cuec_coso_similarity"),
-    FieldMapping("cuec_tsc_confidence_pct", "cuec_tsc_confidence_pct", "cuec_tsc_confidence_pct"),
-    FieldMapping("cuec_coso_confidence_pct", "cuec_coso_confidence_pct", "cuec_coso_confidence_pct"),
-    FieldMapping("cuec_closest_framework", "cuec_closest_framework", "cuec_closest_framework"),
-    FieldMapping("cuec_confidence_justification", "cuec_confidence_justification", "cuec_confidence_justification"),
-]
-
-# SubserviceOrg mapping
-SUBORG_FIELD_MAPPINGS = [
-    FieldMapping("third_party_name", "name", "name"),
-    FieldMapping("name", "name", "name"),
-    FieldMapping("third_party_confidence", "confidence", "confidence"),
-    FieldMapping("confidence", "confidence", "confidence"),
-]
-
-# Product mapping
-PRODUCT_FIELD_MAPPINGS = [
-    FieldMapping("product", "name", "name"),
-    FieldMapping("name", "name", "name"),
-]
-
-# --- Mapping print/validation functions ---
-def print_entity_mapping(entity_name, mappings, json_data, scan_id=None):
-    msg_lines = [f"\n[{entity_name} Mapping]"]
-    for mapping in mappings:
-        value = json_data.get(mapping.json_field)
-        msg_lines.append(f"JSON: {mapping.json_field} → ORM: {mapping.orm_field} → DB: {mapping.db_column} | Value: {value}")
-    if scan_id is not None:
-        msg_lines.append(f"scan_id → scan_id → scan_id | Value: {scan_id}")
-    msg = "\n".join(msg_lines)
-    print(msg)
-    logging.error(msg)
-
-def log_db_verification(entity_name, db_objs):
-    if not db_objs:
-        logging.error(f"[DB VERIFY] {entity_name}: No records found after insert.")
-        print(f"[DB VERIFY] {entity_name}: No records found after insert.")
-        return
-    for obj in db_objs:
-        fields = vars(obj)
-        # Remove SQLAlchemy internal state
-        fields = {k: v for k, v in fields.items() if not k.startswith('_')}
-        msg = f"[DB VERIFY] {entity_name}: " + ", ".join(f"{k}={v}" for k, v in fields.items())
-        logging.error(msg)
-        print(msg)
-
-def build_kwargs_from_mapping(mappings, json_data, scan_id=None):
-    kwargs = {}
-    for mapping in mappings:
-        if mapping.orm_field not in kwargs:
-            value = json_data.get(mapping.json_field)
-            if value is not None:
-                kwargs[mapping.orm_field] = value
-    if scan_id is not None:
-        kwargs["scan_id"] = scan_id
-    return kwargs
+from .config import REDIS_URL, TSC_CRITERIA, COSO_2013_CRITERIA, GPT_PROMPTS
+from .explicit_sql_insert import insert_extracted_data
+import concurrent.futures
+from .gpt_client import gpt_extract
 
 app = FastAPI()
 
@@ -150,6 +39,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Helper function to mark executive summary as stale
+async def mark_executive_summary_stale(scan_id: int, db):
+    """Mark the executive summary as stale when data changes that could impact it"""
+    scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+    if scan_row:
+        scan_row.executive_summary_stale = True
+        db.add(scan_row)
 
 # Set up backend error logging (move this up to the first app instance)
 import pathlib
@@ -209,363 +106,16 @@ test_router = APIRouter()
 @test_router.post("/test/insert_combined_result")
 async def test_insert_combined_result(db=Depends(get_db)):
     """
-    Loads data/json/combined_result.json and inserts a ScanHistory and all related entities.
+    Loads data/json/combined_result.json and inserts all entities using explicit SQL insert logic.
     Returns a summary of what was inserted.
     """
-    import logging
-    # Load the combined result (always resolve from project root)
+    import pathlib
     project_root = pathlib.Path(__file__).resolve().parents[2]
-    combined_path = project_root / "data" / "json" / "combined_result.json"
-    try:
-        with open(combined_path, "r", encoding="utf-8") as f:
-            result = _json.load(f)
-    except Exception as e:
-        logging.exception(f"Failed to load combined_result.json: {e}")
-        raise
-
-    # --- PATCH: Normalize all relevant entities for backend compatibility ---
-    try:
-        # Company normalization
-        if "company" in result:
-            if isinstance(result["company"], str):
-                result["company"] = {"name": result["company"]}
-            elif isinstance(result["company"], dict) and "name" not in result["company"]:
-                for k in ["company_name", "org_name", "organization", "value"]:
-                    if k in result["company"]:
-                        result["company"]["name"] = result["company"][k]
-                        break
-            for key in ["parent_company", "confidence", "company_name", "org_name", "organization"]:
-                if key in result:
-                    result["company"][key] = result[key]
-                    del result[key]
-
-        # Product normalization
-        if "product" in result:
-            if isinstance(result["product"], str):
-                result["product"] = {"name": result["product"]}
-            elif isinstance(result["product"], dict) and "name" not in result["product"]:
-                for k in ["product_name", "value"]:
-                    if k in result["product"]:
-                        result["product"]["name"] = result["product"][k]
-                        break
-            for key in ["confidence", "product_name"]:
-                if key in result:
-                    if isinstance(result["product"], dict):
-                        result["product"][key] = result[key]
-                    del result[key]
-
-        # Auditor normalization
-        if "auditor" in result:
-            if isinstance(result["auditor"], str):
-                result["auditor"] = {"name": result["auditor"]}
-            elif isinstance(result["auditor"], dict) and "name" not in result["auditor"]:
-                for k in ["auditor_name", "value"]:
-                    if k in result["auditor"]:
-                        result["auditor"]["name"] = result["auditor"][k]
-                        break
-            for key in ["confidence", "auditor_name"]:
-                if key in result:
-                    if isinstance(result["auditor"], dict):
-                        result["auditor"][key] = result[key]
-                    del result[key]
-
-        # Subservice orgs/third_parties normalization
-        if "subservice_orgs" in result and isinstance(result["subservice_orgs"], list):
-            for idx, org in enumerate(result["subservice_orgs"]):
-                if isinstance(org, str):
-                    result["subservice_orgs"][idx] = {"name": org}
-                elif isinstance(org, dict) and "name" not in org:
-                    for k in ["org_name", "third_party_name", "value"]:
-                        if k in org:
-                            result["subservice_orgs"][idx]["name"] = org[k]
-                            break
-                for key in ["confidence", "org_name", "third_party_name"]:
-                    if key in result and isinstance(result["subservice_orgs"][idx], dict):
-                        result["subservice_orgs"][idx][key] = result[key]
-            for key in ["confidence", "org_name", "third_party_name"]:
-                if key in result:
-                    del result[key]
-
-        # Coverage period normalization
-        if "coverage_period" in result:
-            if isinstance(result["coverage_period"], str):
-                result["coverage_period"] = {"period": result["coverage_period"]}
-            elif isinstance(result["coverage_period"], dict) and "period" not in result["coverage_period"]:
-                for k in ["start_date", "end_date", "value"]:
-                    if k in result["coverage_period"]:
-                        result["coverage_period"]["period"] = result["coverage_period"][k]
-                        break
-            for key in ["start_date", "end_date", "confidence"]:
-                if key in result:
-                    if isinstance(result["coverage_period"], dict):
-                        result["coverage_period"][key] = result[key]
-                    del result[key]
-
-        # Insert Company first, get company_id
-        from .models import Scan
-        company_id = None
-        company_obj = None
-        company_info = result.get("company")
-        if company_info:
-            if isinstance(company_info, str):
-                company_info = {"name": company_info}
-            for key in ["parent_company", "confidence"]:
-                if key in result and key not in company_info:
-                    company_info[key] = result[key]
-            if company_info.get("company") or company_info.get("name"):
-                print_entity_mapping("Company", COMPANY_FIELD_MAPPINGS, company_info)
-                company_kwargs = build_kwargs_from_mapping(COMPANY_FIELD_MAPPINGS, company_info)
-                company_kwargs["scan_id"] = None  # Will update after scan insert
-                company_obj = Company(**company_kwargs)
-                db.add(company_obj)
-                await db.commit()
-                await db.refresh(company_obj)
-                company_id = company_obj.id
-                # Post-insert verification
-                from sqlalchemy.future import select as _select
-                company_db = (await db.execute(_select(Company).where(Company.id == company_id))).scalars().all()
-                log_db_verification("Company", company_db)
-
-        # Insert ScanHistory
-        scan_history = ScanHistory(
-            timestamp=datetime.datetime.now(),
-            filename="test_combined_result.json",
-            results=result
-        )
-        db.add(scan_history)
-        await db.commit()
-        await db.refresh(scan_history)
-        scan_history_id = scan_history.id
-        from typing import Dict, Any
-        summary: Dict[str, Any] = {"scan_id": scan_history_id}
-
-        # Extract product name
-        product = None
-        product_info = result.get("product")
-        if product_info and isinstance(product_info, dict):
-            product = product_info.get("product") or product_info.get("name")
-
-        # Extract report_date
-        report_date = None
-        report_date_info = result.get("report_date")
-        if report_date_info:
-            if isinstance(report_date_info, dict):
-                report_date = report_date_info.get("report_date")
-            elif isinstance(report_date_info, str):
-                report_date = report_date_info
-            if report_date:
-                try:
-                    report_date = datetime.datetime.fromisoformat(report_date)
-                except Exception:
-                    report_date = None
-
-        # Extract coverage_start and coverage_end (robust to both top-level and nested)
-        coverage_start = None
-        coverage_end = None
-        # Prefer top-level if present
-        if "start_date" in result:
-            coverage_start = result["start_date"]
-        elif "coverage_period" in result and isinstance(result["coverage_period"], dict):
-            coverage_start = result["coverage_period"].get("start_date")
-        if "end_date" in result:
-            coverage_end = result["end_date"]
-        elif "coverage_period" in result and isinstance(result["coverage_period"], dict):
-            coverage_end = result["coverage_period"].get("end_date")
-        # Parse to datetime if present
-        if coverage_start:
-            try:
-                coverage_start = datetime.datetime.fromisoformat(coverage_start)
-            except Exception:
-                coverage_start = None
-        if coverage_end:
-            try:
-                coverage_end = datetime.datetime.fromisoformat(coverage_end)
-            except Exception:
-                coverage_end = None
-
-        # Get extracted text (if available)
-        extracted_text = None
-        if "sections" in result and isinstance(result["sections"], list) and result["sections"]:
-            extracted_text = result["sections"][0].get("snippet")
-
-        # pdf_file: set to None or a placeholder for now
-        pdf_file = None
-        pdf_filename = scan_history.filename
-
-        # gpt_cost, gpt_model, estimated_time_seconds
-        gpt_cost = result.get("gpt_cost")
-        gpt_model = result.get("gpt_model")
-        estimated_time_seconds = result.get("estimated_time_seconds")
-
-        # Insert Scan row with company_id, force id to match scan_history_id
-        scan_row = Scan(
-            id=scan_history_id,  # Force Scan.id to match ScanHistory.id
-            company_id=company_id,
-            product=product,
-            scan_date=scan_history.timestamp,
-            report_date=report_date,
-            coverage_start=coverage_start,
-            coverage_end=coverage_end,
-            pdf_file=pdf_file,
-            pdf_filename=pdf_filename,
-            extracted_text=extracted_text,
-            result_json=result,
-            gpt_cost=gpt_cost,
-            gpt_model=gpt_model,
-            estimated_time_seconds=estimated_time_seconds
-        )
-        db.add(scan_row)
-        await db.commit()
-        await db.refresh(scan_row)
-        scan_id = scan_row.id
-        summary["scan_table_id"] = scan_id
-
-        # Update company.scan_id to point to this scan (if company was inserted)
-        if company_obj is not None and company_id is not None:
-            company_obj.scan_id = scan_id
-            db.add(company_obj)
-            await db.commit()
-        # --- Insert Company (centralized mapping) ---
-        company_info = result.get("company")
-        # PATCH: Accept both string and dict for company_info, and move top-level fields if present
-        if company_info:
-            if isinstance(company_info, str):
-                company_info = {"name": company_info}
-            # Move top-level parent_company/confidence into company_info if present
-            for key in ["parent_company", "confidence"]:
-                if key in result and key not in company_info:
-                    company_info[key] = result[key]
-            if company_info.get("company") or company_info.get("name"):
-                print_entity_mapping("Company", COMPANY_FIELD_MAPPINGS, company_info, scan_id)
-                company_kwargs = build_kwargs_from_mapping(COMPANY_FIELD_MAPPINGS, company_info, scan_id)
-                db.add(Company(**company_kwargs))
-                await db.commit()
-                # Post-insert verification
-                from sqlalchemy.future import select as _select
-                company_db = (await db.execute(_select(Company).where(Company.scan_id == scan_id))).scalars().all()
-                log_db_verification("Company", company_db)
-                # Only assign if not None, to avoid type errors in summary dict
-                company_name = company_kwargs.get("name")
-                if company_name is not None:
-                    summary["company"] = str(company_name)
-
-        # --- Insert Controls ---
-        # Support both legacy and nested formats
-        controls = []
-        if "control_extraction" in result and "controls" in result["control_extraction"]:
-            controls = result["control_extraction"]["controls"]
-        elif "controls" in result:
-            controls_section = result.get("controls", {})
-            if isinstance(controls_section, dict):
-                controls = controls_section.get("controls", [])
-            elif isinstance(controls_section, list):
-                controls = controls_section
-        # Filter out controls that do not have a control_seq (only keep those with a non-null control_seq)
-        controls = [
-            c for c in controls
-            if isinstance(c, dict) and c.get("control_seq") is not None
-        ]
-        for ctrl in controls:
-            try:
-                print_entity_mapping("Control", CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
-                control_kwargs = build_kwargs_from_mapping(CONTROL_FIELD_MAPPINGS, ctrl, scan_id)
-                db.add(Control(**control_kwargs))
-            except Exception as e:
-                logging.exception(f"Failed to insert control: {ctrl}\nError: {e}")
-        if controls:
-            try:
-                await db.commit()
-            except Exception as e:
-                logging.exception(f"Failed to commit controls. Error: {e}")
-            from sqlalchemy.future import select as _select
-            controls_db = (await db.execute(_select(Control).where(Control.scan_id == scan_id))).scalars().all()
-            log_db_verification("Control", controls_db)
-        summary["controls_count"] = int(len(controls))  # type: ignore
-
-        # --- Insert CUECs ---
-        # Support both legacy and nested formats
-        cuecs = []
-        if "cuec_extraction" in result and "cuecs" in result["cuec_extraction"]:
-            cuecs = result["cuec_extraction"]["cuecs"]
-        elif "cuecs" in result:
-            cuecs_section = result.get("cuecs", {})
-            if isinstance(cuecs_section, dict):
-                cuecs = cuecs_section.get("cuecs", [])
-            elif isinstance(cuecs_section, list):
-                cuecs = cuecs_section
-        for cuec in cuecs:
-            try:
-                print_entity_mapping("CUEC", CUEC_FIELD_MAPPINGS, cuec, scan_id)
-                cuec_kwargs = build_kwargs_from_mapping(CUEC_FIELD_MAPPINGS, cuec, scan_id)
-                # Patch: Ensure cuec_confidence_justification is always a string
-                if "cuec_confidence_justification" in cuec_kwargs and isinstance(cuec_kwargs["cuec_confidence_justification"], list):
-                    cuec_kwargs["cuec_confidence_justification"] = _json.dumps(cuec_kwargs["cuec_confidence_justification"])
-                db.add(CUEC(**cuec_kwargs))
-            except Exception as e:
-                logging.exception(f"Failed to insert cuec: {cuec}\nError: {e}")
-        if cuecs:
-            try:
-                await db.commit()
-            except Exception as e:
-                logging.exception(f"Failed to commit cuecs. Error: {e}")
-            from sqlalchemy.future import select as _select
-            cuecs_db = (await db.execute(_select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
-            log_db_verification("CUEC", cuecs_db)
-        summary["cuecs_count"] = int(len(cuecs))  # type: ignore
-
-        # --- Insert Subservice Orgs ---
-        # Support legacy, nested, and flattened formats
-        suborgs = []
-        if "subservice_orgs_extraction" in result and "subservice_orgs" in result["subservice_orgs_extraction"]:
-            suborgs = result["subservice_orgs_extraction"]["subservice_orgs"]
-        elif "subservice_orgs" in result:
-            suborgs_section = result.get("subservice_orgs", {})
-            if isinstance(suborgs_section, dict):
-                suborgs = suborgs_section.get("third_parties", [])
-            elif isinstance(suborgs_section, list):
-                suborgs = suborgs_section
-        elif "third_parties" in result and isinstance(result["third_parties"], list):
-            suborgs = result["third_parties"]
-        for org in suborgs:
-            try:
-                org_data = org if isinstance(org, dict) else {"name": org}
-                print_entity_mapping("SubserviceOrg", SUBORG_FIELD_MAPPINGS, org_data, scan_id)
-                suborg_kwargs = build_kwargs_from_mapping(SUBORG_FIELD_MAPPINGS, org_data, scan_id)
-                db.add(SubserviceOrg(**suborg_kwargs))
-            except Exception as e:
-                logging.exception(f"Failed to insert subservice org: {org}\nError: {e}")
-        if suborgs:
-            try:
-                await db.commit()
-            except Exception as e:
-                logging.exception(f"Failed to commit subservice orgs. Error: {e}")
-            from sqlalchemy.future import select as _select
-            suborgs_db = (await db.execute(_select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
-            log_db_verification("SubserviceOrg", suborgs_db)
-        summary["subservice_orgs_count"] = int(len(suborgs))
-
-        # --- Insert Product ---
-        product_info = result.get("product")
-        if product_info and isinstance(product_info, dict):
-            try:
-                print_entity_mapping("Product", PRODUCT_FIELD_MAPPINGS, product_info, scan_id)
-                product_kwargs = build_kwargs_from_mapping(PRODUCT_FIELD_MAPPINGS, product_info, scan_id)
-                db.add(Product(**product_kwargs))
-                await db.commit()
-                from sqlalchemy.future import select as _select
-                product_db = (await db.execute(_select(Product).where(Product.scan_id == scan_id))).scalars().all()
-                log_db_verification("Product", product_db)
-                product_name = product_kwargs.get("name")
-                if product_name is not None:
-                    summary["product"] = str(product_name)
-            except Exception as e:
-                logging.exception(f"Failed to insert product: {product_info}\nError: {e}")
-
-        await db.commit()
-        return summary
-    except Exception as e:
-        logging.exception(f"Exception during test_insert_combined_result: {e}")
-        raise
+    combined_path = str(project_root / "data" / "json" / "combined_result.json")
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        summary = await loop.run_in_executor(pool, insert_extracted_data, combined_path)
+    return {"insert_summary": summary}
 
 app.include_router(test_router)
 
@@ -586,16 +136,11 @@ if __name__ == "__main__" and sys.argv[-1] == "test_insert_combined_result":
 
 @app.get("/report/{scan_id}")
 async def get_report(scan_id: int, db=Depends(get_db)):
-    # Fetch scan history (for scan date, filename, and full results JSON)
-    scan_history = await db.execute(select(ScanHistory).where(ScanHistory.id == scan_id))
-    scan_history = scan_history.scalar_one_or_none()
-    if not scan_history:
-        raise HTTPException(status_code=404, detail="Scan not found")
-
-    # Fetch Scan table row for coverage fields
-    from .models import Scan
+    # Fetch scan row for all data
     scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
     scan_row = scan_row.scalar_one_or_none()
+    if not scan_row:
+        raise HTTPException(status_code=404, detail="Scan not found")
 
     # Fetch all related entities
     company = (await db.execute(select(Company).where(Company.scan_id == scan_id))).scalars().first()
@@ -605,8 +150,8 @@ async def get_report(scan_id: int, db=Depends(get_db)):
     product = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
 
     # Extract additional fields from the results JSON if present
-    results = scan_history.results or {}
-    auditor = results.get("auditor", {})
+    results = scan_row.result_json or {}
+    auditor = scan_row.auditor if getattr(scan_row, 'auditor', None) else results.get("auditor", {})
     coverage_period = results.get("coverage_period", {})
     report_date = results.get("report_date", {})
     def extract_bad_chunks(section):
@@ -621,22 +166,46 @@ async def get_report(scan_id: int, db=Depends(get_db)):
 
     # Compose response with all expected fields for frontend tables
     return {
-        "scan_id": scan_history.id,
-        "scan_date": scan_history.timestamp,
-        "filename": scan_history.filename,
+        "scan_id": scan_row.id,
+        "scan_date": scan_row.scan_date,
+        "filename": scan_row.pdf_filename,
         "company": company.name if company else None,
         "parent_company": company.parent_company if company else None,
-        "auditor": auditor,
+        "auditor": getattr(scan_row, "auditor", None) or auditor,
         "coverage_period": coverage_period,
-        "coverage_start": getattr(scan_row, "coverage_start", None) if scan_row else None,
-        "coverage_end": getattr(scan_row, "coverage_end", None) if scan_row else None,
+        "coverage_start": getattr(scan_row, "coverage_start", None),
+        "coverage_end": getattr(scan_row, "coverage_end", None),
         "report_date": report_date,
         "product": product.name if product else None,
+        "gpt_cost": getattr(scan_row, "gpt_cost", None),
+        "gpt_model": getattr(scan_row, "gpt_model", None),
+        "estimated_time_seconds": getattr(scan_row, "estimated_time_seconds", None),
+        "gpt_usage_details": getattr(scan_row, "gpt_usage_details", None),
+        "extracted_text": getattr(scan_row, "extracted_text", None),
+        "pdf_filename": getattr(scan_row, "pdf_filename", None),
+        "pdf_file": getattr(scan_row, "pdf_file", None),
+        "company_id": getattr(scan_row, "company_id", None),
+        "executive_summary_stale": getattr(scan_row, "executive_summary_stale", False),
         "subservice_organizations": [
-            {"name": org.name, "confidence": getattr(org, "confidence", None)} for org in suborgs
+            {
+                "name": org.name,
+                "confidence": getattr(org, "confidence", None),
+                "third_party_description": getattr(org, "third_party_description", None),
+                "third_party_page_ref": getattr(org, "third_party_page_ref", None),
+                "third_party_confidence": getattr(org, "third_party_confidence", None),
+                "distance_from_so_keywords": getattr(org, "distance_from_so_keywords", None),
+                "likely_so": getattr(org, "likely_so", None),
+                "common_so": getattr(org, "common_so", None),
+                "source_context": getattr(org, "source_context", None),
+                "confidence_justification": getattr(org, "confidence_justification", None),
+                "third_party_controls": getattr(org, "third_party_controls", None),
+                "annotation": getattr(org, "annotation", None),
+            }
+            for org in suborgs
         ],
         "cuecs": [
             {
+                "id": getattr(c, "id", None),
                 "cuec_seq": getattr(c, "cuec_seq", None),
                 "cuec_id": getattr(c, "cuec_tsc_id", None),
                 "cuec_tsc_id": getattr(c, "cuec_tsc_id", None),
@@ -656,6 +225,8 @@ async def get_report(scan_id: int, db=Depends(get_db)):
                 "cuec_coso_confidence_pct": getattr(c, "cuec_coso_confidence_pct", None),
                 "cuec_closest_framework": getattr(c, "cuec_closest_framework", None),
                 "cuec_confidence_justification": getattr(c, "cuec_confidence_justification", None),
+                "annotation": getattr(c, "annotation", None),
+                "control_strength": getattr(c, "control_strength", None),
             } for c in cuecs
         ],
         "controls": [
@@ -680,11 +251,15 @@ async def get_report(scan_id: int, db=Depends(get_db)):
                 "control_status",
                 "merged_to_control_id",
                 "control_gpt_opinion",
-                "control_gpt_reasoning"
+                "control_gpt_reasoning",
+                "control_confidence",
+                "confidence_calc",
+                "annotation"
             ]} for ctrl in controls
         ],
         "bad_chunks": bad_chunks,
-        "raw_results": results
+        "raw_results": results,
+        "executive_summary": getattr(scan_row, "executive_summary", None)
     }
 
 
@@ -713,6 +288,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
     import logging
     import asyncio
     import threading
+    import time
+    start_time = time.time()
+    
     # logging.error(f"[DEBUG] [run_analysis_job] Thread: {threading.current_thread().name}, job_id={job_id}")
     def progress_callback(percent, status=None):
         # logging.info(f"[INFO] progress_callback: job_id={job_id}, percent={percent}, status={status}")
@@ -758,12 +336,46 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
             progress_callback=progress_callback,
             checklist_callback=checklist_callback
         )
+        
+        # Add timing and filename metadata to results
+        elapsed_time = time.time() - start_time
+        results["estimated_time_seconds"] = elapsed_time
+        results["pdf_filename"] = filename
         # Check for cancellation after analysis
         job_json = redis_client.get(f"job:{job_id}")
         if job_json and isinstance(job_json, str):
             job = _json.loads(job_json)
             if job.get("cancelled"):
                 raise Exception("Scan cancelled by user")
+        
+        # AUTOMATICALLY INSERT INTO DATABASE when scan completes
+        try:
+            import tempfile
+            # Write result to a temp file and call insert_extracted_data
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
+                _json.dump(results, tmpf, ensure_ascii=False)
+                tmpf.flush()
+                tmp_path = tmpf.name
+            
+            # Insert into database
+            summary = insert_extracted_data(tmp_path)
+            logging.error(f"[SUCCESS] Database insertion completed: {summary}")
+            
+            # Clean up temp file
+            import os
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
+                
+            # Add insertion summary to results
+            results["db_insertion_summary"] = summary
+            
+        except Exception as db_error:
+            logging.error(f"[ERROR] Database insertion failed: {db_error}")
+            # Don't fail the entire scan if DB insertion fails, just log it
+            results["db_insertion_error"] = str(db_error)
+        
         async def _update():
             redis_client = _get_redis()
             logging.error(f"[DEBUG] [result_update:_update] Thread: {threading.current_thread().name}, job_id={job_id}, redis_client={id(redis_client)}")
@@ -772,6 +384,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
             job["result"] = results
             job["done"] = True
             job["error"] = None
+            job["db_saved"] = True  # Mark as already saved to database
             # Preserve progress, status, checklist if present
             job["progress"] = job.get("progress", 100)
             job["status"] = job.get("status", "Complete")
@@ -842,7 +455,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request, Depends, UploadFile, File
 from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError
-from .models import ScanHistory, Setting, Base
+from .models import Setting, Base
 from .database import engine, get_db
 from .analyze import analyze_pdf_file
 import threading
@@ -920,146 +533,21 @@ async def get_job_result(job_id: str, db=Depends(get_db)):
 
     # Always try to persist result to DB if not already saved, even for partial/warning/error results
     if not job.get("db_saved") and job.get("result"):
-        try:
-            import sqlalchemy, datetime
-            import logging
-            from .models import ScanHistory, Company, Control, CUEC, SubserviceOrg, Product
-            result = job.get("result")
-            # Insert ScanHistory
-            # Insert ScanHistory (for record, not for scan_id foreign key)
-            scan_history = ScanHistory(
-                timestamp=datetime.datetime.now(),
-                filename=job.get("filename"),
-                results=result
-            )
-            db.add(scan_history)
-            await db.commit()
-            await db.refresh(scan_history)
-            scan_history_id = scan_history.id
-
-            # Insert Scan (get scan_id for all child entities)
-            from .models import Scan
-            product = None
-            product_info = result.get("product")
-            if product_info and isinstance(product_info, dict):
-                product = product_info.get("product") or product_info.get("name")
-            scan_row = Scan(
-                id=scan_history_id,  # Force Scan.id to match ScanHistory.id
-                company_id=None,
-                product=product,
-                scan_date=scan_history.timestamp,
-                report_date=None,
-                coverage_start=None,
-                coverage_end=None,
-                pdf_file=None,
-                pdf_filename=scan_history.filename,
-                extracted_text=None,
-                result_json=result,
-                gpt_cost=result.get("gpt_cost"),
-                gpt_model=result.get("gpt_model"),
-                estimated_time_seconds=result.get("estimated_time_seconds")
-            )
-            db.add(scan_row)
-            await db.commit()
-            await db.refresh(scan_row)
-            scan_id = scan_row.id
-            logging.error(f"[DB] Inserted Scan id={scan_id}")
-
-            # --- Insert Company ---
-            company_info = result.get("company")
-            if company_info and (company_info.get("company") or company_info.get("name")):
-                db.add(Company(
-                    name=company_info.get("company") or company_info.get("name"),
-                    parent_company=company_info.get("parent_company"),
-                    scan_id=scan_id
-                ))
-                logging.error(f"[DB] Inserted Company for scan_id={scan_id}")
-
-            # --- Insert Controls ---
-            controls_section = result.get("controls", {})
-            logging.error(f"[DB] controls_section: {controls_section}")
-            controls = []
-            if isinstance(controls_section, dict):
-                controls = controls_section.get("controls", [])
-            elif isinstance(controls_section, list):
-                controls = controls_section
-            for ctrl in controls:
-                db.add(Control(
-                    control_id=ctrl.get("control_id"),
-                    control_desc=ctrl.get("control_desc") or ctrl.get("description"),
-                    control_test=ctrl.get("control_test"),
-                    control_test_results=ctrl.get("control_test_results"),
-                    control_page_ref=ctrl.get("control_page_ref"),
-                    control_line_ref=ctrl.get("control_line_ref"),
-                    control_seq=ctrl.get("control_seq"),
-                    control_tsc_id=ctrl.get("control_tsc_id"),
-                    control_coso_id=ctrl.get("control_coso_id"),
-                    control_tsc_similarity=ctrl.get("control_tsc_similarity"),
-                    control_coso_similarity=ctrl.get("control_coso_similarity"),
-                    control_tsc_confidence_pct=ctrl.get("control_tsc_confidence_pct"),
-                    control_coso_confidence_pct=ctrl.get("control_coso_confidence_pct"),
-                    control_closest_framework=ctrl.get("control_closest_framework"),
-                    control_tsc_section=ctrl.get("control_tsc_section"),
-                    control_coso_section=ctrl.get("control_coso_section"),
-                    control_soc_domain=ctrl.get("control_soc_domain"),
-                    control_status=ctrl.get("control_status"),
-                    merged_to_control_id=ctrl.get("merged_to_control_id"),
-                    control_gpt_opinion=ctrl.get("control_gpt_opinion"),
-                    control_gpt_reasoning=ctrl.get("control_gpt_reasoning"),
-                    scan_id=scan_id
-                ))
-            if controls:
-                logging.error(f"[DB] Inserted {len(controls)} Controls for scan_id={scan_id}")
-
-            # --- Insert CUECs ---
-            cuecs_section = result.get("cuecs", {})
-            logging.error(f"[DB] cuecs_section: {cuecs_section}")
-            cuecs = []
-            if isinstance(cuecs_section, dict):
-                cuecs = cuecs_section.get("cuecs", [])
-            elif isinstance(cuecs_section, list):
-                cuecs = cuecs_section
-            for cuec in cuecs:
-                db.add(CUEC(
-                    cuec_id=cuec.get("cuec_id"),
-                    description=cuec.get("cuec_desc") or cuec.get("description"),
-                    scan_id=scan_id
-                ))
-            if cuecs:
-                logging.error(f"[DB] Inserted {len(cuecs)} CUECs for scan_id={scan_id}")
-
-            # --- Insert Subservice Orgs ---
-            suborgs_section = result.get("subservice_orgs", {})
-            logging.error(f"[DB] suborgs_section: {suborgs_section}")
-            suborgs = []
-            # subservice_orgs may be a dict with 'third_parties' or a list
-            if isinstance(suborgs_section, dict):
-                suborgs = suborgs_section.get("third_parties", [])
-            elif isinstance(suborgs_section, list):
-                suborgs = suborgs_section
-            for org in suborgs:
-                db.add(SubserviceOrg(
-                    name=org.get("third_party_name") if isinstance(org, dict) else org,
-                    scan_id=scan_id
-                ))
-            if suborgs:
-                logging.error(f"[DB] Inserted {len(suborgs)} SubserviceOrgs for scan_id={scan_id}")
-
-            # --- Insert Product ---
-            if product_info and isinstance(product_info, dict):
-                db.add(Product(
-                    name=product_info.get("product") or product_info.get("name"),
-                    scan_id=scan_id
-                ))
-                logging.error(f"[DB] Inserted Product for scan_id={scan_id}")
-            await db.commit()
-            job["db_saved"] = True
-            await set_job(job_id, job)
-            logging.error(f"[DB] All entities committed for scan_id={scan_id}")
-        except Exception as db_exc:
-            import logging
-            logging.error(f"DB error persisting job result: {db_exc}\nTraceback: {traceback.format_exc()}")
-
+        import pathlib
+        import tempfile
+        import json as _json
+        # Write result to a temp file and call insert_extracted_data
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
+            _json.dump(job["result"], tmpf, ensure_ascii=False)
+            tmpf.flush()
+            tmp_path = tmpf.name
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
+        job["db_saved"] = True
+        await set_job(job_id, job)
+        # Optionally, you can return the summary in the response
+        return {"insert_summary": summary, "results": job.get("result")}
     # If there was an error, return it along with any partial result
     if job.get("error"):
         return {"error": job.get("error"), "partial_result": job.get("result")}
@@ -1157,13 +645,13 @@ async def update_settings(request: Request, db=Depends(get_db)):
 # History endpoints
 @app.get("/history")
 async def get_history(db=Depends(get_db)):
-    result = await db.execute(select(ScanHistory).order_by(ScanHistory.timestamp.desc()).limit(20))
+    result = await db.execute(select(Scan).order_by(Scan.scan_date.desc()).limit(20))
     history = [
         {
             "id": row.id,
-            "timestamp": row.timestamp.isoformat(),
-            "filename": row.filename,
-            "results": row.results
+            "timestamp": row.scan_date.isoformat() if row.scan_date else None,
+            "filename": row.pdf_filename,
+            "results": row.result_json
         }
         for row in result.scalars()
     ]
@@ -1196,3 +684,393 @@ async def cancel_job(job_id: str):
     job_json["cancelled"] = True
     await set_job(job_id, job_json, redis_client)
     return {"status": "cancelled"}
+
+async def update_scan_gpt_fields(scan_id, gpt_cost=None, gpt_model=None, estimated_time_seconds=None, db=None):
+    if db is None:
+        raise ValueError("A valid async database session (db) must be provided.")
+    from .models import Scan
+    from sqlalchemy.future import select
+    update_fields = {}
+    if gpt_cost is not None:
+        update_fields['gpt_cost'] = gpt_cost
+    if gpt_model is not None:
+        update_fields['gpt_model'] = gpt_model
+    if estimated_time_seconds is not None:
+        update_fields['estimated_time_seconds'] = estimated_time_seconds
+    if not update_fields:
+        return
+    result = await db.execute(select(Scan).where(Scan.id == scan_id))
+    scan_row = result.scalar_one_or_none()
+    if scan_row:
+        for k, v in update_fields.items():
+            setattr(scan_row, k, v)
+        db.add(scan_row)
+        await db.commit()
+
+async def add_gpt_usage(scan_id, model, cost, seconds, db):
+    from .models import Scan
+    from sqlalchemy.future import select
+    result = await db.execute(select(Scan).where(Scan.id == scan_id))
+    scan_row = result.scalar_one_or_none()
+    if scan_row:
+        usage = scan_row.gpt_usage_details or []
+        usage.append({"model": model, "cost": cost, "estimated_time_seconds": seconds})
+        scan_row.gpt_usage_details = usage
+        db.add(scan_row)
+        await db.commit()
+
+def sanitize_orm_kwargs(kwargs):
+    for k, v in kwargs.items():
+        if isinstance(v, (list, dict)):
+            kwargs[k] = _json.dumps(v, ensure_ascii=False)
+    return kwargs
+
+@app.get("/framework_criteria")
+async def get_framework_criteria():
+    # Group TSC by section
+    tsc_by_section = {}
+    for crit in TSC_CRITERIA:
+        section = crit.get("section", "Unspecified")
+        if section not in tsc_by_section:
+            tsc_by_section[section] = []
+        tsc_by_section[section].append({"id": crit["id"], "description": crit["description"]})
+    # Group COSO by component/section
+    coso_by_section = {}
+    for crit in COSO_2013_CRITERIA:
+        section = crit.get("component", "Unspecified")
+        if section not in coso_by_section:
+            coso_by_section[section] = []
+        coso_by_section[section].append({"id": crit["id"], "description": crit["description"]})
+    return {"tsc": tsc_by_section, "coso": coso_by_section}
+
+@app.get("/executive_summary/{scan_id}")
+async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=Depends(get_db)):
+    # Force fresh read from database to avoid caching issues
+    await db.commit()  # Ensure any pending transactions are committed
+    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
+    scan_row = scan_row.scalar_one_or_none()
+    if not scan_row:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    # If summary exists and no force refresh, return it immediately
+    existing_summary = getattr(scan_row, "executive_summary", None)
+    
+    # Check for None, null string, or empty summary
+    if not force_refresh and existing_summary is not None and existing_summary != "null" and existing_summary:
+        # Get the summary BEFORE rollback to avoid session issues
+        summary = existing_summary
+        await db.rollback()  # Clean up any pending transaction
+        
+        # Parse the JSON if it's stored as a string
+        if isinstance(summary, str):
+            import json
+            try:
+                summary = json.loads(summary)
+            except:
+                pass  # If parsing fails, return as-is
+        return {"executive_summary": summary}
+    
+    # Otherwise, generate summary using GPT
+    controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
+    cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
+    suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
+    tsc_ids_found = set([getattr(ctrl, "control_tsc_id", None) for ctrl in controls if getattr(ctrl, "control_tsc_id", None)])
+    coso_ids_found = set([getattr(ctrl, "control_coso_id", None) for ctrl in controls if getattr(ctrl, "control_coso_id", None)])
+    tsc_criteria = TSC_CRITERIA
+    coso_criteria = COSO_2013_CRITERIA
+    tsc_table = [
+        {"id": crit["id"], "description": crit["description"], "section": crit.get("section", "Unspecified"), "present": crit["id"] in tsc_ids_found}
+        for crit in tsc_criteria
+    ]
+    coso_table = [
+        {"id": crit["id"], "description": crit["description"], "section": crit.get("component", "Unspecified"), "present": crit["id"] in coso_ids_found}
+        for crit in coso_criteria
+    ]
+    suborg_count = len([o for o in suborgs if getattr(o, "confidence", 0) >= 0.9])
+    cuec_count = len([c for c in cuecs if getattr(c, "cuec_confidence", 0) >= 0.9])
+    tsc_table_str = "\n".join([f"{row['section']}: {row['id']} - {row['description']} ({'✔' if row['present'] else '✗'})" for row in tsc_table])
+    coso_table_str = "\n".join([f"{row['section']}: {row['id']} - {row['description']} ({'✔' if row['present'] else '✗'})" for row in coso_table])
+    
+    # Format control test results for GPT analysis
+    control_test_results_str = "\n".join([
+        f"Control {getattr(ctrl, 'control_id', 'Unknown')}: {getattr(ctrl, 'control_test_results', '')}"
+        for ctrl in controls
+        if getattr(ctrl, 'control_test_results', '').strip()
+    ])
+    
+    # Format CUEC control strength assessments for high-confidence CUECs (≥90%)
+    high_conf_cuecs_with_strength = [
+        cuec for cuec in cuecs 
+        if getattr(cuec, 'cuec_confidence', 0) >= 0.9 and getattr(cuec, 'control_strength', None)
+    ]
+    cuec_control_strengths_str = "\n".join([
+        f"CUEC {getattr(cuec, 'cuec_tsc_id', 'Unknown')} - {getattr(cuec, 'control_strength', 'Not Set')}: {getattr(cuec, 'cuec_description', '')[:150]}..."
+        for cuec in high_conf_cuecs_with_strength
+    ]) if high_conf_cuecs_with_strength else "No high-confidence CUECs with control strength assessments found."
+    
+    # Get company and product names for prompt
+    company_name = None
+    product_name = None
+    company_row = (await db.execute(select(Company).where(Company.scan_id == scan_id))).scalars().first()
+    if company_row:
+        company_name = getattr(company_row, 'name', '') or ''
+    product_row = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
+    if product_row:
+        product_name = getattr(product_row, 'name', '') or ''
+    prompt = GPT_PROMPTS['executive_summary'].format(
+        suborg_count=suborg_count,
+        cuec_count=cuec_count,
+        tsc_covered=sum(1 for row in tsc_table if row['present']),
+        tsc_total=len(tsc_table),
+        coso_covered=sum(1 for row in coso_table if row['present']),
+        coso_total=len(coso_table),
+        tsc_table=tsc_table_str,
+        coso_table=coso_table_str,
+        control_test_results=control_test_results_str,
+        cuec_control_strengths=cuec_control_strengths_str,
+        company=company_name,
+        product=product_name
+    )
+    import json
+    
+
+    
+    print(f"REGENERATE DEBUG: Generating new executive summary for scan {scan_id}")
+    print(f"REGENERATE DEBUG: Calling GPT to generate real summary")
+    
+    # Log the full prompt being sent to GPT
+    print(f"REGENERATE DEBUG: Executive Summary GPT Prompt:")
+    print("=" * 80)
+    print(prompt)
+    print("=" * 80)
+    
+    # Also log to file for later review (reset file each time)
+    import os
+    from pathlib import Path
+    log_dir = Path(__file__).parent.parent.parent / "data" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "executive_summary_gpt.log"
+    
+    with open(log_file, 'w', encoding='utf-8') as f:
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(f"{'='*80}\n")
+        f.write(f"EXECUTIVE SUMMARY GENERATION - {timestamp}\n")
+        f.write(f"Scan ID: {scan_id}\n")
+        f.write(f"{'='*80}\n")
+        f.write(f"PROMPT:\n{prompt}\n")
+        f.write(f"{'-'*80}\n")
+    
+    # Generate real summary using GPT
+    gpt_summary = gpt_extract(prompt, "executive_summary")
+    
+    print(f"REGENERATE DEBUG: GPT Response received (length: {len(gpt_summary)} chars)")
+    print(f"REGENERATE DEBUG: GPT Response preview: {gpt_summary[:200]}...")
+    
+    # Log the response to file as well
+    with open(log_file, 'a', encoding='utf-8') as f:
+        f.write(f"RESPONSE:\n{gpt_summary}\n")
+        f.write(f"{'='*80}\n")
+    
+    # Parse the GPT response JSON
+    # Clean the GPT response by removing markdown code fences
+    cleaned_response = gpt_summary.strip()
+    if cleaned_response.startswith('```json'):
+        cleaned_response = cleaned_response[7:]  # Remove ```json
+    elif cleaned_response.startswith('```'):
+        cleaned_response = cleaned_response[3:]   # Remove ```
+    if cleaned_response.endswith('```'):
+        cleaned_response = cleaned_response[:-3]  # Remove trailing ```
+    cleaned_response = cleaned_response.strip()
+    
+    try:
+        summary_json = json.loads(cleaned_response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Executive summary is not valid JSON: {e}\nRaw response: {gpt_summary}\nCleaned response: {cleaned_response}")
+    required_keys = ["about_company", "key_findings", "areas_of_concern", "recommendations"]
+    if not all(k in summary_json for k in required_keys):
+        raise HTTPException(status_code=500, detail=f"Executive summary JSON missing required keys. Got: {list(summary_json.keys())}\nRaw response: {gpt_summary}")
+    
+    # Optional keys that don't need validation
+    optional_keys = ["deviations_noted"]
+    
+    # Save the generated summary to the database and reset staleness flag
+    print(f"REGENERATE DEBUG: Saving new executive summary to database for scan {scan_id}")
+    scan_row.executive_summary = summary_json
+    scan_row.executive_summary_stale = False  # Reset staleness flag
+    db.add(scan_row)
+    await db.commit()
+    
+    print(f"REGENERATE DEBUG: Executive summary saved successfully for scan {scan_id}")
+    return {"executive_summary": summary_json}
+
+@app.post("/executive_summary/{scan_id}")
+async def regenerate_executive_summary(scan_id: int, db=Depends(get_db)):
+    """Force regeneration of executive summary by clearing it"""
+    print(f"REGENERATE DEBUG: Received request to regenerate executive summary for scan {scan_id}")
+    
+    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
+    scan_row = scan_row.scalar_one_or_none()
+    if not scan_row:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    print(f"REGENERATE DEBUG: Found scan {scan_id}, clearing existing summary")
+    # Clear existing summary to force regeneration
+    scan_row.executive_summary = None
+    scan_row.executive_summary_stale = True  # Mark as stale
+    db.add(scan_row)
+    await db.commit()
+    
+    print(f"REGENERATE DEBUG: Executive summary cleared for scan {scan_id}")
+    return {"status": "Executive summary cleared. Refresh the page to regenerate."}
+
+@app.patch("/executive_summary/{scan_id}")
+async def patch_executive_summary(scan_id: int, data: dict, db=Depends(get_db)):
+    summary = data.get("executive_summary")
+    if not summary:
+        raise HTTPException(status_code=400, detail="No executive_summary provided")
+    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
+    scan_row = scan_row.scalar_one_or_none()
+    if not scan_row:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    scan_row.executive_summary = summary
+    db.add(scan_row)
+    await db.commit()
+    return {"status": "ok"}
+
+@app.patch("/report/{scan_id}/overview")
+async def patch_report_overview(scan_id: int, data: dict, db=Depends(get_db)):
+    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
+    scan_row = scan_row.scalar_one_or_none()
+    if not scan_row:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    # Update fields if present in data
+    if "company" in data:
+        scan_row.company = data["company"]
+    if "product" in data:
+        scan_row.product = data["product"]
+    if "coverageStart" in data:
+        scan_row.coverage_start = data["coverageStart"]
+    if "coverageEnd" in data:
+        scan_row.coverage_end = data["coverageEnd"]
+    if "reportDate" in data:
+        scan_row.report_date = data["reportDate"]
+    if "auditor" in data:
+        scan_row.auditor = data["auditor"]
+    if "scanDate" in data:
+        scan_row.scan_date = data["scanDate"]
+    db.add(scan_row)
+    await db.commit()
+    return {"status": "ok"}
+
+@app.patch("/report/{scan_id}/controls/{control_id}/annotation")
+async def patch_control_annotation(scan_id: int, control_id: str, data: dict, db=Depends(get_db)):
+    ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.control_id == control_id))).scalar_one_or_none()
+    if not ctrl:
+        raise HTTPException(status_code=404, detail="Control not found")
+    ctrl.annotation = data.get("annotation", "")
+    db.add(ctrl)
+    await db.commit()
+    return {"status": "ok"}
+
+@app.patch("/report/{scan_id}/controls/{control_id}")
+async def patch_control(scan_id: int, control_id: str, data: dict, db=Depends(get_db)):
+    ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.control_id == control_id))).scalar_one_or_none()
+    if not ctrl:
+        raise HTTPException(status_code=404, detail="Control not found")
+    
+    # Update allowed fields
+    if "control_confidence" in data:
+        ctrl.control_confidence = data["control_confidence"]
+    if "confidence_calc" in data:
+        ctrl.confidence_calc = data["confidence_calc"]
+    if "annotation" in data:
+        ctrl.annotation = data["annotation"]
+    
+    # Mark executive summary as stale when control data changes
+    await mark_executive_summary_stale(scan_id, db)
+    
+    db.add(ctrl)
+    await db.commit()
+    return {"status": "ok"}
+
+@app.patch("/report/{scan_id}/cuecs/{cuec_id}/annotation")
+async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: dict, db=Depends(get_db)):
+    cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.cuec_tsc_id == cuec_id))).scalar_one_or_none()
+    if not cuec:
+        raise HTTPException(status_code=404, detail="CUEC not found")
+    cuec.annotation = data.get("annotation", "")
+    db.add(cuec)
+    await db.commit()
+    return {"status": "ok"}
+
+@app.patch("/report/{scan_id}/cuecs/{cuec_id}")
+async def patch_cuec(scan_id: int, cuec_id: int, data: dict, db=Depends(get_db)):
+    print(f"PATCH CUEC DEBUG: scan_id={scan_id}, cuec_id={cuec_id}")
+    print(f"PATCH CUEC DEBUG: received data={data}")
+    
+    cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.id == cuec_id))).scalar_one_or_none()
+    if not cuec:
+        print(f"PATCH CUEC DEBUG: CUEC not found for scan_id={scan_id}, cuec_id={cuec_id}")
+        raise HTTPException(status_code=404, detail="CUEC not found")
+    
+    print(f"PATCH CUEC DEBUG: Found CUEC, current control_strength={cuec.control_strength}")
+    
+    # Update allowed fields
+    updated_fields = []
+    if "cuec_confidence" in data:
+        old_val = cuec.cuec_confidence
+        cuec.cuec_confidence = data["cuec_confidence"]
+        updated_fields.append(f"cuec_confidence: {old_val} -> {cuec.cuec_confidence}")
+    if "cuec_confidence_justification" in data:
+        cuec.cuec_confidence_justification = data["cuec_confidence_justification"]
+        updated_fields.append("cuec_confidence_justification")
+    if "annotation" in data:
+        cuec.annotation = data["annotation"]
+        updated_fields.append("annotation")
+    if "control_strength" in data:
+        old_val = cuec.control_strength
+        cuec.control_strength = data["control_strength"]
+        updated_fields.append(f"control_strength: {old_val} -> {cuec.control_strength}")
+    
+    print(f"PATCH CUEC DEBUG: Updated fields: {updated_fields}")
+    
+    # Mark executive summary as stale when CUEC data changes
+    await mark_executive_summary_stale(scan_id, db)
+    
+    db.add(cuec)
+    await db.commit()
+    
+    print(f"PATCH CUEC DEBUG: Successfully committed changes")
+    return {"status": "ok"}
+
+@app.patch("/report/{scan_id}/suborgs/{suborg_id}/annotation")
+async def patch_suborg_annotation(scan_id: int, suborg_id: int, data: dict, db=Depends(get_db)):
+    suborg = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.id == suborg_id))).scalar_one_or_none()
+    if not suborg:
+        raise HTTPException(status_code=404, detail="SubserviceOrg not found")
+    suborg.annotation = data.get("annotation", "")
+    db.add(suborg)
+    await db.commit()
+    return {"status": "ok"}
+
+@app.patch("/report/{scan_id}/suborgs/{suborg_name}")
+async def patch_suborg(scan_id: int, suborg_name: str, data: dict, db=Depends(get_db)):
+    suborg = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.name == suborg_name))).scalar_one_or_none()
+    if not suborg:
+        raise HTTPException(status_code=404, detail="SubserviceOrg not found")
+    
+    # Update allowed fields
+    if "confidence" in data:
+        suborg.confidence = data["confidence"]
+    if "confidence_justification" in data:
+        suborg.confidence_justification = data["confidence_justification"]
+    if "annotation" in data:
+        suborg.annotation = data["annotation"]
+    
+    # Mark executive summary as stale when subservice org data changes
+    await mark_executive_summary_stale(scan_id, db)
+    
+    db.add(suborg)
+    await db.commit()
+    return {"status": "ok"}
