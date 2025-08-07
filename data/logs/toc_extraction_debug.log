@@ -1,22 +1,15 @@
 Raw TOC text from extract_toc_with_gpt:
-Contents 
-
-2 
-I. 
-Independent Service Auditor’s Report on a SOC 2 Examination......................................................................................................... 3 
-II. 
-Assertion of Adobe Incorporated Management .................................................................................................................................................8 
-III. 
-Adobe Incorporated’s Description of Its Experience Cloud System ............................................................................................... 10 
-IV. 
-Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests ............................................................. 46 
-V. 
-Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent 
-Service Auditor’s Report on a SOC 2 Examination ........................................................................................................................................ 112
+TABLE OF  
+CONTENTS 
+ 
+SECTION 1  INDEPENDENT SERVICE AUDITOR’S  
+REPORT .................................................... 1  
+SECTION 2  MANAGEMENT’S ASSERTION .................. 5  
+SECTION 3  DESCRIPTION OF THE SYSTEM ................ 8  
+SECTION 4  TESTING MATRICES ............................... 26
 
 Parsed TOC headings from extract_toc_headings_and_pages_with_gpt:
-  Heading: 'Independent Service Auditor’s Report on a SOC 2 Examination' | Page: 3 | Raw: 'Independent Service Auditor’s Report on a SOC 2 Examination'
-  Heading: 'Assertion of Adobe Incorporated Management' | Page: 8 | Raw: 'Assertion of Adobe Incorporated Management'
-  Heading: 'Adobe Incorporated’s Description of Its Experience Cloud System' | Page: 10 | Raw: 'Adobe Incorporated’s Description of Its Experience Cloud System'
-  Heading: 'Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests' | Page: 46 | Raw: 'Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests'
-  Heading: 'Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent Service Auditor’s Report on a SOC 2 Examination' | Page: 112 | Raw: 'Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent Service Auditor’s Report on a SOC 2 Examination'
+  Heading: 'SECTION 1  INDEPENDENT SERVICE AUDITOR’S REPORT' | Page: 1 | Raw: 'SECTION 1  INDEPENDENT SERVICE AUDITOR’S REPORT'
+  Heading: 'SECTION 2  MANAGEMENT’S ASSERTION' | Page: 5 | Raw: 'SECTION 2  MANAGEMENT’S ASSERTION'
+  Heading: 'SECTION 3  DESCRIPTION OF THE SYSTEM' | Page: 8 | Raw: 'SECTION 3  DESCRIPTION OF THE SYSTEM'
+  Heading: 'SECTION 4  TESTING MATRICES' | Page: 26 | Raw: 'SECTION 4  TESTING MATRICES'

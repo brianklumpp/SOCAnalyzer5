@@ -1,10 +1,10 @@
 {
-  "auditor": "AICPA",
-  "confidence": 0.85,
-  "source_section": "Independent Service Auditor’s Report on a SOC 2 Examination",
-  "source_page": 5,
+  "auditor": "American Institute of Certified Public Accountants (AICPA)",
+  "confidence": 0.9,
+  "source_section": "SECTION 1  INDEPENDENT SERVICE AUDITOR’S REPORT",
+  "source_page": 4,
   "raw_gpt_responses": [
-    "{\n    \"auditor\": \"AICPA\",\n    \"confidence\": 0.8,\n    \"explanation\": \"The text mentions that the examination was conducted in accordance with attestation standards established by the AICPA.\"\n}"
+    "{\n    \"auditor\": \"American Institute of Certified Public Accountants (AICPA)\",\n    \"confidence\": 0.9,\n    \"explanation\": \"The text mentions that the examination was conducted in accordance with attestation standards established by the AICPA.\"\n}"
   ],
-  "confirmation_explanation": "AICPA is not an auditing firm, but it is a professional organization that sets standards for audits, including SOC audits. Many auditing firms are members of AICPA and follow their guidelines for conducting SOC audits."
+  "confirmation_explanation": "The American Institute of Certified Public Accountants (AICPA) is a professional organization of certified public accountants and they do provide SOC audits through their SOC for Service Organizations program."
 }

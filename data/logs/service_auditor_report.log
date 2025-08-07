@@ -1,11 +1,11 @@
 Section: Service_Auditor_Report
 Found: True
-Best candidate: 4
-Best candidate line: 40
+Best candidate: 
+Best candidate line: 44
 Best candidate page: 4
 Best candidate reason: Exact normalized heading match (multi-line)
 Best confidence: 110
-TOC heading: Independent Service Auditor’s Report on a SOC 2 Examination
-TOC page ref: 3
-TOC raw: Independent Service Auditor’s Report on a SOC 2 Examination
+TOC heading: SECTION 1  INDEPENDENT SERVICE AUDITOR’S REPORT
+TOC page ref: 1
+TOC raw: SECTION 1  INDEPENDENT SERVICE AUDITOR’S REPORT
 ---
