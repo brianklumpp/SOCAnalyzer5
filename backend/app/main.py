@@ -370,6 +370,80 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Report retrieval failed: {e}")
 
 
+# ------------------------------
+# Subservice Orgs PATCH endpoints
+# ------------------------------
+from fastapi import Body
+
+ALLOWED_SUBORG_FIELDS = {
+    "confidence",
+    "confidence_justification",
+    "annotation",
+    "third_party_description",
+    "third_party_page_ref",
+}
+
+def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
+    for k in ALLOWED_SUBORG_FIELDS:
+        if k in data:
+            # Normalize confidence to float if passed as string percentage or whole number
+            if k == "confidence":
+                v = data[k]
+                if isinstance(v, str):
+                    s = v.strip()
+                    try:
+                        if s.endswith('%'):
+                            suborg.confidence = float(s[:-1]) / 100.0
+                        else:
+                            n = float(s)
+                            suborg.confidence = n / 100.0 if n > 1 else n
+                    except Exception:
+                        # Ignore invalid parses
+                        pass
+                elif isinstance(v, (int, float)):
+                    suborg.confidence = (float(v) / 100.0) if float(v) > 1 else float(v)
+                continue
+            setattr(suborg, k, data[k])
+
+@app.patch("/report/{scan_id}/suborgs/id/{suborg_id}")
+async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, Any] = Body(...), db=Depends(get_db)):
+    try:
+        row = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.id == suborg_id, SubserviceOrg.scan_id == scan_id))).scalar_one_or_none()
+        if not row:
+            raise HTTPException(status_code=404, detail="Subservice org not found")
+        _suborg_apply_changes(row, payload or {})
+        await mark_executive_summary_stale(scan_id, db)
+        await db.commit()
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"PATCH suborg by id failed: {e}\n{traceback.format_exc()}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update subservice org")
+
+@app.patch("/report/{scan_id}/suborgs/{suborg_name}")
+async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str, Any] = Body(...), db=Depends(get_db)):
+    try:
+        q = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.name == suborg_name))).scalars().all()
+        if not q:
+            raise HTTPException(status_code=404, detail="Subservice org not found")
+        if len(q) > 1:
+            # Ambiguous legacy route
+            raise HTTPException(status_code=409, detail="Multiple subservice orgs share this name; use ID endpoint")
+        row = q[0]
+        _suborg_apply_changes(row, payload or {})
+        await mark_executive_summary_stale(scan_id, db)
+        await db.commit()
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"PATCH suborg by name failed: {e}\n{traceback.format_exc()}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update subservice org")
+
+
 async def get_job(job_id, redis_client=None):
     if redis_client is None:
         redis_client = _get_redis()
