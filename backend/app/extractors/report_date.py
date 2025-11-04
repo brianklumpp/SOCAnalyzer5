@@ -40,23 +40,23 @@ def extract_report_date():
     section_results = load_json(SECTION_JSON_PATH)
     auditor_section = next((s for s in section_results if s.get('topic') == 'Service_Auditor_Report'), None)
     if not auditor_section:
-        logging.error('No Service_Auditor_Report section found.')
-        return None
-    start_line = auditor_section.get('start_line')
-    end_line = auditor_section.get('end_line')
+        logging.warning('No Service_Auditor_Report section found. Falling back to full-document scan for report date.')
+    start_line = auditor_section.get('start_line') if auditor_section else None
+    end_line = auditor_section.get('end_line') if auditor_section else None
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
     if start_line and end_line:
         text = extract_text_for_lines(txt_lines, start_line, end_line)
-    elif auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
+    elif auditor_section and auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
         start = auditor_section['DOC_page_ref']
         end = auditor_section['end_DOC_page_ref']
         pages = list(range(start, end + 1))
         text = extract_text_for_pages(txt_lines, pages)
     else:
-        logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section.')
-        return None
-    # Get last 5 non-empty lines
+        logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section. Using entire document for GPT-only extraction context.')
+        with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
+            text = f2.read()
+    # Primary path: GPT extraction on last lines of the auditor section
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     last_lines = '\n'.join(lines[-5:])
     prompt = config.REPORT_DATE_EXTRACTION_PROMPT.format(text=last_lines)
@@ -73,26 +73,36 @@ def extract_report_date():
         except Exception as e:
             logging.error(f'Failed to parse GPT response: {response} | Error: {e}')
             result['explanation'] = f'Failed to parse GPT response: {e}'
-        # Fallback: try to extract report_date from raw response if missing
-        if not result['report_date'] and response:
-            date_patterns = [
-                r"['\"]?report_date['\"]?\s*[:=]\s*['\"]([0-9]{4}-[0-9]{2}-[0-9]{2})['\"]",
-                r"([0-9]{2}/[0-9]{2}/[0-9]{4})",
-                r"([0-9]{4}/[0-9]{2}/[0-9]{2})",
-                r"([A-Za-z]+\s+[0-9]{1,2},\s*[0-9]{4})",
-                r"([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})"
-            ]
-            found_date = None
-            for pat in date_patterns:
-                date_match = re.search(pat, response)
-                if date_match:
-                    found_date = date_match.group(1)
-                    break
-            if found_date:
-                result['report_date'] = found_date
-                result['explanation'] = 'Extracted from raw response by regex.'
-            elif not result['explanation']:
-                result['explanation'] = 'Failed to parse GPT response and no date found.'
+    # Fallback: heuristic search (disabled by default – see config.ALLOW_REGEX_FALLBACKS)
+    def _parse_month_date(s):
+        try:
+            import datetime as _dt
+            s = s.strip().replace('\u00a0', ' ')
+            s = re.sub(r"\s+", " ", s)
+            m = re.match(r"([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})", s)
+            if m:
+                month, day, year = m.groups()
+                day = int(day)
+                month_num = _dt.datetime.strptime(month[:3], '%b').month
+                return f"{int(year):04d}-{int(month_num):02d}-{int(day):02d}"
+        except Exception:
+            return None
+        return None
+
+    if not result.get('report_date') and getattr(config, 'ALLOW_REGEX_FALLBACKS', False):
+        # Look farther back than the last 5 lines to be safe
+        tail = '\n'.join(lines[-50:]) if lines else text
+        matches = list(re.finditer(r"([A-Za-z]+\s+\d{1,2},\s+\d{4})", tail))
+        if not matches:
+            # As a broader fallback, scan the whole section text
+            matches = list(re.finditer(r"([A-Za-z]+\s+\d{1,2},\s+\d{4})", text))
+        if matches:
+            last_date_str = matches[-1].group(1)
+            iso = _parse_month_date(last_date_str)
+            if iso:
+                result['report_date'] = iso
+                if not result.get('explanation'):
+                    result['explanation'] = 'Heuristic parse: last date in auditor section'
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     logging.info(f'Report date extraction result: {result}')

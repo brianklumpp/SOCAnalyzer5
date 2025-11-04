@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: socanalyzer-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-socanalyzer}
+      POSTGRES_USER: ${POSTGRES_USER:-socuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-socpass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Optional: expose locally
+    # ports:
+    #   - "5432:5432"
+  redis:
+    image: redis:7-alpine
+    container_name: socanalyzer-redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: socanalyzer-backend
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      RUN_MIGRATIONS_ON_START: "true"
+      # Force container to use internal postgres hostname, ignoring host .env overrides
+      POSTGRES_DB: ${POSTGRES_DB:-socanalyzer}
+      POSTGRES_USER: ${POSTGRES_USER:-socuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-socpass}
+      DATABASE_URL_ASYNC: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Ensure TLS uses mounted cert bundle, not a Windows path
+      DATAIKU_VERIFY_SSL: ${DATAIKU_VERIFY_SSL:-true}
+      DATAIKU_CA_BUNDLE: /certs/corp-ca-bundle.pem
+      REQUESTS_CA_BUNDLE: /certs/corp-ca-bundle.pem
+      # Logging level and access log suppression
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      EXCLUDE_ACCESS_LOG_PATHS: ${EXCLUDE_ACCESS_LOG_PATHS:-/analyze/status}
+      LLM_PROVIDER: ${LLM_PROVIDER:-dataiku_dss}
+      DATAIKU_DSS_HOST: ${DATAIKU_DSS_HOST}
+      DATAIKU_DSS_API_KEY: ${DATAIKU_DSS_API_KEY}
+      DATAIKU_DSS_PROJECT: ${DATAIKU_DSS_PROJECT:-SOLIDIGM_GPT_API_ACCESS}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-ada-002}
+      CONTROL_EMBEDDING_MAPPING_ENABLED: ${CONTROL_EMBEDDING_MAPPING_ENABLED:-true}
+      SOCANALYZER_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./certs:/certs:ro
+      - ./backend/alembic.ini:/app/backend/alembic.ini:ro
+      - ./backend/alembic:/app/backend/alembic
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: socanalyzer-frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
+
+

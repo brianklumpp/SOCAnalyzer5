@@ -458,6 +458,10 @@ def fuzzy_match(a, b):
 
 
 def map_control_to_frameworks(control_desc, tsc_criteria, coso_criteria):
+    from ..config import CONTROL_EMBEDDING_MAPPING_ENABLED
+    if not CONTROL_EMBEDDING_MAPPING_ENABLED:
+        logging.info("Embedding-based framework mapping disabled by config. Skipping.")
+        return None, None, -1, -1
     if not tsc_criteria:
         logging.error("TSC criteria list is empty! Cannot map control to TSC framework.")
     if not coso_criteria:
@@ -505,17 +509,27 @@ def get_openai_embedding(text):
     global _embedding_cache
     if text in _embedding_cache:
         return _embedding_cache[text]
+    from ..config import EMBEDDING_PROVIDER, OPENAI_EMBEDDING_MODEL
+    if EMBEDDING_PROVIDER != 'openai':
+        raise RuntimeError('Embedding provider set to non-openai but not implemented yet. Set EMBEDDING_PROVIDER=openai or provide Dataiku embedding endpoint.')
     headers = {
         'Authorization': f'Bearer {os.getenv("OPENAI_API_KEY")}',
         'Content-Type': 'application/json',
     }
     data = {
         'input': text,
-        'model': getattr(config, 'OPENAI_EMBEDDING_MODEL', 'text-embedding-ada-002'),
+        'model': OPENAI_EMBEDDING_MODEL,
     }
+    import certifi
     for attempt in range(3):
         try:
-            resp = requests.post('https://api.openai.com/v1/embeddings', headers=headers, json=data)
+            resp = requests.post(
+                'https://api.openai.com/v1/embeddings',
+                headers=headers,
+                json=data,
+                timeout=20,
+                verify=certifi.where()
+            )
             resp.raise_for_status()
             embedding = resp.json()['data'][0]['embedding']
             _embedding_cache[text] = embedding

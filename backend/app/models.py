@@ -42,6 +42,8 @@ class Control(Base):
     control_desc = Column(Text)
     control_test = Column(Text)
     control_test_results = Column(Text)
+    has_deviation = Column(Boolean)
+    deviation_desc = Column(Text)
     control_page_ref = Column(Integer)
     control_line_ref = Column(Integer)
     control_seq = Column(Integer)

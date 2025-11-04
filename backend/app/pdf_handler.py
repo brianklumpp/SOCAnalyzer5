@@ -2,7 +2,6 @@
 import os
 import re
 import collections
-import openai
 from dotenv import load_dotenv
 import pathlib
 import sys
@@ -13,32 +12,25 @@ from . import config
 from .config import (
     SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE, GPT_PROMPTS, SECTION_TOPICS, WATERMARK_PATTERNS, REGEX_PATTERNS,
     PRIORITY_KEYWORDS_MANAGEMENT_ASSERTION, PRIORITY_KEYWORDS_SERVICE_AUDITOR_REPORT, PRIORITY_KEYWORDS_DESCRIPTION_OF_SYSTEM, PRIORITY_KEYWORDS_CONTROL_DESCRIPTIONS,
-    DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P
+    DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, LLM_PROVIDER
 )
-from .gpt_client import run_gpt_inquiry, load_api_key
+from .gpt_client import run_gpt_inquiry, gpt_extract
 import argparse
 
 def load_api_key():
+    """Deprecated: direct OpenAI key loading is no longer used for GPT calls.
+    Retained for backward compatibility with any external imports."""
     load_dotenv()
-    api_key = os.getenv('OPENAI_API_KEY')
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY not found in .env file.")
-    return api_key
+    return os.getenv('OPENAI_API_KEY')
 
 def get_section_positions(text, model="gpt-3.5-turbo", temperature=0, top_p=1):
+    """Use the configured provider (Dataiku by default) to estimate section positions."""
     prompt = GPT_PROMPTS['section_detection'].format(
         section_keys=list(SECTION_TOPICS.keys()),
         text=text[:20000]
     )
-    api_key = load_api_key()
-    openai.api_key = api_key
-    response = openai.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        top_p=top_p
-    )
-    return response.choices[0].message.content
+    # Route through provider adapter (no direct OpenAI calls)
+    return gpt_extract(prompt, 'section_detection')
 
 def is_watermark(line):
     for pat in WATERMARK_PATTERNS:
@@ -116,26 +108,28 @@ def collapse_extra_blank_lines(text, max_blank_lines=2):
     return re.sub(pattern, replacement, text)
 
 def extract_toc_with_gpt(text, model="gpt-3.5-turbo", temperature=0.0, top_p=1.0):
-    """
-    Use GPT to extract the Table of Contents section from the first part of the report text.
-    Returns the TOC as plain text, or 'TOC NOT FOUND'.
-    """
+    """Use the configured provider to extract the TOC text. Never raises; returns '' on error."""
     prompt = GPT_PROMPTS['extract_toc'].format(text=text)
-    api_key = load_api_key()
-    openai.api_key = api_key
-    response = openai.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        top_p=top_p
-    )
-    content = response.choices[0].message.content
-    # --- Debug: Log raw GPT response for TOC extraction ---
-    gpt_raw_log_path = str(pathlib.Path(__file__).resolve().parents[2] / 'data/logs/toc_gpt_raw_response.log')
-    with open(gpt_raw_log_path, 'w', encoding='utf-8') as gpt_log:
-        gpt_log.write('Raw GPT Response from extract_toc_with_gpt:\n')
-        gpt_log.write(str(response) + '\n')
-    return content.strip() if content else ""
+    try:
+        content = gpt_extract(prompt, 'extract_toc') or ""
+        # --- Debug: Log raw GPT content for TOC extraction ---
+        gpt_raw_log_path = str(pathlib.Path(__file__).resolve().parents[2] / 'data/logs/toc_gpt_raw_response.log')
+        with open(gpt_raw_log_path, 'w', encoding='utf-8') as gpt_log:
+            gpt_log.write('Raw GPT Content from extract_toc_with_gpt (provider=' + str(LLM_PROVIDER) + '):\n')
+            try:
+                gpt_log.write(content + '\n')
+            except Exception:
+                gpt_log.write('<non-text content>\n')
+        return content.strip()
+    except Exception as e:
+        # Log and gracefully fall back to heuristic-only path
+        try:
+            err_log_path = str(pathlib.Path(__file__).resolve().parents[2] / 'data/logs/backend_errors.log')
+            with open(err_log_path, 'a', encoding='utf-8') as logf:
+                logf.write(f"\n[extract_toc_with_gpt] GPT call failed: {e}\n")
+        except Exception:
+            pass
+        return ""
 
 def is_incomplete_sentence(line):
     # Heuristic: incomplete if no period, question, or exclamation at end, and not too short
@@ -155,24 +149,16 @@ def is_line_isolated(line, text):
     return False
 
 def gpt_validate_section_heading(line, context, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P):
-    """
-    Use GPT to validate if a line (with context) looks like a section heading, using the prompt from config.py and gpt_client.py utilities.
-    Returns (is_heading: bool, gpt_response: str)
-    """
-    prompt_template = GPT_PROMPTS['section_heading_validation']
-    prompt = prompt_template.format(text=context, line=line)
-    api_key = load_api_key()
-    openai.api_key = api_key
-    response = openai.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        top_p=top_p
-    )
-    content = response.choices[0].message.content if response.choices[0].message.content else ""
-    content = content.strip()
-    is_heading = content.lower().startswith('yes')
-    return is_heading, content
+    """Use the configured provider to validate section headings. Returns (is_heading, response_text)."""
+    prompt = GPT_PROMPTS['section_heading_validation'].format(text=context, line=line)
+    try:
+        content = gpt_extract(prompt, 'section_heading_validation') or ""
+        content = content.strip()
+        is_heading = content.lower().startswith('yes')
+        return is_heading, content
+    except Exception as e:
+        # Fallback: rely on heuristics only
+        return False, f"gpt_error:{e}"
 
 def chunk_lines(lines, chunk_size=100, overlap=50):
     """Yield (start_line, chunk_lines) for overlapping line chunks."""
@@ -784,28 +770,24 @@ def extract_toc_headings_and_pages(toc_lines):
     return results
 
 def extract_toc_headings_and_pages_with_gpt(toc_text, model='gpt-3.5-turbo', temperature=0.0, top_p=0.0):
-    """
-    Use GPT to extract (heading, page_ref) pairs from the TOC text.
-    Returns a list of (heading, page_ref, raw) tuples.
-    """
-    import openai, json
+    """Use the configured provider to extract (heading, page_ref) pairs from TOC text."""
     prompt = GPT_PROMPTS['extract_toc_headings_and_pages'].format(toc_text=toc_text)
-    api_key = load_api_key()
-    openai.api_key = api_key
-    response = openai.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        top_p=top_p
-    )
-    content = response.choices[0].message.content if response.choices[0].message.content else "[]"
     try:
-        toc_list = json.loads(content)
-        results = [(entry['heading'], entry['page'], entry['heading']) for entry in toc_list if 'heading' in entry and 'page' in entry]
-        return results
+        content = gpt_extract(prompt, 'extract_toc_headings_and_pages') or "[]"
+        try:
+            toc_list = json.loads(content)
+            results = [(entry.get('heading'), entry.get('page'), entry.get('heading')) for entry in toc_list if isinstance(entry, dict)]
+            # Filter out entries without heading
+            return [(h, p, r) for (h, p, r) in results if h]
+        except Exception:
+            return []
     except Exception:
-        # Fallback: return nothing if GPT output is not valid JSON
-        return []
+        # Graceful fallback to regex-only extraction if GPT fails
+        try:
+            toc_lines = [line.strip() for line in toc_text.splitlines() if line.strip()]
+            return extract_toc_headings_and_pages(toc_lines)
+        except Exception:
+            return []
 
 def detect_toc_page(lines, max_pages=5, gpt_fallback_fn=None, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P):
     """
@@ -862,7 +844,7 @@ def detect_toc_page(lines, max_pages=5, gpt_fallback_fn=None, model=DEFAULT_GPT_
     return 1, 'not-found'
 
 def gpt_find_toc_page(lines, max_pages, model, temperature, top_p):
-    """Use GPT to find the TOC page in the first `max_pages` pages."""
+    """Use the configured provider to find the TOC page in the first `max_pages` pages."""
     text = []
     page_count = 0
     for line in lines:
@@ -871,21 +853,24 @@ def gpt_find_toc_page(lines, max_pages, model, temperature, top_p):
             if page_count > max_pages:
                 break
         text.append(line)
-    prompt = GPT_PROMPTS['find_toc_page'].format(text='\n'.join(text))
-    api_key = load_api_key()
-    openai.api_key = api_key
-    response = openai.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        top_p=top_p
-    )
-    content = response.choices[0].message.content if response.choices[0].message.content else ""
-    # Try to extract a page number from the response
-    m = re.search(r'page\s*(\d+)', content, re.IGNORECASE)
-    if m:
-        return int(m.group(1))
-    return None
+    # Build a self-contained prompt (avoid missing config entries)
+    prompt = (
+        "You are analyzing the first {max_pages} pages of a report. "
+        "Determine the page number (1-based) where the Table of Contents begins. "
+        "Respond ONLY with a single integer (the page number). If not found, respond with 'null'.\n\n"
+        "Text:\n{body}"
+    ).format(max_pages=max_pages, body='\n'.join(text))
+    try:
+        content = (gpt_extract(prompt, 'find_toc_page') or "").strip()
+        # Accept plain integer or JSON null-like
+        if content.lower() == 'null':
+            return None
+        m = re.search(r"\d+", content)
+        if m:
+            return int(m.group(0))
+        return None
+    except Exception:
+        return None
 
 def is_toc_entry_start(line):
     """Heuristic: Returns True if the line looks like the start of a new TOC entry (main or sub)."""

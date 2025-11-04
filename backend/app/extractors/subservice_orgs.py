@@ -194,6 +194,27 @@ def extract_subservice_orgs():
         else:
             seen[key] = org
 
+    # Minimal heuristic fallback (disabled by default – see config.ALLOW_REGEX_FALLBACKS)
+    if not seen and getattr(config, 'ALLOW_REGEX_FALLBACKS', False):
+        try:
+            candidates = [
+                ('Amazon Web Services', r"\b(?:Amazon Web Services|\bAWS\b)\b"),
+                ('Microsoft Azure', r"\b(?:Microsoft Azure|\bAzure\b)\b"),
+                ('Google Cloud Platform', r"\b(?:Google Cloud Platform|Google Cloud|\bGCP\b)\b"),
+                ('Salesforce', r"\bSalesforce\b"),
+            ]
+            for canon, pat in candidates:
+                if re.search(pat, text, flags=re.IGNORECASE):
+                    seen[canon.lower()] = {
+                        'third_party_name': canon,
+                        'third_party_description': 'Identified via heuristic from Description of System',
+                        'org_source': 'heuristic_fallback',
+                        'third_party_confidence': 0.6,
+                        'confidence_justification': ['+0.6: appears in system description; GPT returned no results']
+                    }
+        except Exception:
+            pass
+
     # --- POST-EXTRACTION ANALYSIS: Rescue Check for Bad Chunks ---
     def fuzzy_match(a, b):
         return SequenceMatcher(None, a, b).ratio()

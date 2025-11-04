@@ -77,8 +77,7 @@ def extract_auditor_from_report():
     # Find the first Service_Auditor_Report section
     auditor_section = next((s for s in section_results if s.get('topic') == 'Service_Auditor_Report'), None)
     if not auditor_section:
-        logging.error('No Service_Auditor_Report section found.')
-        return None
+        logging.warning('No Service_Auditor_Report section found. Falling back to full-document scan.')
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
     text_sections = [extract_title_page(txt_lines)]
@@ -95,7 +94,14 @@ def extract_auditor_from_report():
             pages = sorted(pages)
             text_sections.append(extract_text_for_pages(txt_lines, pages))
         else:
-            logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section.')
+            logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section. Using full document text for context.')
+            # Fallback to full document text
+            with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
+                text_sections.append(f2.read())
+    else:
+        # No section info: use entire document text
+        with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
+            text_sections.append(f2.read())
     text = '\n'.join(text_sections)
     # Chunk text
     chunks = chunk_text(text)
@@ -126,8 +132,8 @@ def extract_auditor_from_report():
     result = {
         'auditor': auditor,
         'confidence': confidence,
-        'source_section': auditor_section.get('clean_heading'),
-        'source_page': auditor_section.get('DOC_page_ref'),
+        'source_section': (auditor_section.get('clean_heading') if isinstance(auditor_section, dict) else None),
+        'source_page': (auditor_section.get('DOC_page_ref') if isinstance(auditor_section, dict) else None),
         'raw_gpt_responses': responses
     }
     # Follow-up confirmation if an auditor was found
@@ -146,30 +152,7 @@ def extract_auditor_from_report():
             result['confidence'] = 0
             result['confirmation_explanation'] = confirm_explanation
             logging.info(f"Auditor confirmation failed. Explanation: {confirm_explanation}")
-    # Fallback: search for known auditor firms if GPT failed
-    if not result['auditor']:
-        # First, try fallback on the section text
-        fallback_candidate = fallback_auditor_search(text)
-        if not fallback_candidate:
-            # If still not found, search the entire document
-            with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
-                full_doc_text = f.read()
-            fallback_candidate = fallback_auditor_search(full_doc_text)
-            logging.info("Fallback: Searched full document for auditor firm.")
-        if fallback_candidate:
-            logging.info(f"Fallback auditor candidate found: {fallback_candidate}")
-            # Confirm with GPT
-            confirmed_auditor, confirm_confidence, confirm_explanation = confirm_auditor_with_followup(fallback_candidate, text)
-            if confirmed_auditor:
-                result['auditor'] = confirmed_auditor
-                result['confidence'] = confirm_confidence
-                result['confirmation_explanation'] = f"Fallback: {confirm_explanation}"
-            else:
-                result['auditor'] = None
-                result['confidence'] = 0
-                result['confirmation_explanation'] = f"Fallback failed: {confirm_explanation}"
-        else:
-            logging.info("No fallback auditor candidate found.")
+    # GPT-only approach: if GPT didn't return an auditor, leave it as None
     save_json(result, AUDITOR_JSON_PATH)
     logging.info(f'Auditor extraction result: {result}')
     return result

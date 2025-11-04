@@ -8,6 +8,80 @@ DATABASE_URL = os.getenv("DATABASE_URL_ASYNC")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable is not set. Please set it in your .env file.")
 
+# Schema/migration startup behavior
+AUTO_CREATE_SCHEMA = os.getenv("AUTO_CREATE_SCHEMA", "true").lower() == "true"
+RUN_MIGRATIONS_ON_START = os.getenv("RUN_MIGRATIONS_ON_START", "false").lower() == "true"
+ALEMBIC_INI_PATH = os.getenv("ALEMBIC_INI_PATH", str(pathlib.Path(__file__).resolve().parents[1] / 'alembic.ini'))
+
+# Logging configuration
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+EXCLUDE_ACCESS_LOG_PATHS = [s.strip() for s in os.getenv("EXCLUDE_ACCESS_LOG_PATHS", "/analyze/status").split(",") if s.strip()]
+
+# --- GPT logging controls (opt-in, safe by default) ---
+# Enable a unified JSONL log of GPT requests/responses at data/logs/gpt_calls.log
+LOG_GPT_REQUESTS = os.getenv("LOG_GPT_REQUESTS", "false").lower() == "true"
+# When enabled, include a truncated prompt excerpt; set to false to log only sizes/metadata
+LOG_GPT_PROMPTS = os.getenv("LOG_GPT_PROMPTS", "false").lower() == "true"
+# Max characters to include from prompt/response excerpts in logs
+LOG_GPT_MAX_PROMPT_CHARS = int(os.getenv("LOG_GPT_MAX_PROMPT_CHARS", "800"))
+LOG_GPT_MAX_RESPONSE_CHARS = int(os.getenv("LOG_GPT_MAX_RESPONSE_CHARS", "800"))
+# Sample rate for logging (0.0–1.0). 1.0 = log all calls; 0.1 = ~10% of calls
+LOG_GPT_SAMPLE_RATE = float(os.getenv("LOG_GPT_SAMPLE_RATE", "1.0"))
+GPT_CALLS_LOG_PATH = str((pathlib.Path(__file__).resolve().parents[2] / 'data/logs/gpt_calls.log').resolve())
+
+# --- Project policy toggles ---
+# IMPORTANT: Per project policy, DO NOT use regex/text-heuristic fallbacks to produce outputs when GPT fails.
+# Keep extractors GPT-driven. If a fallback is ever needed for debugging, flip this flag to true temporarily.
+ALLOW_REGEX_FALLBACKS = os.getenv("ALLOW_REGEX_FALLBACKS", "false").lower() == "true"
+
+# --- LLM Provider Selection ---
+# Provider options: 'openai' | 'azure' | 'dataiku_apinode' | 'dataiku_dss'
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "dataiku_dss")
+
+# Azure OpenAI (optional if using Azure directly)
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")  # e.g., https://<resource>.openai.azure.com
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+AZURE_OPENAI_DEPLOYMENTS = {
+    # Map logical model names to Azure deployment names if used directly
+    "gpt-4o": os.getenv("AZURE_OPENAI_DEPLOYMENT_GPT4O"),
+    "gpt-3.5-turbo": os.getenv("AZURE_OPENAI_DEPLOYMENT_GPT35"),
+}
+
+# Dataiku API Node configuration (recommended for corp environment)
+DATAIKU_API_BASE = os.getenv("DATAIKU_API_BASE")  # e.g., https://dataiku-dss.corp.nandps.com/public/api/v1
+DATAIKU_API_KEY = os.getenv("DATAIKU_API_KEY")
+DATAIKU_SERVICE_ID = os.getenv("DATAIKU_SERVICE_ID", "SOLIDIGM_GPT_API_ACCESS")
+DATAIKU_ENDPOINT_ID = os.getenv("DATAIKU_ENDPOINT_ID", "chat-completions")
+DATAIKU_TIMEOUT = float(os.getenv("DATAIKU_TIMEOUT", "120"))
+DATAIKU_VERIFY_SSL = os.getenv("DATAIKU_VERIFY_SSL", "true").lower() == "true"
+DATAIKU_CA_BUNDLE = os.getenv("DATAIKU_CA_BUNDLE")  # optional custom CA path
+
+# Dataiku DSS (Python client) configuration
+DATAIKU_DSS_HOST = os.getenv("DATAIKU_DSS_HOST")  # e.g., https://dataiku-dss.corp.nandps.com/
+DATAIKU_DSS_API_KEY = os.getenv("DATAIKU_DSS_API_KEY")
+DATAIKU_DSS_PROJECT = os.getenv("DATAIKU_DSS_PROJECT", "SOLIDIGM_GPT_API_ACCESS")
+
+# Dataiku LLM Catalog mapping: map our logical model names to catalog llm_id values
+# Defaults align to the catalog list provided; can be overridden via environment variables
+DATAIKU_CATALOG_MAP = {
+    # High-quality model mapping
+    "gpt-4o": os.getenv("DATAIKU_LLM_GPT4O", "azureopenai:Azure-OpenAI-Prod:gpt-4o"),
+    # Cost-effective/default fallback for 3.5 usage
+    "gpt-3.5-turbo": os.getenv("DATAIKU_LLM_GPT35", "azureopenai:Azure-OpenAI-Prod:gpt-4o-mini"),
+    # Optional additional mappings (available in catalog)
+    "gpt-4.1": os.getenv("DATAIKU_LLM_GPT41", "azureopenai:Azure-OpenAI-Prod-4-1:gpt-4.1"),
+    "gpt-4.1-mini": os.getenv("DATAIKU_LLM_GPT41_MINI", "azureopenai:Azure-OpenAI-Prod-4-1:gpt-4.1-mini"),
+    "o4-mini": os.getenv("DATAIKU_LLM_O4_MINI", "azureopenai:Azure-OpenAI-Prod-4-1:o4-mini"),
+}
+
+# Embedding provider control
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")  # 'openai' | 'dataiku' (future)
+OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
+
+# Toggle for control/CUEC framework mapping that requires embeddings
+CONTROL_EMBEDDING_MAPPING_ENABLED = os.getenv("CONTROL_EMBEDDING_MAPPING_ENABLED", "true").lower() == "true"
+
 # --- Redis Configuration ---
 REDIS_URL = os.environ.get("SOCANALYZER_REDIS_URL", "redis://localhost:6379/0")
 
@@ -73,11 +147,42 @@ GPT_PROMPTS = {
     ),
     'executive_summary': (
         "You are a risk analyst for a company. Given the following SOC 2 report statistics and coverage tables, generate an executive summary as a valid JSON object. For the 'about_company' section, use the provided company and product names: company = '{company}', product = '{product}' and give a grade of A, B, C, or D. Always provide plausible, relevant content—never say 'not provided', 'not available', or similar. Do not repeat the input stats or tables in your output.\n\n"
-        "CRITICAL: Analyze the control test results below to identify meaningful deviations. Ignore standard passing language like 'No deviations noted', 'No exceptions noted', 'No gaps noted', etc. Only flag actual issues, exceptions, deficiencies, or problems. Extract the meaningful deviation details and include them in a 'deviations_noted' section.\n\n"
-        "IMPORTANT: Consider the CUEC control strength assessments below when forming key findings and recommendations. These represent our (the company's) responsibilities that have been evaluated for our implementation strength.  Include at least one CUEC in the key findings and recommendations.\n\n"
-        "Respond ONLY with a valid JSON object with these exact keys and types, and no extra text.\n"
-        "{{\n  \"about_company\": <string, a brief narrative about the company '{company}', risk profile with grade A, B, C, or D, and product '{product}' in scope>,\n  \"key_findings\": [<string, one to two sentences per bullet>],\n  \"areas_of_concern\": [<string, one to two sentences per bullet>],\n  \"recommendations\": [<string, one to two sentences per bullet>],\n  \"deviations_noted\": [{{\n    \"control_id\": <string>,\n    \"deviation_summary\": <string, extract only the meaningful issue/exception text, excluding standard passing language>\n  }}]\n}}\n\n"
-        "SOC 2 Executive Summary Stats:\n- Subservice orgs: {suborg_count}\n- CUECs: {cuec_count}\n- TSC coverage: {tsc_covered} of {tsc_total}\n- COSO coverage: {coso_covered} of {coso_total}\n\nTSC Table (by section):\n{tsc_table}\n\nCOSO Table (by section):\n{coso_table}\n\nControl Test Results for Deviation Analysis:\n{control_test_results}\n\nCUEC Control Strength Assessments (High-Confidence CUECs ≥90%):\n{cuec_control_strengths}\n"
+        "Deviation identification policy:\n"
+        "- Use BOTH inputs to identify deficiencies: (1) the 'Detected Deviations' list derived from control-level fields, and (2) the 'Control Test Results' text.\n"
+        "- Only include true deviations/exceptions/problems. Ignore passing language such as 'No deviations noted' or similar.\n"
+        "- Under no circumstances treat coverage gaps or absent sections as deficiencies. Treat them strictly as unknowns (not tested / out of scope).\n\n"
+        "Recommendations policy:\n"
+        "- Recommendations must be customer-actionable. Do NOT suggest changes to the vendor's internal processes that we (the customer) cannot enforce.\n"
+        "- If the auditor identified a deficiency outside the customer's direct control, propose what the customer can do to protect themselves (e.g., compensating controls, monitoring, segmentation, data minimization, additional validations, contractual clauses, SLAs, audit rights).\n"
+        "- Provide up to 3 top risk mitigation recommendations (customer-side technical/operational).\n"
+        "- Provide up to 3 top contract enhancement recommendations (contractual/DPAs/SLAs).\n"
+        "- If the Privacy domain (TSC 'P*') appears to be excluded/not covered, include an appropriate contract enhancement recommending stronger privacy and DPA protections, especially if the vendor likely handles PII based on company/product context.\n\n"
+        "CUEC policy:\n"
+        "- Consider the CUEC control strength assessments when forming findings and recommendations. Include at least one CUEC insight in findings or recommendations when relevant.\n\n"
+        "Respond ONLY with a valid JSON object with these keys and types, and no extra text. Include all keys below.\n"
+        "{{\n"
+        "  \"about_company\": <string, brief narrative about '{company}' and product '{product}' in scope; include grade A/B/C/D>,\n"
+        "  \"key_findings\": [<string, 1–2 sentences each>],\n"
+        "  \"areas_of_concern\": [<string, 1–2 sentences each>],\n"
+        "  \"deviations_noted\": [{{\n"
+        "    \"control_id\": <string>,\n"
+        "    \"deviation_summary\": <string, concise meaningful issue/exception text>\n"
+        "  }}],\n"
+        "  \"unknown_coverage_gaps\": [<string, list notable gaps as 'unknown/not covered/not tested' without implying deficiency>],\n"
+        "  \"recommendations_risk_mitigations\": [<string, up to 3 items, 1–2 sentences each>],\n"
+        "  \"recommendations_contract_enhancements\": [<string, up to 3 items, 1–2 sentences each>],\n"
+        "  \"recommendations\": [<string, union of the two recommendation lists above for backward compatibility>]\n"
+        "}}\n\n"
+        "SOC 2 Executive Summary Stats:\n"
+        "- Subservice orgs: {suborg_count}\n"
+        "- CUECs: {cuec_count}\n"
+        "- TSC coverage: {tsc_covered} of {tsc_total}\n"
+        "- COSO coverage: {coso_covered} of {coso_total}\n\n"
+        "TSC Table (by section):\n{tsc_table}\n\n"
+        "COSO Table (by section):\n{coso_table}\n\n"
+        "Detected Deviations (from control-level fields; high-confidence only):\n{detected_deviations}\n\n"
+        "Control Test Results (high-confidence controls) for deviation analysis:\n{control_test_results}\n\n"
+        "CUEC Control Strength Assessments (High-Confidence CUECs ≥90%):\n{cuec_control_strengths}\n"
     ),
 }
 
@@ -134,6 +239,11 @@ DEFAULT_GPT_MODEL = 'gpt-4o'
 # Default generation parameters
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_TOP_P = 0.0  # Set to 0.0 for maximum determinism and minimal hallucination
+# --- Control extractor consistency tuning ---
+# Reduce variability by disabling aggressive non-control detection and GPT-based next-start verification
+CONTROL_DETECT_NON_CONTROL_CONTENT = False
+CONTROL_VERIFY_NEXT_START_ENABLED = False
+
 
 # --- Advanced GPT Token & Chunk Management ---
 CHARS_PER_TOKEN = 3.5  # Average chars per token for planning purposes
@@ -161,6 +271,11 @@ DESCRIPTION_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.4)  # 40
 SUBSERVICE_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.3)  # 30% of available space
 MAX_CHUNK_SIZE = int(MAX_INPUT_TOKENS * CHARS_PER_TOKEN * 0.8)  # 80% of max input tokens for safety
 
+# Executive Summary input budgeting (character-based) to avoid context overruns
+EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS = int(MAX_INPUT_TOKENS * CHARS_PER_TOKEN * 0.45)  # ~45% of input budget
+EXEC_SUMMARY_PER_CONTROL_MAX_CHARS = 700  # cap per control test_result snippet
+EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS = 60  # up to N non-deviation controls after deviations
+
 # Total Combined Text Limits
 TOTAL_PRIMARY_SIZE = PRIMARY_CHUNK_SIZE * 3  # Allow for multiple primary sections
 TOTAL_DESCRIPTION_SIZE = DESCRIPTION_CHUNK_SIZE * 3  # Allow for multiple description sections
@@ -170,13 +285,13 @@ TEXT_OVERLAP = 1000  # Characters of overlap between chunks for context preserva
 GPT_MODELS = {
     'control_extractor': 'gpt-4o',
     'control_extractor_v2': 'gpt-4o',
-    'company_extractor': 'gpt-3.5-turbo',
-    'auditor_extractor': 'gpt-3.5-turbo',
-    'product_extractor': 'gpt-3.5-turbo',
-    'report_date_extractor': 'gpt-3.5-turbo',
-    'coverage_period_extractor': 'gpt-3.5-turbo',
-    'cuec_extractor': 'gpt-3.5-turbo',
-    'subservice_orgs_extractor': 'gpt-3.5-turbo',
+    'company_extractor': 'gpt-4o',
+    'auditor_extractor': 'gpt-4o',
+    'product_extractor': 'gpt-4o',
+    'report_date_extractor': 'gpt-4o',
+    'coverage_period_extractor': 'gpt-4o',
+    'cuec_extractor': 'gpt-4o',
+    'subservice_orgs_extractor': 'gpt-4o',
     'subservice_orgs_gpt_verify': 'gpt-4o',
     'executive_summary': 'gpt-4o',
 }
@@ -631,11 +746,16 @@ Instructions:
    is a different control, or is a different section of the report.  Do not include anything after this as it will 
    likely be extracted as part of the next chunk of content being processed.
 
-6. Provide the Ending Line Number:
+6. Evaluate Whether There Is a Deviation/Exception:
+    - Based STRICTLY on the extracted control_test_results text, determine if a deviation/exception/problem is present.
+    - Respond with two fields: has_deviation (true/false) and deviation_desc (a short sentence describing the deviation, or empty if none).
+    - Consider language variations and languages other than English; do not infer beyond what is stated in the test results text.
+
+7. Provide the Ending Line Number:
    - After extracting the control information, provide the line number where this control information ends.
    - This will be used to determine the starting position for the next chunk.
 
-7. Provide an Initial Confidence Score and Justification:
+8. Provide an Initial Confidence Score and Justification:
    - Provide a confidence score between 0 and 1 indicating how confident you are that the extracted information represents a control.
    - Include a brief justification for your confidence score, explaining why you believe this is a control.
 
@@ -645,6 +765,8 @@ Return the extracted information in the following JSON format:
     "control_desc": "",
     "control_test": "",
     "control_test_results": "",
+    "has_deviation": false,
+    "deviation_desc": "",
     "additional_references": [],
     "end_line": 0,
     "control_confidence": 0.0,
@@ -686,6 +808,32 @@ SEGMENT_CLASSIFICATION_PROMPT = (
     "If no segments are found, return an empty array."
 )
 
+# Minimal prompt to evaluate deviation strictly from control_test_results
+DEVIATION_EVAL_PROMPT = """
+You are given the context of a SOC 2 control. Decide whether a deviation/exception/problem is explicitly stated in the control_test_results.
+
+Rules:
+- Use ONLY the control_test_results text. Do not infer beyond it.
+- If the text states there were no deviations/exceptions/issues (e.g., "No deviations noted"), set has_deviation to false and deviation_desc to an empty string.
+- Only set has_deviation to true if the text clearly reports a deviation/exception/problem; then set deviation_desc to a short, direct summary copied or paraphrased from the text.
+- If unclear, set has_deviation to false.
+
+Return ONLY this JSON object (no extra text):
+{
+  "has_deviation": <true|false>,
+  "deviation_desc": "<string if has_deviation is true, else empty>"
+}
+
+Context:
+Control ID: {control_id}
+Control Description: {control_desc}
+Control Test: {control_test}
+control_test_results:
+<<<
+{control_test_results}
+>>>
+"""
+
 # Model-specific settings
 GPT_MODEL_SETTINGS = {
     'gpt-4o': {
@@ -719,10 +867,21 @@ CONTROL_TEST_WORDS = [
     "evaluated"
 ]
 
+# --- Control Extractor v2 Chunking/Overlap Settings ---
+# Lines per chunk and overlap/tail-guard lines to reduce control splits across chunks
+CONTROL_LINES_PER_CHUNK = 160
+CONTROL_CHUNK_OVERLAP_LINES = 40
+CONTROL_CHUNK_TAIL_GUARD_LINES = 8
+
+# --- Deviation Detection Heuristics (English-only) ---
+# Positive signals indicate an exception/deviation; negatives indicate clean results
+# These are regex patterns (case-insensitive). Customize as needed.
+## Removed: deviation regex patterns (heuristics no longer used)
+
 TABLE_FIELD_MAP = {
     "company": ["name", "parent_company", "confidence", "scan_id"],
     "control": [
-        "control_id", "control_desc", "control_test", "control_test_results", "control_page_ref", "control_line_ref", "control_seq",
+        "control_id", "control_desc", "control_test", "control_test_results", "has_deviation", "deviation_desc", "control_page_ref", "control_line_ref", "control_seq",
         "control_tsc_id", "control_coso_id", "control_tsc_similarity", "control_coso_similarity", "control_tsc_confidence_pct",
         "control_coso_confidence_pct", "control_closest_framework", "control_tsc_section", "control_coso_section", "control_soc_domain",
         "control_status", "merged_to_control_id", "control_gpt_opinion", "control_gpt_reasoning", "control_confidence", "confidence_calc", "scan_id"

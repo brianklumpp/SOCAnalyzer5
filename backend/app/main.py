@@ -16,20 +16,45 @@ import redis.asyncio as redis
 import redis as sync_redis
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, UploadFile, File, APIRouter
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Dict, Any
 from sqlalchemy.future import select
+from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.exc import SQLAlchemyError
 from .models import Company, Control, CUEC, SubserviceOrg, Product, Setting, Base
 from .models import Scan
 from .database import engine, get_db
+from .config import AUTO_CREATE_SCHEMA, RUN_MIGRATIONS_ON_START, ALEMBIC_INI_PATH, LOG_LEVEL, EXCLUDE_ACCESS_LOG_PATHS
 from .analyze import analyze_pdf_file
 from .config import REDIS_URL, TSC_CRITERIA, COSO_2013_CRITERIA, GPT_PROMPTS
+from .config import (
+    EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS,
+    EXEC_SUMMARY_PER_CONTROL_MAX_CHARS,
+    EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS,
+)
 from .explicit_sql_insert import insert_extracted_data
 import concurrent.futures
 from .gpt_client import gpt_extract
 
 app = FastAPI()
+
+# Middleware to suppress access logs for noisy polling endpoints
+@app.middleware("http")
+async def suppress_noisy_access_logs(request: Request, call_next):
+    path = request.url.path
+    if any(path.startswith(p) for p in EXCLUDE_ACCESS_LOG_PATHS):
+        # Temporarily set uvicorn access logger to WARNING
+        import logging as _logging
+        access_logger = _logging.getLogger("uvicorn.access")
+        old_level = access_logger.level
+        access_logger.setLevel(_logging.WARNING)
+        try:
+            response = await call_next(request)
+        finally:
+            access_logger.setLevel(old_level)
+        return response
+    return await call_next(request)
 
 # Enable CORS for frontend (move this up to the first app instance)
 app.add_middleware(
@@ -39,6 +64,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure tables exist on startup (useful for dev/docker-compose)
+@app.on_event("startup")
+async def _init_db_on_startup():
+    try:
+        if RUN_MIGRATIONS_ON_START:
+            import subprocess, os
+            # Run alembic upgrade head using configured alembic.ini
+            subprocess.check_call([
+                'alembic', '-c', ALEMBIC_INI_PATH, 'upgrade', 'head'
+            ], cwd=os.path.dirname(ALEMBIC_INI_PATH))
+        elif AUTO_CREATE_SCHEMA:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+    except Exception:
+        # Ignore if migrations handled elsewhere
+        pass
+    # Capture the running event loop for cross-thread scheduling (e.g., WS broadcasts)
+    try:
+        app.state.loop = asyncio.get_event_loop()
+    except Exception:
+        app.state.loop = None
 
 # Helper function to mark executive summary as stale
 async def mark_executive_summary_stale(scan_id: int, db):
@@ -59,7 +106,8 @@ with open(backend_log_path, 'w', encoding='utf-8'):
 # Set up a human-readable log format
 log_format = '\n%(asctime)s | %(levelname)s | %(module)s | %(message)s\n' + ('-'*80)
 root_logger = logging.getLogger()
-root_logger.setLevel(logging.ERROR)
+# Use configured log level
+root_logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 # Remove all handlers first (avoid duplicate logs on reload)
 for handler in root_logger.handlers[:]:
     root_logger.removeHandler(handler)
@@ -93,11 +141,12 @@ def get_section_logger(section_name):
         file_handler = logging.FileHandler(log_path, encoding='utf-8')
         file_handler.setFormatter(logging.Formatter(log_format))
         logger.addHandler(file_handler)
+    logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
     return logger
 
 # Example usage
 management_assertion_logger = get_section_logger('Management_Assertion')
-if management_assertion_logger:
+if management_assertion_logger and logging.getLogger().isEnabledFor(logging.DEBUG):
     management_assertion_logger.info('This is a test log for Management Assertion section.')
 
 # --- TEST: Insert combined_result.json into DB for fast iteration ---
@@ -135,132 +184,190 @@ if __name__ == "__main__" and sys.argv[-1] == "test_insert_combined_result":
 
 
 @app.get("/report/{scan_id}")
-async def get_report(scan_id: int, db=Depends(get_db)):
-    # Fetch scan row for all data
-    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
-    scan_row = scan_row.scalar_one_or_none()
-    if not scan_row:
-        raise HTTPException(status_code=404, detail="Scan not found")
+async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
+    try:
+        logging.error(f"[REPORT] Enter get_report scan_id={scan_id}, diag={diag}")
+        # Fetch scan row for all data
+        scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan_row = scan_row.scalar_one_or_none()
+        if not scan_row:
+            raise HTTPException(status_code=404, detail="Scan not found")
 
-    # Fetch all related entities
-    company = (await db.execute(select(Company).where(Company.scan_id == scan_id))).scalars().first()
-    controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
-    cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
-    suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
-    product = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
-
-    # Extract additional fields from the results JSON if present
-    results = scan_row.result_json or {}
-    auditor = scan_row.auditor if getattr(scan_row, 'auditor', None) else results.get("auditor", {})
-    coverage_period = results.get("coverage_period", {})
-    report_date = results.get("report_date", {})
-    def extract_bad_chunks(section):
-        if isinstance(section, dict):
-            return section.get("bad_chunks", [])
-        return []
-    bad_chunks = {
-        "cuecs": extract_bad_chunks(results.get("cuecs")),
-        "controls": extract_bad_chunks(results.get("controls")),
-        "subservice_orgs": extract_bad_chunks(results.get("subservice_orgs"))
-    }
-
-    # Compose response with all expected fields for frontend tables
-    return {
-        "scan_id": scan_row.id,
-        "scan_date": scan_row.scan_date,
-        "filename": scan_row.pdf_filename,
-        "company": company.name if company else None,
-        "parent_company": company.parent_company if company else None,
-        "auditor": getattr(scan_row, "auditor", None) or auditor,
-        "coverage_period": coverage_period,
-        "coverage_start": getattr(scan_row, "coverage_start", None),
-        "coverage_end": getattr(scan_row, "coverage_end", None),
-        "report_date": report_date,
-        "product": product.name if product else None,
-        "gpt_cost": getattr(scan_row, "gpt_cost", None),
-        "gpt_model": getattr(scan_row, "gpt_model", None),
-        "estimated_time_seconds": getattr(scan_row, "estimated_time_seconds", None),
-        "gpt_usage_details": getattr(scan_row, "gpt_usage_details", None),
-        "extracted_text": getattr(scan_row, "extracted_text", None),
-        "pdf_filename": getattr(scan_row, "pdf_filename", None),
-        "pdf_file": getattr(scan_row, "pdf_file", None),
-        "company_id": getattr(scan_row, "company_id", None),
-        "executive_summary_stale": getattr(scan_row, "executive_summary_stale", False),
-        "subservice_organizations": [
-            {
-                "name": org.name,
-                "confidence": getattr(org, "confidence", None),
-                "third_party_description": getattr(org, "third_party_description", None),
-                "third_party_page_ref": getattr(org, "third_party_page_ref", None),
-                "third_party_confidence": getattr(org, "third_party_confidence", None),
-                "distance_from_so_keywords": getattr(org, "distance_from_so_keywords", None),
-                "likely_so": getattr(org, "likely_so", None),
-                "common_so": getattr(org, "common_so", None),
-                "source_context": getattr(org, "source_context", None),
-                "confidence_justification": getattr(org, "confidence_justification", None),
-                "third_party_controls": getattr(org, "third_party_controls", None),
-                "annotation": getattr(org, "annotation", None),
+        # Diagnostic short-circuit to isolate 500s occurring outside main logic
+        if diag:
+            logging.error(f"[REPORT] DIAG mode active for scan_id={scan_id}")
+            minimal = {
+                "scan_id": scan_row.id,
+                "has_result_json": bool(getattr(scan_row, "result_json", None)),
+                "has_company": bool((await db.execute(select(Company).where(Company.scan_id == scan_id))).scalars().first() is not None),
             }
-            for org in suborgs
-        ],
-        "cuecs": [
-            {
-                "id": getattr(c, "id", None),
-                "cuec_seq": getattr(c, "cuec_seq", None),
-                "cuec_id": getattr(c, "cuec_tsc_id", None),
-                "cuec_tsc_id": getattr(c, "cuec_tsc_id", None),
-                "cuec_description": getattr(c, "cuec_description", None) or getattr(c, "description", None),
-                "cuec_line_ref": getattr(c, "cuec_line_ref", None),
-                "cuec_confidence": getattr(c, "cuec_confidence", None),
-                "cuec_gpt_opinion": getattr(c, "cuec_gpt_opinion", None),
-                "cuec_distance_from_cuec_keywords": getattr(c, "cuec_distance_from_cuec_keywords", None),
-                "cuec_gpt_reasoning": getattr(c, "cuec_gpt_reasoning", None),
-                "cuec_framework_alignment": getattr(c, "cuec_framework_alignment", None),
-                "cuec_framework_alignment_id": getattr(c, "cuec_framework_alignment_id", None),
-                "cuec_justification": getattr(c, "cuec_justification", None),
-                "cuec_coso_id": getattr(c, "cuec_coso_id", None),
-                "cuec_tsc_similarity": getattr(c, "cuec_tsc_similarity", None),
-                "cuec_coso_similarity": getattr(c, "cuec_coso_similarity", None),
-                "cuec_tsc_confidence_pct": getattr(c, "cuec_tsc_confidence_pct", None),
-                "cuec_coso_confidence_pct": getattr(c, "cuec_coso_confidence_pct", None),
-                "cuec_closest_framework": getattr(c, "cuec_closest_framework", None),
-                "cuec_confidence_justification": getattr(c, "cuec_confidence_justification", None),
-                "annotation": getattr(c, "annotation", None),
-                "control_strength": getattr(c, "control_strength", None),
-            } for c in cuecs
-        ],
-        "controls": [
-            {k: getattr(ctrl, k, None) for k in [
-                "control_id",
-                "control_desc",
-                "control_test",
-                "control_test_results",
-                "control_page_ref",
-                "control_line_ref",
-                "control_seq",
-                "control_tsc_id",
-                "control_coso_id",
-                "control_tsc_similarity",
-                "control_coso_similarity",
-                "control_tsc_confidence_pct",
-                "control_coso_confidence_pct",
-                "control_closest_framework",
-                "control_tsc_section",
-                "control_coso_section",
-                "control_soc_domain",
-                "control_status",
-                "merged_to_control_id",
-                "control_gpt_opinion",
-                "control_gpt_reasoning",
-                "control_confidence",
-                "confidence_calc",
-                "annotation"
-            ]} for ctrl in controls
-        ],
-        "bad_chunks": bad_chunks,
-        "raw_results": results,
-        "executive_summary": getattr(scan_row, "executive_summary", None)
-    }
+            from starlette.responses import Response
+            import json as _json_mod
+            logging.error(f"[REPORT] DIAG returning minimal payload for scan_id={scan_id}: {minimal}")
+            return Response(content=_json_mod.dumps(minimal), media_type="application/json")
+
+        # Fetch selected related entities (now that schema is aligned)
+        company = (await db.execute(select(Company).where(Company.scan_id == scan_id))).scalars().first()
+        controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
+        cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
+        suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
+        product = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
+
+        # Extract additional fields from the results JSON if present
+        results = scan_row.result_json or {}
+        auditor = scan_row.auditor if getattr(scan_row, 'auditor', None) else results.get("auditor", {})
+        coverage_period = results.get("coverage_period", {})
+        report_date = results.get("report_date", {})
+        def extract_bad_chunks(section):
+            if isinstance(section, dict):
+                return section.get("bad_chunks", [])
+            return []
+        bad_chunks = {
+            "cuecs": extract_bad_chunks(results.get("cuecs")),
+            "controls": extract_bad_chunks(results.get("controls")),
+            "subservice_orgs": extract_bad_chunks(results.get("subservice_orgs"))
+        }
+
+        # Compose response with all expected fields for frontend tables
+        # Extract persisted bad_chunks from result_json (supports both embedded and *_meta variants)
+        def get_persisted_bad_chunks(section_key: str):
+            sec_val = results.get(section_key)
+            meta_val = results.get(f"{section_key}_meta")
+            chunks = []
+            if isinstance(sec_val, dict) and isinstance(sec_val.get("bad_chunks"), list):
+                chunks = sec_val.get("bad_chunks")
+            elif isinstance(meta_val, dict) and isinstance(meta_val.get("bad_chunks"), list):
+                chunks = meta_val.get("bad_chunks")
+            return chunks
+        persisted_bad_chunks = {
+            "cuecs": get_persisted_bad_chunks("cuecs"),
+            "controls": get_persisted_bad_chunks("controls"),
+            "subservice_orgs": get_persisted_bad_chunks("subservice_orgs"),
+        }
+        payload = {
+            "scan_id": scan_row.id,
+            # Ensure datetimes are JSON-serializable
+            "scan_date": (scan_row.scan_date.isoformat() if getattr(scan_row, "scan_date", None) else None),
+            "filename": scan_row.pdf_filename,
+            "company": company.name if company else None,
+            "parent_company": company.parent_company if company else None,
+            "auditor": getattr(scan_row, "auditor", None) or auditor,
+            "coverage_period": coverage_period,
+            "coverage_start": (getattr(scan_row, "coverage_start", None).isoformat() if getattr(scan_row, "coverage_start", None) else None),
+            "coverage_end": (getattr(scan_row, "coverage_end", None).isoformat() if getattr(scan_row, "coverage_end", None) else None),
+            "report_date": report_date,
+            "product": product.name if product else None,
+            "gpt_cost": getattr(scan_row, "gpt_cost", None),
+            "gpt_model": getattr(scan_row, "gpt_model", None),
+            "estimated_time_seconds": getattr(scan_row, "estimated_time_seconds", None),
+            # Omit large/unused blobs to keep response lean and avoid serialization issues
+            # "gpt_usage_details": getattr(scan_row, "gpt_usage_details", None),
+            # "extracted_text": getattr(scan_row, "extracted_text", None),
+            "pdf_filename": getattr(scan_row, "pdf_filename", None),
+            # Do not include raw PDF bytes in JSON (not JSON-serializable and not needed by UI)
+            # "pdf_file": getattr(scan_row, "pdf_file", None),
+            "company_id": getattr(scan_row, "company_id", None),
+            "executive_summary_stale": getattr(scan_row, "executive_summary_stale", False),
+            # Temporarily return empty lists to isolate serialization issues
+            "subservice_organizations": [
+                {
+                    "id": getattr(s, "id", None),
+                    "name": getattr(s, "name", None),
+                    "confidence": getattr(s, "confidence", None),
+                    "third_party_description": getattr(s, "third_party_description", None),
+                    "third_party_page_ref": getattr(s, "third_party_page_ref", None),
+                    "third_party_confidence": getattr(s, "third_party_confidence", None),
+                    "distance_from_so_keywords": getattr(s, "distance_from_so_keywords", None),
+                    "likely_so": getattr(s, "likely_so", None),
+                    "common_so": getattr(s, "common_so", None),
+                    "source_context": getattr(s, "source_context", None),
+                    "confidence_justification": getattr(s, "confidence_justification", None),
+                    "third_party_controls": getattr(s, "third_party_controls", None),
+                    "annotation": getattr(s, "annotation", None),
+                } for s in suborgs
+            ],
+            "cuecs": [
+                {
+                    "id": getattr(c, "id", None),
+                    "cuec_seq": getattr(c, "cuec_seq", None),
+                    "cuec_id": getattr(c, "cuec_tsc_id", None),
+                    "cuec_tsc_id": getattr(c, "cuec_tsc_id", None),
+                    "cuec_description": getattr(c, "cuec_description", None) or getattr(c, "description", None),
+                    "cuec_line_ref": getattr(c, "cuec_line_ref", None),
+                    "cuec_confidence": getattr(c, "cuec_confidence", None),
+                    "cuec_gpt_opinion": getattr(c, "cuec_gpt_opinion", None),
+                    "cuec_distance_from_cuec_keywords": getattr(c, "cuec_distance_from_cuec_keywords", None),
+                    "cuec_gpt_reasoning": getattr(c, "cuec_gpt_reasoning", None),
+                    "cuec_framework_alignment": getattr(c, "cuec_framework_alignment", None),
+                    "cuec_framework_alignment_id": getattr(c, "cuec_framework_alignment_id", None),
+                    "cuec_justification": getattr(c, "cuec_justification", None),
+                    "cuec_coso_id": getattr(c, "cuec_coso_id", None),
+                    "cuec_tsc_similarity": getattr(c, "cuec_tsc_similarity", None),
+                    "cuec_coso_similarity": getattr(c, "cuec_coso_similarity", None),
+                    "cuec_tsc_confidence_pct": getattr(c, "cuec_tsc_confidence_pct", None),
+                    "cuec_coso_confidence_pct": getattr(c, "cuec_coso_confidence_pct", None),
+                    "cuec_closest_framework": getattr(c, "cuec_closest_framework", None),
+                    "cuec_confidence_justification": getattr(c, "cuec_confidence_justification", None),
+                    "annotation": getattr(c, "annotation", None),
+                    "control_strength": getattr(c, "control_strength", None),
+                } for c in cuecs
+                ],
+            "controls": [
+                ({"id": getattr(ctrl, "id", None)} | {k: getattr(ctrl, k, None) for k in [
+                    "control_id",
+                    "control_desc",
+                    "control_test",
+                    "control_test_results",
+                    "has_deviation",
+                    "deviation_desc",
+                    "control_page_ref",
+                    "control_line_ref",
+                    "control_seq",
+                    "control_tsc_id",
+                    "control_coso_id",
+                    "control_tsc_similarity",
+                    "control_coso_similarity",
+                    "control_tsc_confidence_pct",
+                    "control_coso_confidence_pct",
+                    "control_closest_framework",
+                    "control_tsc_section",
+                    "control_coso_section",
+                    "control_soc_domain",
+                    "control_status",
+                    "merged_to_control_id",
+                    "control_gpt_opinion",
+                    "control_gpt_reasoning",
+                    "control_confidence",
+                    "confidence_calc",
+                    "annotation"
+                ]}) for ctrl in controls
+            ],
+            "bad_chunks": bad_chunks if any(bad_chunks.values()) else persisted_bad_chunks,
+            # "raw_results": results,
+            "executive_summary": getattr(scan_row, "executive_summary", None)
+        }
+        # Ensure everything is JSON-serializable
+        try:
+            encoded = jsonable_encoder(payload)
+            import json as _json_mod
+            from starlette.responses import Response
+            resp_text = _json_mod.dumps(encoded)
+            logging.error(f"[REPORT] Returning payload for scan_id={scan_id} (size={len(resp_text)} bytes)")
+            return Response(content=resp_text, media_type="application/json")
+        except Exception as enc_err:
+            logging.error(f"/report/{scan_id} jsonable_encoder error: {enc_err}\n{traceback.format_exc()}")
+            # Last-resort: stringify unknown types
+            import json as _json_mod
+            try:
+                text = _json_mod.dumps(payload, default=lambda o: str(o))
+                from starlette.responses import Response
+                return Response(content=text, media_type="application/json")
+            except Exception as dump_err:
+                logging.error(f"/report/{scan_id} json dumps fallback error: {dump_err}\n{traceback.format_exc()}")
+                raise
+    except Exception as e:
+        logging.error(f"[REPORT] /report/{scan_id} error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Report retrieval failed: {e}")
 
 
 async def get_job(job_id, redis_client=None):
@@ -306,9 +413,20 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
         job.pop("done", None)
         job.pop("error", None)
         redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+        # Also broadcast progress over WebSocket to connected clients
+        try:
+            loop = getattr(app.state, 'loop', None)
+            if loop and loop.is_running():
+                asyncio.run_coroutine_threadsafe(broadcast_progress(percent, status), loop)
+        except Exception:
+            pass
 
     def checklist_callback(extractor_statuses):
-        logging.error(f"[DEBUG] [checklist_callback:_update] Thread: {threading.current_thread().name}, job_id={job_id}")
+        # Demote to info-level and only emit at INFO+
+        if logging.getLogger().isEnabledFor(logging.INFO):
+            logger = logging.getLogger('checklist')
+            logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+            logger.info(f"[checklist_callback] job_id={job_id}, checklist={extractor_statuses}")
         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
         job_json = redis_client.get(f"job:{job_id}")
         if isinstance(job_json, str):
@@ -320,7 +438,6 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
         job.pop("done", None)
         job.pop("error", None)
         redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
-        logging.error(f"[DEBUG] checklist_callback: job_id={job_id}, checklist={extractor_statuses}")
     try:
         from .analyze import analyze_pdf_file
         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
@@ -384,7 +501,8 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
             job["result"] = results
             job["done"] = True
             job["error"] = None
-            job["db_saved"] = True  # Mark as already saved to database
+            # Only mark as saved if no DB insertion error was captured
+            job["db_saved"] = ("db_insertion_error" not in results)
             # Preserve progress, status, checklist if present
             job["progress"] = job.get("progress", 100)
             job["status"] = job.get("status", "Complete")
@@ -392,22 +510,27 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
             await set_job(job_id, job, redis_client)
         try:
             loop = asyncio.get_running_loop()
-            logging.error(f"[DEBUG] [result_update] Using running loop: {id(loop)}")
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f"[DEBUG] [result_update] Using running loop: {id(loop)}")
             loop.create_task(_update())
         except RuntimeError:
-            logging.error(f"[DEBUG] [result_update] No running event loop, creating new one.")
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f"[DEBUG] [result_update] No running event loop, creating new one.")
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                logging.error(f"[DEBUG] [result_update] Before run_until_complete, loop: {id(loop)}")
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    logging.debug(f"[DEBUG] [result_update] Before run_until_complete, loop: {id(loop)}")
                 loop.run_until_complete(_update())
-                logging.error(f"[DEBUG] [result_update] After run_until_complete, loop: {id(loop)}")
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    logging.debug(f"[DEBUG] [result_update] After run_until_complete, loop: {id(loop)}")
             except Exception as exc:
                 logging.error(f"[DEBUG] [result_update] Exception in run_until_complete: {exc}")
                 raise
             finally:
                 loop.close()
-                logging.error(f"[DEBUG] [result_update] Closed event loop: {id(loop)}")
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    logging.debug(f"[DEBUG] [result_update] Closed event loop: {id(loop)}")
         # DB write removed from background thread. Will be handled in result endpoint.
     except Exception as e:
         async def _update():
@@ -424,22 +547,27 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
             await set_job(job_id, job, redis_client)
         try:
             loop = asyncio.get_running_loop()
-            logging.error(f"[DEBUG] [error_update] Using running loop: {id(loop)}")
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f"[DEBUG] [error_update] Using running loop: {id(loop)}")
             loop.create_task(_update())
         except RuntimeError:
-            logging.error(f"[DEBUG] [error_update] No running event loop, creating new one.")
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f"[DEBUG] [error_update] No running event loop, creating new one.")
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                logging.error(f"[DEBUG] [error_update] Before run_until_complete, loop: {id(loop)}")
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    logging.debug(f"[DEBUG] [error_update] Before run_until_complete, loop: {id(loop)}")
                 loop.run_until_complete(_update())
-                logging.error(f"[DEBUG] [error_update] After run_until_complete, loop: {id(loop)}")
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    logging.debug(f"[DEBUG] [error_update] After run_until_complete, loop: {id(loop)}")
             except Exception as exc:
                 logging.error(f"[DEBUG] [error_update] Exception in run_until_complete: {exc}")
                 raise
             finally:
                 loop.close()
-                logging.error(f"[DEBUG] [error_update] Closed event loop: {id(loop)}")
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    logging.debug(f"[DEBUG] [error_update] Closed event loop: {id(loop)}")
     finally:
         try:
             os.remove(temp_pdf_path)
@@ -524,15 +652,15 @@ async def get_job_status(job_id: str):
 
 # New endpoint: get job result
 @app.get("/analyze/result/{job_id}")
-async def get_job_result(job_id: str, db=Depends(get_db)):
+async def get_job_result(job_id: str, force_save: bool = False, db=Depends(get_db)):
     job = await get_job(job_id)
     if not job:
         return {"error": "Job not found"}
     if not job.get("done"):
         return {"error": "Job not finished yet"}
 
-    # Always try to persist result to DB if not already saved, even for partial/warning/error results
-    if not job.get("db_saved") and job.get("result"):
+    # Persist to DB if not saved yet or force_save requested
+    if (force_save or not job.get("db_saved")) and job.get("result"):
         import pathlib
         import tempfile
         import json as _json
@@ -628,19 +756,25 @@ async def broadcast_checklist(extractor_statuses):
 @app.get("/settings")
 async def get_settings(db=Depends(get_db)):
     result = await db.execute(select(Setting))
-    settings = {row.key: row.value for row in result.scalars()}
-    return settings
+    rows = result.scalars().all()
+    return {row.key: row.value for row in rows}
 
 @app.post("/settings")
 async def update_settings(request: Request, db=Depends(get_db)):
     data = await request.json()
-    for key, value in data.items():
-        stmt = pg_dialect.insert(Setting).values(key=key, value=str(value)).on_conflict_do_update(
-            index_elements=[Setting.key], set_={"value": str(value)}
-        )
-        await db.execute(stmt)
-    await db.commit()
-    return {"status": "ok"}
+    logging.debug(f"/settings payload: {data}")
+    try:
+        for key, value in data.items():
+            stmt = pg_dialect.insert(Setting).values(key=key, value=str(value)).on_conflict_do_update(
+                index_elements=[Setting.key], set_={"value": str(value)}
+            )
+            await db.execute(stmt)
+        await db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/settings DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 # History endpoints
 @app.get("/history")
@@ -656,6 +790,15 @@ async def get_history(db=Depends(get_db)):
         for row in result.scalars()
     ]
     return history
+
+@app.get("/report_diag/{scan_id}")
+async def report_diag(scan_id: int):
+    try:
+        logging.error(f"[REPORT_DIAG] Entered report_diag with scan_id={scan_id}")
+        return {"ok": True, "scan_id": scan_id}
+    except Exception as e:
+        logging.error(f"[REPORT_DIAG] error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 def read_root():
@@ -752,11 +895,10 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     if not scan_row:
         raise HTTPException(status_code=404, detail="Scan not found")
     
-    # If summary exists and no force refresh, return it immediately
+    # If we already have a summary and it's not marked stale, return it unless force_refresh is requested
     existing_summary = getattr(scan_row, "executive_summary", None)
-    
-    # Check for None, null string, or empty summary
-    if not force_refresh and existing_summary is not None and existing_summary != "null" and existing_summary:
+    is_stale = bool(getattr(scan_row, "executive_summary_stale", False))
+    if not force_refresh and existing_summary is not None and existing_summary != "null" and existing_summary and not is_stale:
         # Get the summary BEFORE rollback to avoid session issues
         summary = existing_summary
         await db.rollback()  # Clean up any pending transaction
@@ -772,6 +914,10 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     
     # Otherwise, generate summary using GPT
     controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
+    high_conf_controls = [
+        ctrl for ctrl in controls
+        if isinstance(getattr(ctrl, 'control_confidence', 0), (int, float)) and getattr(ctrl, 'control_confidence', 0) >= 0.89
+    ]
     cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
     suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
     tsc_ids_found = set([getattr(ctrl, "control_tsc_id", None) for ctrl in controls if getattr(ctrl, "control_tsc_id", None)])
@@ -791,12 +937,53 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     tsc_table_str = "\n".join([f"{row['section']}: {row['id']} - {row['description']} ({'✔' if row['present'] else '✗'})" for row in tsc_table])
     coso_table_str = "\n".join([f"{row['section']}: {row['id']} - {row['description']} ({'✔' if row['present'] else '✗'})" for row in coso_table])
     
-    # Format control test results for GPT analysis
-    control_test_results_str = "\n".join([
-        f"Control {getattr(ctrl, 'control_id', 'Unknown')}: {getattr(ctrl, 'control_test_results', '')}"
-        for ctrl in controls
-        if getattr(ctrl, 'control_test_results', '').strip()
-    ])
+    # Budgeted control test results string (prioritize deviations, then include up to N non-deviations)
+    def _truncate(s: str, max_chars: int) -> str:
+        s = s or ''
+        if len(s) <= max_chars:
+            return s
+        return s[: max_chars - 3] + '...'
+
+    dev_controls = [
+        ctrl for ctrl in high_conf_controls
+        if bool(getattr(ctrl, 'has_deviation', False)) and isinstance(getattr(ctrl, 'control_test_results', ''), str)
+           and getattr(ctrl, 'control_test_results', '').strip()
+    ]
+    non_dev_controls = [
+        ctrl for ctrl in high_conf_controls
+        if (not bool(getattr(ctrl, 'has_deviation', False))) and isinstance(getattr(ctrl, 'control_test_results', ''), str)
+           and getattr(ctrl, 'control_test_results', '').strip()
+    ]
+    # Limit non-deviation controls to configured maximum to reduce prompt size
+    non_dev_controls = non_dev_controls[:EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS]
+
+    selected_controls = dev_controls + non_dev_controls
+    parts = []
+    used = 0
+    for ctrl in selected_controls:
+        cid = getattr(ctrl, 'control_id', 'Unknown')
+        res = _truncate(getattr(ctrl, 'control_test_results', ''), EXEC_SUMMARY_PER_CONTROL_MAX_CHARS)
+        chunk = f"Control {cid}: {res}"
+        if used + len(chunk) + 1 > EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS:
+            break
+        parts.append(chunk)
+        used += len(chunk) + 1
+    control_test_results_str = "\n".join(parts)
+
+    # Prepare detected deviations list from control-level fields (high-confidence only)
+    detected_deviations_list = [
+        f"Control {getattr(ctrl, 'control_id', 'Unknown')}: {getattr(ctrl, 'deviation_desc', '').strip()}"
+        for ctrl in high_conf_controls
+        if bool(getattr(ctrl, 'has_deviation', False)) and isinstance(getattr(ctrl, 'deviation_desc', ''), str) and getattr(ctrl, 'deviation_desc', '').strip()
+    ]
+    detected_deviations_str = "\n".join(detected_deviations_list) if detected_deviations_list else "None."
+
+    # Helper for later de-duplication only; no heuristic deviation detection here
+    def _norm_text(s):
+        try:
+            return " ".join((s or "").strip().lower().split())
+        except Exception:
+            return ""
     
     # Format CUEC control strength assessments for high-confidence CUECs (≥90%)
     high_conf_cuecs_with_strength = [
@@ -827,10 +1014,12 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
         tsc_table=tsc_table_str,
         coso_table=coso_table_str,
         control_test_results=control_test_results_str,
+        detected_deviations=detected_deviations_str,
         cuec_control_strengths=cuec_control_strengths_str,
         company=company_name,
         product=product_name
     )
+    # No heuristic pre-computed deviations; rely on GPT to analyze control_test_results in the prompt
     import json
     
 
@@ -891,8 +1080,42 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     if not all(k in summary_json for k in required_keys):
         raise HTTPException(status_code=500, detail=f"Executive summary JSON missing required keys. Got: {list(summary_json.keys())}\nRaw response: {gpt_summary}")
     
-    # Optional keys that don't need validation
-    optional_keys = ["deviations_noted"]
+    # Let GPT decide deviations_noted; do minimal de-duplication only.
+    def _norm_text(s):
+        try:
+            return " ".join((s or "").strip().lower().split())
+        except Exception:
+            return ""
+    deduped = []
+    seen = set()
+    for dev in (summary_json.get("deviations_noted") or []):
+        if not isinstance(dev, dict):
+            continue
+        cid = str(dev.get("control_id") or "")
+        summary = dev.get("deviation_summary") or ""
+        k = (cid, _norm_text(summary))
+        if k in seen:
+            continue
+        seen.add(k)
+        deduped.append({"control_id": cid, "deviation_summary": summary})
+    summary_json["deviations_noted"] = deduped
+
+    # Ensure legacy recommendations includes both split lists if present
+    try:
+        risk_list = summary_json.get("recommendations_risk_mitigations") or []
+        contract_list = summary_json.get("recommendations_contract_enhancements") or []
+        base_list = summary_json.get("recommendations") or []
+        # Union while preserving order
+        combined = []
+        seen = set()
+        for item in list(base_list) + list(risk_list) + list(contract_list):
+            key = (item or "").strip()
+            if key and key not in seen:
+                seen.add(key)
+                combined.append(key)
+        summary_json["recommendations"] = combined
+    except Exception:
+        pass
     
     # Save the generated summary to the database and reset staleness flag
     print(f"REGENERATE DEBUG: Saving new executive summary to database for scan {scan_id}")
@@ -940,32 +1163,42 @@ async def patch_executive_summary(scan_id: int, data: dict, db=Depends(get_db)):
 
 @app.patch("/report/{scan_id}/overview")
 async def patch_report_overview(scan_id: int, data: dict, db=Depends(get_db)):
-    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
-    scan_row = scan_row.scalar_one_or_none()
-    if not scan_row:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    # Update fields if present in data
-    if "company" in data:
-        scan_row.company = data["company"]
-    if "product" in data:
-        scan_row.product = data["product"]
-    if "coverageStart" in data:
-        scan_row.coverage_start = data["coverageStart"]
-    if "coverageEnd" in data:
-        scan_row.coverage_end = data["coverageEnd"]
-    if "reportDate" in data:
-        scan_row.report_date = data["reportDate"]
-    if "auditor" in data:
-        scan_row.auditor = data["auditor"]
-    if "scanDate" in data:
-        scan_row.scan_date = data["scanDate"]
-    db.add(scan_row)
-    await db.commit()
-    return {"status": "ok"}
+    logging.debug(f"/report/{scan_id}/overview payload: {data}")
+    try:
+        scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan_row = scan_row.scalar_one_or_none()
+        if not scan_row:
+            return JSONResponse({"error": "Scan not found"}, status_code=404)
+        if "company" in data:
+            scan_row.company = data["company"]
+        if "product" in data:
+            scan_row.product = data["product"]
+        if "coverageStart" in data:
+            scan_row.coverage_start = data["coverageStart"]
+        if "coverageEnd" in data:
+            scan_row.coverage_end = data["coverageEnd"]
+        if "reportDate" in data:
+            scan_row.report_date = data["reportDate"]
+        if "auditor" in data:
+            scan_row.auditor = data["auditor"]
+        if "scanDate" in data:
+            scan_row.scan_date = data["scanDate"]
+        db.add(scan_row)
+        await db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/overview DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.patch("/report/{scan_id}/controls/{control_id}/annotation")
 async def patch_control_annotation(scan_id: int, control_id: str, data: dict, db=Depends(get_db)):
-    ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.control_id == control_id))).scalar_one_or_none()
+    try:
+        ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.control_id == control_id))).scalar_one_or_none()
+    except MultipleResultsFound:
+        return JSONResponse({
+            "error": "Multiple controls matched control_id. Use ID endpoint /report/{scan_id}/controls/id/{control_db_id}"
+        }, status_code=409)
     if not ctrl:
         raise HTTPException(status_code=404, detail="Control not found")
     ctrl.annotation = data.get("annotation", "")
@@ -975,24 +1208,104 @@ async def patch_control_annotation(scan_id: int, control_id: str, data: dict, db
 
 @app.patch("/report/{scan_id}/controls/{control_id}")
 async def patch_control(scan_id: int, control_id: str, data: dict, db=Depends(get_db)):
-    ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.control_id == control_id))).scalar_one_or_none()
-    if not ctrl:
-        raise HTTPException(status_code=404, detail="Control not found")
-    
-    # Update allowed fields
-    if "control_confidence" in data:
-        ctrl.control_confidence = data["control_confidence"]
-    if "confidence_calc" in data:
-        ctrl.confidence_calc = data["confidence_calc"]
-    if "annotation" in data:
-        ctrl.annotation = data["annotation"]
-    
-    # Mark executive summary as stale when control data changes
-    await mark_executive_summary_stale(scan_id, db)
-    
-    db.add(ctrl)
-    await db.commit()
-    return {"status": "ok"}
+    logging.debug(f"/report/{scan_id}/controls/{control_id} payload: {data}")
+    try:
+        try:
+            ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.control_id == control_id))).scalar_one_or_none()
+        except MultipleResultsFound:
+            return JSONResponse({
+                "error": "Multiple controls matched control_id. Use ID endpoint /report/{scan_id}/controls/id/{control_db_id}"
+            }, status_code=409)
+        if not ctrl:
+            return JSONResponse({"error": "Control not found"}, status_code=404)
+        # Update allowed fields
+        justification_note = None
+        if "control_confidence" in data:
+            old = getattr(ctrl, "control_confidence", None)
+            ctrl.control_confidence = data["control_confidence"]
+            justification_note = f"UI edit: control_confidence {old} -> {ctrl.control_confidence}"
+        if "confidence_calc" in data:
+            ctrl.confidence_calc = data["confidence_calc"]
+        if "annotation" in data:
+            ctrl.annotation = data["annotation"]
+        # New: allow editing control text fields
+        if "control_desc" in data:
+            ctrl.control_desc = data["control_desc"]
+        if "control_test" in data:
+            ctrl.control_test = data["control_test"]
+        if "control_test_results" in data:
+            ctrl.control_test_results = data["control_test_results"]
+        if "control_page_ref" in data:
+            ctrl.control_page_ref = data["control_page_ref"]
+        # New: allow editing deviation fields via API
+        if "has_deviation" in data:
+            ctrl.has_deviation = data["has_deviation"]
+        if "deviation_desc" in data:
+            ctrl.deviation_desc = data["deviation_desc"]
+        # Append audit note into confidence_calc as an audit trail
+        if justification_note:
+            prev = getattr(ctrl, "confidence_calc", "") or ""
+            sep = "\n" if prev else ""
+            ctrl.confidence_calc = f"{prev}{sep}{justification_note}"
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        db.add(ctrl)
+        await db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/controls/{control_id} DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.patch("/report/{scan_id}/controls/id/{control_db_id}")
+async def patch_control_by_id(scan_id: int, control_db_id: int, data: dict, db=Depends(get_db)):
+    """Update a control by its numeric database ID to avoid duplicate control_id ambiguity."""
+    logging.debug(f"/report/{scan_id}/controls/{control_db_id} payload: {data}")
+    try:
+        ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id))).scalar_one_or_none()
+        if not ctrl:
+            return JSONResponse({"error": "Control not found"}, status_code=404)
+        justification_note = None
+        if "control_confidence" in data:
+            old = getattr(ctrl, "control_confidence", None)
+            ctrl.control_confidence = data["control_confidence"]
+            justification_note = f"UI edit: control_confidence {old} -> {ctrl.control_confidence}"
+        if "confidence_calc" in data:
+            ctrl.confidence_calc = data["confidence_calc"]
+        if "annotation" in data:
+            ctrl.annotation = data["annotation"]
+        # New: allow editing control text fields
+        if "control_desc" in data:
+            ctrl.control_desc = data["control_desc"]
+        if "control_test" in data:
+            ctrl.control_test = data["control_test"]
+        if "control_test_results" in data:
+            ctrl.control_test_results = data["control_test_results"]
+        if "control_page_ref" in data:
+            ctrl.control_page_ref = data["control_page_ref"]
+        # New: allow editing deviation fields via API
+        if "has_deviation" in data:
+            ctrl.has_deviation = data["has_deviation"]
+        if "deviation_desc" in data:
+            ctrl.deviation_desc = data["deviation_desc"]
+        if justification_note:
+            prev = getattr(ctrl, "confidence_calc", "") or ""
+            sep = "\n" if prev else ""
+            ctrl.confidence_calc = f"{prev}{sep}{justification_note}"
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        db.add(ctrl)
+        await db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/controls/{control_db_id} DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.patch("/report/{scan_id}/cuecs/{cuec_id}/annotation")
 async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: dict, db=Depends(get_db)):
@@ -1006,43 +1319,49 @@ async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: dict, db=Depen
 
 @app.patch("/report/{scan_id}/cuecs/{cuec_id}")
 async def patch_cuec(scan_id: int, cuec_id: int, data: dict, db=Depends(get_db)):
-    print(f"PATCH CUEC DEBUG: scan_id={scan_id}, cuec_id={cuec_id}")
-    print(f"PATCH CUEC DEBUG: received data={data}")
-    
-    cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.id == cuec_id))).scalar_one_or_none()
-    if not cuec:
-        print(f"PATCH CUEC DEBUG: CUEC not found for scan_id={scan_id}, cuec_id={cuec_id}")
-        raise HTTPException(status_code=404, detail="CUEC not found")
-    
-    print(f"PATCH CUEC DEBUG: Found CUEC, current control_strength={cuec.control_strength}")
-    
-    # Update allowed fields
-    updated_fields = []
-    if "cuec_confidence" in data:
-        old_val = cuec.cuec_confidence
-        cuec.cuec_confidence = data["cuec_confidence"]
-        updated_fields.append(f"cuec_confidence: {old_val} -> {cuec.cuec_confidence}")
-    if "cuec_confidence_justification" in data:
-        cuec.cuec_confidence_justification = data["cuec_confidence_justification"]
-        updated_fields.append("cuec_confidence_justification")
-    if "annotation" in data:
-        cuec.annotation = data["annotation"]
-        updated_fields.append("annotation")
-    if "control_strength" in data:
-        old_val = cuec.control_strength
-        cuec.control_strength = data["control_strength"]
-        updated_fields.append(f"control_strength: {old_val} -> {cuec.control_strength}")
-    
-    print(f"PATCH CUEC DEBUG: Updated fields: {updated_fields}")
-    
-    # Mark executive summary as stale when CUEC data changes
-    await mark_executive_summary_stale(scan_id, db)
-    
-    db.add(cuec)
-    await db.commit()
-    
-    print(f"PATCH CUEC DEBUG: Successfully committed changes")
-    return {"status": "ok"}
+    logging.debug(f"/report/{scan_id}/cuecs/{cuec_id} payload: {data}")
+    try:
+        cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.id == cuec_id))).scalar_one_or_none()
+        if not cuec:
+            return JSONResponse({"error": "CUEC not found"}, status_code=404)
+        justification_note = None
+        if "cuec_confidence" in data:
+            old = getattr(cuec, "cuec_confidence", None)
+            cuec.cuec_confidence = data["cuec_confidence"]
+            justification_note = f"UI edit: cuec_confidence {old} -> {cuec.cuec_confidence}"
+        if "cuec_confidence_justification" in data:
+            # Always append, never overwrite
+            prev = getattr(cuec, "cuec_confidence_justification", "") or ""
+            sep = "\n" if prev else ""
+            cuec.cuec_confidence_justification = f"{prev}{sep}{data['cuec_confidence_justification']}"
+        if "annotation" in data:
+            cuec.annotation = data["annotation"]
+        if "control_strength" in data:
+            cuec.control_strength = data["control_strength"]
+        # New: allow editing CUEC text fields
+        if "cuec_description" in data:
+            cuec.cuec_description = data["cuec_description"]
+        if "cuec_gpt_reasoning" in data:
+            cuec.cuec_gpt_reasoning = data["cuec_gpt_reasoning"]
+        if "cuec_justification" in data:
+            cuec.cuec_justification = data["cuec_justification"]
+        # Append auto audit note
+        if justification_note:
+            prev = getattr(cuec, "cuec_confidence_justification", "") or ""
+            sep = "\n" if prev else ""
+            cuec.cuec_confidence_justification = f"{prev}{sep}{justification_note}"
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        db.add(cuec)
+        await db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/cuecs/{cuec_id} DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.patch("/report/{scan_id}/suborgs/{suborg_id}/annotation")
 async def patch_suborg_annotation(scan_id: int, suborg_id: int, data: dict, db=Depends(get_db)):
@@ -1054,23 +1373,89 @@ async def patch_suborg_annotation(scan_id: int, suborg_id: int, data: dict, db=D
     await db.commit()
     return {"status": "ok"}
 
+@app.patch("/report/{scan_id}/suborgs/id/{suborg_id}")
+async def patch_suborg_by_id(scan_id: int, suborg_id: int, data: dict, db=Depends(get_db)):
+    """Update a subservice org by its numeric ID. Prefer this over name to avoid duplicate-name ambiguity."""
+    logging.debug(f"/report/{scan_id}/suborgs/{suborg_id} payload: {data}")
+    try:
+        suborg = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.id == suborg_id))).scalar_one_or_none()
+        if not suborg:
+            return JSONResponse({"error": "SubserviceOrg not found"}, status_code=404)
+        justification_note = None
+        if "confidence" in data:
+            old = getattr(suborg, "confidence", None)
+            suborg.confidence = data["confidence"]
+            justification_note = f"UI edit: confidence {old} -> {suborg.confidence}"
+        if "confidence_justification" in data:
+            prev = getattr(suborg, "confidence_justification", "") or ""
+            sep = "\n" if prev else ""
+            suborg.confidence_justification = f"{prev}{sep}{data['confidence_justification']}"
+        if "annotation" in data:
+            suborg.annotation = data["annotation"]
+        # New: allow editing suborg text fields
+        if "third_party_description" in data:
+            suborg.third_party_description = data["third_party_description"]
+        if "third_party_page_ref" in data:
+            suborg.third_party_page_ref = data["third_party_page_ref"]
+        if justification_note:
+            prev = getattr(suborg, "confidence_justification", "") or ""
+            sep = "\n" if prev else ""
+            suborg.confidence_justification = f"{prev}{sep}{justification_note}"
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        db.add(suborg)
+        await db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/suborgs/{suborg_id} DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.patch("/report/{scan_id}/suborgs/{suborg_name}")
 async def patch_suborg(scan_id: int, suborg_name: str, data: dict, db=Depends(get_db)):
-    suborg = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.name == suborg_name))).scalar_one_or_none()
-    if not suborg:
-        raise HTTPException(status_code=404, detail="SubserviceOrg not found")
-    
-    # Update allowed fields
-    if "confidence" in data:
-        suborg.confidence = data["confidence"]
-    if "confidence_justification" in data:
-        suborg.confidence_justification = data["confidence_justification"]
-    if "annotation" in data:
-        suborg.annotation = data["annotation"]
-    
-    # Mark executive summary as stale when subservice org data changes
-    await mark_executive_summary_stale(scan_id, db)
-    
-    db.add(suborg)
-    await db.commit()
-    return {"status": "ok"}
+    logging.debug(f"/report/{scan_id}/suborgs/{suborg_name} payload: {data}")
+    try:
+        # Name-based update maintained for backward compatibility. Return 409 if duplicates exist.
+        try:
+            suborg = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.name == suborg_name))).scalar_one_or_none()
+        except MultipleResultsFound:
+            return JSONResponse({
+                "error": "Multiple subservice orgs matched name. Use ID endpoint /report/{scan_id}/suborgs/id/{suborg_id}"
+            }, status_code=409)
+        if not suborg:
+            return JSONResponse({"error": "SubserviceOrg not found"}, status_code=404)
+        justification_note = None
+        if "confidence" in data:
+            old = getattr(suborg, "confidence", None)
+            suborg.confidence = data["confidence"]
+            justification_note = f"UI edit: confidence {old} -> {suborg.confidence}"
+        if "confidence_justification" in data:
+            prev = getattr(suborg, "confidence_justification", "") or ""
+            sep = "\n" if prev else ""
+            suborg.confidence_justification = f"{prev}{sep}{data['confidence_justification']}"
+        if "annotation" in data:
+            suborg.annotation = data["annotation"]
+        # New: allow editing suborg text fields
+        if "third_party_description" in data:
+            suborg.third_party_description = data["third_party_description"]
+        if "third_party_page_ref" in data:
+            suborg.third_party_page_ref = data["third_party_page_ref"]
+        if justification_note:
+            prev = getattr(suborg, "confidence_justification", "") or ""
+            sep = "\n" if prev else ""
+            suborg.confidence_justification = f"{prev}{sep}{justification_note}"
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        db.add(suborg)
+        await db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/suborgs/{suborg_name} DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)

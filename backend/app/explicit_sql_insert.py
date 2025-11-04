@@ -10,6 +10,69 @@ from dotenv import load_dotenv
 import logging
 from . import config
 
+# --- Helpers for safe DB coercion ---
+def _extract_name(val, keys=("name", "product", "auditor", "company")):
+    """Return a human-readable name from a string or dict; fallback to str(val)."""
+    if isinstance(val, str):
+        return val.strip()
+    if isinstance(val, dict):
+        for k in keys:
+            v = val.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    return None
+
+def _parse_datetime(val):
+    """Best-effort parsing for various date shapes; returns datetime or None.
+
+    Accepts:
+    - None/empty -> None
+    - dict -> try common keys (value, date, iso, report_date)
+    - str -> try common formats, else return None
+    """
+    if not val:
+        return None
+    # If dict, try to pull a likely date string
+    if isinstance(val, dict):
+        for k in ("value", "date", "iso", "report_date", "start_date", "end_date"):
+            if k in val and isinstance(val[k], str) and val[k].strip():
+                val = val[k].strip()
+                break
+        else:
+            # Empty/unsupported dict
+            return None
+    if isinstance(val, str):
+        s = val.strip()
+        if not s or s == "{}":
+            return None
+        # Try a handful of common formats before giving up
+        fmts = [
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+            "%m/%d/%Y",
+            "%d/%m/%Y",
+            "%B %d, %Y",   # October 31, 2023
+            "%b %d, %Y",    # Oct 31, 2023
+            "%d %B %Y",     # 31 October 2023
+            "%d %b %Y",     # 31 Oct 2023
+        ]
+        for fmt in fmts:
+            try:
+                return datetime.strptime(s, fmt)
+            except Exception:
+                pass
+        # Last resort: ISO-ish variations (allow seconds, Z suffix)
+        try:
+            # Handles strings like 2023-10-31T00:00:00 or 2023-10-31 00:00:00
+            s_iso = s.replace("T", " ").rstrip("Z")
+            return datetime.fromisoformat(s_iso)
+        except Exception:
+            return None
+    # Already a datetime?
+    if isinstance(val, datetime):
+        return val
+    return None
+
 def insert_extracted_data(json_path: str):
     # Load environment variables from .env
     load_dotenv()
@@ -49,18 +112,26 @@ def insert_extracted_data(json_path: str):
     try:
         # Insert a new scan row and get scan_id
         coverage_period = data.get("coverage_period")
-        start_date = coverage_period.get("start_date") if isinstance(coverage_period, dict) else None
-        end_date = coverage_period.get("end_date") if isinstance(coverage_period, dict) else None
+        start_date = None
+        end_date = None
+        if isinstance(coverage_period, dict):
+            start_date = _parse_datetime(coverage_period.get("start_date"))
+            end_date = _parse_datetime(coverage_period.get("end_date"))
+        # Report date normalization
+        report_date_norm = _parse_datetime(data.get("report_date"))
+        # Product and auditor names normalized to plain strings
+        product_name = _extract_name(data.get("product"), keys=("name", "product"))
+        auditor_name = _extract_name(data.get("auditor"), keys=("name", "auditor", "firm"))
         scan_fields = [
             "product", "report_date", "coverage_start", "coverage_end", "auditor", "result_json", "scan_date",
             "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id"
         ]
         scan_values = [
-            sanitize_value(data.get("product")),
-            sanitize_value(data.get("report_date")),
-            sanitize_value(start_date),
-            sanitize_value(end_date),
-            sanitize_value(data.get("auditor")),
+            sanitize_value(product_name),
+            report_date_norm,
+            start_date,
+            end_date,
+            sanitize_value(auditor_name),
             json.dumps(data, ensure_ascii=False),
             datetime.utcnow(),
             sanitize_value(data.get("gpt_cost")),
@@ -107,6 +178,11 @@ def insert_extracted_data(json_path: str):
         if controls:
             for ctrl in controls:
                 try:
+                    # Backward-compatible mapping for new fields
+                    if 'has_deviation' not in ctrl:
+                        ctrl['has_deviation'] = False
+                    if 'deviation_desc' not in ctrl:
+                        ctrl['deviation_desc'] = None
                     values = [sanitize_value(ctrl.get(f)) for f in config.TABLE_FIELD_MAP["control"][:-1]] + [scan_id]
                     fields = config.TABLE_FIELD_MAP["control"]
                     sql = f"INSERT INTO control ({', '.join(fields)}) VALUES ({', '.join(['%s']*len(fields))})"

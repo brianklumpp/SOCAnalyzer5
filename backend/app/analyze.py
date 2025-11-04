@@ -51,10 +51,22 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
     ]
     for f in files_to_clear:
         try:
-            with open(f, 'w', encoding='utf-8') as clearf:
-                clearf.truncate(0)
+            os.makedirs(os.path.dirname(f), exist_ok=True)
+            # For JSON outputs, write an empty JSON object to avoid stale content
+            if f.replace('\\', '/').endswith('/data/json/section_results.json'):
+                # Section results will be regenerated below; start with an empty array for clarity
+                with open(f, 'w', encoding='utf-8') as clearf:
+                    clearf.write('[]')
+            elif '/data/json/' in f.replace('\\', '/') and f.lower().endswith('.json'):
+                with open(f, 'w', encoding='utf-8') as clearf:
+                    clearf.write('{}')
+            else:
+                # Logs and other files: truncate
+                with open(f, 'w', encoding='utf-8') as clearf:
+                    clearf.truncate(0)
         except Exception:
-            pass  # Ignore if file does not exist yet
+            # Ignore if file does not exist yet or cannot be written; downstream steps will recreate as needed
+            pass
 
     # Always resolve data paths relative to the project root
     PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -85,6 +97,32 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
     AUDITOR_JSON_PATH = data_path('data/json/auditor_result.json')
     COMPANY_JSON_PATH = data_path('data/json/company_result.json')
     PDF_TXT_PATH = data_path('data/output/output.txt')
+
+    # Helper for control extraction progress based on section end_line
+    control_section = None
+    try:
+        with open(SECTION_JSON_PATH, 'r', encoding='utf-8') as sf:
+            _secs = json.load(sf)
+            control_section = next((s for s in _secs if s.get('topic') == 'Control_Descriptions'), None)
+    except Exception:
+        control_section = None
+
+    def _control_progress_hook(latest_ctrl_end_line: int):
+        try:
+            if progress_callback and control_section and isinstance(control_section.get('end_line'), int):
+                ctrl_end = max(0, latest_ctrl_end_line)
+                sec_end = max(1, control_section['end_line'])
+                pct = 50 + int(45 * min(1.0, ctrl_end / float(sec_end)))
+                progress_callback(pct, f"Controls {ctrl_end}/{sec_end}")
+        except Exception:
+            pass
+
+    # Install hook for control extractor v2
+    try:
+        from .extractors.control_extractor_v2 import set_progress_hook as _set_ctrl_hook
+        _set_ctrl_hook(_control_progress_hook)
+    except Exception:
+        pass
 
     try:
         # Always (re)generate section_results.json before running extractors
@@ -184,10 +222,11 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 checklist[idx]["status"] = "done"
             except Exception as e:
                 logger.error(f"{key} extractor failed: {e}\n{traceback.format_exc()}")
+                # Attempt to load any partial JSON result if present to avoid stale data in memory
                 partial_path = None
-                if key == 'auditor':
+                if key == 'auditor_extraction':
                     partial_path = data_path('data/json/auditor_result.json')
-                elif key == 'company':
+                elif key == 'company_extraction':
                     partial_path = data_path('data/json/company_result.json')
                 if partial_path and os.path.isfile(partial_path):
                     try:
@@ -210,17 +249,17 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 # If result is None but JSON file exists, try to load it
                 if res is None:
                     partial_path = None
-                    if key == 'controls':
+                    if key == 'control_extraction':
                         partial_path = data_path('data/json/control_result.json')
-                    elif key == 'cuecs':
+                    elif key == 'cuec_extraction':
                         partial_path = data_path('data/json/cuec_result.json')
-                    elif key == 'subservice_orgs':
+                    elif key == 'subservice_orgs_extraction':
                         partial_path = data_path('data/json/subservice_orgs_result.json')
-                    elif key == 'product':
+                    elif key == 'product_extraction':
                         partial_path = data_path('data/json/product_result.json')
-                    elif key == 'report_date':
+                    elif key == 'report_date_extraction':
                         partial_path = data_path('data/json/report_date_result.json')
-                    elif key == 'coverage_period':
+                    elif key == 'coverage_period_extraction':
                         partial_path = data_path('data/json/coverage_period_result.json')
                     if partial_path and os.path.isfile(partial_path):
                         try:
@@ -245,18 +284,19 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 return key, res
             except Exception as e:
                 logger.error(f"{key} extractor failed: {e}\n{traceback.format_exc()}")
+                # Attempt to load any partial JSON result if present
                 partial_path = None
-                if key == 'controls':
+                if key == 'control_extraction':
                     partial_path = data_path('data/json/control_result.json')
-                elif key == 'cuecs':
+                elif key == 'cuec_extraction':
                     partial_path = data_path('data/json/cuec_result.json')
-                elif key == 'subservice_orgs':
+                elif key == 'subservice_orgs_extraction':
                     partial_path = data_path('data/json/subservice_orgs_result.json')
-                elif key == 'product':
+                elif key == 'product_extraction':
                     partial_path = data_path('data/json/product_result.json')
-                elif key == 'report_date':
+                elif key == 'report_date_extraction':
                     partial_path = data_path('data/json/report_date_result.json')
-                elif key == 'coverage_period':
+                elif key == 'coverage_period_extraction':
                     partial_path = data_path('data/json/coverage_period_result.json')
                 if partial_path and os.path.isfile(partial_path):
                     try:
@@ -315,6 +355,44 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                         standardized_results[short_key] = val[inner_key]
                 else:
                     standardized_results[short_key] = val
+        # Persist bad_chunks from cuec and controls into standardized_results so they are stored with the scan
+        try:
+            if isinstance(extractor_results.get('cuec_extraction'), dict):
+                cuec_res = extractor_results['cuec_extraction']
+                if isinstance(cuec_res.get('bad_chunks'), list) and len(cuec_res['bad_chunks']) > 0:
+                    standardized_results.setdefault('cuecs', {})  # ensure key exists
+                    if isinstance(standardized_results['cuecs'], list):
+                        # keep list of cuecs as-is; add a sibling metadata container
+                        standardized_results.setdefault('cuecs_meta', {})
+                        standardized_results['cuecs_meta']['bad_chunks'] = cuec_res['bad_chunks']
+                        standardized_results['cuecs_meta']['bad_chunk_count'] = cuec_res.get('bad_chunk_count', len(cuec_res['bad_chunks']))
+                    elif isinstance(standardized_results['cuecs'], dict):
+                        standardized_results['cuecs']['bad_chunks'] = cuec_res['bad_chunks']
+                        standardized_results['cuecs']['bad_chunk_count'] = cuec_res.get('bad_chunk_count', len(cuec_res['bad_chunks']))
+            if isinstance(extractor_results.get('control_extraction'), dict):
+                ctrl_res = extractor_results['control_extraction']
+                if isinstance(ctrl_res.get('bad_chunks'), list) and len(ctrl_res['bad_chunks']) > 0:
+                    standardized_results.setdefault('controls', {})
+                    if isinstance(standardized_results['controls'], list):
+                        standardized_results.setdefault('controls_meta', {})
+                        standardized_results['controls_meta']['bad_chunks'] = ctrl_res['bad_chunks']
+                        standardized_results['controls_meta']['bad_chunk_count'] = ctrl_res.get('bad_chunk_count', len(ctrl_res['bad_chunks']))
+                    elif isinstance(standardized_results['controls'], dict):
+                        standardized_results['controls']['bad_chunks'] = ctrl_res['bad_chunks']
+                        standardized_results['controls']['bad_chunk_count'] = ctrl_res.get('bad_chunk_count', len(ctrl_res['bad_chunks']))
+            if isinstance(extractor_results.get('subservice_orgs_extraction'), dict):
+                so_res = extractor_results['subservice_orgs_extraction']
+                if isinstance(so_res.get('bad_chunks'), list) and len(so_res['bad_chunks']) > 0:
+                    standardized_results.setdefault('subservice_orgs', {})
+                    if isinstance(standardized_results['subservice_orgs'], list):
+                        standardized_results.setdefault('subservice_orgs_meta', {})
+                        standardized_results['subservice_orgs_meta']['bad_chunks'] = so_res['bad_chunks']
+                        standardized_results['subservice_orgs_meta']['bad_chunk_count'] = so_res.get('bad_chunk_count', len(so_res['bad_chunks']))
+                    elif isinstance(standardized_results['subservice_orgs'], dict):
+                        standardized_results['subservice_orgs']['bad_chunks'] = so_res['bad_chunks']
+                        standardized_results['subservice_orgs']['bad_chunk_count'] = so_res.get('bad_chunk_count', len(so_res['bad_chunks']))
+        except Exception:
+            pass
         # Always include sections
         standardized_results['sections'] = results.get('sections', [])
         # --- VALIDATION AND LOGGING ---

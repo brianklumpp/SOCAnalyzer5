@@ -9,3 +9,13 @@ psycopg2-binary
 pydantic
 python-socketio[asyncio_client]
 aiofiles
+requests
+python-dotenv
+dataiku-api-client
+redis>=5
+openai
+numpy
+pymupdf
+rapidfuzz
+certifi
+pdfminer.six

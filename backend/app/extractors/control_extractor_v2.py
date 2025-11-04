@@ -15,6 +15,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ..gpt_client import gpt_extract
 import re
+from typing import Dict, Any, Optional
 
 try:
     from .. import config
@@ -51,6 +52,8 @@ MAPPING_TABLE_INDICATORS = [
     r'COSO.*Framework.*Mapped',
     r'^[A-Z]{1,3}\s*\d+\.\d+.*demonstrates.*commitment',  # Standard criteria text
 ]
+
+## Removed: infer_deviation_fields (heuristic deviation detection)
 
 # SAFEGUARD: Use configuration for processing limits
 def get_safeguard_settings():
@@ -231,6 +234,15 @@ def structure_json_records(classified_segments):
         elif segment_type == 'test_result':
             current_record['control_test_results'] = segment_text
 
+        # Report progress for UI if possible
+        try:
+            if PROGRESS_HOOK and isinstance(current_record, dict):
+                ctrl_end = current_record.get('end_line') or current_record.get('endLine')
+                if isinstance(ctrl_end, int) and ctrl_end > 0:
+                    PROGRESS_HOOK(ctrl_end)
+        except Exception:
+            pass
+
     if current_record:
         json_records.append(current_record)
 
@@ -268,7 +280,7 @@ def extract_controls_v2():
 
     file_path = str(config.PDF_TXT_PATH)
     results = []
-    lines_per_chunk = 100
+    lines_per_chunk = getattr(config, 'CONTROL_LINES_PER_CHUNK', 160)
 
     # Load the text from the specified file
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -296,7 +308,14 @@ def extract_controls_v2():
                 break
         
         retry = False
-        for chunk in extract_control_chunks(file_path, start_line, lines_per_chunk=lines_per_chunk):
+        # Use overlapped chunk iterator with accurate chunk_start tracking
+        for chunk_start, chunk in iter_control_chunks_with_overlap(
+            txt_lines,
+            start_line,
+            lines_per_chunk=lines_per_chunk,
+            overlap_lines=getattr(config, 'CONTROL_CHUNK_OVERLAP_LINES', 40),
+            tail_guard_lines=getattr(config, 'CONTROL_CHUNK_TAIL_GUARD_LINES', 8)
+        ):
             # SAFEGUARD: Check for non-control content (if enabled)
             if safeguards['enabled'] and safeguards['detect_non_control']:
                 is_non_control, reason = detect_non_control_content(chunk)
@@ -306,14 +325,15 @@ def extract_controls_v2():
                     start_line = end_line  # Force exit from outer while loop
                     break
             try:
-                logging.info(f"Processing chunk starting at line {start_line}")
-                result, new_start_line, retry = process_chunk_with_gpt(chunk, start_line, txt_lines, results)
+                logging.info(f"Processing chunk starting at line {chunk_start}")
+                result, new_start_line, retry = process_chunk_with_gpt(chunk, chunk_start, txt_lines, results)
                 logging.info(f"New Start Line Result: {result}")
                 logging.info(f"New Start Line: {new_start_line}")
                 
                 if result:
                     result['control_seq'] = seq  # Assign incrementing control_seq
                     seq += 1
+                    # Trust GPT-provided deviation fields as-is (no heuristic/regex post-processing)
                     results.append(result)
                     start_line = new_start_line
                     consecutive_failures = 0  # Reset failure count on success
@@ -325,9 +345,23 @@ def extract_controls_v2():
                         json.dump(result, json_file, ensure_ascii=False, indent=2)
                         first = False
                     logging.info(f"Wrote control to {config.CONTROL_JSON_PATH}")
+                    # Progress update if available
+                    try:
+                        if PROGRESS_HOOK and isinstance(result, dict):
+                            ctrl_end = result.get('end_line') or result.get('endLine')
+                            if isinstance(ctrl_end, int) and ctrl_end > 0:
+                                PROGRESS_HOOK(ctrl_end)
+                    except Exception:
+                        pass
                     break  # Move to the next chunk after processing one control
                 else:
-                    consecutive_failures += 1  # Increment failure count
+                    # On hard failure without retry hint, advance by half-window to avoid stall
+                    consecutive_failures += 1
+                    advance = max(50, lines_per_chunk // 2)
+                    start_line = min(end_line, start_line + advance)
+                    logging.info(f"No control extracted; advancing start_line by {advance} to {start_line}")
+                    # Restart inner loop with new generator at updated start_line
+                    break
                     
                 if retry:
                     lines_per_chunk += 25  # Increase chunk size for retry
@@ -575,6 +609,36 @@ def process_chunk_with_gpt(chunk, start_line, txt_lines, previous_controls):
         # Infer and set control_line_ref and control_page_ref
         control_data['control_line_ref'] = start_line
         control_data['control_page_ref'] = find_nearest_page_ref(txt_lines, start_line)
+        # Deviation fields: confirm via a dedicated GPT pass based strictly on control_test_results
+        try:
+            from . import config as _cfg
+            dev_prompt = _cfg.DEVIATION_EVAL_PROMPT.format(
+                control_id=control_data.get('control_id', ''),
+                control_desc=control_data.get('control_desc', ''),
+                control_test=control_data.get('control_test', ''),
+                control_test_results=control_data.get('control_test_results', '') or ''
+            )
+            logging.info(f"[GPT PROMPT][deviation_eval][start_line={start_line}]: {dev_prompt}")
+            dev_resp_raw = gpt_extract(dev_prompt, "control_extractor_v2")
+            logging.info(f"[GPT RAW RESPONSE][deviation_eval][start_line={start_line}]: {dev_resp_raw}")
+            dev_text = (dev_resp_raw or '').strip()
+            if dev_text.startswith('```json'):
+                dev_text = dev_text[7:]
+            elif dev_text.startswith('```'):
+                dev_text = dev_text[3:]
+            if dev_text.endswith('```'):
+                dev_text = dev_text[:-3]
+            import json as _json
+            dev_json = _json.loads(dev_text)
+            control_data['has_deviation'] = bool(dev_json.get('has_deviation', False))
+            control_data['deviation_desc'] = dev_json.get('deviation_desc', '') if control_data['has_deviation'] else ''
+        except Exception as _dev_err:
+            logging.warning(f"[deviation_eval] Fallback due to error: {_dev_err}")
+            # Keep whatever GPT provided in first pass; normalize types
+            control_data['has_deviation'] = bool(control_data.get('has_deviation', False))
+            dev_desc = control_data.get('deviation_desc')
+            control_data['deviation_desc'] = dev_desc if isinstance(dev_desc, str) else ''
+
         # Robust defaulting for any missing fields
         required_fields = [
             "control_page_ref",
@@ -603,16 +667,17 @@ def process_chunk_with_gpt(chunk, start_line, txt_lines, previous_controls):
         if len(lookahead_chunk) < 1000:
             logging.warning("Lookahead chunk is shorter than expected.")
 
-        next_control_start = infer_next_control_start(lookahead_chunk, 0)
-        logging.info(f"Next control likely starts at line {next_control_start}")
-
-        # Verify the suggested start with GPT
-        validated_start = verify_next_control_start_with_gpt(next_control_start, previous_controls, txt_lines)
-        if validated_start is not None:
-            start_line = lookahead_start + validated_start - 1
+        if getattr(config, 'CONTROL_VERIFY_NEXT_START_ENABLED', False):
+            next_control_start = infer_next_control_start(lookahead_chunk, 0)
+            logging.info(f"Next control likely starts at line {next_control_start}")
+            validated_start = verify_next_control_start_with_gpt(next_control_start, previous_controls, txt_lines)
+            if validated_start is not None:
+                start_line = lookahead_start + validated_start - 1
+            else:
+                logging.info("Suggested start was invalid. Searching for next control.")
+                start_line = control_data['end_line']
         else:
-            logging.info("Suggested start was invalid. Searching for next control.")
-            # Implement fallback mechanism here if needed
+            # Deterministic: always advance to the end_line of the current control
             start_line = control_data['end_line']
 
         # Replace hard-coded test limit with config variables
@@ -627,20 +692,96 @@ def process_chunk_with_gpt(chunk, start_line, txt_lines, previous_controls):
         return None, start_line, False
 
 def parse_gpt_response(response_text):
-    try:
-        # Remove Markdown code block delimiters if present
-        if response_text.startswith('```json') and response_text.endswith('```'):
-            response_text = response_text[7:-3].strip()
+    import re
+    def _normalize_json_like(text: str) -> str:
+        # Remove markdown code fences
+        t = text.strip()
+        if t.startswith('```json'):
+            t = t[7:]
+        if t.startswith('```'):
+            t = t[3:]
+        if t.endswith('```'):
+            t = t[:-3]
+        # Normalize quotes and remove zero-width spaces/backticks
+        t = t.replace('\u201c', '"').replace('\u201d', '"').replace('\u2019', "'")
+        t = t.replace('“', '"').replace('”', '"').replace('’', "'")
+        t = t.replace('`', '')
+        t = t.replace('\u200b', '').replace('\ufeff', '')
+        # Remove trailing commas before } or ]
+        t = re.sub(r',\s*([}\]])', r'\1', t)
+        return t.strip()
 
-        # Parse the JSON response
-        control_data = json.loads(response_text)
-        logging.debug(f"Parsed JSON response: {control_data}")
-        
-        # Extract the line offsets for the control
+    def _extract_bracket_matched_json(text: str) -> str:
+        # Find first '{' or '[' and return the bracket-balanced substring
+        start = None
+        opener = None
+        for i, ch in enumerate(text):
+            if ch in '{[':
+                start = i
+                opener = ch
+                break
+        if start is None:
+            return text
+        closer = '}' if opener == '{' else ']'
+        depth = 0
+        in_string = False
+        escape = False
+        for j in range(start, len(text)):
+            c = text[j]
+            if in_string:
+                if escape:
+                    escape = False
+                elif c == '\\':
+                    escape = True
+                elif c == '"':
+                    in_string = False
+                continue
+            else:
+                if c == '"':
+                    in_string = True
+                    continue
+                if c == opener:
+                    depth += 1
+                elif c == closer:
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:j+1]
+        # Fallback: return from start to end
+        return text[start:]
+
+    try:
+        if response_text is None:
+            return {}, 0, 0
+        if not isinstance(response_text, str):
+            response_text = str(response_text)
+
+        cleaned = _normalize_json_like(response_text)
+
+        # Try direct parse first
+        try:
+            parsed = json.loads(cleaned)
+        except Exception:
+            candidate = _extract_bracket_matched_json(cleaned)
+            # Second-pass cleanup for trailing commas
+            candidate = re.sub(r',\s*([}\]])', r'\1', candidate)
+            parsed = json.loads(candidate)
+
+        # Normalize to dict
+        if isinstance(parsed, list):
+            parsed_dicts = [x for x in parsed if isinstance(x, dict)]
+            control_data = parsed_dicts[0] if parsed_dicts else {}
+        elif isinstance(parsed, dict):
+            control_data = parsed
+        else:
+            control_data = {}
+
+        if not isinstance(control_data, dict):
+            return {}, 0, 0
+
         lines_into_chunk = control_data.get('start_line', 0)
         lines_covered = control_data.get('end_line', 0)
         return control_data, lines_into_chunk, lines_covered
-    except json.JSONDecodeError as e:
+    except Exception as e:
         logging.error(f"Error parsing JSON response: {e}")
         return {}, 0, 0
 
@@ -697,6 +838,13 @@ def infer_next_control_start(chunk, current_position):
         logging.warning("Received no response for next control start inference.")
     return None
 
+# Progress hook to report extraction progress externally
+PROGRESS_HOOK = None
+
+def set_progress_hook(hook_fn):
+    global PROGRESS_HOOK
+    PROGRESS_HOOK = hook_fn
+
 def main():
     # Load section details from JSON
     with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as json_file:
@@ -739,6 +887,14 @@ def main():
                     seq += 1
                     results.append(result)
                     start_line = new_start_line
+                    # Progress update if available
+                    try:
+                        if PROGRESS_HOOK and isinstance(result, dict):
+                            ctrl_end = result.get('end_line') or result.get('endLine')
+                            if isinstance(ctrl_end, int) and ctrl_end > 0:
+                                PROGRESS_HOOK(ctrl_end)
+                    except Exception:
+                        pass
                     logging.info(f"Appended result. Total results: {len(results)}")
                     # Write each control as soon as it is found
                     with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
@@ -831,29 +987,66 @@ def extract_control_chunks(file_path, start_line, lines_per_chunk=50):
                 break
             yield chunk
 
+
+def iter_control_chunks_with_overlap(txt_lines, start_line, lines_per_chunk=140, overlap_lines=40, tail_guard_lines=8):
+    """
+    Iterate over overlapped chunks from txt_lines, yielding (chunk_start_line, chunk_text).
+    - lines_per_chunk: primary window size
+    - overlap_lines: number of lines to overlap between consecutive chunks
+    - tail_guard_lines: extra lines appended at end of each chunk to avoid splitting conclusions (e.g., 'Deviation noted')
+    """
+    if start_line is None or start_line < 1:
+        start_idx = 1
+    else:
+        start_idx = start_line
+    total_lines = len(txt_lines)
+    step = max(1, lines_per_chunk - max(0, overlap_lines))
+    idx = start_idx
+    while idx <= total_lines:
+        end_idx = min(total_lines, idx + lines_per_chunk - 1 + max(0, tail_guard_lines))
+        chunk = ''.join(txt_lines[idx-1:end_idx])
+        if not chunk.strip():
+            break
+        yield idx, chunk
+        idx += step
+
 # --- Ported helper functions from control_extractor.py ---
 _embedding_cache = {}
 def get_openai_embedding(text):
     global _embedding_cache
     if text in _embedding_cache:
         return _embedding_cache[text]
-    import requests, time
+    import os, time
+    # Attempt Dataiku DSS-based embedding if available in future; currently fallback to OpenAI only if key is present
+    import requests, certifi
+    from ..config import EMBEDDING_PROVIDER, OPENAI_EMBEDDING_MODEL
+    if EMBEDDING_PROVIDER != 'openai':
+        raise RuntimeError('Embedding provider set to non-openai but not implemented yet. Set EMBEDDING_PROVIDER=openai or provide Dataiku embedding endpoint.')
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError('Embedding provider not configured (OPENAI_API_KEY missing).')
     headers = {
-        'Authorization': f'Bearer {os.getenv("OPENAI_API_KEY")}',
+        'Authorization': f'Bearer {api_key}',
         'Content-Type': 'application/json',
     }
     data = {
         'input': text,
-        'model': getattr(config, 'OPENAI_EMBEDDING_MODEL', 'text-embedding-ada-002'),
+        'model': OPENAI_EMBEDDING_MODEL,
     }
     for attempt in range(3):
         try:
-            resp = requests.post('https://api.openai.com/v1/embeddings', headers=headers, json=data)
+            resp = requests.post(
+                'https://api.openai.com/v1/embeddings',
+                headers=headers,
+                json=data,
+                timeout=20,
+                verify=certifi.where()  # force public trust store; ignore REQUESTS_CA_BUNDLE
+            )
             resp.raise_for_status()
             embedding = resp.json()['data'][0]['embedding']
             _embedding_cache[text] = embedding
             return embedding
-        except Exception as e:
+        except Exception:
             time.sleep(1 + attempt)
     raise RuntimeError(f'Failed to get embedding for text: {text}')
 
@@ -863,47 +1056,125 @@ def cosine_similarity(vec1, vec2):
     v2_ = np.array(vec2)
     return float(np.dot(v1, v2_) / (np.linalg.norm(v1) * np.linalg.norm(v2_)))
 
+def classify_control_domain_with_gpt(control_desc: str) -> Dict[str, Any]:
+    """Ask GPT to classify the control into a TSC/COSO domain and suggest candidate IDs.
+    Returns dict: { domain: str or None, tsc_candidates: [ids], coso_candidates: [ids], reasoning: str }
+    """
+    try:
+        prompt = (
+            "You are an expert SOC 2 assessor. Classify the following single control description into a high-level domain "
+            "from this set: Security, Availability, Confidentiality, Processing Integrity, Privacy. Then suggest up to 3 likely AICPA TSC IDs "
+            "(e.g., CC7.2, C1.7, A1.1, PI1.3, P4.1, Conf1.3) and optionally up to 2 COSO principle IDs that best align.\n\n"
+            "Respond ONLY with a JSON object with keys: domain (one of the set), tsc_candidates (array of strings), coso_candidates (array of strings), reasoning (string).\n\n"
+            f"Control: {control_desc}"
+        )
+        raw = gpt_extract(prompt, "control_extractor_v2")
+        # Reuse robust cleaner
+        parsed, _, _ = parse_gpt_response(raw)
+        domain = parsed.get('domain') if isinstance(parsed, dict) else None
+        tsc_candidates = parsed.get('tsc_candidates') if isinstance(parsed, dict) else []
+        coso_candidates = parsed.get('coso_candidates') if isinstance(parsed, dict) else []
+        reasoning = parsed.get('reasoning') if isinstance(parsed, dict) else ''
+        if not isinstance(tsc_candidates, list):
+            tsc_candidates = []
+        if not isinstance(coso_candidates, list):
+            coso_candidates = []
+        return {
+            'domain': domain if isinstance(domain, str) else None,
+            'tsc_candidates': [str(x) for x in tsc_candidates if isinstance(x, (str, int))],
+            'coso_candidates': [str(x) for x in coso_candidates if isinstance(x, (str, int))],
+            'reasoning': reasoning if isinstance(reasoning, str) else ''
+        }
+    except Exception:
+        return {'domain': None, 'tsc_candidates': [], 'coso_candidates': [], 'reasoning': ''}
+
+def _ids_by_domain(tsc_criteria: list, domain: Optional[str]) -> list:
+    if not domain:
+        return [c['id'] for c in tsc_criteria]
+    # Map domain to id prefixes per TSC categories
+    domain = domain.lower()
+    prefixes = []
+    if 'confidential' in domain:
+        prefixes = ['Conf']
+    elif 'availability' in domain:
+        prefixes = ['A']
+    elif 'privacy' in domain:
+        prefixes = ['P']
+    elif 'processing' in domain:
+        prefixes = ['PI']
+    else:
+        # Security / Common Criteria
+        prefixes = ['C', 'CC']
+    return [c['id'] for c in tsc_criteria if any(c['id'].startswith(pfx) for pfx in prefixes)]
+
 def map_control_to_frameworks(control_desc, tsc_criteria, coso_criteria):
     import logging
+    from ..config import CONTROL_EMBEDDING_MAPPING_ENABLED
+    if not CONTROL_EMBEDDING_MAPPING_ENABLED:
+        logging.info("Embedding-based framework mapping disabled by config. Skipping.")
+        return None, None, -1, -1
     if not tsc_criteria:
         logging.error("TSC criteria list is empty! Cannot map control to TSC framework.")
     if not coso_criteria:
         logging.error("COSO criteria list is empty! Cannot map control to COSO framework.")
+
+    # 1) GPT-first domain/candidate classification (contextual intent)
+    classification = classify_control_domain_with_gpt(control_desc)
+    predicted_domain = classification.get('domain')
+    tsc_candidate_ids = set([x.strip() for x in classification.get('tsc_candidates', [])])
+
     try:
         cuec_emb = get_openai_embedding(control_desc)
     except Exception as e:
         logging.error(f"Failed to get embedding for control_desc: {control_desc[:80]}... Error: {e}")
         return None, None, -1, -1
-    # TSC
+
+    # 2) Restrict TSC search space to GPT predicted domain or candidates when available
+    allowed_tsc_ids = _ids_by_domain(tsc_criteria, predicted_domain)
+    if tsc_candidate_ids:
+        # Prefer GPT candidates but ensure they are valid
+        allowed_tsc_ids = [tid for tid in allowed_tsc_ids if tid in tsc_candidate_ids] or allowed_tsc_ids
+
+    # TSC similarity within allowed set
     best_tsc_id = None
     best_tsc_sim = -1
     for crit in tsc_criteria:
+        cid = crit['id']
+        if allowed_tsc_ids and cid not in allowed_tsc_ids:
+            continue
         try:
             emb = get_openai_embedding(crit['description'])
             sim = cosine_similarity(cuec_emb, emb)
             if sim > best_tsc_sim:
                 best_tsc_sim = sim
-                best_tsc_id = crit['id']
+                best_tsc_id = cid
         except Exception as e:
-            logging.error(f"Failed to get embedding or similarity for TSC criteria: {crit.get('id', 'unknown')}. Error: {e}")
+            logging.debug(f"Embedding sim failed for TSC {cid}: {e}")
             continue
-    # COSO
+
+    # 3) COSO: if GPT provided candidates, prefer those; else evaluate all (smaller set)
+    coso_candidate_ids = set([x.strip() for x in classification.get('coso_candidates', [])])
     best_coso_id = None
     best_coso_sim = -1
     for crit in coso_criteria:
+        cid = crit['id']
+        if coso_candidate_ids and cid not in coso_candidate_ids:
+            continue
         try:
             emb = get_openai_embedding(crit['description'])
             sim = cosine_similarity(cuec_emb, emb)
             if sim > best_coso_sim:
                 best_coso_sim = sim
-                best_coso_id = crit['id']
+                best_coso_id = cid
         except Exception as e:
-            logging.error(f"Failed to get embedding or similarity for COSO criteria: {crit.get('id', 'unknown')}. Error: {e}")
+            logging.debug(f"Embedding sim failed for COSO {cid}: {e}")
             continue
+
     if best_tsc_id is None:
         logging.warning(f"No TSC match found for control: {control_desc[:80]}...")
     if best_coso_id is None:
         logging.warning(f"No COSO match found for control: {control_desc[:80]}...")
+
     return best_tsc_id, best_coso_id, best_tsc_sim, best_coso_sim
 
 def get_tsc_section(tsc_id):

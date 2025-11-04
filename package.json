@@ -10,8 +10,7 @@
     "react-csv": "^2.2.2",
     "react-quill": "^2.0.0",
     "recharts": "^3.1.0",
-    "ws": "^8.18.3",
-    "xlsx": "^0.18.5"
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/react-beautiful-dnd": "^13.1.8",

@@ -1,0 +1,13 @@
+.git
+.gitignore
+.vscode
+__pycache__/
+*.pyc
+.venv/
+*.env
+node_modules/
+frontend/node_modules/
+data/
+certs/
+.DS_Store
+Thumbs.db

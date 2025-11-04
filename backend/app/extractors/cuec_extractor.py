@@ -274,35 +274,80 @@ def extract_cuecs():
             if clean_response.endswith('```'):
                 clean_response = clean_response[:-3]
             clean_response = clean_response.strip()
-            def extract_json(text):
-                obj_match = re.search(r'(\{.*?\})', text, re.DOTALL)
-                if obj_match:
-                    return obj_match.group(1)
-                array_match = re.search(r'(\[.*?\])', text, re.DOTALL)
-                if array_match:
-                    return array_match.group(1)
-                return text
+
+            # Robust normalization similar to control_extractor_v2
+            import re as _re
+            def _normalize_json_like(text: str) -> str:
+                t = text.replace('\u201c', '"').replace('\u201d', '"').replace('\u2019', "'")
+                t = t.replace('“', '"').replace('”', '"').replace('’', "'")
+                t = t.replace('`', '').replace('\u200b', '').replace('\ufeff', '')
+                # Remove trailing commas before } or ]
+                t = _re.sub(r',\s*([}\]])', r'\1', t)
+                return t.strip()
+
+            def _extract_bracket_matched_json(text: str) -> str:
+                start = None
+                opener = None
+                for i, ch in enumerate(text):
+                    if ch in '{[':
+                        start = i
+                        opener = ch
+                        break
+                if start is None:
+                    return text
+                closer = '}' if opener == '{' else ']'
+                depth = 0
+                in_string = False
+                escape = False
+                for j in range(start, len(text)):
+                    c = text[j]
+                    if in_string:
+                        if escape:
+                            escape = False
+                        elif c == '\\':
+                            escape = True
+                        elif c == '"':
+                            in_string = False
+                        continue
+                    else:
+                        if c == '"':
+                            in_string = True
+                            continue
+                        if c == opener:
+                            depth += 1
+                        elif c == closer:
+                            depth -= 1
+                            if depth == 0:
+                                return text[start:j+1]
+                return text[start:]
+
+            clean_response = _normalize_json_like(clean_response)
+
             # Try direct parse
             try:
                 data = json.loads(clean_response)
             except Exception as e1:
-                # Try to extract a valid JSON object/array
-                json_sub = extract_json(clean_response)
+                # Extract a valid JSON object/array
+                json_sub = _extract_bracket_matched_json(clean_response)
                 try:
                     data = json.loads(json_sub)
                 except Exception as e2:
-                    # Try to repair unterminated array (common GPT truncation)
-                    repaired = json_sub
-                    if not repaired.strip().endswith(']') and repaired.strip().startswith('['):
+                    # Try to repair unterminated array/object by trimming and closing
+                    repaired = _re.sub(r',\s*([}\]])', r'\1', json_sub)
+                    if repaired.strip().startswith('[') and not repaired.strip().endswith(']'):
                         repaired = repaired.strip() + ']'
+                    if repaired.strip().startswith('{') and not repaired.strip().endswith('}'):
+                        repaired = repaired.strip() + '}'
                     try:
                         data = json.loads(repaired)
                     except Exception as e3:
-                        # Try to recover as much as possible: find all valid JSON objects in the text
-                        objs = re.findall(r'\{[^}]*\}', clean_response)
-                        data = [json.loads(obj) for obj in objs if obj.strip().startswith('{')]
+                        # Recover individual objects if possible
+                        objs = _re.findall(r'\{[\s\S]*?\}', clean_response)
+                        try:
+                            data = [json.loads(obj) for obj in objs if obj.strip().startswith('{')]
+                        except Exception:
+                            data = []
                         if not data:
-                            # Log the bad chunk and response for inspection
                             bad_chunk_info = {
                                 'chunk_index': idx,
                                 'chunk_text': chunk[:500],
@@ -312,10 +357,9 @@ def extract_cuecs():
                                 'chunk_size': len(chunk),
                                 'prompt_length': len(prompt)
                             }
-                            logging.error(f"Failed to parse GPT response as JSON. Raw response: {response}")
+                            logging.warning(f"Failed to parse GPT response as JSON. Raw response truncated: {response[:300]}")
                             with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
                                 gptlog.write(f"\n--- BAD CHUNK {idx} ---\nCHUNK TEXT (truncated):\n{chunk[:500]}\nGPT RESPONSE (truncated):\n{response[:1000]}\nERRORS: e1: {e1}; e2: {e2}; e3: {e3}\nRESPONSE LENGTH: {len(response) if response else 0}\nCHUNK SIZE: {len(chunk)}\nPROMPT LENGTH: {len(prompt)}\n")
-                            # Add to bad_chunks for frontend flagging
                             bad_chunks.append(bad_chunk_info)
                             return [], seq
             # Handle dict with cuecs/excluded
@@ -596,6 +640,57 @@ def extract_cuecs():
                 existing_descs.add(rc['cuec_description'].strip())
 
 
+    # Minimal heuristic fallback (disabled by default – see config.ALLOW_REGEX_FALLBACKS)
+    if not cuec_results and getattr(config, 'ALLOW_REGEX_FALLBACKS', False):
+        try:
+            full_text = ''
+            try:
+                with open(str(config.OUTPUT_DIR / 'output.txt'), 'r', encoding='utf-8') as tf:
+                    full_text = tf.read()
+            except Exception:
+                pass
+            if not full_text:
+                with open(PDF_TXT_PATH, 'r', encoding='utf-8') as tf:
+                    full_text = tf.read()
+            # Find the UER/CUEC section
+            m = re.search(r"(User Entity Responsibilities|Complementary User-?Entity Controls|Complementary User Entity Responsibilities)", full_text, re.IGNORECASE)
+            if m:
+                start_idx = m.start()
+                tail = full_text[start_idx:start_idx + 15000]  # scan forward a reasonable window
+                # Stop at likely next heading
+                stop = re.search(r"\n\s*(Subservice Organization|Complementary Subservice|Management's Assertion|Independent Service Auditor)", tail, re.IGNORECASE)
+                if stop:
+                    tail = tail[:stop.start()]
+                lines = [l.strip() for l in tail.splitlines() if l.strip()]
+                candidates = []
+                for l in lines:
+                    base = l.lstrip('•-*\u2022').strip()
+                    if len(base) < 20:
+                        continue
+                    low = base.lower()
+                    if ('responsible for' in low) or ('must ' in low) or ('shall ' in low) or ('should ' in low) or ('ensure ' in low):
+                        candidates.append(base)
+                seq_f = 1
+                for c in candidates:
+                    cuec_results.append({
+                        'cuec_description': c,
+                        'cuec_seq': seq_f,
+                        'cuec_confidence': 0.5,
+                        'cuec_confidence_justification': ['+0.5: heuristic from UER section; GPT returned no CUECs'],
+                        'cuec_source': 'heuristic_fallback',
+                        'cuec_tsc_id': None,
+                        'cuec_coso_id': None,
+                        'cuec_tsc_similarity': -1,
+                        'cuec_coso_similarity': -1,
+                        'cuec_closest_framework': 'Undetermined',
+                        'cuec_tsc_confidence_pct': None,
+                        'cuec_coso_confidence_pct': None,
+                        'cuec_line_ref': None,
+                    })
+                    seq_f += 1
+        except Exception as _e:
+            logging.error(f"[FALLBACK] CUEC heuristic fallback failed: {_e}")
+
     output_obj = {'cuecs': cuec_results}
     if bad_chunks:
         output_obj['bad_chunks'] = bad_chunks
@@ -796,6 +891,9 @@ def get_openai_embedding(text):
     global _embedding_cache
     if text in _embedding_cache:
         return _embedding_cache[text]
+    from ..config import EMBEDDING_PROVIDER, OPENAI_EMBEDDING_MODEL
+    if EMBEDDING_PROVIDER != 'openai':
+        raise RuntimeError('Embedding provider set to non-openai but not implemented yet. Set EMBEDDING_PROVIDER=openai or provide Dataiku embedding endpoint.')
     headers = {
         'Authorization': f'Bearer {load_api_key()}',
         'Content-Type': 'application/json',
@@ -804,9 +902,10 @@ def get_openai_embedding(text):
         'input': text,
         'model': OPENAI_EMBEDDING_MODEL,
     }
+    import certifi
     for attempt in range(3):
         try:
-            resp = requests.post(OPENAI_EMBEDDING_URL, headers=headers, json=data)
+            resp = requests.post(OPENAI_EMBEDDING_URL, headers=headers, json=data, timeout=20, verify=certifi.where())
             resp.raise_for_status()
             embedding = resp.json()['data'][0]['embedding']
             _embedding_cache[text] = embedding

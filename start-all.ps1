@@ -20,10 +20,42 @@ if ($redisRunning) {
     Write-Host "Redis container created and started."
 }
 
-# Start backend (FastAPI) on all interfaces for WebSocket compatibility (FORCE SINGLE WORKER for debugging)
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --workers 1" -WorkingDirectory "$PSScriptRoot"
+# Start backend (FastAPI) in a new window
+$activate = Join-Path $PSScriptRoot ".venv\\Scripts\\Activate.ps1"
+if (Test-Path $activate) {
+    $backendCmd = '& .\\.venv\\Scripts\\Activate.ps1; $env:PYTHONIOENCODING = ''utf-8''; python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --workers 1'
+} else {
+    $backendCmd = '$env:PYTHONIOENCODING = ''utf-8''; python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --workers 1'
+}
+Start-Process powershell -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", $backendCmd -WorkingDirectory "$PSScriptRoot"
 
-# Start frontend (React, production build)
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "npx serve -s build" -WorkingDirectory "$PSScriptRoot\frontend"
+# Prepare and start frontend (React, production build) in another new window
+$frontendDir = Join-Path $PSScriptRoot "frontend"
+$buildIndex = Join-Path $frontendDir "build\index.html"
 
-Write-Host "Both backend and frontend are starting in new PowerShell windows."
+# If build is missing, install deps and build once
+if (-not (Test-Path $buildIndex)) {
+    Write-Host "Frontend build not found. Installing dependencies and creating production build..."
+    if (Test-Path (Join-Path $frontendDir "package-lock.json")) {
+        Start-Process powershell -Wait -ArgumentList "-NoExit", "-Command", "npm ci" -WorkingDirectory $frontendDir | Out-Null
+    } else {
+        Start-Process powershell -Wait -ArgumentList "-NoExit", "-Command", "npm install" -WorkingDirectory $frontendDir | Out-Null
+    }
+    Start-Process powershell -Wait -ArgumentList "-NoExit", "-Command", "npm run build" -WorkingDirectory $frontendDir | Out-Null
+}
+
+# Use a fixed port to avoid interactive prompts if 3000 is in use by a dev server
+$frontendPort = 3001
+Write-Host "Starting frontend on http://localhost:$frontendPort (serving ./frontend/build via 'serve' 14.2.5)"
+# Ensure 'serve' is available (installed as devDependency). If node_modules missing, run a quick install.
+if (-not (Test-Path (Join-Path $frontendDir "node_modules\serve\package.json"))) {
+    Write-Host "Installing frontend dev dependencies (including 'serve')..."
+    if (Test-Path (Join-Path $frontendDir "package-lock.json")) {
+        Start-Process powershell -Wait -ArgumentList "-NoExit", "-Command", "npm ci" -WorkingDirectory $frontendDir | Out-Null
+    } else {
+        Start-Process powershell -Wait -ArgumentList "-NoExit", "-Command", "npm install" -WorkingDirectory $frontendDir | Out-Null
+    }
+}
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "npm run serve:prod -- -l $frontendPort" -WorkingDirectory $frontendDir
+
+Write-Host "Backend and frontend started in separate PowerShell windows."
