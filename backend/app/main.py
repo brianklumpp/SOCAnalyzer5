@@ -408,6 +408,7 @@ def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
 @app.patch("/report/{scan_id}/suborgs/id/{suborg_id}")
 async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, Any] = Body(...), db=Depends(get_db)):
     try:
+        logging.info(f"PATCH suborg by id: scan_id={scan_id}, suborg_id={suborg_id}, payload={payload}")
         row = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.id == suborg_id, SubserviceOrg.scan_id == scan_id))).scalar_one_or_none()
         if not row:
             raise HTTPException(status_code=404, detail="Subservice org not found")
@@ -425,6 +426,7 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, An
 @app.patch("/report/{scan_id}/suborgs/{suborg_name}")
 async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str, Any] = Body(...), db=Depends(get_db)):
     try:
+        logging.info(f"PATCH suborg by name: scan_id={scan_id}, name={suborg_name}, payload={payload}")
         q = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.name == suborg_name))).scalars().all()
         if not q:
             raise HTTPException(status_code=404, detail="Subservice org not found")
