@@ -153,6 +153,7 @@ def insert_extracted_data(json_path: str):
         company_id = None
         if company:
             try:
+                cur.execute("SAVEPOINT company_insert")
                 name = company if isinstance(company, str) else company.get("company") or company.get("name")
                 parent_company = company.get("parent_company") if isinstance(company, dict) else None
                 confidence = company.get("confidence") if isinstance(company, dict) else None
@@ -167,17 +168,19 @@ def insert_extracted_data(json_path: str):
                     # Update scan record with company_id
                     cur.execute("UPDATE scan SET company_id = %s WHERE id = %s", (company_id, scan_id))
                     logging.info(f"Updated scan {scan_id} with company_id {company_id}")
+                cur.execute("RELEASE SAVEPOINT company_insert")
                 summary["company"] += 1
                 logging.info(f"Inserted into company: {values}")
             except Exception as e:
                 summary["errors"].append(f"Company insert error: {e}")
                 logging.error(f"Company insert error: {e}")
-                conn.rollback()
+                cur.execute("ROLLBACK TO SAVEPOINT company_insert")
         # Insert controls
         controls = data.get("controls")
         if controls:
             for ctrl in controls:
                 try:
+                    cur.execute("SAVEPOINT control_insert")
                     # Backward-compatible mapping for new fields
                     if 'has_deviation' not in ctrl:
                         ctrl['has_deviation'] = False
@@ -188,33 +191,44 @@ def insert_extracted_data(json_path: str):
                     sql = f"INSERT INTO control ({', '.join(fields)}) VALUES ({', '.join(['%s']*len(fields))})"
                     logging.info(f"SQL: {sql} | Values: {values}")
                     cur.execute(sql, values)
+                    cur.execute("RELEASE SAVEPOINT control_insert")
                     summary["control"] += 1
                     logging.info(f"Inserted into control: {values}")
                 except Exception as e:
                     summary["errors"].append(f"Control insert error: {e}")
                     logging.error(f"Control insert error: {e}")
-                    conn.rollback()
+                    cur.execute("ROLLBACK TO SAVEPOINT control_insert")
         # Insert cuecs
         cuecs = data.get("cuecs")
         if cuecs:
             for cuec in cuecs:
                 try:
+                    cur.execute("SAVEPOINT cuec_insert")
                     values = [sanitize_value(cuec.get(f)) for f in config.TABLE_FIELD_MAP["cuec"][:-1]] + [scan_id]
                     fields = config.TABLE_FIELD_MAP["cuec"]
                     sql = f"INSERT INTO cuec ({', '.join(fields)}) VALUES ({', '.join(['%s']*len(fields))})"
                     logging.info(f"SQL: {sql} | Values: {values}")
                     cur.execute(sql, values)
+                    cur.execute("RELEASE SAVEPOINT cuec_insert")
                     summary["cuec"] += 1
                     logging.info(f"Inserted into cuec: {values}")
                 except Exception as e:
                     summary["errors"].append(f"CUEC insert error: {e}")
                     logging.error(f"CUEC insert error: {e}")
-                    conn.rollback()
+                    cur.execute("ROLLBACK TO SAVEPOINT cuborg_insert")
         # Insert subservice orgs
-        suborgs = data.get("subservice_orgs")
-        if suborgs:
+        suborgs_wrapper = data.get("subservice_orgs")
+        # Handle nested structure: {"subservice_orgs": {"subservice_orgs": [...]}}
+        if suborgs_wrapper:
+            if isinstance(suborgs_wrapper, dict) and "subservice_orgs" in suborgs_wrapper:
+                suborgs = suborgs_wrapper.get("subservice_orgs", [])
+            elif isinstance(suborgs_wrapper, list):
+                suborgs = suborgs_wrapper
+            else:
+                suborgs = []
             for org in suborgs:
                 try:
+                    cur.execute("SAVEPOINT suborg_insert")
                     name = org.get("third_party_name") if isinstance(org, dict) else org
                     confidence = org.get("third_party_confidence") if isinstance(org, dict) else None
                     third_party_description = org.get("third_party_description") if isinstance(org, dict) else None
@@ -247,32 +261,52 @@ def insert_extracted_data(json_path: str):
                     sql = f"INSERT INTO subservice_org ({', '.join(fields)}) VALUES ({', '.join(['%s']*len(fields))}) ON CONFLICT DO NOTHING"
                     logging.info(f"SQL: {sql} | Values: {values}")
                     cur.execute(sql, values)
+                    cur.execute("RELEASE SAVEPOINT suborg_insert")
                     summary["subservice_org"] += 1
                     logging.info(f"Inserted into subservice_org: {values}")
                 except Exception as e:
                     summary["errors"].append(f"SubserviceOrg insert error: {e}")
                     logging.error(f"SubserviceOrg insert error: {e}")
-                    conn.rollback()
+                    cur.execute("ROLLBACK TO SAVEPOINT suborg_insert")
         # Insert product
         product = data.get("product")
         if product:
             try:
+                cur.execute("SAVEPOINT product_insert")
                 name = product if isinstance(product, str) else product.get("product") or product.get("name")
                 values = [sanitize_value(name), scan_id]
                 fields = config.TABLE_FIELD_MAP["product"]
                 sql = f"INSERT INTO product ({', '.join(fields)}) VALUES ({', '.join(['%s']*len(fields))}) ON CONFLICT DO NOTHING"
                 logging.info(f"SQL: {sql} | Values: {values}")
                 cur.execute(sql, values)
+                cur.execute("RELEASE SAVEPOINT product_insert")
                 summary["product"] += 1
                 logging.info(f"Inserted into product: {values}")
             except Exception as e:
                 summary["errors"].append(f"Product insert error: {e}")
                 logging.error(f"Product insert error: {e}")
-                conn.rollback()
-        conn.commit()
+                cur.execute("ROLLBACK TO SAVEPOINT product_insert")
+        print("DEBUG: About to commit transaction...")
+        logging.info("About to commit transaction...")
+        try:
+            conn.commit()
+            print("DEBUG: Transaction committed successfully!")
+            logging.info("Transaction committed successfully!")
+        except Exception as commit_error:
+            print(f"DEBUG: COMMIT FAILED: {commit_error}")
+            logging.error(f"COMMIT FAILED: {commit_error}")
+            raise
+    except Exception as outer_error:
+        print(f"DEBUG: Outer exception caught: {outer_error}")
+        logging.error(f"Outer exception caught: {outer_error}")
+        conn.rollback()
+        raise
     finally:
+        print("DEBUG: In finally block, closing connection")
         cur.close()
         conn.close()
+        logging.info("Connection closed.")
+    print("DEBUG: Returning summary")
     return summary
 
 if __name__ == "__main__":
