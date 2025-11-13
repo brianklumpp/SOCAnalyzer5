@@ -2,28 +2,52 @@
 import os
 import json
 import pathlib
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict, Any, Callable
 import requests
 import time
 import random
 import logging
+import contextvars
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 from .config import (
     OUTPUT_TEXT_FILE, GPT_PROMPTS, ENV_PATH, DEFAULT_GPT_MODEL, GPT_MODELS,
     DEFAULT_TEMPERATURE, DEFAULT_TOP_P, CHARS_PER_TOKEN, DEFAULT_CHUNK_SIZE, TEXT_OVERLAP,
-    GPT_MODEL_SETTINGS, LLM_PROVIDER,
+    MAX_OUTPUT_TOKENS, LLM_PROVIDER,
     AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENTS,
     DATAIKU_API_BASE, DATAIKU_API_KEY, DATAIKU_SERVICE_ID, DATAIKU_ENDPOINT_ID, DATAIKU_TIMEOUT,
     DATAIKU_CATALOG_MAP, DATAIKU_VERIFY_SSL, DATAIKU_CA_BUNDLE,
-    DATAIKU_DSS_HOST, DATAIKU_DSS_API_KEY, DATAIKU_DSS_PROJECT,
-    LOG_GPT_REQUESTS, LOG_GPT_PROMPTS, LOG_GPT_MAX_PROMPT_CHARS, LOG_GPT_MAX_RESPONSE_CHARS, LOG_GPT_SAMPLE_RATE, GPT_CALLS_LOG_PATH
+    DATAIKU_DSS_HOST, DATAIKU_DSS_HOST_IP, DATAIKU_DSS_API_KEY, DATAIKU_DSS_PROJECT,
+    LOG_GPT_REQUESTS, LOG_GPT_PROMPTS, LOG_GPT_MAX_PROMPT_CHARS, LOG_GPT_MAX_RESPONSE_CHARS, LOG_GPT_SAMPLE_RATE, GPT_CALLS_LOG_PATH,
+    LOG_GPT_INCLUDE_HEADERS, LOG_GPT_HEADER_WHITELIST,
+    DATAIKU_DSS_CALL_TIMEOUT, HTTP_REQUEST_TIMEOUT
 )
+
+# --- DNS Fallback (Global - applied once at module import) ---
+# Install DNS fallback BEFORE any threads start to ensure all workers use it
+if DATAIKU_DSS_HOST_IP and DATAIKU_DSS_HOST:
+    try:
+        import socket
+        from urllib.parse import urlparse
+        _dns_fallback_hostname = urlparse(DATAIKU_DSS_HOST).hostname
+        if _dns_fallback_hostname:
+            _original_getaddrinfo = socket.getaddrinfo
+            def _custom_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+                if host == _dns_fallback_hostname:
+                    # Use hardcoded IP for Dataiku host
+                    return _original_getaddrinfo(DATAIKU_DSS_HOST_IP, port, family, type, proto, flags)
+                return _original_getaddrinfo(host, port, family, type, proto, flags)
+            socket.getaddrinfo = _custom_getaddrinfo
+            logging.info(f"[DNS_FALLBACK] Globally installed DNS override: {_dns_fallback_hostname} -> {DATAIKU_DSS_HOST_IP}")
+    except Exception as dns_err:
+        logging.warning(f"[DNS_FALLBACK] Failed to install global DNS resolver: {dns_err}")
 
 # Module-level cache for persistent clients/handles to reduce DNS/connect overhead
 _DSS_CACHE: Dict[str, Any] = {"client": None, "project": None, "llm": {}}
 
 # --- Lightweight structured logger for GPT calls (opt-in) ---
 _gpt_logger: Optional[logging.Logger] = None
+_gpt_logger_ready: bool = False
 if LOG_GPT_REQUESTS:
     try:
         os.makedirs(os.path.dirname(GPT_CALLS_LOG_PATH), exist_ok=True)
@@ -36,18 +60,79 @@ if LOG_GPT_REQUESTS:
             formatter = logging.Formatter('%(message)s')
             fh.setFormatter(formatter)
             _gpt_logger.addHandler(fh)
+        # Force a startup log line (bypass sampling) to verify path/permissions
+        try:
+            _gpt_logger.info(json.dumps({
+                "ts": time.time(),
+                "phase": "startup",
+                "message": "gpt logging initialized",
+                "path": GPT_CALLS_LOG_PATH,
+            }))
+            _gpt_logger_ready = True
+        except Exception:
+            _gpt_logger_ready = False
     except Exception:
         _gpt_logger = None
+        _gpt_logger_ready = False
+
+# Per-thread/task logging context (e.g., job_id, extractor)
+_gpt_log_ctx: contextvars.ContextVar = contextvars.ContextVar("gpt_log_ctx", default={})
+
+def set_gpt_log_context(**kwargs):
+    try:
+        cur = dict(_gpt_log_ctx.get() or {})
+        cur.update({k: v for k, v in kwargs.items() if v is not None})
+        _gpt_log_ctx.set(cur)
+    except Exception:
+        pass
+
+def clear_gpt_log_context():
+    try:
+        _gpt_log_ctx.set({})
+    except Exception:
+        pass
 
 def _maybe_log_event(event: Dict[str, Any]):
     """Write a single JSON line event if GPT logging is enabled and sampling criteria met."""
     if not LOG_GPT_REQUESTS or _gpt_logger is None:
         return
     try:
+        # Attach context (job_id, extractor, etc.) if present
+        ctx = _gpt_log_ctx.get() or {}
+        if isinstance(ctx, dict):
+            for k in ("job_id", "extractor", "round_id"):
+                if k in ctx and k not in event:
+                    event[k] = ctx.get(k)
         # basic reservoir sampling via probability threshold
         if LOG_GPT_SAMPLE_RATE < 1.0 and random.random() > LOG_GPT_SAMPLE_RATE:
             return
         _gpt_logger.info(json.dumps(event, ensure_ascii=False))
+    except Exception:
+        pass
+
+def gpt_logging_status() -> Dict[str, Any]:
+    """Return current GPT logging status for diagnostics."""
+    return {
+        "enabled": bool(LOG_GPT_REQUESTS),
+        "path": GPT_CALLS_LOG_PATH,
+        "logger_ready": bool(_gpt_logger_ready and _gpt_logger is not None),
+    }
+
+def log_gpt_event(tag: str, extra: Optional[Dict[str, Any]] = None):
+    """Emit a manual event to the GPT log (bypassing sampling)."""
+    if not LOG_GPT_REQUESTS or _gpt_logger is None:
+        return
+    try:
+        payload = {"ts": time.time(), "phase": tag}
+        if isinstance(extra, dict):
+            payload.update(extra)
+        # include context if available
+        ctx = _gpt_log_ctx.get() or {}
+        if isinstance(ctx, dict):
+            for k in ("job_id", "extractor", "round_id"):
+                if k in ctx and k not in payload:
+                    payload[k] = ctx.get(k)
+        _gpt_logger.info(json.dumps(payload, ensure_ascii=False))
     except Exception:
         pass
 
@@ -106,7 +191,7 @@ def gpt_extract(prompt, extractor_name):
 
 
 # --- Provider implementations ---
-def _with_retries(func, *, retries: int = 3, base_delay_seconds: float = 1.0):
+def _with_retries(func, *, retries: int = 3, base_delay_seconds: float = 1.0, on_retry: Optional[Callable[[int, float, Exception], None]] = None):
     last_exc = None
     for attempt in range(retries):
         try:
@@ -116,6 +201,11 @@ def _with_retries(func, *, retries: int = 3, base_delay_seconds: float = 1.0):
             if attempt == retries - 1:
                 break
             sleep_seconds = base_delay_seconds * (2 ** attempt) + random.uniform(0, 0.25)
+            try:
+                if callable(on_retry):
+                    on_retry(attempt + 1, sleep_seconds, exc)
+            except Exception:
+                pass
             time.sleep(sleep_seconds)
     raise last_exc
 
@@ -145,8 +235,38 @@ def _call_azure(messages, model, max_tokens, temperature, top_p) -> Tuple[str, O
         "temperature": temperature,
         "top_p": top_p,
     }
-    r = _with_retries(lambda: requests.post(url, headers=headers, json=payload, timeout=120))
+    t0 = time.time()
+    def _retry_cb(attempt, delay, exc):
+        _maybe_log_event({
+            "ts": time.time(),
+            "phase": "retry",
+            "provider": "azure",
+            "model": model,
+            "attempt": attempt,
+            "next_delay_s": round(delay, 3),
+            "error": str(exc),
+        })
+    r = _with_retries(lambda: requests.post(url, headers=headers, json=payload, timeout=HTTP_REQUEST_TIMEOUT), on_retry=_retry_cb)
     r.raise_for_status()
+    # Log limited response headers for rate-limit diagnostics
+    try:
+        if LOG_GPT_REQUESTS and LOG_GPT_INCLUDE_HEADERS:
+            hdrs = {}
+            for k, v in (r.headers or {}).items():
+                lk = str(k).lower()
+                if lk in [h.lower() for h in LOG_GPT_HEADER_WHITELIST]:
+                    hdrs[lk] = v
+            _maybe_log_event({
+                "ts": time.time(),
+                "phase": "http",
+                "provider": "azure",
+                "model": model,
+                "status_code": r.status_code,
+                "duration_ms": int((time.time() - t0) * 1000),
+                "headers": hdrs or None,
+            })
+    except Exception:
+        pass
     data = r.json()
     content = data["choices"][0]["message"]["content"]
     usage = data.get("usage")
@@ -168,7 +288,17 @@ def _call_dataiku_apinode(messages, model, max_tokens, temperature, top_p) -> Tu
         from dataikuapi import APINodeClient
         # Bind client to the service; then call run_function(endpoint_id, payload)
         client = APINodeClient(DATAIKU_API_BASE, DATAIKU_API_KEY, DATAIKU_SERVICE_ID)
-        resp = _with_retries(lambda: client.run_function(DATAIKU_ENDPOINT_ID, payload))
+        def _retry_cb(attempt, delay, exc):
+            _maybe_log_event({
+                "ts": time.time(),
+                "phase": "retry",
+                "provider": "dataiku_apinode",
+                "model": model,
+                "attempt": attempt,
+                "next_delay_s": round(delay, 3),
+                "error": str(exc),
+            })
+        resp = _with_retries(lambda: client.run_function(DATAIKU_ENDPOINT_ID, payload), on_retry=_retry_cb)
         content = (
             (resp.get("choices") or [{}])[0].get("message", {}).get("content")
             or resp.get("result")
@@ -182,7 +312,36 @@ def _call_dataiku_apinode(messages, model, max_tokens, temperature, top_p) -> Tu
         # Try common API Node function endpoint path
         url = f"{DATAIKU_API_BASE}/services/{DATAIKU_SERVICE_ID}/endpoints/{DATAIKU_ENDPOINT_ID}/run"
         verify_arg = DATAIKU_CA_BUNDLE if DATAIKU_CA_BUNDLE else DATAIKU_VERIFY_SSL
-        r = _with_retries(lambda: requests.post(url, headers=headers, json=payload, timeout=DATAIKU_TIMEOUT, verify=verify_arg))
+        t0 = time.time()
+        def _retry_cb2(attempt, delay, exc):
+            _maybe_log_event({
+                "ts": time.time(),
+                "phase": "retry",
+                "provider": "dataiku_apinode",
+                "model": model,
+                "attempt": attempt,
+                "next_delay_s": round(delay, 3),
+                "error": str(exc),
+            })
+        r = _with_retries(lambda: requests.post(url, headers=headers, json=payload, timeout=DATAIKU_TIMEOUT, verify=verify_arg), on_retry=_retry_cb2)
+        try:
+            if LOG_GPT_REQUESTS and LOG_GPT_INCLUDE_HEADERS:
+                hdrs = {}
+                for k, v in (r.headers or {}).items():
+                    lk = str(k).lower()
+                    if lk in [h.lower() for h in LOG_GPT_HEADER_WHITELIST]:
+                        hdrs[lk] = v
+                _maybe_log_event({
+                    "ts": time.time(),
+                    "phase": "http",
+                    "provider": "dataiku_apinode",
+                    "model": model,
+                    "status_code": r.status_code,
+                    "duration_ms": int((time.time() - t0) * 1000),
+                    "headers": hdrs or None,
+                })
+        except Exception:
+            pass
         r.raise_for_status()
         data = r.json()
         content = (
@@ -201,6 +360,18 @@ def _call_dataiku_dss(messages, model, max_tokens, temperature, top_p) -> Tuple[
     # Honor corporate CA bundle if provided (used by requests under the hood)
     if DATAIKU_CA_BUNDLE:
         os.environ["REQUESTS_CA_BUNDLE"] = DATAIKU_CA_BUNDLE
+    
+    # DNS fallback was applied globally at module import time (see top of file)
+    # Log that we're using it for this call
+    if DATAIKU_DSS_HOST_IP and DATAIKU_DSS_HOST:
+        _maybe_log_event({
+            "ts": time.time(),
+            "phase": "dns_fallback",
+            "provider": "dataiku_dss",
+            "hostname": urlparse(DATAIKU_DSS_HOST).hostname,
+            "ip": DATAIKU_DSS_HOST_IP,
+        })
+    
     # Create/cache client and project
     if _DSS_CACHE["client"] is None:
         _DSS_CACHE["client"] = DSSClient(DATAIKU_DSS_HOST, DATAIKU_DSS_API_KEY, no_check_certificate=(not DATAIKU_VERIFY_SSL))
@@ -219,7 +390,36 @@ def _call_dataiku_dss(messages, model, max_tokens, temperature, top_p) -> Tuple[
     comp = comp.with_message(messages[0]["content"])  # assumes single user message
     # If the SDK supports params tuning, it would be something like:
     # comp = comp.with_params(max_tokens=max_tokens, temperature=temperature, top_p=top_p)
-    resp = _with_retries(lambda: comp.execute())
+    def _retry_cb(attempt, delay, exc):
+        _maybe_log_event({
+            "ts": time.time(),
+            "phase": "retry",
+            "provider": "dataiku_dss",
+            "model": model,
+            "attempt": attempt,
+            "next_delay_s": round(delay, 3),
+            "error": str(exc),
+        })
+    t0 = time.time()
+    
+    # Note: We rely on the Dataiku SDK's internal timeout mechanisms.
+    # signal.alarm() doesn't work in worker threads, so we removed it.
+    # The DNS fallback above helps avoid long DNS resolution hangs.
+    resp = _with_retries(lambda: comp.execute(), on_retry=_retry_cb)
+    
+    try:
+        # SDK doesn't expose headers; still log latency to detect server-side slowness
+        _maybe_log_event({
+            "ts": time.time(),
+            "phase": "http",
+            "provider": "dataiku_dss",
+            "model": model,
+            "status_code": None,
+            "duration_ms": int((time.time() - t0) * 1000),
+            "headers": None,
+        })
+    except Exception:
+        pass
     text = getattr(resp, 'text', None)
     if text is None:
         # Fallback if SDK returns dict
@@ -235,14 +435,19 @@ def _chat_completion(prompt: str, extractor_name: str, *, override_model: Option
                      override_temperature: Optional[float] = None, override_top_p: Optional[float] = None) -> str:
     from .gpt_tracker import track_gpt_call
     model = override_model or GPT_MODELS.get(extractor_name, DEFAULT_GPT_MODEL)
-    settings = GPT_MODEL_SETTINGS.get(model, {})
-    max_tokens = settings.get('max_tokens', 2048)
-    temperature = override_temperature if override_temperature is not None else settings.get('temperature', DEFAULT_TEMPERATURE)
-    top_p = override_top_p if override_top_p is not None else settings.get('top_p', DEFAULT_TOP_P)
+    # Use values from .env via config constants
+    max_tokens = MAX_OUTPUT_TOKENS
+    temperature = override_temperature if override_temperature is not None else DEFAULT_TEMPERATURE
+    top_p = override_top_p if override_top_p is not None else DEFAULT_TOP_P
     messages = [{"role": "user", "content": prompt}]
 
     t0 = time.time()
     provider = LLM_PROVIDER
+    # Set extractor into log context for downstream provider logs
+    try:
+        set_gpt_log_context(extractor=extractor_name)
+    except Exception:
+        pass
     # Pre-call log (metadata only; optional prompt excerpt)
     try:
         if LOG_GPT_REQUESTS:
@@ -332,7 +537,15 @@ def _chat_completion(prompt: str, extractor_name: str, *, override_model: Option
         pass
     return content
 
-__all__ = ["gpt_extract", "run_gpt_inquiry", "load_api_key"]
+__all__ = [
+    "gpt_extract",
+    "run_gpt_inquiry",
+    "load_api_key",
+    "set_gpt_log_context",
+    "clear_gpt_log_context",
+    "gpt_logging_status",
+    "log_gpt_event",
+]
 
 def main():
     import argparse

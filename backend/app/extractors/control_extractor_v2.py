@@ -92,40 +92,53 @@ def detect_non_control_content(text_chunk):
 # Dynamic chunking function
 
 def dynamic_chunking(text, initial_chunk_size=3000):
-    """
-    Use GPT to analyze text and determine logical breakpoints for chunking.
+    """Use GPT (optimized prompt) to identify logical breakpoints via JSON array of offsets.
+
+    Returns list of text chunks; falls back to naive split if GPT output unusable.
     """
     chunk = text[:initial_chunk_size]
     remaining_text = text[initial_chunk_size:]
-    chunks = []
+    logging.info(f'[DYNAMIC_CHUNKING] initial_chunk_size={len(chunk)} total_len={len(text)}')
 
-    logging.info(f'Initial chunk size: {len(chunk)}')
-
-    prompt = (
-        "Identify the single numeric character position in the text where each control section header starts. "
-        "Do not infer or assume any details not present in the text."
-    )
-    logging.info(f"[GPT PROMPT][dynamic_chunking]: {prompt}")
+    try:
+        prompt = config.DYNAMIC_CHUNKING_PROMPT.format(text=chunk)
+    except Exception:
+        # Fallback to refined prompt if constant missing
+        prompt = config.CHUNK_ANALYSIS_PROMPT_REFINED.format(text=chunk)
+    logging.info(f"[GPT PROMPT][dynamic_chunking]: {prompt[:400]}...")
     response = gpt_extract(prompt, "control_extractor_v2")
     logging.info(f"[GPT RAW RESPONSE][dynamic_chunking]: {response}")
 
     if not response:
-        logging.error('Empty GPT response for chunking. Using default chunk size.')
-        return [chunk, remaining_text]
+        logging.error('[DYNAMIC_CHUNKING] Empty GPT response; using naive split.')
+        return [chunk, remaining_text] if remaining_text else [chunk]
 
-    breakpoints = parse_breakpoints(response)
+    # Parse JSON array of integers if possible
+    breakpoints = []
+    try:
+        data = json.loads(response.strip())
+        if isinstance(data, list):
+            breakpoints = [bp for bp in data if isinstance(bp, int) and 0 < bp < len(chunk)]
+    except Exception as e:
+        logging.warning(f'[DYNAMIC_CHUNKING] JSON parse failed: {e}; attempting legacy parsing.')
+        breakpoints = parse_breakpoints(response)
 
     if not breakpoints:
-        logging.error('No breakpoints found in GPT response. Using default chunk size.')
-        return [chunk, remaining_text]
+        logging.warning('[DYNAMIC_CHUNKING] No valid breakpoints parsed; using naive split.')
+        return [chunk, remaining_text] if remaining_text else [chunk]
 
+    breakpoints = sorted(set(breakpoints))
+    chunks = []
     start = 0
-    for breakpoint in breakpoints:
-        chunks.append(chunk[start:breakpoint])
-        start = breakpoint
-
-    chunks.append(remaining_text)
-
+    for bp in breakpoints:
+        if bp <= start:
+            continue
+        chunks.append(chunk[start:bp])
+        start = bp
+    chunks.append(chunk[start:])
+    if remaining_text:
+        chunks.append(remaining_text)
+    logging.info(f'[DYNAMIC_CHUNKING] Produced {len(chunks)} chunks from initial segment.')
     return chunks
 
 # Implement parsing logic for GPT responses
@@ -179,10 +192,28 @@ def classify_text_segments(chunk):
 # Implement parsing logic for classified segments
 
 def parse_classified_segments(response):
+    """Parse GPT classification response.
+
+    Preferred format: JSON array of objects {"type": ..., "text": ...}.
+    Fallback: legacy line-prefixed format.
     """
-    Parse GPT response to extract classified segments.
-    """
-    # Example parsing logic based on the response format
+    # Attempt JSON first
+    try:
+        data = json.loads(response)
+        if isinstance(data, list):
+            json_segments = []
+            for obj in data:
+                if isinstance(obj, dict) and 'type' in obj and 'text' in obj:
+                    t = obj['type'].strip()
+                    txt = obj['text'].strip()
+                    if t in {'control_id','control_description','test_procedure','test_result'} and txt:
+                        json_segments.append({'type': t, 'text': txt})
+            if json_segments:
+                return json_segments
+    except Exception as e:
+        logging.debug(f'[CLASSIFY] JSON parse failed, falling back: {e}')
+
+    # Legacy fallback parsing
     segments = []
     try:
         lines = response.split('\n')
@@ -206,7 +237,7 @@ def parse_classified_segments(response):
         if current_segment:
             segments.append(current_segment)
     except Exception as e:
-        logging.error(f'Error parsing classified segments: {e}')
+        logging.error(f'[CLASSIFY] Legacy parse error: {e}')
     return segments
 
 # JSON structuring function
@@ -255,14 +286,14 @@ def structure_json_records(classified_segments):
 
 # Update extract_controls_v2 to use JSON structuring
 
-def extract_controls_v2():
+def extract_controls_v2(start_at_control: Optional[int] = None, start_at_line: Optional[int] = None):
     """
     Main function to extract controls using the new strategic approach, matching the old extractor's interface.
     Uses config.PDF_TXT_PATH and config.SECTION_JSON_PATH for input, and config.CONTROL_JSON_PATH for output.
     """
-    # Reset output file at the start of extraction
+    # Initialize output file as valid JSON from the start to enable mid-run reads
     with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as f:
-        f.write('[]\n')
+        json.dump({"controls": []}, f, ensure_ascii=False, indent=2)
 
     # Load section details from JSON
     with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as json_file:
@@ -274,6 +305,8 @@ def extract_controls_v2():
     if control_section:
         start_line = control_section.get("start_line")
         end_line = control_section.get("end_line")
+        section_start_line = start_line
+        section_end_line = end_line
     else:
         logging.error("Control_Descriptions section not found in section_results.json")
         return
@@ -286,13 +319,68 @@ def extract_controls_v2():
     with open(file_path, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
 
-    seq = 1  # Add before the while loop
+    seq = 1  # sequence counter
+    if isinstance(start_at_control, int) and start_at_control > 1:
+        # If resuming by control sequence, we will skip writing existing controls and fast-forward start_line using heuristic.
+        # Heuristic: load existing controls JSON (if present) and determine max end_line of already processed controls.
+        try:
+            if os.path.exists(config.CONTROL_JSON_PATH):
+                with open(config.CONTROL_JSON_PATH, 'r', encoding='utf-8') as prevf:
+                    prev_data = json.load(prevf)
+                prev_controls = prev_data.get('controls') or []
+                # Filter controls up to start_at_control-1
+                already = [c for c in prev_controls if int(c.get('control_seq', 0)) < start_at_control]
+                if already:
+                    seq = start_at_control
+                    # Determine resume line: max end_line among already processed controls
+                    resume_line = max([c.get('end_line') or c.get('endLine') or c.get('control_line_ref') or 0 for c in already])
+                    if isinstance(resume_line, int) and resume_line > 0:
+                        start_line = resume_line
+                        logging.info(f"[RESUME] Resuming control extraction at line {start_line} (after control_seq {start_at_control-1})")
+        except Exception as _resume_err:
+            logging.warning(f"[RESUME] Failed heuristic resume by control_seq: {_resume_err}")
+    if isinstance(start_at_line, int) and start_at_line > 0:
+        start_line = start_at_line
+        logging.info(f"[RESUME] Overriding start_line via resume_start_at_line={start_at_line}")
     first = True
     start_time = time.time()
     consecutive_failures = 0
     safeguards = get_safeguard_settings()
     
     while start_line < end_line:
+        # --- STALL WATCHDOG: detect lack of forward progress between outer iterations ---
+        if 'last_progress_line' not in locals():
+            last_progress_line = start_line
+            last_progress_ts = time.time()
+        else:
+            if start_line <= last_progress_line:
+                # No forward movement since last loop; if elapsed > threshold, force advance
+                stall_idle = getattr(config, 'CONTROL_STALL_MAX_IDLE_SECONDS', 180)
+                stall_advance = getattr(config, 'CONTROL_STALL_FORCE_ADVANCE_LINES', 120)
+                if stall_idle > 0 and (time.time() - last_progress_ts) > stall_idle:
+                    logging.warning(f"[STALL] No control progress for {stall_idle}s at line {start_line}; forcing advance by {stall_advance} lines")
+                    start_line = min(end_line, start_line + stall_advance)
+                    last_progress_ts = time.time()
+                    try:
+                        progress_path = getattr(config, 'JSON_DIR', None)
+                        if progress_path:
+                            progress_file = progress_path / 'control_progress.json'
+                            stall_meta = {
+                                "section_start_line": section_start_line,
+                                "section_end_line": section_end_line,
+                                "current_line": start_line,
+                                "extracted_controls": len(results),
+                                "stall_event": True,
+                                "forced_advance": stall_advance,
+                                "ts": time.time(),
+                            }
+                            with open(progress_file, 'w', encoding='utf-8') as pf:
+                                json.dump(stall_meta, pf, ensure_ascii=False, indent=2)
+                    except Exception as _serr:
+                        logging.warning(f"[STALL] Failed to record stall meta: {_serr}")
+            else:
+                last_progress_line = start_line
+                last_progress_ts = time.time()
         # SAFEGUARD: Check processing time timeout (if enabled)
         if safeguards['enabled']:
             elapsed_minutes = (time.time() - start_time) / 60
@@ -338,13 +426,30 @@ def extract_controls_v2():
                     start_line = new_start_line
                     consecutive_failures = 0  # Reset failure count on success
                     logging.info(f"Appended result. Total results: {len(results)}")
-                    # Write each control as soon as it is found
-                    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-                        if not first:
-                            json_file.write(',\n')
-                        json.dump(result, json_file, ensure_ascii=False, indent=2)
-                        first = False
-                    logging.info(f"Wrote control to {config.CONTROL_JSON_PATH}")
+                    # Persist a valid JSON object after each extracted control for downstream readers
+                    try:
+                        with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as jf:
+                            json.dump({"controls": results}, jf, ensure_ascii=False, indent=2)
+                        logging.info(f"Wrote {len(results)} controls to {config.CONTROL_JSON_PATH}")
+                        # --- LINE PROGRESS META WRITE ---
+                        try:
+                            progress_meta = {
+                                "section_start_line": section_start_line,
+                                "section_end_line": section_end_line,
+                                "current_line": start_line,
+                                "extracted_controls": len(results),
+                                "last_write_ts": time.time(),
+                            }
+                            progress_path = getattr(config, 'JSON_DIR', None)
+                            if progress_path:
+                                progress_file = progress_path / 'control_progress.json'
+                                with open(progress_file, 'w', encoding='utf-8') as pf:
+                                    json.dump(progress_meta, pf, ensure_ascii=False, indent=2)
+                                logging.info(f"[PROGRESS] Updated control_progress.json current_line={start_line}")
+                        except Exception as _perr:
+                            logging.warning(f"Failed to write control_progress.json: {_perr}")
+                    except Exception as _werr:
+                        logging.warning(f"Failed mid-run write of controls JSON: {_werr}")
                     # Progress update if available
                     try:
                         if PROGRESS_HOOK and isinstance(result, dict):
@@ -369,18 +474,12 @@ def extract_controls_v2():
                     break  # Retry with the same start_line
                 if config.CONTROL_TESTING_ENABLED and start_line > config.CONTROL_TESTING_MAX_LINE:
                     logging.info(f"Start line {start_line} exceeds test limit ({config.CONTROL_TESTING_MAX_LINE}). Stopping processing.")
-                    # Close the JSON array
-                    with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-                        json_file.write('\n]\n')
                     break  # Ensure the outer loop also stops
             except Exception as e:
                 logging.error(f"Error processing chunk: {e}")
                 break
         if config.CONTROL_TESTING_ENABLED and start_line > config.CONTROL_TESTING_MAX_LINE:
             logging.info(f"Start line {start_line} exceeds test limit ({config.CONTROL_TESTING_MAX_LINE}). Stopping processing.")
-            # Close the JSON array
-            with open(config.CONTROL_JSON_PATH, 'a', encoding='utf-8') as json_file:
-                json_file.write('\n]\n')
             break  # Ensure the outer loop also stops
 
     # --- PATCH: Penalize subtext/duplicate controls ---
@@ -611,8 +710,7 @@ def process_chunk_with_gpt(chunk, start_line, txt_lines, previous_controls):
         control_data['control_page_ref'] = find_nearest_page_ref(txt_lines, start_line)
         # Deviation fields: confirm via a dedicated GPT pass based strictly on control_test_results
         try:
-            from . import config as _cfg
-            dev_prompt = _cfg.DEVIATION_EVAL_PROMPT.format(
+            dev_prompt = config.DEVIATION_EVAL_PROMPT.format(
                 control_id=control_data.get('control_id', ''),
                 control_desc=control_data.get('control_desc', ''),
                 control_test=control_data.get('control_test', ''),
@@ -1010,51 +1108,9 @@ def iter_control_chunks_with_overlap(txt_lines, start_line, lines_per_chunk=140,
         yield idx, chunk
         idx += step
 
-# --- Ported helper functions from control_extractor.py ---
-_embedding_cache = {}
-def get_openai_embedding(text):
-    global _embedding_cache
-    if text in _embedding_cache:
-        return _embedding_cache[text]
-    import os, time
-    # Attempt Dataiku DSS-based embedding if available in future; currently fallback to OpenAI only if key is present
-    import requests, certifi
-    from ..config import EMBEDDING_PROVIDER, OPENAI_EMBEDDING_MODEL
-    if EMBEDDING_PROVIDER != 'openai':
-        raise RuntimeError('Embedding provider set to non-openai but not implemented yet. Set EMBEDDING_PROVIDER=openai or provide Dataiku embedding endpoint.')
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError('Embedding provider not configured (OPENAI_API_KEY missing).')
-    headers = {
-        'Authorization': f'Bearer {api_key}',
-        'Content-Type': 'application/json',
-    }
-    data = {
-        'input': text,
-        'model': OPENAI_EMBEDDING_MODEL,
-    }
-    for attempt in range(3):
-        try:
-            resp = requests.post(
-                'https://api.openai.com/v1/embeddings',
-                headers=headers,
-                json=data,
-                timeout=20,
-                verify=certifi.where()  # force public trust store; ignore REQUESTS_CA_BUNDLE
-            )
-            resp.raise_for_status()
-            embedding = resp.json()['data'][0]['embedding']
-            _embedding_cache[text] = embedding
-            return embedding
-        except Exception:
-            time.sleep(1 + attempt)
-    raise RuntimeError(f'Failed to get embedding for text: {text}')
-
-def cosine_similarity(vec1, vec2):
-    import numpy as np
-    v1 = np.array(vec1)
-    v2_ = np.array(vec2)
-    return float(np.dot(v1, v2_) / (np.linalg.norm(v1) * np.linalg.norm(v2_)))
+# --- Removed embedding functions (replaced with GPT-based classification) ---
+# Previously: get_openai_embedding(), cosine_similarity(), _embedding_cache
+# Now using _select_best_framework_match_with_gpt() for direct GPT reasoning
 
 def classify_control_domain_with_gpt(control_desc: str) -> Dict[str, Any]:
     """Ask GPT to classify the control into a TSC/COSO domain and suggest candidate IDs.
@@ -1107,75 +1163,120 @@ def _ids_by_domain(tsc_criteria: list, domain: Optional[str]) -> list:
         prefixes = ['C', 'CC']
     return [c['id'] for c in tsc_criteria if any(c['id'].startswith(pfx) for pfx in prefixes)]
 
+def _select_best_framework_match_with_gpt(control_desc: str, criteria_subset: list, framework_name: str, candidate_ids: set) -> tuple:
+    """
+    Use GPT to select the single best-matching framework criterion from a subset.
+    
+    Args:
+        control_desc: The control description to map
+        criteria_subset: List of criteria dicts with 'id' and 'description' keys
+        framework_name: "TSC" or "COSO" for context
+        candidate_ids: Optional set of candidate IDs from initial classification
+    
+    Returns:
+        (best_id, confidence_score) where confidence is 0.0-1.0 or -1 on error
+    """
+    import logging
+    
+    if not criteria_subset:
+        return None, -1
+    
+    # Limit to top 10 candidates to keep prompt manageable
+    criteria_to_eval = criteria_subset[:10]
+    
+    # Build prompt with control and candidate criteria
+    criteria_text = "\n".join([
+        f"- {c['id']}: {c['description'][:200]}{'...' if len(c['description']) > 200 else ''}"
+        for c in criteria_to_eval
+    ])
+    
+    prompt = f"""You are an expert SOC 2 auditor. Select the single best-matching {framework_name} criterion for this control.
+
+Control Description:
+{control_desc}
+
+Available {framework_name} Criteria:
+{criteria_text}
+
+Respond ONLY with a JSON object with keys:
+- best_id: The ID of the best-matching criterion (must be from the list above)
+- confidence: Your confidence level from 0.0 to 1.0
+- reasoning: Brief explanation of why this criterion matches best
+
+If no good match exists, return {{"best_id": null, "confidence": 0.0, "reasoning": "explanation"}}.
+"""
+    
+    try:
+        raw = gpt_extract(prompt, "control_extractor_v2")
+        result = json.loads(raw.strip())
+        
+        best_id = result.get('best_id')
+        confidence = float(result.get('confidence', 0.0))
+        
+        # Validate the ID exists in our subset
+        if best_id and best_id not in [c['id'] for c in criteria_to_eval]:
+            logging.warning(f"GPT returned invalid {framework_name} ID: {best_id}")
+            return None, -1
+        
+        return best_id, confidence
+        
+    except Exception as e:
+        logging.error(f"GPT framework selection failed for {framework_name}: {e}")
+        return None, -1
+
 def map_control_to_frameworks(control_desc, tsc_criteria, coso_criteria):
+    """
+    Map a control description to best-matching TSC and COSO criteria using GPT-based reasoning.
+    
+    Replaces the previous embedding + cosine similarity approach with direct GPT analysis.
+    GPT-5 via Dataiku can reason about control intent and framework alignment better than
+    embedding similarity, and eliminates the OpenAI API dependency.
+    
+    Returns: (best_tsc_id, best_coso_id, confidence_tsc, confidence_coso)
+    """
     import logging
     from ..config import CONTROL_EMBEDDING_MAPPING_ENABLED
+    
     if not CONTROL_EMBEDDING_MAPPING_ENABLED:
-        logging.info("Embedding-based framework mapping disabled by config. Skipping.")
+        logging.info("Framework mapping disabled by config. Skipping.")
         return None, None, -1, -1
+    
     if not tsc_criteria:
         logging.error("TSC criteria list is empty! Cannot map control to TSC framework.")
+        return None, None, -1, -1
     if not coso_criteria:
         logging.error("COSO criteria list is empty! Cannot map control to COSO framework.")
+        return None, None, -1, -1
 
-    # 1) GPT-first domain/candidate classification (contextual intent)
+    # 1) Get GPT's initial domain classification and candidates
     classification = classify_control_domain_with_gpt(control_desc)
     predicted_domain = classification.get('domain')
     tsc_candidate_ids = set([x.strip() for x in classification.get('tsc_candidates', [])])
+    coso_candidate_ids = set([x.strip() for x in classification.get('coso_candidates', [])])
 
-    try:
-        cuec_emb = get_openai_embedding(control_desc)
-    except Exception as e:
-        logging.error(f"Failed to get embedding for control_desc: {control_desc[:80]}... Error: {e}")
-        return None, None, -1, -1
-
-    # 2) Restrict TSC search space to GPT predicted domain or candidates when available
+    # 2) Restrict search space based on domain and candidates
     allowed_tsc_ids = _ids_by_domain(tsc_criteria, predicted_domain)
     if tsc_candidate_ids:
-        # Prefer GPT candidates but ensure they are valid
         allowed_tsc_ids = [tid for tid in allowed_tsc_ids if tid in tsc_candidate_ids] or allowed_tsc_ids
+    
+    # Filter criteria lists
+    tsc_subset = [c for c in tsc_criteria if c['id'] in allowed_tsc_ids] if allowed_tsc_ids else tsc_criteria
+    coso_subset = [c for c in coso_criteria if c['id'] in coso_candidate_ids] if coso_candidate_ids else coso_criteria
 
-    # TSC similarity within allowed set
-    best_tsc_id = None
-    best_tsc_sim = -1
-    for crit in tsc_criteria:
-        cid = crit['id']
-        if allowed_tsc_ids and cid not in allowed_tsc_ids:
-            continue
-        try:
-            emb = get_openai_embedding(crit['description'])
-            sim = cosine_similarity(cuec_emb, emb)
-            if sim > best_tsc_sim:
-                best_tsc_sim = sim
-                best_tsc_id = cid
-        except Exception as e:
-            logging.debug(f"Embedding sim failed for TSC {cid}: {e}")
-            continue
-
-    # 3) COSO: if GPT provided candidates, prefer those; else evaluate all (smaller set)
-    coso_candidate_ids = set([x.strip() for x in classification.get('coso_candidates', [])])
-    best_coso_id = None
-    best_coso_sim = -1
-    for crit in coso_criteria:
-        cid = crit['id']
-        if coso_candidate_ids and cid not in coso_candidate_ids:
-            continue
-        try:
-            emb = get_openai_embedding(crit['description'])
-            sim = cosine_similarity(cuec_emb, emb)
-            if sim > best_coso_sim:
-                best_coso_sim = sim
-                best_coso_id = cid
-        except Exception as e:
-            logging.debug(f"Embedding sim failed for COSO {cid}: {e}")
-            continue
+    # 3) Ask GPT to select the single best match from the subset
+    best_tsc_id, tsc_confidence = _select_best_framework_match_with_gpt(
+        control_desc, tsc_subset, "TSC", tsc_candidate_ids
+    )
+    best_coso_id, coso_confidence = _select_best_framework_match_with_gpt(
+        control_desc, coso_subset, "COSO", coso_candidate_ids
+    )
 
     if best_tsc_id is None:
         logging.warning(f"No TSC match found for control: {control_desc[:80]}...")
     if best_coso_id is None:
         logging.warning(f"No COSO match found for control: {control_desc[:80]}...")
 
-    return best_tsc_id, best_coso_id, best_tsc_sim, best_coso_sim
+    return best_tsc_id, best_coso_id, tsc_confidence, coso_confidence
 
 def get_tsc_section(tsc_id):
     for section, ids in getattr(config, 'control_tsc_sections', {}).items():

@@ -1,10 +1,11 @@
 {
-  "auditor": "American Institute of Certified Public Accountants (AICPA)",
-  "confidence": 0.9,
-  "source_section": "SECTION 1  INDEPENDENT SERVICE AUDITOR’S REPORT",
-  "source_page": 4,
+  "auditor": "BDO USA, P.C.",
+  "confidence": 0.95,
+  "source_section": "I. Independent Service Auditor’s Report on a SOC 2 Examination",
+  "source_page": 5,
   "raw_gpt_responses": [
-    "{\n    \"auditor\": \"American Institute of Certified Public Accountants (AICPA)\",\n    \"confidence\": 0.9,\n    \"explanation\": \"The text mentions that the examination was conducted in accordance with attestation standards established by the AICPA.\"\n}"
+    "{\n    \"auditor\": \"BDO USA, P.C.\",\n    \"confidence\": 1.0,\n    \"explanation\": \"The report explicitly states that BDO USA, P.C. prepared the Independent Service Auditor's Report, as identified in the headers, contact information, and opinion language, making it the responsible auditing firm.\"\n}"
   ],
-  "confirmation_explanation": "The American Institute of Certified Public Accountants (AICPA) is a professional organization of certified public accountants and they do provide SOC audits through their SOC for Service Organizations program."
+  "validation_note": "Validated on attempt 1",
+  "confirmation_explanation": "BDO USA, P.C. is a well-known accounting and professional services firm that provides assurance and compliance services, including SOC 2 audits. They are recognized for offering SOC compliance services as part of their broader portfolio of audit services."
 }

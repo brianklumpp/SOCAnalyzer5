@@ -60,6 +60,75 @@ def extract_title_page(txt_lines):
         title_page_lines.append(line)
     return ''.join(title_page_lines)
 
+def verify_auditor_in_text(auditor_name: str, text: str) -> bool:
+    """Check if the auditor name actually appears in the source text."""
+    if not auditor_name:
+        return False
+    # Case-insensitive search for the auditor name in text
+    return auditor_name.lower() in text.lower()
+
+def extract_auditor_with_validation(text: str, company_line: str, max_attempts: int = 5) -> Tuple[Optional[str], float, List[str], str]:
+    """
+    Extract auditor with text validation and retry logic.
+    Returns: (auditor_name, confidence, responses, validation_note)
+    """
+    chunks = chunk_text(text)
+    
+    for attempt in range(max_attempts):
+        logging.info(f"Auditor extraction attempt {attempt + 1}/{max_attempts}")
+        responses = []
+        
+        # Use standard prompt for first attempt, retry prompt for subsequent attempts
+        if attempt == 0:
+            prompt_template = config.AUDITOR_EXTRACTION_PROMPT_EXCLUDE
+        else:
+            prompt_template = config.AUDITOR_EXTRACTION_PROMPT_RETRY
+        
+        for idx, chunk in enumerate(chunks):
+            full_prompt = prompt_template.format(
+                text=chunk,
+                company_line=company_line
+            )
+            
+            logging.debug(f'Attempt {attempt + 1}, Prompt chunk {idx}: {full_prompt[:500]}...')
+            response = gpt_extract(full_prompt, 'auditor_extractor')
+            logging.debug(f'Attempt {attempt + 1}, GPT response chunk {idx}: {response}')
+            responses.append(response)
+        
+        # Parse responses - take first non-empty auditor name
+        auditor = None
+        confidence = 0
+        for resp in responses:
+            try:
+                data = json.loads(resp)
+                if data.get('auditor'):
+                    auditor = data['auditor']
+                    confidence = data.get('confidence', 1)
+                    break
+            except Exception as e:
+                logging.error(f'Failed to parse GPT response: {resp} | Error: {e}')
+        
+        # If no auditor found, break early
+        if not auditor:
+            logging.warning(f"Attempt {attempt + 1}: No auditor identified by GPT")
+            if attempt == max_attempts - 1:
+                return None, 0, responses, f"No auditor found after {max_attempts} attempts"
+            continue
+        
+        # Validate that the auditor name exists in the text
+        if verify_auditor_in_text(auditor, text):
+            logging.info(f"Attempt {attempt + 1}: Auditor '{auditor}' validated in source text")
+            return auditor, confidence, responses, f"Validated on attempt {attempt + 1}"
+        else:
+            logging.warning(f"Attempt {attempt + 1}: Auditor '{auditor}' NOT found in source text - retrying")
+            if attempt == max_attempts - 1:
+                # Final attempt failed validation
+                logging.error(f"All {max_attempts} attempts failed to find auditor text in document")
+                return "Unknown", 0, responses, f"Failed text validation after {max_attempts} attempts"
+    
+    # Should not reach here, but safety fallback
+    return "Unknown", 0, [], f"Extraction failed after {max_attempts} attempts"
+
 def extract_auditor_from_report():
     # Reset output file at the start of extraction
     with open(config.JSON_DIR / 'auditor_result.json', 'w', encoding='utf-8') as f:
@@ -103,41 +172,21 @@ def extract_auditor_from_report():
         with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
             text_sections.append(f2.read())
     text = '\n'.join(text_sections)
-    # Chunk text
-    chunks = chunk_text(text)
-    # Prepare prompt
-    prompt_template = config.AUDITOR_EXTRACTION_PROMPT_EXCLUDE
-    responses = []
-    for idx, chunk in enumerate(chunks):
-        full_prompt = prompt_template.format(
-            text=chunk,
-            company_line=company_line
-        )
-        logging.debug(f'Prompt chunk {idx}: {full_prompt[:500]}...')
-        response = gpt_extract(full_prompt, 'auditor_extractor')
-        logging.debug(f'GPT response chunk {idx}: {response}')
-        responses.append(response)
-    # Parse responses (simple: take first non-empty auditor name)
-    auditor = None
-    confidence = 0
-    for resp in responses:
-        try:
-            data = json.loads(resp)
-            if data.get('auditor'):
-                auditor = data['auditor']
-                confidence = data.get('confidence', 1)
-                break
-        except Exception as e:
-            logging.error(f'Failed to parse GPT response: {resp} | Error: {e}')
+    
+    # Extract auditor with validation and retry logic
+    auditor, confidence, responses, validation_note = extract_auditor_with_validation(text, company_line, max_attempts=5)
+    
     result = {
         'auditor': auditor,
         'confidence': confidence,
         'source_section': (auditor_section.get('clean_heading') if isinstance(auditor_section, dict) else None),
         'source_page': (auditor_section.get('DOC_page_ref') if isinstance(auditor_section, dict) else None),
-        'raw_gpt_responses': responses
+        'raw_gpt_responses': responses,
+        'validation_note': validation_note
     }
-    # Follow-up confirmation if an auditor was found
-    if auditor:
+    
+    # Follow-up confirmation if an auditor was found and it's not "Unknown"
+    if auditor and auditor != "Unknown":
         confirmed_auditor, confirm_confidence, confirm_explanation = confirm_auditor_with_followup(auditor, text)
         if confirmed_auditor:
             # If confirmation confidence is higher, average the two; if lower, use the minimum
@@ -152,6 +201,7 @@ def extract_auditor_from_report():
             result['confidence'] = 0
             result['confirmation_explanation'] = confirm_explanation
             logging.info(f"Auditor confirmation failed. Explanation: {confirm_explanation}")
+    
     # GPT-only approach: if GPT didn't return an auditor, leave it as None
     save_json(result, AUDITOR_JSON_PATH)
     logging.info(f'Auditor extraction result: {result}')

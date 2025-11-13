@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import re
+import sys
 from difflib import SequenceMatcher
 from .. import config
 from ..gpt_client import gpt_extract
@@ -14,6 +15,11 @@ OUTPUT_JSON_PATH = config.JSON_DIR / "subservice_orgs_result.json"
 PDF_TXT_PATH = config.PDF_TXT_PATH
 
 logger = logging.getLogger(__name__)
+
+def log_and_print(msg):
+    """Log and print to console with immediate flush"""
+    print(msg, flush=True)
+    logger.info(msg)
 
 def load_json(path):
     with open(path, 'r', encoding='utf-8') as f:
@@ -60,32 +66,79 @@ def load_common_so_list(path):
         return [line.strip() for line in f if line.strip()]
 
 def extract_subservice_orgs():
+    print("\n" + "="*80, flush=True)
+    print("[DEBUG] Subservice Orgs Extractor Started", flush=True)
+    print("="*80 + "\n", flush=True)
+    
     # Reset output file at the start of extraction
+    print("[DEBUG] Resetting output file...", flush=True)
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
-        json.dump({"third_parties": []}, f, ensure_ascii=False, indent=2)
+        json.dump({"subservice_orgs": []}, f, ensure_ascii=False, indent=2)
+    
+    print(f"[DEBUG] Loading section results from: {SECTION_JSON_PATH}", flush=True)
     section_results = load_json(SECTION_JSON_PATH)
+    print(f"[DEBUG] Found {len(section_results)} sections", flush=True)
+    
+    print("[DEBUG] Looking for Description_of_System section...", flush=True)
     desc_section = next((s for s in section_results if s.get('topic') == 'Description_of_System'), None)
+    
     if not desc_section:
-        logging.error('No Description_of_System section found.')
+        error_msg = 'No Description_of_System section found.'
+        print(f"[ERROR] {error_msg}", flush=True)
+        logging.error(error_msg)
+        
+        # Show what sections we DO have
+        print(f"\n[DEBUG] Available sections:", flush=True)
+        for s in section_results:
+            print(f"  - {s.get('topic', 'Unknown')}", flush=True)
+        
         return None
+    
+    print(f"[DEBUG] Found Description_of_System section", flush=True)
+    print(f"[DEBUG] Section details: {desc_section.get('clean_heading', 'N/A')}", flush=True)
+    
     start_line = desc_section.get('start_line')
     end_line = desc_section.get('end_line')
+    
+    print(f"[DEBUG] Reading PDF text from: {PDF_TXT_PATH}", flush=True)
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
+    print(f"[DEBUG] Loaded {len(txt_lines)} lines of text", flush=True)
+    
     if start_line and end_line:
+        print(f"[DEBUG] Extracting text from lines {start_line} to {end_line}", flush=True)
         text = extract_text_for_lines(txt_lines, start_line, end_line)
     else:
         start = desc_section['DOC_page_ref']
         end = desc_section['end_DOC_page_ref']
+        print(f"[DEBUG] Extracting text from pages {start} to {end}", flush=True)
         pages = list(range(start, end + 1))
         text = extract_text_for_pages(txt_lines, pages)
+    
+    print(f"[DEBUG] Extracted text length: {len(text)} characters", flush=True)
+    
     # Cap chunk size for GPT safety and add overlap
     chunk_size = min(getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000), 1500)
-    overlap = getattr(config, 'TEXT_OVERLAP', 1000)
+    # Overlap should be smaller than chunk size - use 10% of chunk size or 200 chars, whichever is larger
+    overlap = min(int(chunk_size * 0.1), 200)
+    
+    print(f"[DEBUG] Chunk size: {chunk_size}, Overlap: {overlap}", flush=True)
+    print(f"[DEBUG] Creating chunks...", flush=True)
+    
     chunks = chunk_text_with_overlap(text, chunk_size, overlap)
     chunk_results = []
     bad_chunks = []
+    
+    total_chunks = len(chunks)
+    print(f"\n[Subservice Orgs] Found {total_chunks} chunks to process", flush=True)
+    print(f"[Subservice Orgs] Starting extraction...\n", flush=True)
+    
     for idx, chunk in enumerate(chunks):
+        # Show progress in console with immediate flush
+        progress_msg = f"[Subservice Orgs] Processing chunk {idx + 1}/{total_chunks}..."
+        print(f"\r{progress_msg}", end='', flush=True)
+        
+        logging.info(f'Processing chunk {idx + 1}/{total_chunks}')
         logging.debug(f'Chunk {idx} text: {chunk[:1000]}...')
         prompt = SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT.format(
             text=chunk
@@ -188,7 +241,10 @@ def extract_subservice_orgs():
             # Merge page refs and controls
             prev = seen[key]
             if org.get('third_party_page_ref') and prev.get('third_party_page_ref'):
-                prev['third_party_page_ref'] += ',' + org['third_party_page_ref']
+                # Convert both to strings before concatenating
+                prev_ref = str(prev['third_party_page_ref'])
+                org_ref = str(org['third_party_page_ref'])
+                prev['third_party_page_ref'] = prev_ref + ',' + org_ref
             if org.get('third_party_controls') and prev.get('third_party_controls'):
                 prev['third_party_controls'] += org['third_party_controls']
         else:
@@ -291,13 +347,18 @@ def extract_subservice_orgs():
         for entry in rescue_report:
             logging.info(f"Bad chunk desc: {entry['bad_chunk_desc'][:80]}... | Rescue: {entry['rescue_type']} | Confidence: {entry['confidence_pct']}% | Matched: {entry['matched_desc'][:80] if entry['matched_desc'] else None}")
 
-    output = {'third_parties': ensure_confidence_justification_field(list(seen.values()))}
+    output = {'subservice_orgs': ensure_confidence_justification_field(list(seen.values()))}
     if bad_chunks:
         output['bad_chunks'] = bad_chunks
         output['bad_chunk_rescue_report'] = rescue_report
         output['bad_chunk_count'] = len(bad_chunks) # type: ignore
         output['rescued_chunk_count'] = len([r for r in rescue_report if r.get('confidence_pct', 0) >= 90]) # type: ignore
         output['unrecoverable_chunks'] = [r for r in rescue_report if r.get('rescue_type') == 'unmatched'] # type: ignore
+    
+    # Clear the progress line and show completion
+    print("\r" + " " * 80 + "\r", end='', flush=True)
+    log_and_print(f"\n[Subservice Orgs] ✓ Completed! Found {len(seen)} organizations")
+    
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
     logging.info(f'Subservice orgs extraction result: {output}')
@@ -421,7 +482,8 @@ def clean_company_name(name):
     return base.strip()
 
 def calculate_confidence(entry, company_names, so_list, likely_so, common_so, top2_distance_names):
-    conf = 0.3
+    conf = 0.0
+    entry['confidence_justification'] = []
     name = (entry.get('third_party_name') or '').strip().lower()
     cleaned_name = clean_company_name(name)
     cleaned_company_names = [clean_company_name(n) for n in company_names if n]
@@ -430,25 +492,31 @@ def calculate_confidence(entry, company_names, so_list, likely_so, common_so, to
         if cname and (cname == cleaned_name or cname in cleaned_name or cleaned_name in cname or SequenceMatcher(None, cname, cleaned_name).ratio() > 0.85):
             conf -= 0.8
             penalty_applied = True
-            entry['confidence_justification'] = entry.get('confidence_justification', []) + [f'-0.8: matches company or parent name ({cname})']
+            entry['confidence_justification'].append(f'-0.8: matches company or parent name ({cname})')
             break
     # Only apply common_so bonus if not penalized for company match
     if not penalty_applied and name in {so.strip().lower() for so in so_list}:
         conf += 0.4
-        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['+0.4: in common subservice orgs list']
+        entry['confidence_justification'].append('+0.4: in common subservice orgs list')
     if likely_so == 'Yes':
         conf += 0.1
-        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['+0.1: likely_so is Yes']
+        entry['confidence_justification'].append('+0.1: likely_so is Yes')
     elif likely_so == 'No':
         conf -= 0.1
-        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['-0.1: likely_so is No']
+        entry['confidence_justification'].append('-0.1: likely_so is No')
     if common_so == 'Yes' and not penalty_applied:
         conf += 0.1
-        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['+0.1: common_so is Yes']
+        entry['confidence_justification'].append('+0.1: common_so is Yes')
     if name in top2_distance_names:
         conf += 0.1
-        entry['confidence_justification'] = entry.get('confidence_justification', []) + ['+0.1: top2 distance name']
-    return conf
+        entry['confidence_justification'].append('+0.1: top2 distance name')
+    # Context-based adjustment (example: penalize SaaS/monitoring tools)
+    desc = (entry.get('third_party_description') or '').lower()
+    saas_keywords = ['monitoring', 'logging', 'ticketing', 'alert', 'hr', 'business application', 'it service management', 'endpoint detection', 'vulnerability assessment']
+    if any(kw in desc for kw in saas_keywords):
+        conf -= 0.2
+        entry['confidence_justification'].append('-0.2: description indicates SaaS/monitoring tool')
+    return min(1.0, max(0.0, conf))
 
 def postprocess_third_parties(third_parties, company_names, so_list, heuristic_exclusions_log_path=None):
     processed = []
@@ -514,6 +582,8 @@ def filter_third_parties_with_gpt():
     Post-processes extracted third parties using GPT to filter out non-companies (frameworks, departments, generic terms, software, etc.).
     Logs exclusions with reasons. Overwrites the JSON with filtered results.
     """
+    # Import the enhancement module
+    from .subservice_orgs_dedup import enhance_subservice_orgs
     # gpt_extract already imported at top
     
     INPUT_JSON_PATH = OUTPUT_JSON_PATH
@@ -528,7 +598,7 @@ def filter_third_parties_with_gpt():
         hlog.write('')  # Reset heuristic log
     with open(INPUT_JSON_PATH, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    third_parties = data.get('third_parties', [])
+    third_parties = data.get('subservice_orgs', [])
     # Normalize/deduplicate before filtering
     third_parties = normalize_third_party_names(third_parties)
     # Filter out company being audited and parent
@@ -584,10 +654,16 @@ def filter_third_parties_with_gpt():
     filtered = postprocess_third_parties(filtered, company_names, so_list, heuristic_exclusions_log_path=HEURISTIC_LOG_PATH)
     # Set likely_so to 'No' for company/parent
     filtered = set_likely_so_for_company_and_parent(filtered, company_names)
+    
+    # ENHANCEMENT: Use GPT to deduplicate and adjust confidence for SaaS tools
+    print("\n[Subservice Orgs Enhancement] Starting intelligent deduplication and confidence adjustment...", flush=True)
+    filtered = enhance_subservice_orgs(filtered)
+    print("[Subservice Orgs Enhancement] ✓ Enhancement complete!\n", flush=True)
+    
     # Write filtered results
     filtered = ensure_confidence_justification_field(filtered)
     with open(str(OUTPUT_JSON_PATH), 'w', encoding='utf-8') as f:
-        json.dump({'third_parties': filtered}, f, indent=2, ensure_ascii=False)
+        json.dump({'subservice_orgs': filtered}, f, indent=2, ensure_ascii=False)
     logging.info(f"Final filtered subservice orgs written to {OUTPUT_JSON_PATH}. Kept: {len(filtered)}. Excluded: {len(exclusions)}. See {FILTER_LOG_PATH} for details. Heuristic exclusions in {HEURISTIC_LOG_PATH}.")
 
 def elevate_and_group_control_ids(json_path=OUTPUT_JSON_PATH):
@@ -597,7 +673,7 @@ def elevate_and_group_control_ids(json_path=OUTPUT_JSON_PATH):
     """
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    for entry in data.get('third_parties', []):
+    for entry in data.get('subservice_orgs', []):
         controls = entry.get('third_party_controls')
         if controls and isinstance(controls, list):
             control_ids = [c.get('third_party_control_id') for c in controls if c.get('third_party_control_id')]
@@ -639,18 +715,22 @@ def gpt_verify_likely_subservice_orgs(subservice_orgs):
                 if not clean_response.strip():
                     raise ValueError("Empty response from GPT")
                 data = json.loads(clean_response)
+                justification = org.get('confidence_justification', [])
                 if data.get('is_likely_subservice_org', False):
-                    # Confirmed: add +0.2
                     old_conf = org['third_party_confidence']
-                    org['third_party_confidence'] = min(1.0, round(old_conf + 0.2, 3))
-                    org['confidence_justification'] = org.get('confidence_justification', []) + [f"+0.2: GPT-4o review confirms subservice org: {data.get('reason', 'No reason provided')}"]
+                    new_conf = min(1.0, round(old_conf + 0.2, 3))
+                    org['third_party_confidence'] = new_conf
+                    justification.append(f"GPT-4o review: confirmed as subservice org (+0.2). Reason: {data.get('reason', 'No reason provided')}")
                 else:
-                    # Not confirmed: subtract 0.2
                     old_conf = org['third_party_confidence']
-                    org['third_party_confidence'] = max(0, round(old_conf - 0.2, 3))
-                    org['confidence_justification'] = org.get('confidence_justification', []) + [f"-0.2: GPT-4o review: {data.get('reason', 'No reason provided')}"]
+                    new_conf = max(0, round(old_conf - 0.2, 3))
+                    org['third_party_confidence'] = new_conf
+                    justification.append(f"GPT-4o review: NOT a subservice org (-0.2). Reason: {data.get('reason', 'No reason provided')}")
+                org['confidence_justification'] = justification
             except Exception as e:
-                org['confidence_justification'] = org.get('confidence_justification', []) + [f"GPT-4o review failed: {e} | Response: {repr(response)}"]
+                justification = org.get('confidence_justification', [])
+                justification.append(f"GPT-4o review failed: {e} | Response: {repr(response)}")
+                org['confidence_justification'] = justification
             time.sleep(0.7)  # avoid rate limits
     return subservice_orgs
 

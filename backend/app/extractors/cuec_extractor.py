@@ -6,7 +6,6 @@ import re
 import time
 import requests
 import math
-import numpy as np  # type: ignore  # pylance: ignore-reportMissingImports
 from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .. import config
@@ -35,10 +34,9 @@ with open(GPT_LOG_PATH, 'w', encoding='utf-8') as gptlog:
 
 CUEC_KEYWORDS = config.CUEC_KEYWORDS
 CUEC_EXTRACTION_PROMPT = config.CUEC_EXTRACTION_PROMPT
-OPENAI_EMBEDDING_MODEL = getattr(config, 'OPENAI_EMBEDDING_MODEL', 'text-embedding-ada-002')
-OPENAI_EMBEDDING_URL = 'https://api.openai.com/v1/embeddings'
 
-_embedding_cache = {}
+# Removed: numpy, _embedding_cache, OPENAI_EMBEDDING_MODEL, OPENAI_EMBEDDING_URL
+# Now using GPT-based framework mapping instead of embeddings
 
 def load_json(path):
     with open(path, 'r', encoding='utf-8') as f:
@@ -884,65 +882,78 @@ def consolidate_cuecs_with_gpt(cuec_list, min_batch_size=1, bad_chunks=None):
         return left + right
     return cuec_list
 
-def get_openai_embedding(text):
-    """
-    Get embedding for a given text using OpenAI API. Caches results for efficiency.
-    """
-    global _embedding_cache
-    if text in _embedding_cache:
-        return _embedding_cache[text]
-    from ..config import EMBEDDING_PROVIDER, OPENAI_EMBEDDING_MODEL
-    if EMBEDDING_PROVIDER != 'openai':
-        raise RuntimeError('Embedding provider set to non-openai but not implemented yet. Set EMBEDDING_PROVIDER=openai or provide Dataiku embedding endpoint.')
-    headers = {
-        'Authorization': f'Bearer {load_api_key()}',
-        'Content-Type': 'application/json',
-    }
-    data = {
-        'input': text,
-        'model': OPENAI_EMBEDDING_MODEL,
-    }
-    import certifi
-    for attempt in range(3):
-        try:
-            resp = requests.post(OPENAI_EMBEDDING_URL, headers=headers, json=data, timeout=20, verify=certifi.where())
-            resp.raise_for_status()
-            embedding = resp.json()['data'][0]['embedding']
-            _embedding_cache[text] = embedding
-            time.sleep(0.2)  # Add delay to avoid rate limits
-            return embedding
-        except Exception as e:
-            time.sleep(1 + attempt)
-    raise RuntimeError(f'Failed to get embedding for text: {text}')
-
-def cosine_similarity(vec1, vec2):
-    v1 = np.array(vec1)
-    v2 = np.array(vec2)
-    return float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+# --- Removed embedding functions (replaced with GPT-based classification) ---
+# Previously: get_openai_embedding(), cosine_similarity(), _embedding_cache
+# Now using GPT direct reasoning for framework mapping
 
 def map_cuec_to_frameworks(cuec_desc, tsc_criteria, coso_criteria):
-    cuec_emb = get_openai_embedding(cuec_desc)
-    # TSC
-    best_tsc_id = None
-    best_tsc_sim = -1
-    for crit in tsc_criteria:
-        emb = get_openai_embedding(crit['description'])
-        sim = cosine_similarity(cuec_emb, emb)
-        if sim > best_tsc_sim:
-            best_tsc_sim = sim
-            best_tsc_id = crit['id']
-    # COSO
-    best_coso_id = None
-    best_coso_sim = -1
-    for crit in coso_criteria:
-        emb = get_openai_embedding(crit['description'])
-        sim = cosine_similarity(cuec_emb, emb)
-        if sim > best_coso_sim:
-            best_coso_sim = sim
-            best_coso_id = crit['id']
-    # Add debug logging for framework mapping
-    logging.info(f"map_cuec_to_frameworks: desc='{cuec_desc[:80]}...' | best_tsc_id={best_tsc_id} (sim={best_tsc_sim}) | best_coso_id={best_coso_id} (sim={best_coso_sim})")
-    return best_tsc_id, best_coso_id, best_tsc_sim, best_coso_sim
+    """
+    Map a CUEC description to best-matching TSC and COSO criteria using GPT reasoning.
+    
+    Replaces previous OpenAI embedding + cosine similarity approach with direct GPT analysis.
+    This eliminates OpenAI API dependency and leverages GPT-5's superior reasoning capabilities.
+    
+    Returns: (best_tsc_id, best_coso_id, confidence_tsc, confidence_coso)
+    """
+    if not tsc_criteria or not coso_criteria:
+        logging.warning("TSC or COSO criteria missing for CUEC mapping")
+        return None, None, -1, -1
+    
+    # Use a simplified GPT prompt to select best matches
+    # Limit to top 10 candidates each to keep prompt manageable
+    tsc_subset = tsc_criteria[:10]
+    coso_subset = coso_criteria[:10]
+    
+    tsc_text = "\n".join([f"- {c['id']}: {c['description'][:150]}..." for c in tsc_subset])
+    coso_text = "\n".join([f"- {c['id']}: {c['description'][:150]}..." for c in coso_subset])
+    
+    prompt = f"""You are an expert SOC 2 auditor. For this Complementary User Entity Control (CUEC), select the best-matching TSC and COSO criteria.
+
+CUEC Description:
+{cuec_desc}
+
+Available TSC Criteria:
+{tsc_text}
+
+Available COSO Criteria:
+{coso_text}
+
+Respond ONLY with a JSON object:
+{{
+  "best_tsc_id": "ID or null",
+  "tsc_confidence": 0.0-1.0,
+  "best_coso_id": "ID or null",
+  "coso_confidence": 0.0-1.0,
+  "reasoning": "brief explanation"
+}}
+"""
+    
+    try:
+        raw = gpt_extract(prompt, "cuec_extractor")
+        result = json.loads(raw.strip())
+        
+        best_tsc_id = result.get('best_tsc_id')
+        best_coso_id = result.get('best_coso_id')
+        tsc_conf = float(result.get('tsc_confidence', 0.0))
+        coso_conf = float(result.get('coso_confidence', 0.0))
+        
+        # Validate IDs
+        valid_tsc = [c['id'] for c in tsc_subset]
+        valid_coso = [c['id'] for c in coso_subset]
+        
+        if best_tsc_id and best_tsc_id not in valid_tsc:
+            logging.warning(f"GPT returned invalid TSC ID: {best_tsc_id}")
+            best_tsc_id, tsc_conf = None, -1
+        if best_coso_id and best_coso_id not in valid_coso:
+            logging.warning(f"GPT returned invalid COSO ID: {best_coso_id}")
+            best_coso_id, coso_conf = None, -1
+        
+        logging.info(f"map_cuec_to_frameworks: desc='{cuec_desc[:80]}...' | best_tsc_id={best_tsc_id} (conf={tsc_conf}) | best_coso_id={best_coso_id} (conf={coso_conf})")
+        return best_tsc_id, best_coso_id, tsc_conf, coso_conf
+        
+    except Exception as e:
+        logging.error(f"GPT CUEC framework mapping failed: {e}")
+        return None, None, -1, -1
 
 def main():
     extract_cuecs()

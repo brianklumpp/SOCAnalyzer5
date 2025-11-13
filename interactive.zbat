@@ -1,0 +1,37 @@
+@echo off
+REM Interactive SOC2 Analysis Launcher
+REM Provides a guided TUI for SOC2 PDF analysis
+
+setlocal enabledelayedexpansion
+
+REM Find Python executable (prefer venv)
+set PYTHON_EXE=python
+if exist ".venv\Scripts\python.exe" set PYTHON_EXE=.venv\Scripts\python.exe
+if exist "venv\Scripts\python.exe" set PYTHON_EXE=venv\Scripts\python.exe
+if exist "env\Scripts\python.exe" set PYTHON_EXE=env\Scripts\python.exe
+
+REM Check if script exists
+if not exist "interactive_scan.py" (
+    echo Error: interactive_scan.py not found
+    pause
+    exit /b 1
+)
+
+REM Enable ANSI colors in Windows 10+
+for /f "tokens=3" %%i in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v CurrentBuildNumber 2^>nul') do set BUILD=%%i
+if %BUILD% GEQ 10586 (
+    reg add HKCU\Console /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>&1
+)
+
+echo.
+echo ================================================================
+echo   SOC2 Analyzer - Interactive Mode
+echo ================================================================
+echo.
+echo Starting interactive analysis wizard...
+echo.
+
+REM Run the interactive script
+%PYTHON_EXE% interactive_scan.py
+
+exit /b %ERRORLEVEL%

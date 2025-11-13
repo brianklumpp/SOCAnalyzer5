@@ -1,2 +1,15 @@
-Raw GPT Response from extract_toc_with_gpt:
-ChatCompletion(id='chatcmpl-C1xMDjJaIZ8Ab0rGKUWeFPDv65eJq', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='TABLE OF  \nCONTENTS \n \nSECTION 1  INDEPENDENT SERVICE AUDITOR’S  \nREPORT .................................................... 1  \nSECTION 2  MANAGEMENT’S ASSERTION .................. 5  \nSECTION 3  DESCRIPTION OF THE SYSTEM ................ 8  \nSECTION 4  TESTING MATRICES ............................... 26', refusal=None, role='assistant', annotations=[], audio=None, function_call=None, tool_calls=None))], created=1754582533, model='gpt-4o-2024-08-06', object='chat.completion', service_tier='default', system_fingerprint='fp_ff25b2783a', usage=CompletionUsage(completion_tokens=63, prompt_tokens=3969, total_tokens=4032, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0)))
+Raw GPT Content from extract_toc_with_gpt (provider=dataiku_dss):
+Contents 
+
+2 
+I. 
+Independent Service Auditor’s Report on a SOC 2 Examination......................................................................................................... 3 
+II. 
+Assertion of Adobe Incorporated Management .................................................................................................................................................8 
+III. 
+Adobe Incorporated’s Description of Its Experience Cloud System ............................................................................................... 10 
+IV. 
+Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests ............................................................. 46 
+V. 
+Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent 
+Service Auditor’s Report on a SOC 2 Examination ........................................................................................................................................ 112

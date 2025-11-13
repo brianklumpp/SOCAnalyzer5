@@ -1,11 +1,40 @@
+networks:
+  socanalyzer-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
 services:
+  # Local DNS cache to resolve corporate resources without external DNS
+  dns-cache:
+    image: strm/dnsmasq:latest
+    container_name: socanalyzer-dns-cache
+    volumes:
+      - ./dns/dnsmasq.conf:/etc/dnsmasq.conf:ro
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Map to host IP dynamically
+    networks:
+      socanalyzer-network:
+        ipv4_address: 172.20.0.2  # Fixed IP for DNS cache
+    healthcheck:
+      test: ["CMD", "nslookup", "dataiku-dss.corp.nandps.com", "172.20.0.2"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   postgres:
     image: postgres:15-alpine
     container_name: socanalyzer-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-socanalyzer}
-      POSTGRES_USER: ${POSTGRES_USER:-socuser}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-socpass}
+      POSTGRES_DB: ${POSTGRES_DB:-soc2analyzer}
+      POSTGRES_USER: ${POSTGRES_USER:-soc2_analyzer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-puntitforthewin}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -13,49 +42,73 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # Optional: expose locally
-    # ports:
-    #   - "5432:5432"
+    networks:
+      socanalyzer-network:
+        ipv4_address: 172.20.0.3  # Fixed IP for postgres
+    ports:
+      - "5433:5432"  # Expose to localhost:5433 to avoid conflict with local PostgreSQL
   redis:
     image: redis:7-alpine
     container_name: socanalyzer-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    networks:
+      socanalyzer-network:
+        ipv4_address: 172.20.0.4  # Fixed IP for redis
 
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     container_name: socanalyzer-backend
+    restart: unless-stopped
+    dns:
+      - 172.20.0.2  # Use our local DNS cache first (fixed IP)
+      - 8.8.8.8     # Fallback to Google DNS
     depends_on:
+      dns-cache:
+        condition: service_healthy
       redis:
         condition: service_started
       postgres:
         condition: service_healthy
     environment:
       RUN_MIGRATIONS_ON_START: "true"
-      # Force container to use internal postgres hostname, ignoring host .env overrides
       POSTGRES_DB: ${POSTGRES_DB:-socanalyzer}
       POSTGRES_USER: ${POSTGRES_USER:-socuser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-socpass}
       DATABASE_URL_ASYNC: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       DATABASE_URL_SYNC: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      # Ensure TLS uses mounted cert bundle, not a Windows path
       DATAIKU_VERIFY_SSL: ${DATAIKU_VERIFY_SSL:-true}
       DATAIKU_CA_BUNDLE: /certs/corp-ca-bundle.pem
       REQUESTS_CA_BUNDLE: /certs/corp-ca-bundle.pem
-      # Logging level and access log suppression
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
       EXCLUDE_ACCESS_LOG_PATHS: ${EXCLUDE_ACCESS_LOG_PATHS:-/analyze/status}
+      PARALLEL_EXTRACTORS_TIMEOUT_SECONDS: ${PARALLEL_EXTRACTORS_TIMEOUT_SECONDS:-0}
+      JOB_WATCHDOG_MIN_PROGRESS: ${JOB_WATCHDOG_MIN_PROGRESS:-95}
+      JOB_WATCHDOG_IDLE_SECONDS: ${JOB_WATCHDOG_IDLE_SECONDS:-0}
+      LOG_GPT_REQUESTS: ${LOG_GPT_REQUESTS:-false}
+      LOG_GPT_PROMPTS: ${LOG_GPT_PROMPTS:-false}
+      LOG_GPT_INCLUDE_HEADERS: ${LOG_GPT_INCLUDE_HEADERS:-false}
+      LOG_GPT_HEADER_WHITELIST: ${LOG_GPT_HEADER_WHITELIST:-x-ratelimit-limit,x-ratelimit-remaining,x-ratelimit-reset,retry-after}
+      LOG_GPT_SAMPLE_RATE: ${LOG_GPT_SAMPLE_RATE:-1.0}
+      LOG_GPT_MAX_PROMPT_CHARS: ${LOG_GPT_MAX_PROMPT_CHARS:-800}
+      LOG_GPT_MAX_RESPONSE_CHARS: ${LOG_GPT_MAX_RESPONSE_CHARS:-800}
+      GPT_CALLS_LOG_PATH: ${GPT_CALLS_LOG_PATH:-/app/data/logs/gpt_calls.log}
+      DATAIKU_DSS_CALL_TIMEOUT: ${DATAIKU_DSS_CALL_TIMEOUT:-90}
+      HTTP_REQUEST_TIMEOUT: ${HTTP_REQUEST_TIMEOUT:-120}
       LLM_PROVIDER: ${LLM_PROVIDER:-dataiku_dss}
       DATAIKU_DSS_HOST: ${DATAIKU_DSS_HOST}
+      DATAIKU_DSS_HOST_IP: ${DATAIKU_DSS_HOST_IP:-}
       DATAIKU_DSS_API_KEY: ${DATAIKU_DSS_API_KEY}
       DATAIKU_DSS_PROJECT: ${DATAIKU_DSS_PROJECT:-SOLIDIGM_GPT_API_ACCESS}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-ada-002}
-      CONTROL_EMBEDDING_MAPPING_ENABLED: ${CONTROL_EMBEDDING_MAPPING_ENABLED:-true}
+      CONTROL_EMBEDDING_MAPPING_ENABLED: "false"  # Temporarily disabled - GPT mapping overloads Dataiku
       SOCANALYZER_REDIS_URL: redis://redis:6379/0
+      DOCKER_CONTROL_ENABLED: "true"
     ports:
       - "8000:8000"
     volumes:
@@ -63,16 +116,23 @@ services:
       - ./certs:/certs:ro
       - ./backend/alembic.ini:/app/backend/alembic.ini:ro
       - ./backend/alembic:/app/backend/alembic
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      socanalyzer-network:
+        ipv4_address: 172.20.0.5  # Fixed IP for backend
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: socanalyzer-frontend
+    restart: unless-stopped
     depends_on:
       - backend
     ports:
       - "3000:80"
+    networks:
+      - socanalyzer-network
 
 volumes:
   postgres_data:

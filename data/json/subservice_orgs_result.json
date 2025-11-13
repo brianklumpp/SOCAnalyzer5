@@ -1,1143 +1,627 @@
 {
-  "third_parties": [
+  "subservice_orgs": [
     {
-      "third_party_name": "splunk",
-      "third_party_description": "Security information and event management (SIEM) tool",
-      "third_party_page_ref": null,
-      "third_party_confidence": 0.9,
-      "distance_from_so_keywords": 6,
+      "third_party_name": "Amazon Web Services, Inc. (AWS)",
+      "third_party_description": "Provides infrastructure as a service through its AWS platform.",
+      "third_party_page_ref": "Description of System",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [],
-      "source_context": "porting the Stream Connect \nfor Apache Kafka system. \nDatabase \nPrimary database engine supporting the APaaS \nsystem. \nMariaDB \nPostgres \nActive Directory \n(AD) \nAuthenticates and authorizes users and computers in \nServiceNow's corporate Windows domain network. \nWindows \nOpenLDAP \nAccess to the application and database operating \nsystems, and some internal applications is governed \nby the OpenLDAP centralized Lightweight Directory \nAccess Protocol (LDAP) system. \nLinux \nVirtual Private \nNetwork (VPN) \nProvides the means of authentication for \nadministrators to access the production network. \nPalo Alto \nFirewalls \nRedundant firewall systems utilized filter incoming \nand outgoing network traffic. \n \nIn addition, ServiceNow utilizes the following applications and utilities to support the System: \n• \nSplunk – security information and event management (SIEM) tool utilized to provide centralized log \nmanagement and file integrity monitoring. \n• \nPuppet – enforces configuration policy and ens",
-      "confidence_justification": [
-        "Filtered by GPT: This is a software tool used for security information and event management, not a company or cloud provider.",
-        "+0.4: in common subservice orgs list",
-        "+0.1: likely_so is Yes",
-        "+0.1: common_so is Yes",
-        "GPT-4o review failed: Expecting value: line 1 column 1 (char 0) | Response: '```json\\n{\\n  \"is_likely_subservice_org\": true,\\n  \"reason\": \"Splunk, as a Security Information and Event Management (SIEM) tool, is often used by organizations to manage and analyze security data. In the context of SOC 2 compliance, if an organization relies on Splunk to perform critical security monitoring and event management functions, it could be considered a subservice organization. This is because it plays a significant role in the organization\\'s control environment, particularly in the areas of security and availability.\"\\n}\\n```'"
-      ]
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": []
     },
     {
-      "third_party_name": "Workday",
-      "third_party_description": "Cloud-based human resources information system (HRIS)",
-      "third_party_page_ref": null,
-      "third_party_confidence": 0.9,
-      "distance_from_so_keywords": 6,
+      "third_party_name": "Microsoft Corporation (Microsoft)",
+      "third_party_description": "Provides infrastructure as a service through its Azure platform.",
+      "third_party_page_ref": "Description of System",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
       "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [],
-      "source_context": "porting the Stream Connect \nfor Apache Kafka system. \nDatabase \nPrimary database engine supporting the APaaS \nsystem. \nMariaDB \nPostgres \nActive Directory \n(AD) \nAuthenticates and authorizes users and computers in \nServiceNow's corporate Windows domain network. \nWindows \nOpenLDAP \nAccess to the application and database operating \nsystems, and some internal applications is governed \nby the OpenLDAP centralized Lightweight Directory \nAccess Protocol (LDAP) system. \nLinux \nVirtual Private \nNetwork (VPN) \nProvides the means of authentication for \nadministrators to access the production network. \nPalo Alto \nFirewalls \nRedundant firewall systems utilized filter incoming \nand outgoing network traffic. \n \nIn addition, ServiceNow utilizes the following applications and utilities to support the System: \n• \nSplunk – security information and event management (SIEM) tool utilized to provide centralized log \nmanagement and file integrity monitoring. \n• \nPuppet – enforces configuration policy and ens",
-      "confidence_justification": [
-        "+0.4: in common subservice orgs list",
-        "+0.1: likely_so is Yes",
-        "+0.1: common_so is Yes",
-        "GPT-4o review failed: Expecting value: line 1 column 1 (char 0) | Response: '```json\\n{\\n  \"is_likely_subservice_org\": true,\\n  \"reason\": \"Workday, as a cloud-based human resources information system (HRIS), could be considered a subservice organization in a SOC 2 report if the primary service organization relies on Workday to process or manage critical HR data that impacts the security, availability, processing integrity, confidentiality, or privacy of the services provided to its clients. The inclusion would depend on whether Workday\\'s services are integral to the primary organization\\'s service commitments and system requirements.\"\\n}\\n```'"
-      ]
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": []
     },
     {
-      "third_party_name": "equinix",
-      "third_party_description": "Data center hosting services provider",
-      "third_party_page_ref": "E 15,Description of System section,Description of System section",
-      "third_party_confidence": 0.9,
-      "distance_from_so_keywords": 3,
+      "third_party_name": "Google LLC",
+      "third_party_description": "(Adobe Workfront Only) Provides infrastructure as a service through its Google Cloud Platform (GCP).",
+      "third_party_page_ref": "Description of System,Page 44,45",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
       "likely_so": "Yes",
       "common_so": "Yes",
-      "third_party_controls": null,
-      "source_context": "E 15 ===\n\n12 \n\nThe following table describes the information used and supported by the system. \n \nData Used and Supported by the System \nData Description \nData Reporting \nApplication data supported by the APaaS system \nconsists of customer inputs relating to the automation \nof customer IT and business processes including the \nfollowing: \n• \nAsset management \n• \nChange management \n• \nCloud provisioning \n• \nConfiguration management \n• \nDiscovery and application dependency mapping \n• \nIncident and problem management \n• \nGovernance risk and compliance \n• \nOrchestration \n• \nPerformance analytics \n• \nProject and portfolio management \n• \nService automation platform \n• \nService catalog and request fulfillment \nThe system can be utilized by the customer to generate \nvarious exports and customizable reports, including the \nfollowing: \n• \nIT performance reporting and analytics \n• \nBusiness services mapping \n• \nRoot cause and risk analysis \n• \nProcess management workflows \n• \nService level and spo",
-      "confidence_justification": [
-        "+0.4: in common subservice orgs list",
-        "+0.1: likely_so is Yes",
-        "+0.1: common_so is Yes",
-        "GPT-4o review failed: Expecting value: line 1 column 1 (char 0) | Response: '```json\\n{\\n  \"is_likely_subservice_org\": true,\\n  \"reason\": \"Equinix, as a data center hosting services provider, is likely to be a subservice organization in a SOC 2 report because it provides essential infrastructure services that can impact the security, availability, and confidentiality of the primary service organization\\'s systems and data.\"\\n}\\n```'"
-      ]
+      "third_party_controls": [],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": []
     },
     {
-      "third_party_name": "null",
-      "third_party_description": "null",
-      "third_party_page_ref": "null,null",
-      "third_party_confidence": 0.2,
-      "distance_from_so_keywords": 6,
-      "likely_so": "No",
+      "third_party_name": "Cyxtera Technologies, Inc. (Cyxtera)",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_page_ref": "Description of System",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
       "common_so": "No",
       "third_party_controls": [],
-      "source_context": "nce users are ready to update the code repository, they check the code back in.  The version \ncontrol software assigns a different version number to each check-in and allows users to rollback code to previous \nversions when necessary.  In addition, the tool provides users with the ability to compare different versions of the \ncode to each other in order to highlight changes and roll back to prior versions of application code if necessary.  \nThe ability to modify source code within the version control software is restricted to authorized development \npersonnel.  Version control administrative access privileges are restricted to members of the build and release team. \n  \nSoftware development projects are defined in one of two ways: \n• \nFeature Release – Feature release projects contain new functionality and fixes to existing functionality.  \nProduct Management and Development Management jointly provide an update on the product vision for \neach feature release.  The Product Owner determin",
-      "confidence_justification": [
-        "Filtered by GPT: No information provided",
-        "-0.1: likely_so is No"
-      ]
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": []
     },
     {
-      "third_party_name": "ServiceNow",
-      "third_party_description": "Provider of enterprise cloud computing services that define, structure, manage, and automate digital workflows for global enterprises.",
-      "third_party_page_ref": "PAGE 12,Page 3,Description of Services Provided,https://www.servicenow.com/,Page 13,ServiceNow website,PAGE 15,PAGE 15,Description of System section,Page 16,PAGE 16,PAGE 16,Description of System section,Description of System section,https://www.servicenow.com/,N/A,Page 17,PAGE 17,PAGE 17,N/A,Description of System section,https://www.servicenow.com/,PAGE 18,PAGE 18,PAGE 18,Description of System section,Description of System section,Description of System section,PAGE 19,Description of System section,https://www.servicenow.com/,N/A,null,https://www.servicenow.com/,PAGE 20,PAGE 20,PAGE 20,Description of System section,https://www.servicenow.com/,https://www.servicenow.com/,https://www.servicenow.com/,Description of System section,PAGE 21,PAGE 21,PAGE 21,page 1,N/A,https://www.servicenow.com/,PAGE 23,PAGE 23,https://www.servicenow.com/,ServiceNow website,PAGE 25,PAGE 25,PAGE 25,https://www.servicenow.com/,https://www.servicenow.com/,https://www.servicenow.com/,Description of System section,PAGE 26,PAGE 26,page 1,Description of System section,https://www.servicenow.com/,PAGE 27,PAGE 27,PAGE 27,Description of System section,null,Description of System section,PAGE 28,PAGE 28,PAGE 28",
-      "third_party_confidence": 0.0,
+      "third_party_name": "Digital Realty Trust, Inc. (formerly Interxion)",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_page_ref": "Description of System",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Equinix, Inc. (Equinix)",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_page_ref": "Description of System",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "NTT Ltd. (formerly Gyron)",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_page_ref": "Description of System",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Amazon Web Services",
+      "third_party_description": "Cloud hosting and infrastructure provider used for Adobe's Experience Cloud infrastructure.",
+      "third_party_page_ref": "Page 18,Description of System",
+      "third_party_confidence": 1.0,
       "distance_from_so_keywords": 3,
-      "likely_so": "No",
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "y system incidents that occurred during the period November 1, 2022 to October 31, 2023 \nresulting in Adobe’s failure to achieve one or more of its service commitments or system requirements based on \nthese considerations. \nComponents of the System Used to Provide the Services \nAdobe maintains a Common Controls Framework (CCF) that is used in the implementation of control measures as \na risk mitigation strategy to support Adobe operations, technology infrastructure, and security management activities. \nThe domains are stated in the beginning of Section IV. Further details on these control domains and associated \ncontrol activities are detailed throughout Section III and are identified by the phrase “(CCF XXX)” where XXX identifies \nthe short acronym for the CCF domain. All CCF domains are explicitly mentioned in Section III except for Risk \nManagement (CCF RM), which is detailed within multiple COSO Common Criteria (e.g., Risk Assessment, Monitoring \nActivities, Control Activities, Ris",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Google",
+      "third_party_description": "Cloud service provider contributing to Adobe's Experience Cloud infrastructure.",
+      "third_party_page_ref": "Page 18",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "y system incidents that occurred during the period November 1, 2022 to October 31, 2023 \nresulting in Adobe’s failure to achieve one or more of its service commitments or system requirements based on \nthese considerations. \nComponents of the System Used to Provide the Services \nAdobe maintains a Common Controls Framework (CCF) that is used in the implementation of control measures as \na risk mitigation strategy to support Adobe operations, technology infrastructure, and security management activities. \nThe domains are stated in the beginning of Section IV. Further details on these control domains and associated \ncontrol activities are detailed throughout Section III and are identified by the phrase “(CCF XXX)” where XXX identifies \nthe short acronym for the CCF domain. All CCF domains are explicitly mentioned in Section III except for Risk \nManagement (CCF RM), which is detailed within multiple COSO Common Criteria (e.g., Risk Assessment, Monitoring \nActivities, Control Activities, Ris",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Microsoft",
+      "third_party_description": "Cloud service provider supporting Adobe's Experience Cloud infrastructure.",
+      "third_party_page_ref": "Page 18,19",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "y system incidents that occurred during the period November 1, 2022 to October 31, 2023 \nresulting in Adobe’s failure to achieve one or more of its service commitments or system requirements based on \nthese considerations. \nComponents of the System Used to Provide the Services \nAdobe maintains a Common Controls Framework (CCF) that is used in the implementation of control measures as \na risk mitigation strategy to support Adobe operations, technology infrastructure, and security management activities. \nThe domains are stated in the beginning of Section IV. Further details on these control domains and associated \ncontrol activities are detailed throughout Section III and are identified by the phrase “(CCF XXX)” where XXX identifies \nthe short acronym for the CCF domain. All CCF domains are explicitly mentioned in Section III except for Risk \nManagement (CCF RM), which is detailed within multiple COSO Common Criteria (e.g., Risk Assessment, Monitoring \nActivities, Control Activities, Ris",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Amazon Web Services (AWS)",
+      "third_party_description": "Directs and controls operations as well as establishes, communicates, and monitors policies and procedures for some of the production environments for Adobe’s Experience Cloud solutions. It operates, manages, and controls the components from the virtualization layer to the physical security of the facilities in which Adobe’s Experience Cloud components operate.",
+      "third_party_page_ref": "18,CIS-hardened Amazon Machine Images (AMIs)",
+      "third_party_confidence": 0.95,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
       "common_so": "Yes",
       "third_party_controls": [
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
+          "third_party_control_desc": "Elastic Compute Cloud (EC2)"
         },
         {
           "third_party_control_seq": 2,
           "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow provides infrastructure and software for the APaaS system."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "A documented code of conduct and an acceptable use policy are in place to facilitate reducing incentives and temptations"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "A documented code of conduct and an acceptable use policy are in place to facilitate reducing incentives and temptations for personnel to engage in dishonest, illegal, or unethical acts. Each employee acknowledges that they have read and received those documents."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Employees undergo code of conduct, ethics, and insider trading training annually."
+          "third_party_control_desc": "Simple Storage Service (S3)"
         },
         {
           "third_party_control_seq": 3,
           "third_party_control_id": null,
-          "third_party_control_desc": "Employees and contractors are required to consent to a background check and drug test, as permissible per local law, as a component of the hiring process, and are subject to rescreening at the discretion of management."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented code of conduct and acceptable use policy"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Employee training on code of conduct, ethics, and insider trading"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Background check and drug test for employees and contractors"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Employees undergo code of conduct, ethics, and insider trading training annually."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Employees and contractors are required to consent to a background check and drug test."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Board of Directors Oversight"
+          "third_party_control_desc": "Relational Database Service (RDS)"
         },
         {
           "third_party_control_seq": 4,
           "third_party_control_id": null,
-          "third_party_control_desc": "Organizational Structure and Assignment of Authority and Responsibility"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Establishing a relevant organizational structure"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Assigning authority and responsibility for operating activities"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Establishing reporting relationships and authorization hierarchies"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Communicating key areas of authority, responsibility, and lines of reporting to personnel"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Establishing a relevant organizational structure"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Commitment to Competence"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented position descriptions specifying qualification, education, and experience required for competence levels of particular jobs."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Management formally evaluates employee performance on an annual basis and informally throughout the calendar year."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented position descriptions specifying qualification, education, and experience required for competence levels of particular jobs."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Management periodically briefed on regulatory and industry changes affecting services provided."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Management meetings held on a weekly basis to discuss operational issues."
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "All hands meetings held on a quarterly basis to communicate company-wide objectives."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Management periodically briefed on regulatory and industry changes affecting services provided."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Management meetings are held on a weekly basis to discuss operational issues."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "All hands meetings are held on a quarterly basis to communicate company-wide objectives."
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Departmental meetings are held on a quarterly basis to discuss department-level objectives."
+          "third_party_control_desc": "Identity Access Management (IAM)"
         },
         {
           "third_party_control_seq": 5,
           "third_party_control_id": null,
-          "third_party_control_desc": "Periodic security and risk oversight meetings are held to discuss the security and risk items that are relevant to the organization."
+          "third_party_control_desc": "Virtual Private Cloud (VPC)"
         },
         {
           "third_party_control_seq": 6,
           "third_party_control_id": null,
-          "third_party_control_desc": "Annual security management meetings occur to oversee the security program, communicate security across the organization, and review risks and security issues."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Management periodically briefed on regulatory and industry changes affecting services provided."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Management meetings are held on a weekly basis to discuss operational issues."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "All hands meetings are held on a quarterly basis to communicate company-wide objectives."
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Departmental meetings are held on a quarterly basis to discuss department-level objectives."
-        },
-        {
-          "third_party_control_seq": 5,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Periodic security and risk oversight meetings are held to discuss the security and risk items that are relevant to the organization."
-        },
-        {
-          "third_party_control_seq": 6,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Annual security management meetings occur to oversee the security program, communicate security across the organization, and review risks and security issues."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented policies and procedures are in place addressing human resources operations and practices."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "The new hire process is documented for newly hired employees to help ensure that the required steps in the new hire process are completed."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented policies and procedures are in place addressing human resources operations and practices."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "The new hire process is documented for newly hired employees to help ensure that the required steps in the new hire process are completed."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "The termination process is documented for terminated employees to help ensure that the required steps in the termination process are completed."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented policies and procedures are in place addressing human resources operations and practices."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "The new hire process is documented for newly hired employees to help ensure that the required steps in the new hire process are completed."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "The termination process is documented for terminated employees to help ensure that the required steps in the termination process are completed."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow risk assessment process"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow senior management oversight of risk management"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow risk assessment process"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow's methodology for analyzing risks"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow senior management oversees risk management ownership, accountability, and is involved in the risk identification process."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow's methodology for analyzing risks varies, largely because many risks are difficult to quantify."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow's risk analysis process includes estimating the impact of a risk, assessing the impact and likelihood of the risk occurring, determining inherent risk, considering existing controls, determining residual risk, and managing the risk."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Estimating the impact of a risk"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Assessing the impact and likelihood (or frequency) of the risk occurring"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Determining the inherent risk (absence of controls)"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Considering the adequacy and effectiveness of existing controls"
-        },
-        {
-          "third_party_control_seq": 5,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Determining the residual risk considering existing controls"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow has applied a risk management approach to the organization in order to select and develop control activities."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "After relevant risks have been identified and evaluated, control activities are established to meet the overall objectives of the organization."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Selection and Development of Control Activities"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Control activities for achieving business objectives"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Risk management approach for selecting and developing control activities"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Selection and development of control activities"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Risk management approach to organization"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Establishment of control activities inclusive of general control activities over technology"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Enforcement of control activities by defined policies and procedures"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Evaluate relationships between business processes and technology"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Define and establish necessary control activities for technology"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Enforce control activities through policies and procedures"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implement, monitor, review, and improve control activities"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented backup procedures are in place to guide personnel"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented backup procedures are in place to guide personnel in the data backup and recovery process."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Each Now Platform instance is locally backed up in the data center in which the instance database exists."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented backup procedures are in place to guide personnel in the data backup and recovery process."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow maintains data center pairs throughout the world for availability and redundancy purposes."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Data replication for customer data files"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Continuous replication of customer data files on a near real-time basis"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Alert notification system for replication failures"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Automated backup system configuration"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Data center redundancy and availability"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Continuous replication of customer data"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Alert notification system for replication failures"
-        },
-        {
-          "third_party_control_seq": 5,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Access control for replicated data"
-        },
-        {
-          "third_party_control_seq": 6,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Information System Contingency Plan (ISCP)"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Established the Information System Contingency Plan (ISCP) to recover the ServiceNow APaaS."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Tests the ISCP against multiple scenarios including data failover and backup restoration on an annual basis."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Established the Information System Contingency Plan (ISCP) to recover the ServiceNow APaaS."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Test the ISCP against multiple scenarios including data failover and backup restoration on an annual basis."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Controls provide reasonable assurance that production problems, systems processing, and availability issues are monitored, identified, recorded, analyzed, and resolved completely and in a timely manner."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Availability monitoring is performed, and established warnings and alerts are displayed via a dashboard to security staff who monitor the dashboard 24x7."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Case management procedures are documented to restore normal service operation to customers as quickly as possible and to minimize the impact on their business operations."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Case management procedures are documented to restore normal service operation to customers as quickly as possible and to minimize the impact on their business operations."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow utilizes the Now Support Portal for communicating and tracking any identified cases, and updates are provided within the ticket for affected customers as available."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Utilizes the Now Support Portal for communicating and tracking cases."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Performs root cause investigation on P1 classified cases."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Controls provide reasonable assurance that logical access to programs, data, and computer resources is restricted to authorized users."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Users are restricted to performing authorized actions."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Information security program consisting of policies and procedures"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Review of policies on at least an annual basis"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Information security program consisting of policies and procedures"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Security awareness training for personnel"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "On-boarding process for new employees"
-        },
-        {
-          "third_party_control_seq": 18,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Established on-boarding process for hiring new employees"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Tracks completion of annual security awareness training"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Requires performance of background verification checks and drug testing for employees"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Protects access to customer systems with authentication and authorization mechanisms"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Background verification checks and drug testing for employees"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Authentication and authorization mechanisms for access to customer systems"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Access controls for employees managing and supporting customer instances"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Restriction of administrative access privileges to network security authentication application and server operating systems"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Access to customer instances for support requests"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Access to customer instances provisioned by automation and removed when ticket is closed."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Provisions access to customer instances"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Automatically removes privileges when ticket is closed"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Records access and actions in platform transaction logs"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow's ability to access customer instances can be disabled by deploying the ServiceNow Controlled Access (SNCA) plugin."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Any access or actions performed by a ServiceNow support team member on behalf of the client are automatically recorded in the platform transaction logs of the customer instance for monitoring."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Firewall system installed and utilized to protect ServiceNow production systems"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Changes to programs and related data management systems are authorized, tested, documented, approved, and implemented"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented software development and release management procedures"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented coding standards and guidelines"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow provides software change releases to customers via the Now Support Portal."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow posts release notes, user guides, and system descriptions publicly via the ServiceNow documentation site."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow offers cloud-based solutions"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Customers can rapidly deploy services in a modular fashion"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow's service is accessed through a web-based interface"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Service deployment in a modular fashion"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Customizable applications"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Efficient upgrades with minimal disruption"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 5,
-          "third_party_control_id": null,
-          "third_party_control_desc": null
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implement various methods of communication to help provide assurance that employees understand their individual roles and responsibilities"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implement orientation for new employees and training for employees"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implement internal Knowledge Base to communicate controlled documentation"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Use e-mail messages to communicate time-sensitive information"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implement various methods of communication to help provide assurance that employees understand their individual roles and responsibilities"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Track incidents within the ticketing system and manage them until resolved"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Provide service management software as a service"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implement ongoing monitoring activities"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Quarterly board of directors’ meetings are held to review organization-wide performance."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "The production environment is monitored 24 hours per day by the SRE personnel for changes to the environment."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow reviews its data center authorized access user lists on a quarterly basis, at a minimum."
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow periodically performs on-site reviews of the security and controls at the data centers that ServiceNow uses."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Quarterly board of directors’ meetings are held to review organization-wide performance."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "The production environment is monitored 24 hours per day by the SRE personnel for changes to the environment."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow reviews its data center authorized access user lists on a quarterly basis, at a minimum."
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow periodically performs on-site reviews of the security and controls at the data centers that ServiceNow uses."
-        },
-        {
-          "third_party_control_seq": 5,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Procedures executed by the SRE personnel for monitoring alerts and escalations."
-        },
-        {
-          "third_party_control_seq": 6,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Selected security events are automatically sent to a centralized audit logging tool for review."
+          "third_party_control_desc": "Security Groups"
         },
         {
           "third_party_control_seq": 7,
           "third_party_control_id": null,
-          "third_party_control_desc": "Security personnel manually review the security events log exceptions on each business day."
+          "third_party_control_desc": "Lambda Functions"
         },
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": "Review data center authorized access user lists on a quarterly basis"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Perform on-site reviews of security and controls at data centers"
+          "third_party_control_desc": "AWS subscribes to a defined physical, environmental, and virtual security model."
         },
         {
           "third_party_control_seq": 1,
           "third_party_control_id": null,
-          "third_party_control_desc": "Continuous control monitoring (CCM) program"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow maintains a continuous control monitoring (CCM) program to evaluate the performance of specific control activities and processes at certain intervals based on risk and frequency of the control activity."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow is audited by multiple external third parties."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Supports user entities in meeting regulatory demands"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Audited by multiple external third-party entities for certification and regulatory reasons on an annual basis"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Assists user entities in meeting various certifications and regulatory demands"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Assisted user entities in successfully meeting the requirements of many certifications and regulatory demands"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Review co-location data center provider SOC reports or other available assessments on an annual basis"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Routine meetings with vendor account management personnel to ensure services are provided according to expectations"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Review the co-location data center provider SOC reports or other available assessments on an annual basis"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Review controls applicable to the services provided to ServiceNow through periodic visits to the facility"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Hold routine meetings with vendor account management personnel to ensure services are provided according to expectations"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Utilization of ServiceNow ticketing system"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Documented procedures for submitting tickets"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Monitoring of ticketing system to ensure issue resolution"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implementation of corrective action program"
-        },
-        {
-          "third_party_control_seq": 5,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Conducting root-cause analysis"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Utilized to record, track, and monitor identified issues or events"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Designed with the assumption that certain controls will be implemented by user entities"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow ticketing system is utilized to record, track, and monitor identified issues or events."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "ServiceNow's APaaS system is designed with the assumption that certain controls will be implemented by user entities."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing and maintaining backup procedures for their data according to their own internal requirements, if their internal requirements are not satisfied by the 14-day backup retention provided by ServiceNow."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing and maintaining backup procedures for their data according to their own internal requirements, if their internal requirements are not satisfied by the 14-day backup retention provided by ServiceNow."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing and managing the retention of the data within their Now Platform instances according to their internal policy."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure ServiceNow is notified of changes made to technical or administrative contact information."
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure the confidentiality of any user accounts and passwords assigned for use with their Now Platform instances."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing and maintaining backup procedures for their data according to their own internal requirements, if their internal requirements are not satisfied by the 14-day backup retention provided by ServiceNow."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing and managing the retention of the data within their Now Platform instances according to their internal policy."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure ServiceNow is notified of changes made to technical or administrative contact information."
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure the confidentiality of any user accounts and passwords assigned for use with their Now Platform instances."
-        },
-        {
-          "third_party_control_seq": 5,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure end-user access and issuing and securing login accounts and passwords are controlled for their Now Platform instances."
-        },
-        {
-          "third_party_control_seq": 6,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure the implementation and configuration of the ServiceNow Controlled Access Plugin to restrict the ability of ServiceNow staff from accessing the application layer of their Now Platform instances if desired."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure ServiceNow is notified of changes made to technical or administrative contact information."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure the confidentiality of any user accounts and passwords assigned for use with their Now Platform instances."
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure end-user access and issuing and securing login accounts and passwords are controlled for their Now Platform instances."
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure the implementation and configuration of the ServiceNow Controlled Access Plugin to restrict the ability of ServiceNow staff from accessing the application layer of their Now Platform instances if desired."
-        },
-        {
-          "third_party_control_seq": 5,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure the Now Platform instance security hardening configurations are understood, and ensuring the instance is hardened according to their internal risk tolerance."
-        },
-        {
-          "third_party_control_seq": 6,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure the level of encryption desired for their Now Platform instances and configuring said encryption."
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implementing controls for end-user access and login accounts"
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implementing controls for monitoring and notification of issues"
-        },
-        {
-          "third_party_control_seq": 3,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Implementing controls for monitoring transaction logs"
-        },
-        {
-          "third_party_control_seq": 4,
-          "third_party_control_id": null,
-          "third_party_control_desc": "Notifying ServiceNow of requested modifications"
-        },
-        {
-          "third_party_control_seq": 1,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for implementing controls that ensure monitoring of the Now Platform instances and that ServiceNow is notified of any known or suspected issues."
-        },
-        {
-          "third_party_control_seq": 2,
-          "third_party_control_id": null,
-          "third_party_control_desc": "User entities are responsible for notifying ServiceNow of requested modifications to application functionality or features."
+          "third_party_control_desc": "Base configurations of CIS-hardened Amazon Machine Images are deployed within the infrastructure."
         }
       ],
-      "source_context": "\n8 \n\nSECTION 3 \n \nDESCRIPTION OF THE \nSYSTEM \n\n=== PAGE 12 ===\n\n9 \n\nOVERVIEW OF OPERATIONS \n \nCompany Background \n \nServiceNow is a provider of enterprise cloud computing services that define, structure, manage, and automate \ndigital workflows for global enterprises.  The company delivers digital workflows that help their customers create \nexperiences and unlock productivity.  The ServiceNow Now Platform enables enterprise-wide experiences and \nproductivity by simplifying and streamlining processes across systems, functions, and departments.  The \nServiceNow product portfolio focuses on delivering information technology (IT), employee and customer workflows, \nand enabling customers to build workflow applications for their business.  In addition to the ServiceNow IT service \nmanagement applications, ServiceNow provides digital workflow products for customer service, global talent, \nsecurity operations, integrated risk management (including compliance, risk, and audit), and other enterpr",
-      "confidence_justification": [
-        "-0.8: matches company or parent name (servicenow)",
-        "-0.1: likely_so is No",
-        "+0.1: top2 distance name"
-      ]
+      "source_context": "iated components within \nthese environments is executed by the infrastructure team within Adobe’s Experience Cloud department. \n=== PAGE 18 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n18 \nKey elements of the infrastructure and subservice organizations are included in the following table: \nInfrastructure \nDescription \nAWS (Subservice \nOrganization) \nAWS directs and controls operations as well as establishes, communicates, and monitors \npolicies and procedures for some of the production environments for Adobe’s Experience \nCloud solutions. In addition, it operates, manages, and controls the components from the \nvirtualization layer to the physical security of the facilities in which Adobe’s Experience \nCloud components operate. In turn, Adobe assumes respons",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Google Cloud Platform (GCP)",
+      "third_party_description": "GCP manages and controls virtualization layers, physical security, and production environments for Adobe Workfront solutions.",
+      "third_party_page_ref": "Page 19",
+      "third_party_confidence": 0.98,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "GCP directs, controls, and monitors policies and procedures for physical and environmental security for Adobe Workfront components."
+        }
+      ],
+      "source_context": "S) \n• Identity Access Management (IAM) \n• Virtual Private Cloud (VPC) \n• Security Groups \n• Lambda Functions \n \nAdobe periodically reviews third-party assurance reports to verify that AWS continually \nsubscribes to a defined physical, environmental, and virtual security model. \nGoogle (Subservice \nOrganization) \n(Workfront only) Google Cloud Platform (GCP) directs and controls operations as well as \nestablishes, communicates, and monitors policies and procedures for some of the \nproduction environments for Adobe Workfront solutions. In addition, it operates, manages, \nand controls the components from the virtualization layer to the physical security of the \nfacilities in which Adobe Workfront components operate. In turn, Adobe assumes \nresponsibility and management of the operating system (including updates and security \npatches), application software, and the configuration of the security group firewall provided \nby the subservice organization. \nKey GCP services utilized by Adobe incl",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Colocation providers",
+      "third_party_description": "Hosts certain production environments for Adobe’s Experience Cloud solutions, manages environmental controls, physical access, and technical control mechanisms for security in leased restricted areas.",
+      "third_party_page_ref": 20,
+      "third_party_confidence": 0.75,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Establishes, communicates, and monitors policies and procedures for the data center environment."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Manages environmental controls, physical access, and technical control mechanisms for security within restricted areas."
+        }
+      ],
+      "source_context": "ublished, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n20 \nInfrastructure \nDescription \nBastion Hosts \nBastion hosts provide an additional authentication layer for internal users requiring logical \naccess to Adobe Experience Cloud production servers. Adobe personnel must first \nauthenticate to the Adobe corporate network before being allowed to connect to the \nproduction network. To access the production network, users must authenticate through a \nbastion host with valid Adobe Active Directory (AD) credentials before being granted \naccess to the production environment. Bastion hosts are only accessible from trusted \nAdobe networks and require multifactor authentication. \nColocations (Subservice \nOrganizations) \nSome production environments for Adobe’s Experience Cloud solutions are hosted in \ncolocations. Each colocation directs and controls operations as well as establishes, \ncommunicates, an",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Cyxtera",
+      "third_party_description": "Colocation provider used to support Adobe's Experience Cloud solutions.",
+      "third_party_page_ref": "Page 21",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Digital Realty Trust",
+      "third_party_description": "Colocation provider used to support Adobe's Experience Cloud solutions.",
+      "third_party_page_ref": "Page 21",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Equinix",
+      "third_party_description": "Colocation provider used to support Adobe's Experience Cloud solutions.",
+      "third_party_page_ref": "Page 21",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "NTT ltd.",
+      "third_party_description": "Colocation provider used to support Adobe's Experience Cloud solutions.",
+      "third_party_page_ref": "Page 21,45",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "AWS",
+      "third_party_description": "Amazon Web Services – cloud hosting provider",
+      "third_party_page_ref": "CAMP description",
+      "third_party_confidence": 0.95,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "mpliance with Adobe-defined security baselines. \nIdentity and Access Management \nSafeguard for Privileged \nSessions (Safeguard) \nSafeguard is a privileged session management tool that monitors remote administrative \naccess to servers and network devices. \nCAMP \nCAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and \nmanaging the “root” user for AWS accounts and Azure subscriptions. \nHashiCorp Vault \nHashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API \nkeys, and other secrets. \nIAM Portal \nIAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each \nLDAP group is assigned an owner who is responsible for approving who can have access \nto that specific group.  \nKLAM \nKLAM is Adobe’s proprietary tool for access management to the AWS console and \napplicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) \nand is used to map Adobe’s corporate AD groups to AWS IAM roles. ",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Azure",
+      "third_party_description": "Microsoft Azure – cloud hosting provider",
+      "third_party_page_ref": "CAMP description",
+      "third_party_confidence": 0.95,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "mpliance with Adobe-defined security baselines. \nIdentity and Access Management \nSafeguard for Privileged \nSessions (Safeguard) \nSafeguard is a privileged session management tool that monitors remote administrative \naccess to servers and network devices. \nCAMP \nCAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and \nmanaging the “root” user for AWS accounts and Azure subscriptions. \nHashiCorp Vault \nHashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API \nkeys, and other secrets. \nIAM Portal \nIAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each \nLDAP group is assigned an owner who is responsible for approving who can have access \nto that specific group.  \nKLAM \nKLAM is Adobe’s proprietary tool for access management to the AWS console and \napplicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) \nand is used to map Adobe’s corporate AD groups to AWS IAM roles. ",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "HashiCorp Vault",
+      "third_party_description": "HashiCorp Vault – secrets management tool for storing and controlling access to sensitive information like tokens, passwords, and API keys",
+      "third_party_page_ref": "HashiCorp Vault description",
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "mpliance with Adobe-defined security baselines. \nIdentity and Access Management \nSafeguard for Privileged \nSessions (Safeguard) \nSafeguard is a privileged session management tool that monitors remote administrative \naccess to servers and network devices. \nCAMP \nCAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and \nmanaging the “root” user for AWS accounts and Azure subscriptions. \nHashiCorp Vault \nHashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API \nkeys, and other secrets. \nIAM Portal \nIAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each \nLDAP group is assigned an owner who is responsible for approving who can have access \nto that specific group.  \nKLAM \nKLAM is Adobe’s proprietary tool for access management to the AWS console and \napplicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) \nand is used to map Adobe’s corporate AD groups to AWS IAM roles. ",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Okta",
+      "third_party_description": "Okta – identity and access management service that enables single sign-on and integrates with Adobe’s corporate Active Directory",
+      "third_party_page_ref": "KLAM description,22",
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "mpliance with Adobe-defined security baselines. \nIdentity and Access Management \nSafeguard for Privileged \nSessions (Safeguard) \nSafeguard is a privileged session management tool that monitors remote administrative \naccess to servers and network devices. \nCAMP \nCAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and \nmanaging the “root” user for AWS accounts and Azure subscriptions. \nHashiCorp Vault \nHashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API \nkeys, and other secrets. \nIAM Portal \nIAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each \nLDAP group is assigned an owner who is responsible for approving who can have access \nto that specific group.  \nKLAM \nKLAM is Adobe’s proprietary tool for access management to the AWS console and \napplicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) \nand is used to map Adobe’s corporate AD groups to AWS IAM roles. ",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "SailPoint",
+      "third_party_description": "SailPoint is an identity management solution used to execute approved logical access changes.",
+      "third_party_page_ref": 22,
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ent for subsets of the organization’s users. \nMicrosoft Active \nDirectory (AD) \nAdobe’s AD stores user accounts, group memberships, and account data, and is used to \nmanage access to the Adobe corporate network. Internal users are required to have an \nAdobe AD username and password to be able to authenticate to the Adobe corporate \nnetwork and the Adobe Experience Cloud production servers. \nOkta \nAccess to production environments at Adobe requires Okta multifactor authentication.  \nSailPoint \nThe SailPoint identity management solution is the back-end technology that executes \napproved logical access changes requested within the IAM Portal. \n=== PAGE 22 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n22 \nApplication \nDescription \nZero-Trust Enterprise \nNetwork ",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Workday",
+      "third_party_description": "Workday is used to manage Adobe personnel account and employment information.",
+      "third_party_page_ref": "22,Page 34",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 4,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ent for subsets of the organization’s users. \nMicrosoft Active \nDirectory (AD) \nAdobe’s AD stores user accounts, group memberships, and account data, and is used to \nmanage access to the Adobe corporate network. Internal users are required to have an \nAdobe AD username and password to be able to authenticate to the Adobe corporate \nnetwork and the Adobe Experience Cloud production servers. \nOkta \nAccess to production environments at Adobe requires Okta multifactor authentication.  \nSailPoint \nThe SailPoint identity management solution is the back-end technology that executes \napproved logical access changes requested within the IAM Portal. \n=== PAGE 22 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n22 \nApplication \nDescription \nZero-Trust Enterprise \nNetwork ",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Jira",
+      "third_party_description": "Jira is a ticketing application used to track and assign work items.",
+      "third_party_page_ref": 22,
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 7,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ent for subsets of the organization’s users. \nMicrosoft Active \nDirectory (AD) \nAdobe’s AD stores user accounts, group memberships, and account data, and is used to \nmanage access to the Adobe corporate network. Internal users are required to have an \nAdobe AD username and password to be able to authenticate to the Adobe corporate \nnetwork and the Adobe Experience Cloud production servers. \nOkta \nAccess to production environments at Adobe requires Okta multifactor authentication.  \nSailPoint \nThe SailPoint identity management solution is the back-end technology that executes \napproved logical access changes requested within the IAM Portal. \n=== PAGE 22 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n22 \nApplication \nDescription \nZero-Trust Enterprise \nNetwork ",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Rapid7 Nexpose",
+      "third_party_description": "A vulnerability assessment tool that scans, identifies, and reports vulnerabilities found on the network.",
+      "third_party_page_ref": 23,
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Conducts vulnerability scanning and reporting."
+        }
+      ],
+      "source_context": "s to Adobe personnel, \ncollect completed module results, and remind users and management of incomplete \nmodules. \n=== PAGE 23 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n23 \nApplication \nDescription \nVulnerability Management \nHubble \nHubble module is an enterprise tool that catalogs host properties including, but not \nlimited to, installed packages, version information, running processes, and outbound \nconnections. Hubble data is leveraged to quickly assess the environments’ exposure to \nexisting, or emerging, vulnerabilities and prioritize remediation. \nRapid7 Nexpose \nRapid7 Nexpose is a vulnerability assessment tool that scans, identifies, and reports \nvulnerabilities found on the network.  \nCrowdStrike Falcon \nNext-generation endpoint detection and res",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "CrowdStrike Falcon",
+      "third_party_description": "Next-generation endpoint detection and response (EDR) solution focused on malware detection.",
+      "third_party_page_ref": "23,Endpoint Detection Response Software",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Provides endpoint detection and response for malware protection."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Protects servers and workstations by detecting malicious activity."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Provides real-time and historical visibility necessary to investigate incidents."
+        }
+      ],
+      "source_context": "s to Adobe personnel, \ncollect completed module results, and remind users and management of incomplete \nmodules. \n=== PAGE 23 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n23 \nApplication \nDescription \nVulnerability Management \nHubble \nHubble module is an enterprise tool that catalogs host properties including, but not \nlimited to, installed packages, version information, running processes, and outbound \nconnections. Hubble data is leveraged to quickly assess the environments’ exposure to \nexisting, or emerging, vulnerabilities and prioritize remediation. \nRapid7 Nexpose \nRapid7 Nexpose is a vulnerability assessment tool that scans, identifies, and reports \nvulnerabilities found on the network.  \nCrowdStrike Falcon \nNext-generation endpoint detection and res",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Adobe Data Center Subservice Providers",
+      "third_party_description": "Organizations providing colocation and data center services to Adobe for secure and available services globally.",
+      "third_party_page_ref": "Description of System",
+      "third_party_confidence": 0.95,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Colocation assurance reports are reviewed annually."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Infractions to physical or environmental security controls are tracked to remediation."
+        }
+      ],
+      "source_context": "sical security system to work only with specific \nphysical badge readers. Within the physical security system, roles are defined and configured. When physical access \nto the site is requested, the requester must select the role(s) that are desired. Upon approval, that role will grant the \naccess to a user based upon the configuration of those roles. Each role has been created with consideration to least \nprivilege to ensure that physical access can be granted on a granular level. \nAdobe-Managed Facilities \nSecured Facility \nAdobe has partnered with several data center subservice providers to ensure it can provide secure and available \nservices for its global customer base. Adobe-managed facilities (i.e., colocations) only allow Adobe personnel with \nphysical access into the cage where Adobe equipment is stored and operated. Other colocation customers do not \nhave access to Adobe cages. Colocation assurance reports are reviewed on an annual basis, and infractions to physical \nor environ",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "SolarWinds",
+      "third_party_description": "A network management software used to monitor configurations of Adobe-managed network devices to ensure compliance with security hardening and baseline configuration standards.",
+      "third_party_page_ref": "1,SolarWinds technology implemented at Adobe",
+      "third_party_confidence": 0.95,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Monitor configurations of Adobe-managed network devices."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "SolarWinds checks devices for updated firmware versioning, vulnerabilities, and exposures against SolarWinds’ CISCO PSIRT repository."
+        }
+      ],
+      "source_context": "eline configuration standards. Hosts are monitored by a configuration management tool, which monitors file \nintegrity and configuration settings of individual hosts. Hosts with configurations that are not compliant with the \nbaseline configuration standard are flagged, and an alert is sent to appropriate personnel, who identify the host and \nremediate the issue. Agents are installed as part of the provisioning process for production hosts. Additionally, the \nSecurity team works with solution teams periodically to ensure that their host environments have the appropriate \nagents running. \nNetwork Configuration Checks \nConfigurations of Adobe’s production network devices is monitored by SolarWinds, which checks each network \ndevice for misaligned security hardening and baseline configurations. SolarWinds is used to monitor configurations \nof Adobe-managed network devices to ensure they are compliant with the security hardening and baseline \nconfiguration standard. Network devices that are",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "MAVLink",
+      "third_party_description": "A tool used to collect data from public cloud service providers, including access logs, resource configurations, security alerts, and best practice recommendations.",
+      "third_party_page_ref": 1,
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Collect data from public cloud service providers into a centralized log repository."
+        }
+      ],
+      "source_context": "eline configuration standards. Hosts are monitored by a configuration management tool, which monitors file \nintegrity and configuration settings of individual hosts. Hosts with configurations that are not compliant with the \nbaseline configuration standard are flagged, and an alert is sent to appropriate personnel, who identify the host and \nremediate the issue. Agents are installed as part of the provisioning process for production hosts. Additionally, the \nSecurity team works with solution teams periodically to ensure that their host environments have the appropriate \nagents running. \nNetwork Configuration Checks \nConfigurations of Adobe’s production network devices is monitored by SolarWinds, which checks each network \ndevice for misaligned security hardening and baseline configurations. SolarWinds is used to monitor configurations \nof Adobe-managed network devices to ensure they are compliant with the security hardening and baseline \nconfiguration standard. Network devices that are",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Splunk",
+      "third_party_description": "A platform used to consolidate data collected from public cloud service providers for logging and analysis purposes.",
+      "third_party_page_ref": "1,Systems Monitoring (CCF SM) — Security",
+      "third_party_confidence": 0.95,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Provide consolidated logs for monitoring and analysis purposes."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Implements security monitoring alert criteria for identifying critical security events."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Criteria defined and periodically reviewed to ensure accurate monitoring."
+        }
+      ],
+      "source_context": "eline configuration standards. Hosts are monitored by a configuration management tool, which monitors file \nintegrity and configuration settings of individual hosts. Hosts with configurations that are not compliant with the \nbaseline configuration standard are flagged, and an alert is sent to appropriate personnel, who identify the host and \nremediate the issue. Agents are installed as part of the provisioning process for production hosts. Additionally, the \nSecurity team works with solution teams periodically to ensure that their host environments have the appropriate \nagents running. \nNetwork Configuration Checks \nConfigurations of Adobe’s production network devices is monitored by SolarWinds, which checks each network \ndevice for misaligned security hardening and baseline configurations. SolarWinds is used to monitor configurations \nof Adobe-managed network devices to ensure they are compliant with the security hardening and baseline \nconfiguration standard. Network devices that are",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Microsoft Azure",
+      "third_party_description": "Cloud hosting provider offering CIS-hardened Azure VM images utilized by Adobe.",
+      "third_party_page_ref": "CIS-hardened Azure VM images,Description of System",
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 6,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Base configurations of CIS-hardened Azure VM images are deployed within the infrastructure."
+        }
+      ],
+      "source_context": "the approved whitelist \nof Transmission Control Protocol (TCP) and User Datagram Protocol (UDP) ports. \nNetwork segmentation is implemented within the Adobe Experience Cloud production environment to restrict access \nto authorized services, systems, and users. Users can only access the production environment from the Adobe \ncorporate network. \nVulnerability Management (CCF VM) \nVulnerability Assessment \nAdobe proactively monitors the production environment to identify and resolve vulnerabilities that could \ncompromise the security of critical data. Vulnerability assessments are performed against the infrastructure, platform, \nand applications that make up the Adobe Experience Cloud. \nNetwork Patch Management \nFor services hosted at Adobe-owned or managed facilities, Adobe conducts network device vulnerability scanning via \nthe SolarWinds technology, which is implemented at Adobe to monitor both physical and virtual network device \ndeployments. SolarWinds checks each device for updated ",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Nexpose",
+      "third_party_description": "Vulnerability management solution; Adobe uses Nexpose for host vulnerability scanning and reporting within the production network.",
+      "third_party_page_ref": "Description of System",
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 4,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": " has developed base configurations of CIS-hardened Amazon Machine Images (AMIs), as well as CIS-hardened \nAzure VM images, which are deployed within the production environment. These images contain the latest patches \nas notified by CIS and are available for service teams to use. \nIn addition to AMI hardening, Adobe also conducts host vulnerability scanning on a scheduled basis via Nexpose. \nNexpose is used to query all hosts on the Adobe Experience Cloud production network. Completed scans deliver a \nreport that enumerates identified vulnerabilities and assigns them a score. Tickets are created and assigned to \nappropriate personnel for identified vulnerabilities, which are prioritized based on risk and used to document and \ntrack patching. The Nexpose database of known host vulnerabilities is updated on an ongoing basis to ensure the \nlatest known exploitable vulnerabilities are removed from Adobe’s environment. \nPenetration Testing \nAdobe regularly engages approved third-party secur",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Approved Third-Party Security Firms",
+      "third_party_description": "Organizations conducting annual penetration testing of Adobe systems to identify and mitigate potential security vulnerabilities.",
+      "third_party_page_ref": "Description of System",
+      "third_party_confidence": 0.7,
+      "distance_from_so_keywords": 4,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": " has developed base configurations of CIS-hardened Amazon Machine Images (AMIs), as well as CIS-hardened \nAzure VM images, which are deployed within the production environment. These images contain the latest patches \nas notified by CIS and are available for service teams to use. \nIn addition to AMI hardening, Adobe also conducts host vulnerability scanning on a scheduled basis via Nexpose. \nNexpose is used to query all hosts on the Adobe Experience Cloud production network. Completed scans deliver a \nreport that enumerates identified vulnerabilities and assigns them a score. Tickets are created and assigned to \nappropriate personnel for identified vulnerabilities, which are prioritized based on risk and used to document and \ntrack patching. The Nexpose database of known host vulnerabilities is updated on an ongoing basis to ensure the \nlatest known exploitable vulnerabilities are removed from Adobe’s environment. \nPenetration Testing \nAdobe regularly engages approved third-party secur",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Amazon Web Services, Inc.",
+      "third_party_description": "Cloud hosting provider offering scalable infrastructure services.",
+      "third_party_page_ref": "Page 44,45",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC6.2",
+          "third_party_control_desc": "Policies and procedures exist to ensure logical access provisioning to information systems requires approval from appropriate personnel."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": "CC6.3",
+          "third_party_control_desc": "Logical access to production systems includes quarterly reviews and corrective actions for accounts and access."
+        }
+      ],
+      "source_context": "d at the beginning of Section III under Scope \nand Boundaries of the System. The following CSOCs are those controls that Adobe’s management assumed, in the \ndesign of the system, would be implemented by a subservice organization and are necessary, in combination with \ncontrols at Adobe, to provide reasonable assurance that the service organization’s service commitments and system \nrequirements are achieved. \nNumber \nCSOC \nApplicable Criteria \nAmazon Web Services, Inc., Microsoft Corporation, and Google LLC \n1. \nPolicies and procedures exist to ensure that logical access to production systems \nis restricted to authorized personnel. \nCC6.1, CC6.2, CC6.3 \n=== PAGE 44 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n44 \nNumber \nCSOC \nApplicable Criteria \n2. \nLogica",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Microsoft Corporation",
+      "third_party_description": "Cloud services and software solutions provider, commonly associated with Azure infrastructure and applications.",
+      "third_party_page_ref": "Page 44,45",
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC6.2",
+          "third_party_control_desc": "Policies and procedures exist to ensure logical access provisioning to information systems requires approval from appropriate personnel."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": "CC6.3",
+          "third_party_control_desc": "Logical access to production systems includes quarterly reviews and corrective actions for accounts and access."
+        }
+      ],
+      "source_context": "d at the beginning of Section III under Scope \nand Boundaries of the System. The following CSOCs are those controls that Adobe’s management assumed, in the \ndesign of the system, would be implemented by a subservice organization and are necessary, in combination with \ncontrols at Adobe, to provide reasonable assurance that the service organization’s service commitments and system \nrequirements are achieved. \nNumber \nCSOC \nApplicable Criteria \nAmazon Web Services, Inc., Microsoft Corporation, and Google LLC \n1. \nPolicies and procedures exist to ensure that logical access to production systems \nis restricted to authorized personnel. \nCC6.1, CC6.2, CC6.3 \n=== PAGE 44 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n44 \nNumber \nCSOC \nApplicable Criteria \n2. \nLogica",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Cyxtera Technologies, Inc.",
+      "third_party_description": "Provider of colocation and data center services, ensuring secure and reliable infrastructure.",
+      "third_party_page_ref": 45,
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 15,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "ter. \nCorrective actions are taken where applicable. \nA1.3 \n14. \nRedundant systems or periodic backups of data to resume system operations in \nthe event of a failure are performed. \nA1.3 \n15. \nAnnual backup restoration or failover and failback tests are performed to \nconfirm reliability and integrity of system backups and redundancy. \nA1.3 \nAmazon Web Services, Inc., Microsoft Corporation, Google LLC, Cyxtera Technologies, Inc., Digital Realty Trust, \nInc., Equinix, Inc., and NTT ltd.  \n16. \nPolicies and procedures exist to ensure that physical access to facilities housing \ninformation systems is restricted to authorized personnel. \nCC6.4 \n17. \nPhysical access to restricted areas of the facility is protected by walls with non-\npartitioned ceilings, secured entry points, and/or manned reception desks. \nCC6.4 \n=== PAGE 45 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others withou",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Digital Realty Trust, Inc.",
+      "third_party_description": "Provider of data center, colocation, and interconnection solutions for reliable IT infrastructure hosting.",
+      "third_party_page_ref": 45,
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 15,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "ter. \nCorrective actions are taken where applicable. \nA1.3 \n14. \nRedundant systems or periodic backups of data to resume system operations in \nthe event of a failure are performed. \nA1.3 \n15. \nAnnual backup restoration or failover and failback tests are performed to \nconfirm reliability and integrity of system backups and redundancy. \nA1.3 \nAmazon Web Services, Inc., Microsoft Corporation, Google LLC, Cyxtera Technologies, Inc., Digital Realty Trust, \nInc., Equinix, Inc., and NTT ltd.  \n16. \nPolicies and procedures exist to ensure that physical access to facilities housing \ninformation systems is restricted to authorized personnel. \nCC6.4 \n17. \nPhysical access to restricted areas of the facility is protected by walls with non-\npartitioned ceilings, secured entry points, and/or manned reception desks. \nCC6.4 \n=== PAGE 45 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others withou",
+      "confidence_justification": []
+    },
+    {
+      "third_party_name": "Equinix, Inc.",
+      "third_party_description": "Provider of data center and interconnection services globally to host critical infrastructure.",
+      "third_party_page_ref": 45,
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 15,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ter. \nCorrective actions are taken where applicable. \nA1.3 \n14. \nRedundant systems or periodic backups of data to resume system operations in \nthe event of a failure are performed. \nA1.3 \n15. \nAnnual backup restoration or failover and failback tests are performed to \nconfirm reliability and integrity of system backups and redundancy. \nA1.3 \nAmazon Web Services, Inc., Microsoft Corporation, Google LLC, Cyxtera Technologies, Inc., Digital Realty Trust, \nInc., Equinix, Inc., and NTT ltd.  \n16. \nPolicies and procedures exist to ensure that physical access to facilities housing \ninformation systems is restricted to authorized personnel. \nCC6.4 \n17. \nPhysical access to restricted areas of the facility is protected by walls with non-\npartitioned ceilings, secured entry points, and/or manned reception desks. \nCC6.4 \n=== PAGE 45 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others withou",
+      "confidence_justification": []
     }
   ]
 }

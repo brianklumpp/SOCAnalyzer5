@@ -4,10 +4,11 @@ import json
 import logging
 import traceback
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time  # Added missing import for watchdog timing and progress tracking
+# ThreadPoolExecutor removed - now using sequential processing for stability
 from .extractors.auditor import extract_auditor_from_report
 from .extractors.company import extract_company_from_report
-from .extractors.control_extractor_v2 import extract_controls_v2
+from .extractors.control_integration import extract_controls  # V2/V4 unified interface
 from .extractors.cuec_extractor import extract_cuecs
 from .extractors.subservice_orgs import extract_subservice_orgs, filter_third_parties_with_gpt
 from .extractors.product import extract_product_from_report
@@ -36,12 +37,11 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         str(config.JSON_DIR / 'report_date_result.json'),
         str(config.JSON_DIR / 'coverage_period_result.json'),
         str(config.JSON_DIR / 'subservice_orgs_result.json'),
-        str(config.JSON_DIR / 'combined_result.json'),
         str(config.LOGS_DIR / 'control_gpt.log'),
         str(config.LOGS_DIR / 'cuec_extractor.log'),
         str(config.LOGS_DIR / 'backend_errors.log'),
         str(config.LOGS_DIR / 'section_gpt_responses.log'),
-        str(config.LOGS_DIR / 'control_extractor.log'),
+    # control_extractor.log (v1) removed; v2 logs to control_extractor_v2.log
         str(config.LOGS_DIR / 'subservice_orgs_extractor.log'),
         str(config.LOGS_DIR / 'product_extractor.log'),
         str(config.LOGS_DIR / 'auditor_extractor.log'),
@@ -67,6 +67,13 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         except Exception:
             # Ignore if file does not exist yet or cannot be written; downstream steps will recreate as needed
             pass
+    # Special-case: do NOT pre-create/overwrite combined_result.json; remove it if present to indicate not-yet-written
+    try:
+        _combined_path = str(config.JSON_DIR / 'combined_result.json')
+        if os.path.isfile(_combined_path):
+            os.remove(_combined_path)
+    except Exception:
+        pass
 
     # Always resolve data paths relative to the project root
     PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -117,12 +124,14 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         except Exception:
             pass
 
-    # Install hook for control extractor v2
-    try:
-        from .extractors.control_extractor_v2 import set_progress_hook as _set_ctrl_hook
-        _set_ctrl_hook(_control_progress_hook)
-    except Exception:
-        pass
+    # Install progress hook for control extractor (v2 only - v4 doesn't support hooks yet)
+    control_version = getattr(config, 'CONTROL_EXTRACTOR_VERSION', 'v4')
+    if control_version == 'v2':
+        try:
+            from .extractors.control_extractor_v2 import set_progress_hook as _set_ctrl_hook
+            _set_ctrl_hook(_control_progress_hook)
+        except Exception:
+            pass
 
     try:
         # Always (re)generate section_results.json before running extractors
@@ -200,18 +209,41 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             update_progress(100, "Required file missing before extractors.")
             return {"error": f"Required file {output_json_path} not found before running extractors."}
         # --- Run company and auditor sequentially (prerequisites) ---
+        # Wrapper for subservice_orgs to run both extraction and filtering sequentially
+        def _run_subservice_orgs_extraction():
+            """Run subservice extraction + GPT filtering, return final filtered result."""
+            extract_subservice_orgs()  # Extracts and writes raw results to JSON
+            return filter_third_parties_with_gpt()  # Reads JSON, filters, writes back, returns result
+        
+        # Wrapper for control extraction to use configured version (v2 or v4)
+        def _run_control_extraction():
+            """Run control extraction using configured version from config.CONTROL_EXTRACTOR_VERSION"""
+            version = getattr(config, 'CONTROL_EXTRACTOR_VERSION', 'v4')
+            logger.info(f"Running control extraction with version: {version}")
+            extract_controls(version=version)
+            # Both v2 and v4 write to config.CONTROL_JSON_PATH, so read the results back
+            with open(config.CONTROL_JSON_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get("controls", [])
+        
         prereq_steps = [
             (3, "company_extraction", extract_company_from_report, "Running company extractor...", 30),
             (4, "auditor_extraction", extract_auditor_from_report, "Running auditor extractor...", 40),
         ]
         parallel_steps = [
-            (5, "control_extraction", extract_controls_v2, "Running controls extractor...", 50),
+            (5, "control_extraction", _run_control_extraction, "Running controls extractor...", 50),
             (6, "cuec_extraction", extract_cuecs, "Running CUECs extractor...", 60),
-            (7, "subservice_orgs_extraction", lambda: (extract_subservice_orgs(), filter_third_parties_with_gpt()), "Running subservice orgs extractor...", 70),
+            (7, "subservice_orgs_extraction", _run_subservice_orgs_extraction, "Running subservice orgs extractor...", 70),
             (8, "product_extraction", extract_product_from_report, "Running product extractor...", 80),
             (9, "report_date_extraction", extract_report_date, "Running report date extractor...", 90),
             (10, "coverage_period_extraction", extract_coverage_period, "Running coverage period extractor...", 95),
         ]
+
+        # Watchdog: if controls extractor runs too long without increasing result size, mark as partial and continue
+        CONTROL_WATCHDOG_ENABLED = getattr(config, 'CONTROL_WATCHDOG_ENABLED', True)
+        CONTROL_WATCHDOG_MAX_MINUTES = getattr(config, 'CONTROL_WATCHDOG_MAX_MINUTES', 25)
+        _ctrl_last_count = 0
+        _ctrl_last_time = time.time()
         # Run prerequisites sequentially
         for idx, key, func, status, pct in prereq_steps:
             try:
@@ -238,6 +270,40 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                         results[key] = None
             # Update checklist in Redis after each sequential extractor
             update_checklist(checklist)
+        # Predefine flatten map for building standardized results (also used for partial writes)
+        flatten_map = {
+            'control_extraction': ('controls', 'controls'),
+            'cuec_extraction': ('cuecs', 'cuecs'),
+            'subservice_orgs_extraction': ('subservice_orgs', 'third_parties'),
+            'product_extraction': ('product', 'product'),
+            'auditor_extraction': ('auditor', 'auditor'),
+            'company_extraction': ('company', 'company'),
+            'report_date_extraction': ('report_date', 'report_date'),
+            'coverage_period_extraction': ('coverage_period', 'coverage_period'),
+        }
+
+        def _write_partial_combined(current_results: dict):
+            try:
+                standardized_partial = {}
+                for ext_key, (short_key, inner_key) in flatten_map.items():
+                    val = current_results.get(ext_key)
+                    if val is None:
+                        continue
+                    if isinstance(val, dict) and inner_key in val:
+                        if short_key == 'controls' and isinstance(val[inner_key], list):
+                            standardized_partial[short_key] = [dict(c) for c in val[inner_key]]
+                        else:
+                            standardized_partial[short_key] = val[inner_key]
+                    else:
+                        standardized_partial[short_key] = val
+                if standardized_partial:
+                    standardized_partial['sections'] = results.get('sections', [])
+                    combined_result_path = data_path('data/json/combined_result.json')
+                    with open(combined_result_path, 'w', encoding='utf-8') as f:
+                        json.dump(standardized_partial, f, indent=2, ensure_ascii=False)
+            except Exception as _p_err:
+                logger.error(f"Failed partial combined write: {_p_err}")
+
         # --- Run remaining extractors in parallel threads ---
         extractor_results = {}
         def run_extractor(idx, key, func, status, pct):
@@ -246,6 +312,20 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 logger.debug(f"{status}")
                 res = func()
                 logger.debug(f"{key}: {res}")
+                # If controls extractor returned a list or dict with controls, update watchdog metrics
+                if key == 'control_extraction':
+                    try:
+                        if isinstance(res, dict) and isinstance(res.get('controls'), list):
+                            current_count = len(res['controls'])
+                        elif isinstance(res, list):
+                            current_count = len(res)
+                        else:
+                            current_count = 0
+                        if current_count > _ctrl_last_count:
+                            _ctrl_last_count = current_count
+                            _ctrl_last_time = time.time()
+                    except Exception:
+                        pass
                 # If result is None but JSON file exists, try to load it
                 if res is None:
                     partial_path = None
@@ -308,12 +388,79 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     except Exception as e2:
                         logger.error(f"Failed to load partial result for {key}: {e2}")
                 return key, None
-        # Run all extractors in parallel
-        with ThreadPoolExecutor(max_workers=6) as executor:
-            futures = [executor.submit(run_extractor, idx, key, func, status, pct) for idx, key, func, status, pct in parallel_steps]
-            for future in as_completed(futures):
-                key, res = future.result()
-                extractor_results[key] = res
+        
+        # === CHECKPOINT SYSTEM ===
+        CHECKPOINT_PATH = data_path('data/json/_extraction_checkpoint.json')
+        def save_checkpoint(completed_extractors):
+            """Save current extraction progress to checkpoint file."""
+            try:
+                checkpoint_data = {
+                    'timestamp': time.time(),
+                    'completed': completed_extractors,
+                    'checklist': checklist
+                }
+                with open(CHECKPOINT_PATH, 'w', encoding='utf-8') as cf:
+                    json.dump(checkpoint_data, cf, indent=2)
+                logger.info(f"Checkpoint saved: {len(completed_extractors)} extractors completed")
+            except Exception as e:
+                logger.error(f"Failed to save checkpoint: {e}")
+        
+        def load_checkpoint():
+            """Load checkpoint and return list of completed extractors."""
+            try:
+                if os.path.isfile(CHECKPOINT_PATH):
+                    with open(CHECKPOINT_PATH, 'r', encoding='utf-8') as cf:
+                        data = json.load(cf)
+                    completed = data.get('completed', [])
+                    saved_checklist = data.get('checklist', [])
+                    logger.info(f"Checkpoint loaded: {len(completed)} extractors previously completed")
+                    return completed, saved_checklist
+            except Exception as e:
+                logger.error(f"Failed to load checkpoint: {e}")
+            return [], []
+        
+        # Load checkpoint to resume from previous run
+        completed_extractors, saved_checklist = load_checkpoint()
+        if saved_checklist:
+            # Restore checklist state from checkpoint
+            checklist = saved_checklist
+            update_checklist(checklist)
+        
+        # Filter parallel steps to skip already completed extractors
+        if completed_extractors:
+            logger.info(f"Resuming from checkpoint, skipping: {completed_extractors}")
+            parallel_steps = [(idx, key, func, status, pct) for (idx, key, func, status, pct) in parallel_steps 
+                             if key not in completed_extractors]
+        
+        # SEQUENTIAL PROCESSING: Run extractors one at a time for maximum stability
+        # No threading, no race conditions, no DNS threading issues
+        logger.info("Running extractors SEQUENTIALLY (no parallel workers)")
+        for idx, key, func, status, pct in parallel_steps:
+            logger.info(f"Starting extractor '{key}' (sequential mode)")
+            try:
+                k, res = run_extractor(idx, key, func, status, pct)
+                extractor_results[k] = res
+                logger.info(f"Extractor '{k}' completed successfully")
+                
+                # Add to checkpoint after each completion
+                if k not in completed_extractors:
+                    completed_extractors.append(k)
+                    save_checkpoint(completed_extractors)
+                    
+            except Exception as e:
+                logger.error(f"Extractor '{key}' raised exception: {e}\n{traceback.format_exc()}")
+                extractor_results[key] = None
+                # Mark as failed in checklist but continue with remaining extractors
+                for item in checklist:
+                    if item.get('name') == key:
+                        item['status'] = 'error'
+                        break
+                update_checklist(checklist)
+                
+            finally:
+                # Write partial combined_result.json after each extractor
+                _write_partial_combined(extractor_results)
+            
         # --- Always load extractor outputs from JSON files if present ---
         extractor_json_map = {
             'control_extraction': 'data/json/control_result.json',
@@ -334,16 +481,6 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 except Exception as e:
                     logger.error(f"Failed to load {json_path} for {ext_key}: {e}")
         # --- FLATTEN AND ENFORCE: Only short keys in final result ---
-        flatten_map = {
-            'control_extraction': ('controls', 'controls'),
-            'cuec_extraction': ('cuecs', 'cuecs'),
-            'subservice_orgs_extraction': ('subservice_orgs', 'third_parties'),
-            'product_extraction': ('product', 'product'),
-            'auditor_extraction': ('auditor', 'auditor'),
-            'company_extraction': ('company', 'company'),
-            'report_date_extraction': ('report_date', 'report_date'),
-            'coverage_period_extraction': ('coverage_period', 'coverage_period'),
-        }
         standardized_results = {}
         for ext_key, (short_key, inner_key) in flatten_map.items():
             val = extractor_results.get(ext_key)
@@ -414,7 +551,24 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             logf.write(f"Full standardized results keys: {list(standardized_results.keys())}\n")
         update_progress(100, "Analysis complete.")
         logger.debug(f"Final standardized results: {standardized_results}")
-        
+
+        # Ensure subservice orgs deduplication/enhancement is applied to the
+        # standardized results even when the extractor ran previously or when
+        # results were loaded from disk. This guarantees canonicalization and
+        # confidence adjustments are consistently executed as part of the
+        # regular workflow.
+        try:
+            if isinstance(standardized_results.get('subservice_orgs'), list) and len(standardized_results.get('subservice_orgs')) > 0:
+                logger.info("Applying subservice orgs enhancement/dedup to standardized results...")
+                try:
+                    from .extractors.subservice_orgs_dedup import enhance_subservice_orgs
+                    standardized_results['subservice_orgs'] = enhance_subservice_orgs(standardized_results['subservice_orgs'])
+                    logger.info("Subservice orgs enhancement complete; reduced to %d entries", len(standardized_results['subservice_orgs']))
+                except Exception as e:
+                    logger.exception("Failed to run subservice orgs enhancement: %s", e)
+        except Exception:
+            logger.exception("Unexpected error while attempting to enhance subservice orgs")
+
         # Add extracted text from output.txt to results
         try:
             with open(OUTPUT_TEXT_FILE, 'r', encoding='utf-8') as f:

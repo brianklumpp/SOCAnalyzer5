@@ -21,18 +21,77 @@ Prereqs: Docker Desktop (or engine) installed.
 2) Place your corporate CA bundle on the host and mount if needed (edit compose):
    - Example: create `certs/` and put `corp-ca-bundle.pem` there; then add a volume mount to the backend service (e.g., `- ./certs:/certs:ro`).
 
-3) Build and run:
+3) Build and run (Docker-only):
    
-   docker compose up --build
+  docker compose up --build
 
 4) Access:
-   - Backend: http://localhost:8000
-   - Frontend: http://localhost:3000
+  - Backend: http://localhost:8000
+  - Frontend: http://localhost:3000 (Dockerized frontend)
 
 Notes:
 - Data/output and JSON logs are persisted via the `./data:/app/data` bind mount.
 - Do not bake secrets into images; use compose `.env` or your secret manager in prod.
+
+### Helper script (Windows): socanalyzer.ps1
+Use the Docker-only helper to manage containers like a service:
+
+```powershell
+./socanalyzer.ps1 start     # start containers in background (no rebuild)
+./socanalyzer.ps1 status    # show status/ports for frontend, backend, postgres, redis
+./socanalyzer.ps1 restart   # restart running containers (no rebuild)
+./socanalyzer.ps1 stop      # stop running containers (do not remove)
+./socanalyzer.ps1 rebuild   # rebuild images and start containers (up -d --build)
+./socanalyzer.ps1 down      # stop and remove containers (volumes preserved)
+```
+
+Service-like behavior: docker-compose services include `restart: unless-stopped`, so they will restart on reboot unless you stop them.
 # SOCAnalyzer5
+
+## ⚠️ IMPORTANT: API Approach Deprecated (November 2025)
+
+**The FastAPI background threading approach has been deprecated due to stability issues.**
+
+Threading-related problems (hanging processes, high CPU usage) led to reverting to direct script execution.
+
+### New Recommended Usage (Direct Execution - No Threading Issues)
+
+**🎯 Interactive Mode (Easiest - Guided Wizard):**
+```powershell
+# Launch interactive TUI with menu-driven workflow
+.\interactive.ps1
+
+# Or use batch file
+interactive.bat
+```
+
+**📋 Command Line Mode:**
+```powershell
+# List available PDF reports
+.\run_scan.ps1 -ListReports
+
+# Analyze a PDF report (auto-inserts to database)
+.\run_scan.ps1 soc2_reports\Okta.pdf
+
+# With verbose logging
+.\run_scan.ps1 Okta.pdf -Verbose
+```
+
+Or using Python directly:
+```bash
+python run_analysis.py soc2_reports/Okta.pdf --verbose
+```
+
+**See [DIRECT_EXECUTION_GUIDE.md](DIRECT_EXECUTION_GUIDE.md) for complete documentation.**
+
+### Why the Change?
+- ✅ **Stable**: No threading issues or hanging processes
+- ✅ **Simple**: Direct execution, easier debugging
+- ✅ **Fast**: No API/Redis overhead
+- ✅ **Transparent**: Real-time console progress
+- ❌ **API `/analyze/` endpoint disabled** (returns error message)
+
+---
 
 SOCAnalyzer5 is a comprehensive platform for analyzing SOC 2 reports, extracting key data, and providing structured outputs for further review and automation. The application features a FastAPI backend for PDF parsing, data normalization, and database management, as well as a React-based frontend for interactive report analysis and editing.
 
@@ -73,7 +132,8 @@ SOCAnalyzer5 automates the extraction and normalization of data from SOC 2 PDF r
   - PDF extraction layer plus modular extractors for auditor, company, product, controls, CUECs, subservice orgs, coverage period, and report dates.
   - Unified LLM adapter that prioritizes the corporate Dataiku provider; Azure/OpenAI are optional fallbacks.
 - Frontend (React):
-  - Interactive report review and editing, built with React. In development it runs on port 3000; in production it’s built and served as static files (port 3001 by default in local scripts).
+  - Interactive report review and editing, built with React. In development it runs on port 3000; in production it’s built into static files.
+  - Local scripts: If Docker’s frontend container is running (port 3000), the script will skip starting a local static server to avoid duplicates. If Docker isn’t running, the script can serve the build locally (default port 3001).
 - Database (PostgreSQL):
   - Primary datastore for scans, companies, products, controls, CUECs, and subservice orgs. Managed by SQLAlchemy and Alembic.
 - Caching/Jobs (Redis):
@@ -287,11 +347,24 @@ Embedding note
   ```powershell
   npm start
   ```
-3) Production build (served on 3001 by local script)
+3) Production build
   ```powershell
   npm run build
-  # then run ./start-all.ps1 to serve the build
+  # then run ./start-all.ps1
   ```
+  - If the Dockerized frontend is running (port 3000), the local script will not start a second frontend.
+  - If Docker is not running or you prefer the local server, the script will serve the build on port 3001 by default.
+  - You can override or force behavior via environment variables (see below).
+
+### Startup script environment variables
+- `SOCANALYZER_SKIP_LOCAL_FRONTEND=1`
+  - Always skip starting the local static server (use the Dockerized frontend on port 3000).
+- `SOCANALYZER_FRONTEND_PORT=PORT`
+  - Port for the local static server (default: 3001) when the Dockerized frontend is not running.
+- `SOCANALYZER_SKIP_REDIS=1`
+  - Skip starting Redis via Docker in the start-all script.
+- `SOCANALYZER_FORCE_DOCKER=1`
+  - Treat Docker as available even if basic checks fail.
 
 ### Data
 - Place SOC 2 PDF reports in the appropriate directory or upload via the frontend.

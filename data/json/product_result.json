@@ -1,11 +1,7 @@
 {
-  "product": "ServiceNow Application Platform as a Service (APaaS)",
+  "product": "Adobe Experience Cloud",
   "confidence": 1,
   "raw_gpt_responses": [
-    "{\n  \"product\": \"ServiceNow Application Platform as a Service (APaaS)\",\n  \"confidence\": 1,\n  \"explanation\": \"The text explicitly mentions the ServiceNow Application Platform as a Service (APaaS) multiple times, describing its features, components, and services provided.\"\n}",
-    "{\n  \"product\": \"ServiceNow\",\n  \"confidence\": 1,\n  \"explanation\": \"The text repeatedly mentions 'ServiceNow' as the subject of various control activities, risk assessments, and organizational structures.\"\n}",
-    "{\n  \"product\": \"ServiceNow\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text repeatedly mentions ServiceNow as the system being audited, detailing its security measures and access controls.\"\n}",
-    "{\n  \"product\": \"ServiceNow\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text explicitly mentions ServiceNow as the product being audited.\"\n}",
-    "{\n  \"product\": \"ServiceNow\",\n  \"confidence\": 0.9,\n  \"explanation\": \"The text explicitly mentions ServiceNow as the system being audited for controls and control objectives.\"\n}"
+    "{\n    \"product\": \"Adobe Experience Cloud\",\n    \"confidence\": 1,\n    \"explanation\": \"The SOC 2 report explicitly states that Adobe Experience Cloud is the system in scope for the examination. Multiple references, including 'Adobe's Description of its Adobe Experience Cloud System,' and 'The description presents Adobe’s Experience Cloud system,' establish the scope of the audit. The description is primarily focused on the controls and operations specific to this platform.\"\n}"
   ]
 }

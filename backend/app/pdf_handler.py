@@ -10,9 +10,10 @@ import string
 import json
 from . import config
 from .config import (
-    SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE, GPT_PROMPTS, SECTION_TOPICS, WATERMARK_PATTERNS, REGEX_PATTERNS,
+    SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE, SECTION_TOPICS, WATERMARK_PATTERNS, REGEX_PATTERNS,
     PRIORITY_KEYWORDS_MANAGEMENT_ASSERTION, PRIORITY_KEYWORDS_SERVICE_AUDITOR_REPORT, PRIORITY_KEYWORDS_DESCRIPTION_OF_SYSTEM, PRIORITY_KEYWORDS_CONTROL_DESCRIPTIONS,
-    DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, LLM_PROVIDER
+    DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, LLM_PROVIDER,
+    SECTION_DETECTION_PROMPT, EXTRACT_TOC_PROMPT, SECTION_HEADING_VALIDATION_PROMPT, EXTRACT_TOC_HEADINGS_AND_PAGES_PROMPT
 )
 from .gpt_client import run_gpt_inquiry, gpt_extract
 import argparse
@@ -25,7 +26,7 @@ def load_api_key():
 
 def get_section_positions(text, model="gpt-3.5-turbo", temperature=0, top_p=1):
     """Use the configured provider (Dataiku by default) to estimate section positions."""
-    prompt = GPT_PROMPTS['section_detection'].format(
+    prompt = SECTION_DETECTION_PROMPT.format(
         section_keys=list(SECTION_TOPICS.keys()),
         text=text[:20000]
     )
@@ -109,7 +110,7 @@ def collapse_extra_blank_lines(text, max_blank_lines=2):
 
 def extract_toc_with_gpt(text, model="gpt-3.5-turbo", temperature=0.0, top_p=1.0):
     """Use the configured provider to extract the TOC text. Never raises; returns '' on error."""
-    prompt = GPT_PROMPTS['extract_toc'].format(text=text)
+    prompt = EXTRACT_TOC_PROMPT.format(text=text)
     try:
         content = gpt_extract(prompt, 'extract_toc') or ""
         # --- Debug: Log raw GPT content for TOC extraction ---
@@ -150,7 +151,7 @@ def is_line_isolated(line, text):
 
 def gpt_validate_section_heading(line, context, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P):
     """Use the configured provider to validate section headings. Returns (is_heading, response_text)."""
-    prompt = GPT_PROMPTS['section_heading_validation'].format(text=context, line=line)
+    prompt = SECTION_HEADING_VALIDATION_PROMPT.format(text=context, line=line)
     try:
         content = gpt_extract(prompt, 'section_heading_validation') or ""
         content = content.strip()
@@ -771,7 +772,7 @@ def extract_toc_headings_and_pages(toc_lines):
 
 def extract_toc_headings_and_pages_with_gpt(toc_text, model='gpt-3.5-turbo', temperature=0.0, top_p=0.0):
     """Use the configured provider to extract (heading, page_ref) pairs from TOC text."""
-    prompt = GPT_PROMPTS['extract_toc_headings_and_pages'].format(toc_text=toc_text)
+    prompt = EXTRACT_TOC_HEADINGS_AND_PAGES_PROMPT.format(toc_text=toc_text)
     try:
         content = gpt_extract(prompt, 'extract_toc_headings_and_pages') or "[]"
         try:

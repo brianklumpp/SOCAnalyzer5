@@ -15,19 +15,27 @@ import sqlalchemy.dialects.postgresql as pg_dialect
 import redis.asyncio as redis
 import redis as sync_redis
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, UploadFile, File, APIRouter
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi import Body
+from fastapi.staticfiles import StaticFiles
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+# Removed premature stream_handler formatter assignment (stream_handler not yet defined here).
 from typing import Optional, Dict, Any
+
+# Boot marker to verify container/image version and source path
+logging.warning(f"[BOOT] Loaded backend.app.main from {__file__}")
 from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.exc import SQLAlchemyError
 from .models import Company, Control, CUEC, SubserviceOrg, Product, Setting, Base
 from .models import Scan
 from .database import engine, get_db
-from .config import AUTO_CREATE_SCHEMA, RUN_MIGRATIONS_ON_START, ALEMBIC_INI_PATH, LOG_LEVEL, EXCLUDE_ACCESS_LOG_PATHS
+from .config import AUTO_CREATE_SCHEMA, RUN_MIGRATIONS_ON_START, ALEMBIC_INI_PATH, LOG_LEVEL, EXCLUDE_ACCESS_LOG_PATHS, DOCKER_CONTROL_ENABLED
 from .analyze import analyze_pdf_file
-from .config import REDIS_URL, TSC_CRITERIA, COSO_2013_CRITERIA, GPT_PROMPTS
+from .config import REDIS_URL, TSC_CRITERIA, COSO_2013_CRITERIA, EXECUTIVE_SUMMARY_PROMPT
+from .extractors.cuec_extractor import map_cuec_to_frameworks
+from . import config as cfg
 from .config import (
     EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS,
     EXEC_SUMMARY_PER_CONTROL_MAX_CHARS,
@@ -35,9 +43,21 @@ from .config import (
 )
 from .explicit_sql_insert import insert_extracted_data
 import concurrent.futures
-from .gpt_client import gpt_extract
+from .gpt_client import gpt_extract, set_gpt_log_context, clear_gpt_log_context
+from .extractors.cuec_extractor import map_cuec_to_frameworks
 
 app = FastAPI()
+# Minimal direct diagnostic route (bypasses router) to ensure availability
+@app.get("/diag/gpt_logging", tags=["diag"], include_in_schema=True)
+async def diag_gpt_logging_root():
+    try:
+        from .gpt_client import gpt_logging_status, log_gpt_event
+        status = gpt_logging_status()
+        log_gpt_event("diag_root", {"message": "direct app route", "path": status.get("path")})
+        return {"ok": True, "status": status}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 
 # Middleware to suppress access logs for noisy polling endpoints
 @app.middleware("http")
@@ -86,6 +106,15 @@ async def _init_db_on_startup():
         app.state.loop = asyncio.get_event_loop()
     except Exception:
         app.state.loop = None
+    # Emit GPT logging status at startup for diagnostics and write a test event
+    try:
+        from .gpt_client import gpt_logging_status, log_gpt_event
+        status = gpt_logging_status()
+        logging.info(f"[STARTUP] GPT logging status: enabled={status.get('enabled')} ready={status.get('logger_ready')} path={status.get('path')}")
+        if status.get('enabled'):
+            log_gpt_event("startup_check", {"message": "backend startup", "service": "backend"})
+    except Exception as _gpt_init_err:
+        logging.warning(f"[STARTUP] GPT logging status check failed: {_gpt_init_err}")
 
 # Helper function to mark executive summary as stale
 async def mark_executive_summary_stale(scan_id: int, db):
@@ -168,6 +197,21 @@ async def test_insert_combined_result(db=Depends(get_db)):
 
 app.include_router(test_router)
 
+# --- Diagnostics router ---
+diag_router = APIRouter(prefix="/diag")
+
+@diag_router.get("/gpt_logging")
+async def diag_gpt_logging():
+    try:
+        from .gpt_client import gpt_logging_status, log_gpt_event
+        status = gpt_logging_status()
+        log_gpt_event("diag", {"message": "manual diag hit", "path": status.get("path")})
+        return {"ok": True, "status": status}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+app.include_router(diag_router)
+
 if __name__ == "__main__" and sys.argv[-1] == "test_insert_combined_result":
     async def _main():
         # Use a dummy dependency context
@@ -182,15 +226,67 @@ if __name__ == "__main__" and sys.argv[-1] == "test_insert_combined_result":
     asyncio.run(_main())
 
 
+# --------- SPA static fallback for UI routes under /app ---------
+# Serve the built React app's index.html for any /app/* route and /app-settings
+FRONTEND_BUILD_DIR = PROJECT_ROOT / 'frontend' / 'build'
+FRONTEND_BUILD_INDEX = FRONTEND_BUILD_DIR / 'index.html'
+
+def _spa_index_response():
+    if FRONTEND_BUILD_INDEX.exists():
+        return FileResponse(str(FRONTEND_BUILD_INDEX))
+    return JSONResponse({"error": "UI build not found"}, status_code=404)
+
+@app.get("/app-settings", include_in_schema=False)
+async def spa_app_settings():
+    return _spa_index_response()
+
+@app.get("/app/{full_path:path}", include_in_schema=False)
+async def spa_catch_all(full_path: str):
+    return _spa_index_response()
+
+# Serve static assets for the SPA so relative URLs like `static/js/...` resolve
+if FRONTEND_BUILD_DIR.exists():
+    # Mount at /app to support deep-linking like /app/report/123
+    app.mount("/app", StaticFiles(directory=str(FRONTEND_BUILD_DIR), html=True), name="spa")
+    # Mount /static for asset paths in index.html
+    static_dir = FRONTEND_BUILD_DIR / 'static'
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    # Common top-level assets
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon():
+        path = FRONTEND_BUILD_DIR / 'favicon.ico'
+        if path.exists():
+            return FileResponse(str(path))
+        return JSONResponse(status_code=404, content={"error": "favicon not found"})
+
+    @app.get("/manifest.json", include_in_schema=False)
+    async def manifest():
+        path = FRONTEND_BUILD_DIR / 'manifest.json'
+        if path.exists():
+            return FileResponse(str(path))
+        return JSONResponse(status_code=404, content={"error": "manifest not found"})
+
+    @app.get("/asset-manifest.json", include_in_schema=False)
+    async def asset_manifest():
+        path = FRONTEND_BUILD_DIR / 'asset-manifest.json'
+        if path.exists():
+            return FileResponse(str(path))
+        return JSONResponse(status_code=404, content={"error": "asset-manifest not found"})
+
+
 
 @app.get("/report/{scan_id}")
 async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
     try:
         logging.error(f"[REPORT] Enter get_report scan_id={scan_id}, diag={diag}")
         # Fetch scan row for all data
-        scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
-        scan_row = scan_row.scalar_one_or_none()
+        result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        logging.error(f"[REPORT] Query executed, result type: {type(result)}")
+        scan_row = result.scalar_one_or_none()
+        logging.error(f"[REPORT] scan_row after scalar_one_or_none: {scan_row}, type: {type(scan_row)}")
         if not scan_row:
+            logging.error(f"[REPORT] Scan not found for scan_id={scan_id}")
             raise HTTPException(status_code=404, detail="Scan not found")
 
         # Diagnostic short-circuit to isolate 500s occurring outside main logic
@@ -381,6 +477,7 @@ ALLOWED_SUBORG_FIELDS = {
     "annotation",
     "third_party_description",
     "third_party_page_ref",
+    "name",
 }
 
 def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
@@ -412,6 +509,9 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, An
         row = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.id == suborg_id, SubserviceOrg.scan_id == scan_id))).scalar_one_or_none()
         if not row:
             raise HTTPException(status_code=404, detail="Subservice org not found")
+        # If renaming, trim whitespace but allow duplicates (extractors may produce duplicates intentionally)
+        if isinstance(payload, dict) and "name" in payload and payload["name"] is not None:
+            payload["name"] = str(payload["name"]).strip()
         _suborg_apply_changes(row, payload or {})
         await mark_executive_summary_stale(scan_id, db)
         await db.commit()
@@ -434,6 +534,9 @@ async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str
             # Ambiguous legacy route
             raise HTTPException(status_code=409, detail="Multiple subservice orgs share this name; use ID endpoint")
         row = q[0]
+        # If renaming, trim whitespace; duplicates are allowed. Keep legacy-name-route 409 only for ambiguity on selection.
+        if isinstance(payload, dict) and "name" in payload and payload["name"] is not None:
+            payload["name"] = str(payload["name"]).strip()
         _suborg_apply_changes(row, payload or {})
         await mark_executive_summary_stale(scan_id, db)
         await db.commit()
@@ -449,10 +552,17 @@ async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str
 async def get_job(job_id, redis_client=None):
     if redis_client is None:
         redis_client = _get_redis()
-    job_json = await redis_client.get(f"job:{job_id}")
-    if job_json:
-        return _json.loads(job_json)
-    return None
+        try:
+            job_json = await redis_client.get(f"job:{job_id}")
+        except Exception as e:
+            logging.warning(f"[get_job] Redis access failed: {e}")
+            return None
+        if job_json:
+            try:
+                return _json.loads(job_json)
+            except Exception:
+                return None
+        return None
 
 async def set_job(job_id, job_dict, redis_client=None):
     if redis_client is None:
@@ -465,7 +575,168 @@ async def del_job(job_id, redis_client=None):
     await redis_client.delete(f"job:{job_id}")
 
 def _get_redis():
-    return redis.from_url(REDIS_URL, decode_responses=True)
+    # Harden Redis client with short connect/read timeouts so API endpoints don't hang on DNS/connection issues
+    try:
+        return redis.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=0.5,  # fast-fail DNS/connect
+            socket_timeout=0.75,          # read/write timeout
+            health_check_interval=5,
+            retry_on_timeout=True,
+        )
+    except Exception:
+        # As a last resort, return a client without special options; callers still guard usage
+        return redis.from_url(REDIS_URL, decode_responses=True)
+
+# --- Helpers for artifact presence and lightweight counts ---
+def _project_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[2]
+
+def _artifact_presence() -> Dict[str, bool]:
+    base = _project_root()
+    files = {
+        "controls": base / "data/json/control_result.json",
+        "cuecs": base / "data/json/cuec_result.json",
+        "subservice_orgs": base / "data/json/subservice_orgs_result.json",
+        "product": base / "data/json/product_result.json",
+        "auditor": base / "data/json/auditor_result.json",
+        "company": base / "data/json/company_result.json",
+        "report_date": base / "data/json/report_date_result.json",
+        "coverage_period": base / "data/json/coverage_period_result.json",
+        "combined": base / "data/json/combined_result.json",
+        "sections": base / "data/json/section_results.json",
+        "extracted_text": base / "data/output/output.txt",
+    }
+    return {k: p.is_file() for k, p in files.items()}
+
+def _reset_scan_state():
+    """Remove prior JSON artifacts and truncate logs to ensure a clean run for a new scan.
+
+    This clears only analyzer-generated outputs under data/json and data/output, and truncates
+    files under data/logs. It does not touch the database or user-uploaded PDFs.
+    """
+    try:
+        base = _project_root()
+        # JSON artifacts to remove
+        json_rel_paths = [
+            'data/json/control_result.json',
+            'data/json/cuec_result.json',
+            'data/json/subservice_orgs_result.json',
+            'data/json/subservice_orgs_result_postprocessed.json',
+            'data/json/product_result.json',
+            'data/json/auditor_result.json',
+            'data/json/company_result.json',
+            'data/json/report_date_result.json',
+            'data/json/coverage_period_result.json',
+            'data/json/combined_result.json',
+            'data/json/section_results.json',
+        ]
+        for rel in json_rel_paths:
+            try:
+                p = base / rel
+                if p.is_file():
+                    p.unlink()
+            except Exception:
+                pass
+        # Output text (legacy extracted text)
+        try:
+            out_txt = base / 'data/output/output.txt'
+            if out_txt.is_file():
+                out_txt.unlink()
+        except Exception:
+            pass
+        # Truncate logs
+        try:
+            logs_dir = base / 'data/logs'
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            for entry in logs_dir.iterdir():
+                try:
+                    if entry.is_file():
+                        # Truncate file
+                        with open(str(entry), 'w', encoding='utf-8'):
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        logging.info("[RESET] Cleared prior JSON artifacts and truncated logs for new scan")
+    except Exception as e:
+        logging.error(f"[RESET] Unexpected error during cleanup: {e}")
+
+def _safe_len(val) -> int:
+    try:
+        return len(val) if isinstance(val, (list, dict, str)) else (int(val) if isinstance(val, (int, float)) else 0)
+    except Exception:
+        return 0
+
+def _result_counts_from_obj(result: Dict[str, Any]) -> Dict[str, int]:
+    counts = {
+        "company": 1 if bool(result.get("company")) else 0,
+        "product": 1 if bool(result.get("product")) else 0,
+        "auditor": 1 if bool(result.get("auditor")) else 0,
+        "report_date": 1 if bool(result.get("report_date")) else 0,
+        "coverage_period": 1 if bool(result.get("coverage_period")) else 0,
+        "control": _safe_len(result.get("controls") or []),
+        "cuec": _safe_len(result.get("cuecs") or []),
+        "subservice_org": _safe_len(result.get("subservice_orgs") or []),
+    }
+    return counts
+
+def _result_counts_from_disk() -> Dict[str, int]:
+    import json as _j
+    base = _project_root()
+    def _load(path: str):
+        try:
+            with open(str(base / path), 'r', encoding='utf-8') as f:
+                return _j.load(f)
+        except Exception:
+            return None
+    def _streaming_array_count(path: str) -> int:
+        """Best-effort count for a file being incrementally written as JSON objects separated by commas.
+
+        control_extractor_v2 writes an initial '[]\n' then appends each object with a leading comma, finally
+        overwriting the whole file with a proper {"controls": [...]} structure when complete. While in-flight,
+        json.load() fails; this heuristic counts objects so UI progress/counts reflect partial extraction.
+        """
+        file_path = str(base / path)
+        if not os.path.isfile(file_path):
+            return 0
+        count = 0
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    ls = line.lstrip()
+                    # Skip the opening [] line
+                    if ls.startswith('[]'):
+                        continue
+                    # Detect start of an object
+                    if ls.startswith('{'):
+                        count += 1
+            return count
+        except Exception:
+            return 0
+    counts = {"company": 0, "product": 0, "auditor": 0, "report_date": 0, "coverage_period": 0, "control": 0, "cuec": 0, "subservice_org": 0}
+    # company/product/auditor/report_date/coverage_period are dict-ish
+    counts["company"] = 1 if _load('data/json/company_result.json') else 0
+    counts["product"] = 1 if _load('data/json/product_result.json') else 0
+    counts["auditor"] = 1 if _load('data/json/auditor_result.json') else 0
+    counts["report_date"] = 1 if _load('data/json/report_date_result.json') else 0
+    counts["coverage_period"] = 1 if _load('data/json/coverage_period_result.json') else 0
+    # list-like inside dicts
+    cuec_obj = _load('data/json/cuec_result.json') or {}
+    ctrl_obj = _load('data/json/control_result.json') or {}
+    so_obj = _load('data/json/subservice_orgs_result.json') or {}
+    counts["cuec"] = _safe_len((cuec_obj or {}).get("cuecs") or cuec_obj.get("third_parties") or [])
+    if isinstance(ctrl_obj, dict) and "controls" in ctrl_obj:
+        counts["control"] = _safe_len(ctrl_obj.get("controls") or [])
+    else:
+        # Fallback to streaming partial file heuristic while control extractor still running
+        counts["control"] = _streaming_array_count('data/json/control_result.json')
+    counts["subservice_org"] = _safe_len((so_obj or {}).get("third_parties") or [])
+    return counts
+
+# (Removed duplicate earlier definition of _build_combined_results_from_disk; keeping the comprehensive version below.)
 
 def run_analysis_job(job_id, temp_pdf_path, filename, db):
     import logging
@@ -475,6 +746,10 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
     start_time = time.time()
     
     # logging.error(f"[DEBUG] [run_analysis_job] Thread: {threading.current_thread().name}, job_id={job_id}")
+    # Track progress and last update for watchdog
+    last_progress_value = {"val": 0}
+    last_progress_ts = {"ts": time.time()}
+
     def progress_callback(percent, status=None):
         # logging.info(f"[INFO] progress_callback: job_id={job_id}, percent={percent}, status={status}")
         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
@@ -489,6 +764,12 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
         job.pop("done", None)
         job.pop("error", None)
         redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+        # Update watchdog trackers
+        try:
+            last_progress_value["val"] = int(percent or 0)
+        except Exception:
+            last_progress_value["val"] = 0
+        last_progress_ts["ts"] = time.time()
         # Also broadcast progress over WebSocket to connected clients
         try:
             loop = getattr(app.state, 'loop', None)
@@ -514,7 +795,67 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
         job.pop("done", None)
         job.pop("error", None)
         redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+    # Watchdog to finalize from disk if job stalls after high progress
+    stop_event = threading.Event()
+    def _watchdog():
+        try:
+            while not stop_event.is_set():
+                time.sleep(5)
+                idle = time.time() - last_progress_ts["ts"]
+                try:
+                    from . import config as _cfg
+                    min_progress = int(getattr(_cfg, 'JOB_WATCHDOG_MIN_PROGRESS', 95))
+                    idle_secs = int(getattr(_cfg, 'JOB_WATCHDOG_IDLE_SECONDS', 0))
+                except Exception:
+                    min_progress = 95
+                    idle_secs = 0
+                if idle_secs <= 0:
+                    # Watchdog disabled
+                    continue
+                if last_progress_value["val"] >= min_progress and idle > idle_secs:
+                    logging.warning(f"[WATCHDOG] job_id={job_id} idle_for={int(idle)}s at progress={last_progress_value['val']} — finalizing from disk")
+                    try:
+                        results = _build_combined_results_from_disk()
+                        # Only mark done if there's any content; otherwise keep waiting
+                        if isinstance(results, dict) and len(results.keys()) > 0:
+                            # Ensure combined_result.json exists (writer inside helper is guarded)
+                            async def _update_final():
+                                rc = _get_redis()
+                                job = await get_job(job_id, rc) or {}
+                                job["result"] = results
+                                job["done"] = True
+                                job["error"] = None
+                                job["db_saved"] = job.get("db_saved", False)
+                                job["progress"] = 100
+                                job["status"] = "Finalized from disk (watchdog)"
+                                job["finalized"] = True
+                                await set_job(job_id, job, rc)
+                            loop = getattr(app.state, 'loop', None)
+                            if loop and loop.is_running():
+                                asyncio.run_coroutine_threadsafe(_update_final(), loop)
+                            else:
+                                asyncio.run(_update_final())
+                            try:
+                                asyncio.run(broadcast_progress(100, "Finalized from disk"))
+                                asyncio.run(broadcast_done())
+                            except Exception:
+                                pass
+                            stop_event.set()
+                            break
+                    except Exception as e:
+                        logging.error(f"[WATCHDOG] finalize failed: {e}\n{traceback.format_exc()}")
+        except Exception as e:
+            logging.error(f"[WATCHDOG] unexpected error: {e}")
+
+    wd_thr = threading.Thread(target=_watchdog, name=f"job-watchdog-{job_id}", daemon=True)
+    wd_thr.start()
+
     try:
+        # Set job_id into GPT logging context for the duration of this analysis thread
+        try:
+            set_gpt_log_context(job_id=job_id)
+        except Exception:
+            pass
         from .analyze import analyze_pdf_file
         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
         # Check for cancellation before starting
@@ -530,10 +871,32 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
             checklist_callback=checklist_callback
         )
         
-        # Add timing and filename metadata to results
+    # Add timing and filename metadata to results
         elapsed_time = time.time() - start_time
         results["estimated_time_seconds"] = elapsed_time
         results["pdf_filename"] = filename
+        # Ensure combined_result.json exists (some edge cases may skip write inside analyze_pdf_file) by rebuilding from disk artifacts now.
+        try:
+            # This will also emit a combined_result.json write attempt internally
+            disk_combined = _build_combined_results_from_disk()
+            if isinstance(disk_combined, dict) and disk_combined:
+                # Merge any keys missing from in-memory results (avoid overwriting richer in-memory structures)
+                for k, v in disk_combined.items():
+                    if k not in results:
+                        results[k] = v
+                results.setdefault('_combined_rebuild', True)
+        except Exception as _cr_err:
+            logging.error(f"[run_analysis_job] combined_result rebuild failed: {_cr_err}")
+        # Last-resort: write the in-memory results to combined_result.json directly
+        try:
+            PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+            combined_path = (PROJECT_ROOT / 'data' / 'json' / 'combined_result.json')
+            combined_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(str(combined_path), 'w', encoding='utf-8') as cf:
+                _json.dump(results, cf, ensure_ascii=False, indent=2)
+            logging.info(f"[run_analysis_job] Wrote combined_result.json to {combined_path}")
+        except Exception as _werr:
+            logging.error(f"[run_analysis_job] Failed to write combined_result.json: {_werr}")
         # Check for cancellation after analysis
         job_json = redis_client.get(f"job:{job_id}")
         if job_json and isinstance(job_json, str):
@@ -607,6 +970,8 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
                 loop.close()
                 if logging.getLogger().isEnabledFor(logging.DEBUG):
                     logging.debug(f"[DEBUG] [result_update] Closed event loop: {id(loop)}")
+        # Signal watchdog to stop; normal path completed
+        stop_event.set()
         # DB write removed from background thread. Will be handled in result endpoint.
     except Exception as e:
         async def _update():
@@ -647,7 +1012,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
     finally:
         try:
             os.remove(temp_pdf_path)
-        except Exception:
+        except Exception as e:
             pass
 
 
@@ -678,26 +1043,52 @@ import traceback
 
 @app.post("/analyze/")
 async def analyze_pdf_bg(file: UploadFile = File(...), db=Depends(get_db)):
-    temp_dir = "data/tmp"
-    os.makedirs(temp_dir, exist_ok=True)
-    filename = file.filename if file.filename else "uploaded.pdf"
-    temp_pdf_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{filename}")
-    with open(temp_pdf_path, "wb") as f_out:
-        shutil.copyfileobj(file.file, f_out)
-    job_id = str(uuid.uuid4())
-    await set_job(job_id, {
-        "status": "Queued",
-        "progress": 0,
-        "done": False,
-        "result": None,
-        "error": None,
-        "checklist": [],
-        "filename": filename
-    })
-    # Start background thread
-    thread = threading.Thread(target=run_analysis_job, args=(job_id, temp_pdf_path, filename, db))
-    thread.start()
-    return {"job_id": job_id}
+    """
+    DEPRECATED: This API endpoint with background threading has been deprecated
+    due to threading-related stability issues (hanging, high CPU usage).
+    
+    Please use the direct analysis script instead:
+        python run_analysis.py <path_to_pdf>
+    
+    This endpoint is disabled to prevent threading issues. If you need to use
+    the web interface, consider re-enabling it, but be aware of potential stability problems.
+    """
+    return {
+        "error": "API-based analysis is deprecated",
+        "message": "Please use the direct analysis script: python run_analysis.py <pdf_path>",
+        "reason": "Threading-related stability issues (hanging, high CPU)",
+        "alternatives": [
+            "Use: python run_analysis.py soc2_reports/YourFile.pdf",
+            "Or: python run_analysis.py --list-reports (to see available reports)"
+        ]
+    }
+    
+    # ORIGINAL CODE DISABLED (uncomment to re-enable, but expect threading issues):
+    # temp_dir = "data/tmp"
+    # os.makedirs(temp_dir, exist_ok=True)
+    # filename = file.filename if file.filename else "uploaded.pdf"
+    # temp_pdf_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{filename}")
+    # with open(temp_pdf_path, "wb") as f_out:
+    #     shutil.copyfileobj(file.file, f_out)
+    # # Reset prior artifacts/logs to ensure clean scan state
+    # try:
+    #     _reset_scan_state()
+    # except Exception:
+    #     pass
+    # job_id = str(uuid.uuid4())
+    # await set_job(job_id, {
+    #     "status": "Queued",
+    #     "progress": 0,
+    #     "done": False,
+    #     "result": None,
+    #     "error": None,
+    #     "checklist": [],
+    #     "filename": filename
+    # })
+    # # Start background thread
+    # thread = threading.Thread(target=run_analysis_job, args=(job_id, temp_pdf_path, filename, db))
+    # thread.start()
+    # return {"job_id": job_id}
 
 # New endpoint: poll job status
 @app.get("/analyze/status/{job_id}")
@@ -708,14 +1099,26 @@ async def get_job_status(job_id: str):
     logging.info(f"[INFO] get_job_status: called for job_id={job_id}")
     job = await get_job(job_id)
     if not job:
-        # print(f"[PRINT] get_job_status: job_id={job_id} NOT FOUND")
-        logging.error(f"[ERROR] get_job_status: job_id={job_id} NOT FOUND")
-        return {"error": "Job not found"}
+        # Distinguish true miss vs transient Redis issue by a second quick guarded fetch
+        transient = False
+        try:
+            _ = await get_job(job_id)
+        except Exception:
+            transient = True
+        logging.error(f"[ERROR] get_job_status: job_id={job_id} NOT FOUND (transient={transient})")
+        return {"error": "Job not found", "transient_unavailable": transient}
     # Remove detailed job state logging for status checks
     # print(f"[PRINT] get_job_status: job_id={job_id}, job={job}")
     # logging.info(f"[INFO] get_job_status: job_id={job_id}, job={job}")
     # print(f"[PRINT] get_job_status fields: progress={job.get('progress')}, checklist={job.get('checklist')}, status={job.get('status')}, done={job.get('done')}, error={job.get('error')}, filename={job.get('filename')}")
     # logging.info(f"[INFO] get_job_status fields: progress={job.get('progress')}, checklist={job.get('checklist')}, status={job.get('status')}, done={job.get('done')}, error={job.get('error')}, filename={job.get('filename')}")
+    # Build artifacts presence and counts; keep mid-run path ultra-lightweight to avoid disk I/O
+    artifacts = None
+    counts = None
+    if job.get("done"):
+        artifacts = _artifact_presence()
+        result_obj = job.get("result") or {}
+        counts = _result_counts_from_obj(result_obj) if result_obj else _result_counts_from_disk()
     return {
         "status": job.get("status"),
         "progress": job.get("progress"),
@@ -723,39 +1126,542 @@ async def get_job_status(job_id: str):
         "error": job.get("error"),
         "checklist": job.get("checklist", []),
         "filename": job.get("filename"),
-        "_debug_job": job  # Include full job state for frontend debugging (remove in prod)
+        "finalized": bool(job.get("finalized", False) or str(job.get("status", "")).lower().startswith("finalized")),
+        "artifacts": artifacts,
+        "counts": counts,
+        "transient_unavailable": False,
+        # Debug payload removed to reduce response size and avoid client timeouts
+    }
+
+# Ultra-lightweight status endpoint to use during active scans
+@app.get("/analyze/status_min/{job_id}")
+async def get_job_status_min(job_id: str, include_artifacts: bool = False):
+    """Ultra-lightweight status endpoint.
+
+    Now returns counts and checklist mid-run so the UI can render progress bars without
+    needing the heavier /analyze/status endpoint. Disk counts are inexpensive small file loads.
+    Artifacts presence is optional (include_artifacts=true) or automatically included when done.
+    """
+    job = await get_job(job_id)
+    if not job:
+        # best-effort transient flag on redis access race
+        transient = False
+        try:
+            _ = await get_job(job_id)
+        except Exception:
+            transient = True
+        return {"error": "Job not found", "transient_unavailable": transient}
+    # Lightweight counts from disk OR embedded result if already present
+    result_obj = job.get("result") or {}
+    counts = _result_counts_from_obj(result_obj) if result_obj else _result_counts_from_disk()
+    # Checklist preserved in job dict for stepper
+    checklist = job.get("checklist", [])
+    artifacts = None
+    if job.get("done") or include_artifacts:
+        artifacts = _artifact_presence()
+    # Optional line-based progress (e.g., control extraction advancing through section)
+    def _line_progress():
+        try:
+            proj_root = pathlib.Path(__file__).resolve().parents[2]
+            json_dir = proj_root / 'data' / 'json'
+            progress = {}
+            ctrl_path = json_dir / 'control_progress.json'
+            if ctrl_path.exists():
+                with open(ctrl_path, 'r', encoding='utf-8') as f:
+                    meta = _json.load(f)
+                s = meta.get('section_start_line')
+                e = meta.get('section_end_line')
+                cur = meta.get('current_line')
+                pct = None
+                if isinstance(s, int) and isinstance(e, int) and isinstance(cur, int) and e > s:
+                    pct = round(((cur - s) / (e - s)) * 100, 2)
+                progress['controls'] = {
+                    'section_start_line': s,
+                    'section_end_line': e,
+                    'current_line': cur,
+                    'percent_complete': pct,
+                    'extracted_controls': meta.get('extracted_controls'),
+                }
+            return progress
+        except Exception as _lp_err:
+            logging.warning(f"[status_min] line progress error: {_lp_err}")
+            return {}
+    line_progress = _line_progress()
+    return {
+        "status": job.get("status"),
+        "progress": job.get("progress"),
+        "done": job.get("done"),
+        "error": job.get("error"),
+        "counts": counts,
+        "checklist": checklist,
+        "artifacts": artifacts,
+        "transient_unavailable": False,
+        "line_progress": line_progress,
     }
 
 # New endpoint: get job result
 @app.get("/analyze/result/{job_id}")
-async def get_job_result(job_id: str, force_save: bool = False, db=Depends(get_db)):
+async def get_job_result(job_id: str, force_save: bool = False, format: Optional[str] = None, request: Request = None, db=Depends(get_db)):
+    """Return analysis results with content negotiation.
+
+    Behavior:
+    - If force_save (or not yet saved) persists result to DB first.
+    - Honors format=text or format=summary even on first (persisting) call.
+    - format=text => raw extracted_text only (text/plain)
+    - format=summary => compact JSON: counts, artifacts, keys, finalized (+ optional insert_summary if just saved)
+    - default => full results JSON.
+    """
     job = await get_job(job_id)
     if not job:
         return {"error": "Job not found"}
     if not job.get("done"):
         return {"error": "Job not finished yet"}
 
+    # Pre-calc negotiation flags early so we can honor them after persistence
+    fmt = (format or "").lower().strip()
+    accept = (request.headers.get("accept") if request else "")
+    wants_text = (fmt == "text") or ("text/plain" in (accept or ""))
+    wants_summary = (fmt == "summary") or ("application/summary+json" in (accept or ""))
+
     # Persist to DB if not saved yet or force_save requested
+    insert_summary = None
     if (force_save or not job.get("db_saved")) and job.get("result"):
-        import pathlib
-        import tempfile
-        import json as _json
-        # Write result to a temp file and call insert_extracted_data
+        import tempfile, json as _json
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
             _json.dump(job["result"], tmpf, ensure_ascii=False)
             tmpf.flush()
             tmp_path = tmpf.name
         loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
-            summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
+            insert_summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
         job["db_saved"] = True
         await set_job(job_id, job)
-        # Optionally, you can return the summary in the response
-        return {"insert_summary": summary, "results": job.get("result")}
+
     # If there was an error, return it along with any partial result
     if job.get("error"):
         return {"error": job.get("error"), "partial_result": job.get("result")}
-    return {"results": job.get("result")}
+
+    res_obj = job.get("result") or {}
+
+    if wants_text:
+        from starlette.responses import Response
+        text = res_obj.get("extracted_text") or ""
+        return Response(content=text, media_type="text/plain; charset=utf-8")
+
+    if wants_summary:
+        summary_payload = {
+            "counts": _result_counts_from_obj(res_obj),
+            "artifacts": _artifact_presence(),
+            "keys": sorted(list(res_obj.keys())),
+            "finalized": bool(job.get("finalized", False) or str(job.get("status", "")).lower().startswith("finalized")),
+        }
+        if insert_summary is not None:
+            # Include minimal DB insertion confirmation without dumping large result
+            summary_payload["db_inserted"] = True
+            summary_payload["insert_summary"] = insert_summary
+        return summary_payload
+
+    # Default: full JSON results (backward compatible); include insert_summary if applicable
+    default_response = {"results": res_obj}
+    if insert_summary is not None:
+        default_response["insert_summary"] = insert_summary
+        default_response["summary"] = {
+            "counts": _result_counts_from_obj(res_obj),
+            "artifacts": _artifact_presence(),
+        }
+    return default_response
+
+# (Removed duplicate earlier /analyze/resume route that only finalized from artifacts.)
+
+# Utility: rebuild a combined result from any extractor JSONs already on disk
+def _build_combined_results_from_disk() -> dict:
+    try:
+        import json
+        import os
+        from . import config as cfg
+        PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+        def data_path(rel: str) -> str:
+            return str((PROJECT_ROOT / rel).resolve())
+
+        # Load extractor JSONs if present
+        extractor_json_map = {
+            'control_extraction': 'data/json/control_result.json',
+            'cuec_extraction': 'data/json/cuec_result.json',
+            'subservice_orgs_extraction': 'data/json/subservice_orgs_result.json',
+            'product_extraction': 'data/json/product_result.json',
+            'auditor_extraction': 'data/json/auditor_result.json',
+            'company_extraction': 'data/json/company_result.json',
+            'report_date_extraction': 'data/json/report_date_result.json',
+            'coverage_period_extraction': 'data/json/coverage_period_result.json',
+        }
+        extractor_results: dict[str, Any] = {}
+        for ext_key, rel_path in extractor_json_map.items():
+            fpath = data_path(rel_path)
+            if os.path.isfile(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as pf:
+                        extractor_results[ext_key] = json.load(pf)
+                except Exception as e:
+                    logging.error(f"[_build_combined] Failed to load {rel_path}: {e}")
+
+        # Flatten to standardized keys expected by the app
+        flatten_map = {
+            'control_extraction': ('controls', 'controls'),
+            'cuec_extraction': ('cuecs', 'cuecs'),
+            'subservice_orgs_extraction': ('subservice_orgs', 'third_parties'),
+            'product_extraction': ('product', 'product'),
+            'auditor_extraction': ('auditor', 'auditor'),
+            'company_extraction': ('company', 'company'),
+            'report_date_extraction': ('report_date', 'report_date'),
+            'coverage_period_extraction': ('coverage_period', 'coverage_period'),
+        }
+        standardized_results: dict[str, Any] = {}
+        for ext_key, (short_key, inner_key) in flatten_map.items():
+            val = extractor_results.get(ext_key)
+            if val is None:
+                continue
+            if isinstance(val, dict) and inner_key in val:
+                # For controls, ensure list of dicts
+                if short_key == 'controls' and isinstance(val[inner_key], list):
+                    standardized_results[short_key] = [dict(c) for c in val[inner_key]]
+                else:
+                    standardized_results[short_key] = val[inner_key]
+            else:
+                standardized_results[short_key] = val
+
+        # Persist bad_chunks meta where present (cuecs/controls/subservice_orgs)
+        try:
+            if isinstance(extractor_results.get('cuec_extraction'), dict):
+                cuec_res = extractor_results['cuec_extraction']
+                if isinstance(cuec_res.get('bad_chunks'), list) and len(cuec_res['bad_chunks']) > 0:
+                    standardized_results.setdefault('cuecs_meta', {})
+                    standardized_results['cuecs_meta']['bad_chunks'] = cuec_res['bad_chunks']
+                    standardized_results['cuecs_meta']['bad_chunk_count'] = cuec_res.get('bad_chunk_count', len(cuec_res['bad_chunks']))
+            if isinstance(extractor_results.get('control_extraction'), dict):
+                ctrl_res = extractor_results['control_extraction']
+                if isinstance(ctrl_res.get('bad_chunks'), list) and len(ctrl_res['bad_chunks']) > 0:
+                    standardized_results.setdefault('controls_meta', {})
+                    standardized_results['controls_meta']['bad_chunks'] = ctrl_res['bad_chunks']
+                    standardized_results['controls_meta']['bad_chunk_count'] = ctrl_res.get('bad_chunk_count', len(ctrl_res['bad_chunks']))
+            if isinstance(extractor_results.get('subservice_orgs_extraction'), dict):
+                so_res = extractor_results['subservice_orgs_extraction']
+                if isinstance(so_res.get('bad_chunks'), list) and len(so_res['bad_chunks']) > 0:
+                    standardized_results.setdefault('subservice_orgs_meta', {})
+                    standardized_results['subservice_orgs_meta']['bad_chunks'] = so_res['bad_chunks']
+                    standardized_results['subservice_orgs_meta']['bad_chunk_count'] = so_res.get('bad_chunk_count', len(so_res['bad_chunks']))
+        except Exception:
+            pass
+
+        # Always include sections if available
+        try:
+            with open(data_path('data/json/section_results.json'), 'r', encoding='utf-8') as sf:
+                standardized_results['sections'] = json.load(sf)
+        except Exception:
+            standardized_results['sections'] = []
+
+        # Attach extracted text if present
+        try:
+            with open(data_path('data/output/output.txt'), 'r', encoding='utf-8') as tf:
+                standardized_results['extracted_text'] = tf.read()
+        except Exception:
+            standardized_results['extracted_text'] = None
+
+        # Attach GPT usage summary if available
+        try:
+            from .gpt_tracker import get_usage_summary
+            gpt_summary = get_usage_summary()
+            if isinstance(gpt_summary, dict):
+                standardized_results.update(gpt_summary)
+        except Exception:
+            pass
+
+        # Also write combined_result.json for troubleshooting only if we have content to write
+        try:
+            if isinstance(standardized_results, dict) and len(standardized_results.keys()) > 0:
+                combined_result_path = data_path('data/json/combined_result.json')
+                with open(combined_result_path, 'w', encoding='utf-8') as f:
+                    json.dump(standardized_results, f, indent=2, ensure_ascii=False)
+                logging.info(f"[_build_combined] Wrote combined_result.json to {combined_result_path}")
+            else:
+                logging.info("[_build_combined] Skipping combined_result.json write (no content yet)")
+        except Exception as e:
+            logging.error(f"[_build_combined] Failed to write combined_result.json: {e}")
+
+        return standardized_results
+    except Exception as e:
+        logging.error(f"[_build_combined] Unexpected error: {e}\n{traceback.format_exc()}")
+        return {}
+
+
+@app.post("/analyze/finalize/{job_id}")
+async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depends(get_db)):
+    """Rebuild job results from extractor JSONs on disk and mark the job done.
+
+    Useful when a background job was interrupted but individual extractor outputs exist.
+    """
+    # Build result object from disk
+    results = _build_combined_results_from_disk()
+    if not results:
+        return JSONResponse({"error": "No extractor outputs found on disk"}, status_code=404)
+
+    # Try to persist to DB (optional)
+    insert_summary = None
+    if force_save:
+        try:
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
+                _json.dump(results, tmpf, ensure_ascii=False)
+                tmpf.flush()
+                tmp_path = tmpf.name
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                insert_summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
+        except Exception as e:
+            logging.error(f"[/analyze/finalize] DB insertion failed: {e}")
+
+    # Update job in Redis and broadcast done
+    redis_client = _get_redis()
+    job = await get_job(job_id, redis_client) or {}
+    job["result"] = results
+    job["done"] = True
+    job["error"] = None
+    job["db_saved"] = bool(insert_summary) if force_save else job.get("db_saved", False)
+    job["progress"] = 100
+    job["status"] = "Finalized from disk"
+    job["finalized"] = True
+    await set_job(job_id, job, redis_client)
+    try:
+        await broadcast_progress(100, "Finalized from disk")
+        await broadcast_done()
+    except Exception:
+        pass
+    resp = {"results": results}
+    if insert_summary is not None:
+        resp["insert_summary"] = insert_summary
+    return resp
+
+# --- Resume selected extractors and rebuild combined results ---
+from pydantic import BaseModel
+
+class ResumeRequest(BaseModel):
+    # Allow omitted/empty extractors to trigger finalize-from-disk behavior
+    extractors: Optional[list[str]] = None
+    force_save: Optional[bool] = False
+    start_at_control: Optional[int] = None  # granular resume: control sequence index to resume from
+    start_at_line: Optional[int] = None     # granular resume: starting line number within control section
+
+@app.post("/analyze/resume/{job_id}")
+async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_db)):
+    """Rerun one or more extractors and refresh combined_result.json and job result.
+
+    Valid extractor names: controls, cuecs, subservice_orgs, product, auditor, company, report_date, coverage_period
+    """
+    valid = {
+        "controls": "control_extraction",
+        "cuecs": "cuec_extraction",
+        "subservice_orgs": "subservice_orgs_extraction",
+        "product": "product_extraction",
+        "auditor": "auditor_extraction",
+        "company": "company_extraction",
+        "report_date": "report_date_extraction",
+        "coverage_period": "coverage_period_extraction",
+    }
+    requested = [e for e in (payload.extractors or []) if e in valid]
+    # Persist granular resume hints in job for downstream extractor usage
+    try:
+        redis_client = _get_redis()
+        job = await get_job(job_id, redis_client) or {}
+        if payload.start_at_control is not None:
+            job['resume_start_at_control'] = int(payload.start_at_control)
+        if payload.start_at_line is not None:
+            job['resume_start_at_line'] = int(payload.start_at_line)
+        if payload.start_at_control is not None or payload.start_at_line is not None:
+            await set_job(job_id, job, redis_client)
+    except Exception as _gran_err:
+        logging.warning(f"[resume] Failed to persist granular resume params: {_gran_err}")
+    if not requested:
+        # No extractors provided: finalize from disk artifacts (backward compatible behavior)
+        try:
+            results = _build_combined_results_from_disk()
+            redis_client = _get_redis()
+            job = await get_job(job_id, redis_client) or {}
+            job["result"] = results
+            job["done"] = True
+            job["error"] = None
+            job["progress"] = 100
+            job["status"] = "Finalized from disk"
+            job["finalized"] = True
+            if payload.force_save:
+                try:
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
+                        _json.dump(results, tmpf, ensure_ascii=False)
+                        tmpf.flush()
+                        tmp_path = tmpf.name
+                    loop = asyncio.get_event_loop()
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        insert_summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
+                    job["db_saved"] = True
+                    await set_job(job_id, job, redis_client)
+                    await broadcast_progress(100, job["status"])
+                    return {"status": "ok", "results": results, "insert_summary": insert_summary}
+                except Exception as e:
+                    logging.error(f"[/analyze/resume finalize] DB insertion failed: {e}")
+            await set_job(job_id, job, redis_client)
+            await broadcast_progress(100, job["status"])
+            return {"status": "ok", "results": results}
+        except Exception as e:
+            logging.error(f"[/analyze/resume finalize] Failed: {e}\n{traceback.format_exc()}")
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # Run the selected extractors synchronously
+    try:
+        from .extractors.control_extractor_v2 import extract_controls_v2
+        from .extractors.cuec_extractor import extract_cuecs
+        from .extractors.subservice_orgs import extract_subservice_orgs, filter_third_parties_with_gpt
+        from .extractors.product import extract_product_from_report
+        from .extractors.auditor import extract_auditor_from_report
+        from .extractors.company import extract_company_from_report
+        from .extractors.report_date import extract_report_date
+        from .extractors.coverage_period import extract_coverage_period
+        ran = {}
+        for name in requested:
+            if name == "controls":
+                # Pass granular start hints if available
+                # Refresh latest job snapshot including granular hints
+                redis_client = _get_redis()
+                job = await get_job(job_id, redis_client) or {}
+                start_at_control = job.get('resume_start_at_control')
+                start_at_line = job.get('resume_start_at_line')
+                try:
+                    ran[name] = extract_controls_v2(start_at_control=start_at_control, start_at_line=start_at_line)
+                except TypeError:
+                    # Backward compatibility if signature not yet updated
+                    ran[name] = extract_controls_v2()
+            elif name == "cuecs":
+                ran[name] = extract_cuecs()
+            elif name == "subservice_orgs":
+                # returns tuple (raw, postprocessed)
+                ran[name] = (extract_subservice_orgs(), filter_third_parties_with_gpt())
+            elif name == "product":
+                ran[name] = extract_product_from_report()
+            elif name == "auditor":
+                ran[name] = extract_auditor_from_report()
+            elif name == "company":
+                ran[name] = extract_company_from_report()
+            elif name == "report_date":
+                ran[name] = extract_report_date()
+            elif name == "coverage_period":
+                ran[name] = extract_coverage_period()
+        # Rebuild combined results from disk outputs
+        results = _build_combined_results_from_disk()
+        redis_client = _get_redis()
+        job = await get_job(job_id, redis_client) or {}
+        job["result"] = results
+        job["status"] = f"Resumed extractors: {', '.join(requested)}"
+        job["done"] = True
+        job["progress"] = 100
+        job["finalized"] = False  # job is now from fresh extractors
+        if payload.force_save:
+            # Optionally re-insert into DB (may create duplicates if the same scan already saved)
+            try:
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
+                    _json.dump(results, tmpf, ensure_ascii=False)
+                    tmpf.flush()
+                    tmp_path = tmpf.name
+                loop = asyncio.get_event_loop()
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    insert_summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
+                job["db_saved"] = True
+                await set_job(job_id, job, redis_client)
+                await broadcast_progress(100, job["status"])
+                return {"status": "ok", "results": results, "insert_summary": insert_summary}
+            except Exception as e:
+                logging.error(f"[/analyze/resume] DB insertion failed: {e}")
+        await set_job(job_id, job, redis_client)
+        await broadcast_progress(100, job["status"])
+        return {"status": "ok", "results": results}
+    except Exception as e:
+        logging.error(f"[/analyze/resume] extractor run failed: {e}\n{traceback.format_exc()}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Progressive partial controls endpoint
+@app.get("/analyze/controls_partial/{job_id}")
+async def get_partial_controls(job_id: str, min_pct: float = 20.0, limit: int = 0):
+    """Expose partial controls mid-run with completion percentage.
+    - min_pct: threshold at which frontends may decide to show the panel (informational only here)
+    - limit: truncate the returned list to the first N controls if > 0
+    """
+    job = await get_job(job_id)
+    if not job:
+        return {"error": "Job not found"}
+    try:
+        import os, json
+        # Use centralized config path; ensure string for os.path.exists
+        path = str(cfg.CONTROL_JSON_PATH)
+        if not os.path.exists(path):
+            return {"controls": [], "count": 0, "completion_pct": 0.0, "estimated_total": None}
+        controls = []
+        data = None
+        # Attempt strict JSON parse first; if it fails (mid-run streaming file), fall back to tolerant line parser
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            controls = (data or {}).get('controls') or []
+        except Exception:
+            # Tolerant streaming reader: treat each line starting with '{' or ',{' as one JSON object
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        ls = line.lstrip()
+                        if not ls:
+                            continue
+                        # Skip opening placeholder lines like []
+                        if ls.startswith('[]') or ls.startswith('[') or ls.startswith(']'):
+                            continue
+                        if ls.startswith('{') or ls.startswith(',{'):
+                            js = ls.lstrip(',').rstrip().rstrip(',')
+                            try:
+                                obj = json.loads(js)
+                                controls.append(obj)
+                            except Exception:
+                                # Best effort only; skip malformed fragment
+                                continue
+            except Exception as e_stream:
+                logging.error(f"[/analyze/controls_partial] tolerant parse failed: {e_stream}")
+                controls = []
+        minimal = [
+            {
+                'control_seq': c.get('control_seq'),
+                'control_id': c.get('control_id'),
+                'control_desc': c.get('control_desc'),
+                'has_deviation': c.get('has_deviation'),
+            }
+            for c in controls
+            if (c.get('control_id') or c.get('control_desc'))
+        ]
+        if limit > 0:
+            minimal = minimal[:limit]
+        est_total = job.get('controls_estimate')
+        completion_pct = None
+        if isinstance(est_total, int) and est_total > 0:
+            completion_pct = round(100.0 * len(controls) / est_total, 2)
+        else:
+            # fallback heuristic: assume 100 controls for scaling when unknown
+            completion_pct = round(min(100.0, len(controls)), 2) if len(controls) <= 100 else 100.0
+        return {
+            'controls': minimal,
+            'count': len(minimal),
+            'total_parsed': len(controls),
+            'completion_pct': completion_pct,
+            'estimated_total': est_total,
+            'finalized': bool(job.get('finalized')),
+            'threshold_met': completion_pct >= float(min_pct)
+        }
+    except Exception as e:
+        logging.error(f"[/analyze/controls_partial] error: {e}\n{traceback.format_exc()}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 # Set up backend error logging
 import pathlib
@@ -830,7 +1736,16 @@ async def broadcast_checklist(extractor_statuses):
 
 # Settings endpoints
 @app.get("/settings")
-async def get_settings(db=Depends(get_db)):
+async def get_settings(request: Request, db=Depends(get_db)):
+    # Content negotiation: if browser navigates to /settings expecting HTML, serve SPA index
+    accept = (request.headers.get("accept") or "").lower()
+    if "text/html" in accept:
+        # Serve the React app to avoid UI/API route collision when deep-linking
+        FRONTEND_INDEX = PROJECT_ROOT / 'frontend' / 'build' / 'index.html'
+        if FRONTEND_INDEX.exists():
+            return FileResponse(str(FRONTEND_INDEX))
+        return JSONResponse({"error": "UI build not found"}, status_code=404)
+    # API JSON response for programmatic clients
     result = await db.execute(select(Setting))
     rows = result.scalars().all()
     return {row.key: row.value for row in rows}
@@ -851,6 +1766,122 @@ async def update_settings(request: Request, db=Depends(get_db)):
         await db.rollback()
         logging.error(f"/settings DB error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# Runtime config introspection endpoints
+@app.get("/config/runtime")
+async def get_runtime_config():
+    from . import config as cfg
+    return {
+        "model": {
+            "default_model": cfg.DEFAULT_GPT_MODEL,
+            "provider": cfg.LLM_PROVIDER,
+            "temperature": cfg.DEFAULT_TEMPERATURE,
+            "top_p": cfg.DEFAULT_TOP_P,
+        },
+        "token_windows": {
+            "max_total_tokens": cfg.MAX_TOTAL_TOKENS,
+            "max_output_tokens": cfg.MAX_OUTPUT_TOKENS,
+            "max_input_tokens": cfg.MAX_INPUT_TOKENS,
+        },
+        "budgets": {
+            "system_tokens": cfg.GPT_SYSTEM_TOKENS,
+            "user_tokens": cfg.GPT_USER_TOKENS,
+            "response_tokens": cfg.GPT_RESPONSE_TOKENS,
+            "available_tokens": cfg.GPT_AVAILABLE_TOKENS,
+        },
+        "chunking": {
+            "chars_per_token": cfg.CHARS_PER_TOKEN,
+            "default_chunk_size": cfg.DEFAULT_CHUNK_SIZE,
+            "primary_chunk_size": cfg.PRIMARY_CHUNK_SIZE,
+            "description_chunk_size": cfg.DESCRIPTION_CHUNK_SIZE,
+            "subservice_chunk_size": cfg.SUBSERVICE_CHUNK_SIZE,
+            "max_chunk_size": cfg.MAX_CHUNK_SIZE,
+            "text_overlap": cfg.TEXT_OVERLAP,
+        },
+        "executive_summary": {
+            "test_results_budget_chars": cfg.EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS,
+            "per_control_max_chars": cfg.EXEC_SUMMARY_PER_CONTROL_MAX_CHARS,
+            "max_non_deviation_controls": cfg.EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS,
+        },
+        "feature_toggles": {
+            "allow_regex_fallbacks": cfg.ALLOW_REGEX_FALLBACKS,
+            "control_embedding_mapping_enabled": cfg.CONTROL_EMBEDDING_MAPPING_ENABLED,
+            "docker_control_enabled": cfg.DOCKER_CONTROL_ENABLED,
+        }
+    }
+
+@app.get("/config/budgets")
+async def get_budget_snapshot():
+    from . import config as cfg
+    return {
+        "timestamp": time.time(),
+        "model": cfg.DEFAULT_GPT_MODEL,
+        "token_window": cfg.MAX_TOTAL_TOKENS,
+        "input_tokens_budget": cfg.MAX_INPUT_TOKENS,
+        "output_tokens_budget": cfg.MAX_OUTPUT_TOKENS,
+        "available_tokens_after_overheads": cfg.GPT_AVAILABLE_TOKENS,
+        "derived_chunk_sizes": {
+            "default": cfg.DEFAULT_CHUNK_SIZE,
+            "primary": cfg.PRIMARY_CHUNK_SIZE,
+            "description": cfg.DESCRIPTION_CHUNK_SIZE,
+            "subservice": cfg.SUBSERVICE_CHUNK_SIZE,
+        },
+        "overlap_chars": cfg.TEXT_OVERLAP,
+        "chars_per_token": cfg.CHARS_PER_TOKEN,
+    }
+
+# Docker control endpoints (guarded)
+def _run_docker_cmd(args):
+    import subprocess
+    try:
+        out = subprocess.check_output(args, stderr=subprocess.STDOUT, timeout=12).decode("utf-8", errors="replace")
+        return {"ok": True, "output": out}
+    except subprocess.CalledProcessError as e:
+        return {"ok": False, "output": e.output.decode("utf-8", errors="replace"), "code": e.returncode}
+    except Exception as e:
+        return {"ok": False, "output": str(e)}
+
+@app.get("/docker/status")
+async def docker_status():
+    if not DOCKER_CONTROL_ENABLED:
+        return JSONResponse({"error": "Docker control disabled"}, status_code=403)
+    # Include stopped containers too so UI can present Start actions
+    result = _run_docker_cmd(["docker", "ps", "-a", "--format", "{{.Names}}::{{.Status}}"])
+    if not result["ok"]:
+        return JSONResponse({"error": result["output"]}, status_code=500)
+    services = []
+    for line in result["output"].strip().splitlines():
+        if "::" in line:
+            name, status = line.split("::", 1)
+            services.append({"name": name, "status": status})
+    return {"services": services}
+
+@app.post("/docker/stop/{container}")
+async def docker_stop(container: str):
+    if not DOCKER_CONTROL_ENABLED:
+        return JSONResponse({"error": "Docker control disabled"}, status_code=403)
+    result = _run_docker_cmd(["docker", "stop", container])
+    if not result["ok"]:
+        return JSONResponse({"error": result["output"]}, status_code=500)
+    return {"status": "stopped", "container": container}
+
+@app.post("/docker/restart/{container}")
+async def docker_restart(container: str):
+    if not DOCKER_CONTROL_ENABLED:
+        return JSONResponse({"error": "Docker control disabled"}, status_code=403)
+    result = _run_docker_cmd(["docker", "restart", container])
+    if not result["ok"]:
+        return JSONResponse({"error": result["output"]}, status_code=500)
+    return {"status": "restarted", "container": container}
+
+@app.post("/docker/start/{container}")
+async def docker_start(container: str):
+    if not DOCKER_CONTROL_ENABLED:
+        return JSONResponse({"error": "Docker control disabled"}, status_code=403)
+    result = _run_docker_cmd(["docker", "start", container])
+    if not result["ok"]:
+        return JSONResponse({"error": result["output"]}, status_code=500)
+    return {"status": "started", "container": container}
 
 # History endpoints
 @app.get("/history")
@@ -971,24 +2002,32 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     if not scan_row:
         raise HTTPException(status_code=404, detail="Scan not found")
     
-    # If we already have a summary and it's not marked stale, return it unless force_refresh is requested
+    # Get existing summary and staleness flag
     existing_summary = getattr(scan_row, "executive_summary", None)
     is_stale = bool(getattr(scan_row, "executive_summary_stale", False))
-    if not force_refresh and existing_summary is not None and existing_summary != "null" and existing_summary and not is_stale:
-        # Get the summary BEFORE rollback to avoid session issues
+    
+    # NEW BEHAVIOR: Do NOT auto-generate an executive summary on page load.
+    # Always return the cached summary (even if null) and the staleness flag
+    # when force_refresh is not requested. Generation is expensive (GPT call)
+    # and should only be triggered explicitly via the POST regeneration endpoint
+    # or when force_refresh=True is passed.
+    if not force_refresh:
+        # Return whatever is stored (could be None) so the frontend can show
+        # the cached summary and a stale-warning if appropriate.
         summary = existing_summary
         await db.rollback()  # Clean up any pending transaction
-        
+
         # Parse the JSON if it's stored as a string
         if isinstance(summary, str):
             import json
             try:
                 summary = json.loads(summary)
-            except:
+            except Exception:
                 pass  # If parsing fails, return as-is
-        return {"executive_summary": summary}
+
+        return {"executive_summary": summary, "is_stale": is_stale}
     
-    # Otherwise, generate summary using GPT
+    # Otherwise, generate summary using GPT (only if force_refresh=True or no summary exists)
     controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
     high_conf_controls = [
         ctrl for ctrl in controls
@@ -1080,7 +2119,7 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     product_row = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
     if product_row:
         product_name = getattr(product_row, 'name', '') or ''
-    prompt = GPT_PROMPTS['executive_summary'].format(
+    prompt = EXECUTIVE_SUMMARY_PROMPT.format(
         suborg_count=suborg_count,
         cuec_count=cuec_count,
         tsc_covered=sum(1 for row in tsc_table if row['present']),
@@ -1201,11 +2240,11 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     await db.commit()
     
     print(f"REGENERATE DEBUG: Executive summary saved successfully for scan {scan_id}")
-    return {"executive_summary": summary_json}
+    return {"executive_summary": summary_json, "is_stale": False}
 
 @app.post("/executive_summary/{scan_id}")
 async def regenerate_executive_summary(scan_id: int, db=Depends(get_db)):
-    """Force regeneration of executive summary by clearing it"""
+    """Force regeneration of executive summary"""
     print(f"REGENERATE DEBUG: Received request to regenerate executive summary for scan {scan_id}")
     
     scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
@@ -1213,15 +2252,16 @@ async def regenerate_executive_summary(scan_id: int, db=Depends(get_db)):
     if not scan_row:
         raise HTTPException(status_code=404, detail="Scan not found")
     
-    print(f"REGENERATE DEBUG: Found scan {scan_id}, clearing existing summary")
-    # Clear existing summary to force regeneration
-    scan_row.executive_summary = None
-    scan_row.executive_summary_stale = True  # Mark as stale
-    db.add(scan_row)
-    await db.commit()
+    print(f"REGENERATE DEBUG: Found scan {scan_id}, triggering force regeneration")
     
-    print(f"REGENERATE DEBUG: Executive summary cleared for scan {scan_id}")
-    return {"status": "Executive summary cleared. Refresh the page to regenerate."}
+    # Rollback to release the row lock before calling get_executive_summary
+    await db.rollback()
+    
+    # Call the GET endpoint with force_refresh=True to regenerate
+    result = await get_executive_summary(scan_id=scan_id, force_refresh=True, db=db)
+    
+    print(f"REGENERATE DEBUG: Executive summary regenerated for scan {scan_id}")
+    return result
 
 @app.patch("/executive_summary/{scan_id}")
 async def patch_executive_summary(scan_id: int, data: dict, db=Depends(get_db)):
@@ -1241,6 +2281,27 @@ async def patch_executive_summary(scan_id: int, data: dict, db=Depends(get_db)):
 async def patch_report_overview(scan_id: int, data: dict, db=Depends(get_db)):
     logging.debug(f"/report/{scan_id}/overview payload: {data}")
     try:
+        from datetime import datetime
+        
+        def parse_date(date_str):
+            """Parse various date string formats to datetime object"""
+            if not date_str:
+                return None
+            if isinstance(date_str, datetime):
+                return date_str
+            # Try multiple date formats
+            for fmt in [
+                "%Y-%m-%dT%H:%M:%S.%f",  # ISO with microseconds
+                "%Y-%m-%dT%H:%M:%S",      # ISO without microseconds
+                "%Y-%m-%d",               # Date only
+            ]:
+                try:
+                    return datetime.strptime(date_str, fmt)
+                except ValueError:
+                    continue
+            # If all formats fail, return None
+            return None
+        
         scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
         scan_row = scan_row.scalar_one_or_none()
         if not scan_row:
@@ -1250,17 +2311,21 @@ async def patch_report_overview(scan_id: int, data: dict, db=Depends(get_db)):
         if "product" in data:
             scan_row.product = data["product"]
         if "coverageStart" in data:
-            scan_row.coverage_start = data["coverageStart"]
+            scan_row.coverage_start = parse_date(data["coverageStart"])
         if "coverageEnd" in data:
-            scan_row.coverage_end = data["coverageEnd"]
+            scan_row.coverage_end = parse_date(data["coverageEnd"])
         if "reportDate" in data:
-            scan_row.report_date = data["reportDate"]
+            scan_row.report_date = parse_date(data["reportDate"])
         if "auditor" in data:
             scan_row.auditor = data["auditor"]
         if "scanDate" in data:
-            scan_row.scan_date = data["scanDate"]
+            scan_row.scan_date = parse_date(data["scanDate"])
         db.add(scan_row)
         await db.commit()
+        
+        # Mark executive summary as stale since overview data changed
+        await mark_executive_summary_stale(scan_id, db)
+        
         return {"status": "ok"}
     except Exception as e:
         await db.rollback()
@@ -1268,7 +2333,7 @@ async def patch_report_overview(scan_id: int, data: dict, db=Depends(get_db)):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.patch("/report/{scan_id}/controls/{control_id}/annotation")
-async def patch_control_annotation(scan_id: int, control_id: str, data: dict, db=Depends(get_db)):
+async def patch_control_annotation(scan_id: int, control_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     try:
         ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.control_id == control_id))).scalar_one_or_none()
     except MultipleResultsFound:
@@ -1283,7 +2348,7 @@ async def patch_control_annotation(scan_id: int, control_id: str, data: dict, db
     return {"status": "ok"}
 
 @app.patch("/report/{scan_id}/controls/{control_id}")
-async def patch_control(scan_id: int, control_id: str, data: dict, db=Depends(get_db)):
+async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     logging.debug(f"/report/{scan_id}/controls/{control_id} payload: {data}")
     try:
         try:
@@ -1298,7 +2363,24 @@ async def patch_control(scan_id: int, control_id: str, data: dict, db=Depends(ge
         justification_note = None
         if "control_confidence" in data:
             old = getattr(ctrl, "control_confidence", None)
-            ctrl.control_confidence = data["control_confidence"]
+            new_val = None
+            try:
+                val = data["control_confidence"]
+                if isinstance(val, str):
+                    s = val.strip()
+                    if s.endswith('%'):
+                        n = float(s[:-1])
+                        new_val = n / 100.0
+                    else:
+                        n = float(s)
+                        new_val = (n / 100.0) if n > 1 else n
+                elif isinstance(val, (int, float)):
+                    f = float(val)
+                    new_val = (f / 100.0) if f > 1 else f
+            except Exception:
+                new_val = None
+            if new_val is not None:
+                ctrl.control_confidence = new_val
             justification_note = f"UI edit: control_confidence {old} -> {ctrl.control_confidence}"
         if "confidence_calc" in data:
             ctrl.confidence_calc = data["confidence_calc"]
@@ -1337,7 +2419,7 @@ async def patch_control(scan_id: int, control_id: str, data: dict, db=Depends(ge
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.patch("/report/{scan_id}/controls/id/{control_db_id}")
-async def patch_control_by_id(scan_id: int, control_db_id: int, data: dict, db=Depends(get_db)):
+async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     """Update a control by its numeric database ID to avoid duplicate control_id ambiguity."""
     logging.debug(f"/report/{scan_id}/controls/{control_db_id} payload: {data}")
     try:
@@ -1347,7 +2429,24 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: dict, db=D
         justification_note = None
         if "control_confidence" in data:
             old = getattr(ctrl, "control_confidence", None)
-            ctrl.control_confidence = data["control_confidence"]
+            new_val = None
+            try:
+                val = data["control_confidence"]
+                if isinstance(val, str):
+                    s = val.strip()
+                    if s.endswith('%'):
+                        n = float(s[:-1])
+                        new_val = n / 100.0
+                    else:
+                        n = float(s)
+                        new_val = (n / 100.0) if n > 1 else n
+                elif isinstance(val, (int, float)):
+                    f = float(val)
+                    new_val = (f / 100.0) if f > 1 else f
+            except Exception:
+                new_val = None
+            if new_val is not None:
+                ctrl.control_confidence = new_val
             justification_note = f"UI edit: control_confidence {old} -> {ctrl.control_confidence}"
         if "confidence_calc" in data:
             ctrl.confidence_calc = data["confidence_calc"]
@@ -1383,8 +2482,10 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: dict, db=D
         logging.error(f"/report/{scan_id}/controls/{control_db_id} DB error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+    # NOTE: Keep normalization inline in handlers to avoid import scope issues
+
 @app.patch("/report/{scan_id}/cuecs/{cuec_id}/annotation")
-async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: dict, db=Depends(get_db)):
+async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.cuec_tsc_id == cuec_id))).scalar_one_or_none()
     if not cuec:
         raise HTTPException(status_code=404, detail="CUEC not found")
@@ -1394,7 +2495,7 @@ async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: dict, db=Depen
     return {"status": "ok"}
 
 @app.patch("/report/{scan_id}/cuecs/{cuec_id}")
-async def patch_cuec(scan_id: int, cuec_id: int, data: dict, db=Depends(get_db)):
+async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     logging.debug(f"/report/{scan_id}/cuecs/{cuec_id} payload: {data}")
     try:
         cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.id == cuec_id))).scalar_one_or_none()
@@ -1403,7 +2504,24 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: dict, db=Depends(get_db))
         justification_note = None
         if "cuec_confidence" in data:
             old = getattr(cuec, "cuec_confidence", None)
-            cuec.cuec_confidence = data["cuec_confidence"]
+            new_val = None
+            try:
+                val = data["cuec_confidence"]
+                if isinstance(val, str):
+                    s = val.strip()
+                    if s.endswith('%'):
+                        n = float(s[:-1])
+                        new_val = n / 100.0
+                    else:
+                        n = float(s)
+                        new_val = (n / 100.0) if n > 1 else n
+                elif isinstance(val, (int, float)):
+                    f = float(val)
+                    new_val = (f / 100.0) if f > 1 else f
+            except Exception:
+                new_val = None
+            if new_val is not None:
+                cuec.cuec_confidence = new_val
             justification_note = f"UI edit: cuec_confidence {old} -> {cuec.cuec_confidence}"
         if "cuec_confidence_justification" in data:
             # Always append, never overwrite
@@ -1439,6 +2557,216 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: dict, db=Depends(get_db))
         logging.error(f"/report/{scan_id}/cuecs/{cuec_id} DB error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@app.patch("/report/{scan_id}/cuecs/tsc/{cuec_tsc_id}")
+async def patch_cuec_by_tsc(scan_id: int, cuec_tsc_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+    """Legacy-compatible route to update a CUEC by its TSC ID.
+    If multiple rows share the TSC ID within a scan, returns 409 to avoid ambiguity.
+    Prefer the numeric ID route: /report/{scan_id}/cuecs/{id}
+    """
+    logging.debug(f"/report/{scan_id}/cuecs/tsc/{cuec_tsc_id} payload: {data}")
+    try:
+        try:
+            cuec = (await db.execute(
+                select(CUEC).where(CUEC.scan_id == scan_id, CUEC.cuec_tsc_id == cuec_tsc_id)
+            )).scalar_one_or_none()
+        except MultipleResultsFound:
+            return JSONResponse({
+                "error": "Multiple CUECs matched cuec_tsc_id. Use ID endpoint /report/{scan_id}/cuecs/{id}"
+            }, status_code=409)
+        if not cuec:
+            return JSONResponse({"error": "CUEC not found"}, status_code=404)
+        justification_note = None
+        if "cuec_confidence" in data:
+            old = getattr(cuec, "cuec_confidence", None)
+            new_val = None
+            try:
+                val = data["cuec_confidence"]
+                if isinstance(val, str):
+                    s = val.strip()
+                    if s.endswith('%'):
+                        n = float(s[:-1])
+                        new_val = n / 100.0
+                    else:
+                        n = float(s)
+                        new_val = (n / 100.0) if n > 1 else n
+                elif isinstance(val, (int, float)):
+                    f = float(val)
+                    new_val = (f / 100.0) if f > 1 else f
+            except Exception:
+                new_val = None
+            if new_val is not None:
+                cuec.cuec_confidence = new_val
+            justification_note = f"UI edit: cuec_confidence {old} -> {cuec.cuec_confidence}"
+        if "cuec_confidence_justification" in data:
+            prev = getattr(cuec, "cuec_confidence_justification", "") or ""
+            sep = "\n" if prev else ""
+            cuec.cuec_confidence_justification = f"{prev}{sep}{data['cuec_confidence_justification']}"
+        if "annotation" in data:
+            cuec.annotation = data["annotation"]
+        if "control_strength" in data:
+            cuec.control_strength = data["control_strength"]
+        if "cuec_description" in data:
+            cuec.cuec_description = data["cuec_description"]
+        if "cuec_gpt_reasoning" in data:
+            cuec.cuec_gpt_reasoning = data["cuec_gpt_reasoning"]
+        if "cuec_justification" in data:
+            cuec.cuec_justification = data["cuec_justification"]
+        if justification_note:
+            prev = getattr(cuec, "cuec_confidence_justification", "") or ""
+            sep = "\n" if prev else ""
+            cuec.cuec_confidence_justification = f"{prev}{sep}{justification_note}"
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        db.add(cuec)
+        await db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/cuecs/tsc/{cuec_tsc_id} DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/cuecs/{cuec_id}/recompute_frameworks")
+async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_db)):
+    """Recompute TSC/COSO mapping for a CUEC description using embeddings.
+    Updates and persists: cuec_tsc_id, cuec_coso_id, cuec_tsc_similarity, cuec_coso_similarity,
+    cuec_tsc_confidence_pct, cuec_coso_confidence_pct, cuec_closest_framework, and framework_alignment fields.
+    """
+    try:
+        cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.id == cuec_id))).scalar_one_or_none()
+        if not cuec:
+            return JSONResponse({"error": "CUEC not found"}, status_code=404)
+        desc = getattr(cuec, "cuec_description", None) or getattr(cuec, "description", None)
+        if not desc or not isinstance(desc, str) or not desc.strip():
+            return JSONResponse({"error": "CUEC description is empty; cannot compute mapping"}, status_code=400)
+        try:
+            tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, TSC_CRITERIA, COSO_2013_CRITERIA)
+        except Exception as e:
+            # Embedding provider or network issue
+            return JSONResponse({"error": f"Mapping failed: {e}"}, status_code=503)
+
+        # Persist fields
+        cuec.cuec_tsc_id = tsc_id
+        cuec.cuec_coso_id = coso_id
+        cuec.cuec_tsc_similarity = tsc_sim
+        cuec.cuec_coso_similarity = coso_sim
+        cuec.cuec_tsc_confidence_pct = int(round(100 * (tsc_sim + 1) / 2)) if isinstance(tsc_sim, (int, float)) and tsc_sim != -1 else None
+        cuec.cuec_coso_confidence_pct = int(round(100 * (coso_sim + 1) / 2)) if isinstance(coso_sim, (int, float)) and coso_sim != -1 else None
+        # Derive closest/framework alignment
+        if (isinstance(tsc_sim, (int, float)) and isinstance(coso_sim, (int, float))):
+            if tsc_sim > coso_sim:
+                cuec.cuec_closest_framework = 'TSC'
+            elif coso_sim > tsc_sim:
+                cuec.cuec_closest_framework = 'COSO'
+            elif tsc_sim == coso_sim and tsc_sim != -1:
+                cuec.cuec_closest_framework = 'Equal'
+            else:
+                cuec.cuec_closest_framework = 'Undetermined'
+        else:
+            cuec.cuec_closest_framework = 'Undetermined'
+        # Alignment fields prefer TSC when available
+        if tsc_id and isinstance(tsc_id, str):
+            cuec.cuec_framework_alignment = 'TSC'
+            cuec.cuec_framework_alignment_id = tsc_id
+        elif coso_id and isinstance(coso_id, str):
+            cuec.cuec_framework_alignment = 'COSO'
+            cuec.cuec_framework_alignment_id = coso_id
+        else:
+            cuec.cuec_framework_alignment = 'Undetermined'
+            cuec.cuec_framework_alignment_id = None
+
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        db.add(cuec)
+        await db.commit()
+        return {
+            "status": "ok",
+            "cuec": {
+                "id": cuec.id,
+                "cuec_tsc_id": cuec.cuec_tsc_id,
+                "cuec_coso_id": cuec.cuec_coso_id,
+                "cuec_tsc_similarity": cuec.cuec_tsc_similarity,
+                "cuec_coso_similarity": cuec.cuec_coso_similarity,
+                "cuec_tsc_confidence_pct": cuec.cuec_tsc_confidence_pct,
+                "cuec_coso_confidence_pct": cuec.cuec_coso_confidence_pct,
+                "cuec_closest_framework": cuec.cuec_closest_framework,
+                "cuec_framework_alignment": cuec.cuec_framework_alignment,
+                "cuec_framework_alignment_id": cuec.cuec_framework_alignment_id,
+            }
+        }
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/cuecs/{cuec_id}/recompute_frameworks error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/controls/id/{control_db_id}/recompute_frameworks")
+async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depends(get_db)):
+    """Recompute TSC/COSO mapping for a Control using its description or test text.
+    Updates and persists: control_tsc_id, control_coso_id, control_tsc_similarity, control_coso_similarity,
+    control_tsc_confidence_pct, control_coso_confidence_pct, control_closest_framework.
+    """
+    try:
+        ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id))).scalar_one_or_none()
+        if not ctrl:
+            return JSONResponse({"error": "Control not found"}, status_code=404)
+        # Prefer control_desc; fallback to control_test
+        desc = (getattr(ctrl, "control_desc", None) or "").strip()
+        if not desc:
+            desc = (getattr(ctrl, "control_test", None) or "").strip()
+        if not desc:
+            return JSONResponse({"error": "No suitable text (desc/test) to compute mapping"}, status_code=400)
+        try:
+            tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, TSC_CRITERIA, COSO_2013_CRITERIA)
+        except Exception as e:
+            return JSONResponse({"error": f"Mapping failed: {e}"}, status_code=503)
+
+        ctrl.control_tsc_id = tsc_id
+        ctrl.control_coso_id = coso_id
+        ctrl.control_tsc_similarity = tsc_sim
+        ctrl.control_coso_similarity = coso_sim
+        ctrl.control_tsc_confidence_pct = int(round(100 * (tsc_sim + 1) / 2)) if isinstance(tsc_sim, (int, float)) and tsc_sim != -1 else None
+        ctrl.control_coso_confidence_pct = int(round(100 * (coso_sim + 1) / 2)) if isinstance(coso_sim, (int, float)) and coso_sim != -1 else None
+        if (isinstance(tsc_sim, (int, float)) and isinstance(coso_sim, (int, float))):
+            if tsc_sim > coso_sim:
+                ctrl.control_closest_framework = 'TSC'
+            elif coso_sim > tsc_sim:
+                ctrl.control_closest_framework = 'COSO'
+            elif tsc_sim == coso_sim and tsc_sim != -1:
+                ctrl.control_closest_framework = 'Equal'
+            else:
+                ctrl.control_closest_framework = 'Undetermined'
+        else:
+            ctrl.control_closest_framework = 'Undetermined'
+
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        db.add(ctrl)
+        await db.commit()
+        return {
+            "status": "ok",
+            "control": {
+                "id": ctrl.id,
+                "control_tsc_id": ctrl.control_tsc_id,
+                "control_coso_id": ctrl.control_coso_id,
+                "control_tsc_similarity": ctrl.control_tsc_similarity,
+                "control_coso_similarity": ctrl.control_coso_similarity,
+                "control_tsc_confidence_pct": ctrl.control_tsc_confidence_pct,
+                "control_coso_confidence_pct": ctrl.control_coso_confidence_pct,
+                "control_closest_framework": ctrl.control_closest_framework,
+            }
+        }
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/controls/id/{control_db_id}/recompute_frameworks error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.patch("/report/{scan_id}/suborgs/{suborg_id}/annotation")
 async def patch_suborg_annotation(scan_id: int, suborg_id: int, data: dict, db=Depends(get_db)):
     suborg = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.id == suborg_id))).scalar_one_or_none()
@@ -1460,7 +2788,24 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, data: dict, db=Depend
         justification_note = None
         if "confidence" in data:
             old = getattr(suborg, "confidence", None)
-            suborg.confidence = data["confidence"]
+            new_val = None
+            try:
+                val = data["confidence"]
+                if isinstance(val, str):
+                    s = val.strip()
+                    if s.endswith('%'):
+                        n = float(s[:-1])
+                        new_val = n / 100.0
+                    else:
+                        n = float(s)
+                        new_val = (n / 100.0) if n > 1 else n
+                elif isinstance(val, (int, float)):
+                    f = float(val)
+                    new_val = (f / 100.0) if f > 1 else f
+            except Exception:
+                new_val = None
+            if new_val is not None:
+                suborg.confidence = new_val
             justification_note = f"UI edit: confidence {old} -> {suborg.confidence}"
         if "confidence_justification" in data:
             prev = getattr(suborg, "confidence_justification", "") or ""
@@ -1506,7 +2851,24 @@ async def patch_suborg(scan_id: int, suborg_name: str, data: dict, db=Depends(ge
         justification_note = None
         if "confidence" in data:
             old = getattr(suborg, "confidence", None)
-            suborg.confidence = data["confidence"]
+            new_val = None
+            try:
+                val = data["confidence"]
+                if isinstance(val, str):
+                    s = val.strip()
+                    if s.endswith('%'):
+                        n = float(s[:-1])
+                        new_val = n / 100.0
+                    else:
+                        n = float(s)
+                        new_val = (n / 100.0) if n > 1 else n
+                elif isinstance(val, (int, float)):
+                    f = float(val)
+                    new_val = (f / 100.0) if f > 1 else f
+            except Exception:
+                new_val = None
+            if new_val is not None:
+                suborg.confidence = new_val
             justification_note = f"UI edit: confidence {old} -> {suborg.confidence}"
         if "confidence_justification" in data:
             prev = getattr(suborg, "confidence_justification", "") or ""
@@ -1534,4 +2896,175 @@ async def patch_suborg(scan_id: int, suborg_name: str, data: dict, db=Depends(ge
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/suborgs/{suborg_name} DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ---- Create endpoints: allow adding rows missed by extraction ----
+
+def _norm_pct_like(val):
+    try:
+        if isinstance(val, str):
+            s = val.strip()
+            if not s:
+                return None
+            if s.endswith('%'):
+                n = float(s[:-1])
+                return n / 100.0
+            n = float(s)
+            return (n / 100.0) if n > 1 else n
+        if isinstance(val, (int, float)):
+            f = float(val)
+            return (f / 100.0) if f > 1 else f
+    except Exception:
+        return None
+    return None
+
+def _as_float_or_none(v):
+    try:
+        return None if v is None or v == '' else float(v)
+    except Exception:
+        return None
+
+@app.post("/report/{scan_id}/suborgs")
+async def create_suborg(scan_id: int, data: dict, db=Depends(get_db)):
+    """Create a new Subservice Organization row for a scan."""
+    try:
+        name = str(data.get("name", "")).strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="name is required")
+        confidence = _norm_pct_like(data.get("confidence"))
+        suborg = SubserviceOrg(
+            scan_id=scan_id,
+            name=name,
+            confidence=confidence,
+            third_party_description=data.get("third_party_description"),
+            third_party_page_ref=data.get("third_party_page_ref"),
+            third_party_confidence=_as_float_or_none(data.get("third_party_confidence")),
+            distance_from_so_keywords=_as_float_or_none(data.get("distance_from_so_keywords")),
+            likely_so=data.get("likely_so"),
+            common_so=data.get("common_so"),
+            source_context=data.get("source_context"),
+            confidence_justification=data.get("confidence_justification"),
+            third_party_controls=data.get("third_party_controls"),
+            annotation=data.get("annotation"),
+        )
+        db.add(suborg)
+        # Mark exec summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        await db.commit()
+        await db.refresh(suborg)
+        return {
+            "id": suborg.id,
+            "name": suborg.name,
+            "confidence": suborg.confidence,
+            "third_party_description": suborg.third_party_description,
+            "third_party_page_ref": suborg.third_party_page_ref,
+            "third_party_confidence": suborg.third_party_confidence,
+            "distance_from_so_keywords": suborg.distance_from_so_keywords,
+            "likely_so": suborg.likely_so,
+            "common_so": suborg.common_so,
+            "source_context": suborg.source_context,
+            "confidence_justification": suborg.confidence_justification,
+            "third_party_controls": suborg.third_party_controls,
+            "annotation": suborg.annotation,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"create_suborg error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/cuecs")
+async def create_cuec(scan_id: int, data: dict, db=Depends(get_db)):
+    """Create a new CUEC row for a scan."""
+    try:
+        desc = str(data.get("cuec_description", "")).strip()
+        if not desc:
+            raise HTTPException(status_code=400, detail="cuec_description is required")
+        conf = _norm_pct_like(data.get("cuec_confidence"))
+        cuec = CUEC(
+            scan_id=scan_id,
+            cuec_description=desc,
+            cuec_tsc_id=str(data.get("cuec_tsc_id") or "") or None,
+            cuec_coso_id=str(data.get("cuec_coso_id") or "") or None,
+            cuec_confidence=conf,
+            control_strength=(data.get("control_strength") or None),
+            cuec_confidence_justification=data.get("cuec_confidence_justification"),
+            cuec_gpt_reasoning=data.get("cuec_gpt_reasoning"),
+            cuec_justification=data.get("cuec_justification"),
+            annotation=data.get("annotation"),
+        )
+        db.add(cuec)
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        await db.commit()
+        await db.refresh(cuec)
+        return {
+            "id": cuec.id,
+            "cuec_description": cuec.cuec_description,
+            "cuec_tsc_id": cuec.cuec_tsc_id,
+            "cuec_coso_id": cuec.cuec_coso_id,
+            "cuec_confidence": cuec.cuec_confidence,
+            "control_strength": cuec.control_strength,
+            "cuec_confidence_justification": cuec.cuec_confidence_justification,
+            "cuec_gpt_reasoning": cuec.cuec_gpt_reasoning,
+            "cuec_justification": cuec.cuec_justification,
+            "annotation": cuec.annotation,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"create_cuec error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/controls")
+async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
+    """Create a new Control row for a scan."""
+    try:
+        desc = str(data.get("control_desc", "")).strip()
+        if not desc and not str(data.get("control_id", "")).strip():
+            raise HTTPException(status_code=400, detail="control_desc or control_id is required")
+        conf = _norm_pct_like(data.get("control_confidence"))
+        ctrl = Control(
+            scan_id=scan_id,
+            control_id=(str(data.get("control_id") or "").strip() or None),
+            control_desc=(desc or None),
+            control_tsc_id=(str(data.get("control_tsc_id") or "").strip() or None),
+            control_coso_id=(str(data.get("control_coso_id") or "").strip() or None),
+            control_confidence=conf,
+            control_page_ref=_as_float_or_none(data.get("control_page_ref")),
+            control_line_ref=_as_float_or_none(data.get("control_line_ref")),
+            control_seq=_as_float_or_none(data.get("control_seq")),
+            annotation=data.get("annotation"),
+        )
+        db.add(ctrl)
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        await db.commit()
+        await db.refresh(ctrl)
+        return {
+            "id": ctrl.id,
+            "control_id": ctrl.control_id,
+            "control_desc": ctrl.control_desc,
+            "control_tsc_id": ctrl.control_tsc_id,
+            "control_coso_id": ctrl.control_coso_id,
+            "control_confidence": ctrl.control_confidence,
+            "control_page_ref": ctrl.control_page_ref,
+            "control_line_ref": ctrl.control_line_ref,
+            "control_seq": ctrl.control_seq,
+            "annotation": ctrl.annotation,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"create_control error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)

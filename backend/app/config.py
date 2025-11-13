@@ -28,6 +28,13 @@ LOG_GPT_MAX_RESPONSE_CHARS = int(os.getenv("LOG_GPT_MAX_RESPONSE_CHARS", "800"))
 # Sample rate for logging (0.0–1.0). 1.0 = log all calls; 0.1 = ~10% of calls
 LOG_GPT_SAMPLE_RATE = float(os.getenv("LOG_GPT_SAMPLE_RATE", "1.0"))
 GPT_CALLS_LOG_PATH = str((pathlib.Path(__file__).resolve().parents[2] / 'data/logs/gpt_calls.log').resolve())
+# Include selected response/request headers (rate-limit diagnostics) when logging
+LOG_GPT_INCLUDE_HEADERS = os.getenv("LOG_GPT_INCLUDE_HEADERS", "false").lower() == "true"
+# Comma-separated header names to capture (case-insensitive). Defaults target common rate limit & retry headers.
+LOG_GPT_HEADER_WHITELIST = [h.strip() for h in os.getenv(
+    "LOG_GPT_HEADER_WHITELIST",
+    "x-ratelimit-limit,x-ratelimit-remaining,x-ratelimit-reset,retry-after"
+).split(',') if h.strip()]
 
 # --- Project policy toggles ---
 # IMPORTANT: Per project policy, DO NOT use regex/text-heuristic fallbacks to produce outputs when GPT fails.
@@ -46,6 +53,7 @@ AZURE_OPENAI_DEPLOYMENTS = {
     # Map logical model names to Azure deployment names if used directly
     "gpt-4o": os.getenv("AZURE_OPENAI_DEPLOYMENT_GPT4O"),
     "gpt-3.5-turbo": os.getenv("AZURE_OPENAI_DEPLOYMENT_GPT35"),
+    "gpt-5": os.getenv("AZURE_OPENAI_DEPLOYMENT_GPT5"),
 }
 
 # Dataiku API Node configuration (recommended for corp environment)
@@ -59,6 +67,7 @@ DATAIKU_CA_BUNDLE = os.getenv("DATAIKU_CA_BUNDLE")  # optional custom CA path
 
 # Dataiku DSS (Python client) configuration
 DATAIKU_DSS_HOST = os.getenv("DATAIKU_DSS_HOST")  # e.g., https://dataiku-dss.corp.nandps.com/
+DATAIKU_DSS_HOST_IP = os.getenv("DATAIKU_DSS_HOST_IP")  # Optional: fallback IP address (e.g., "192.168.1.100")
 DATAIKU_DSS_API_KEY = os.getenv("DATAIKU_DSS_API_KEY")
 DATAIKU_DSS_PROJECT = os.getenv("DATAIKU_DSS_PROJECT", "SOLIDIGM_GPT_API_ACCESS")
 
@@ -73,14 +82,27 @@ DATAIKU_CATALOG_MAP = {
     "gpt-4.1": os.getenv("DATAIKU_LLM_GPT41", "azureopenai:Azure-OpenAI-Prod-4-1:gpt-4.1"),
     "gpt-4.1-mini": os.getenv("DATAIKU_LLM_GPT41_MINI", "azureopenai:Azure-OpenAI-Prod-4-1:gpt-4.1-mini"),
     "o4-mini": os.getenv("DATAIKU_LLM_O4_MINI", "azureopenai:Azure-OpenAI-Prod-4-1:o4-mini"),
+    # GPT-5 model mapping - will work when IT deploys it in Dataiku
+    "gpt-5": os.getenv("DATAIKU_LLM_GPT5", "azureopenai:Azure-OpenAI-Prod:gpt-5"),
 }
 
-# Embedding provider control
-EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")  # 'openai' | 'dataiku' (future)
-OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
+# DEPRECATED: Embedding provider control (no longer used)
+# Framework mapping now uses GPT-based reasoning instead of embeddings
+# Keeping these for backwards compatibility but they have no effect
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "gpt")  # Changed default from "openai" to "gpt"
+OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")  # Not used
 
-# Toggle for control/CUEC framework mapping that requires embeddings
+# Toggle for control/CUEC framework mapping (now uses GPT instead of embeddings)
 CONTROL_EMBEDDING_MAPPING_ENABLED = os.getenv("CONTROL_EMBEDDING_MAPPING_ENABLED", "true").lower() == "true"
+
+# Docker control (frontend UI) enable flag
+DOCKER_CONTROL_ENABLED = os.getenv("DOCKER_CONTROL_ENABLED", "false").lower() == "true"
+
+# --- Timeout configuration for external service calls ---
+# DSS client operations (completions, embeddings); 0 means no timeout
+DATAIKU_DSS_CALL_TIMEOUT = float(os.getenv("DATAIKU_DSS_CALL_TIMEOUT", "90"))
+# Overall request timeout for HTTP-based providers (Azure, API Node); includes connect + read
+HTTP_REQUEST_TIMEOUT = float(os.getenv("HTTP_REQUEST_TIMEOUT", "120"))
 
 # --- Redis Configuration ---
 REDIS_URL = os.environ.get("SOCANALYZER_REDIS_URL", "redis://localhost:6379/0")
@@ -107,138 +129,456 @@ SOC2_REPORTS_DIR = PROJECT_ROOT / 'soc2_reports'
 # Path to output text file (legacy, prefer PDF_TXT_PATH)
 OUTPUT_TEXT_FILE = str(PDF_TXT_PATH)
 
-# Example prompts for GPT inquiries
-GPT_PROMPTS = {
-    'summary': "Summarize the key findings in the SOC report.",
-    'controls': "List all control activities described in the SOC report.",
-    'exceptions': "Identify any exceptions or issues noted in the SOC report.",
-    'section_detection': (
-        "You are an expert at analyzing SOC reports. Given the full text of a SOC report, your task is to:\n"
-        "1. Analyze the table of contents and the document to estimate the best probable start position (character offset and percentage) for each of the following section topics: {section_keys}.\n"
-        "2. Do NOT simply use the first keyword match. Instead, use the table of contents to estimate the page number, then analyze the content before and after that position to find the best section start.\n"
-        "3. For each section, output an object with these keys:\n"
-        "   - topic (string)\n   - offset (integer, character offset)\n   - percent (float, 0-100)\n   - confidence (probability percentage, 0-100)\n"
-        "4. Output a single valid JSON array (list of objects, one per section). Do not include any explanation, markdown, or extra text. Only output the JSON array.\n\n"
-        "SOC Report Text:\n{text}\n"
-    ),
-    'extract_toc': (
-        "You are an expert at reading SOC reports. Given the first part of a SOC report, extract ONLY the Table of Contents section. "
-        "Return the Table of Contents as plain text, exactly as it appears in the report. If no TOC is found, reply with 'TOC NOT FOUND'.\n\n"
-        "Report Text:\n{text}\n"
-    ),
-    'section_heading_validation': (
-        "You are analyzing a document. Given the following text, does the line marked with >>> look like a section heading?\n"
-        "Respond with 'Yes' or 'No' and a brief reason.\n"
-        "Context:\n{text}\n>>> {line}\n"
-    ),
-    'section_chunk_scan': (
-        "You are analyzing a SOC report. The following chunk of text is from the report, starting at line {start_line} of the full document. "
-        "Does this chunk contain the start of the section titled '{heading}'? "
-        "Only consider a heading if it appears on its own line, not as part of a paragraph. "
-        "If yes, reply 'Yes, absolute line X: [exact heading text]' where X is the line number in the full document (not just this chunk) and [exact heading text] is the heading as it appears. "
-        "If not, reply 'No, does not contain section start.'\n\nChunk:\n{chunk}"
-    ),
-    'extract_toc_headings_and_pages': (
-        "Given the following Table of Contents, extract all MAIN section headings (not sub-entries) "
-        "and their page numbers. Respond ONLY with a JSON array of objects with 'heading' and 'page' fields. "
-        "Do not include sub-entries or subsections. Example output: "
-        "[{{\"heading\": \"Section I – Assertion of Management\", \"page\": 1}}, {{\"heading\": \"Section II – Service Auditor's Report\", \"page\": 3}}]" 
-        "\n\nTOC:\n{toc_text}"
-    ),
-    'executive_summary': (
-        "You are a risk analyst for a company. Given the following SOC 2 report statistics and coverage tables, generate an executive summary as a valid JSON object. For the 'about_company' section, use the provided company and product names: company = '{company}', product = '{product}' and give a grade of A, B, C, or D. Always provide plausible, relevant content—never say 'not provided', 'not available', or similar. Do not repeat the input stats or tables in your output.\n\n"
-        "Deviation identification policy:\n"
-        "- Use BOTH inputs to identify deficiencies: (1) the 'Detected Deviations' list derived from control-level fields, and (2) the 'Control Test Results' text.\n"
-        "- Only include true deviations/exceptions/problems. Ignore passing language such as 'No deviations noted' or similar.\n"
-        "- Under no circumstances treat coverage gaps or absent sections as deficiencies. Treat them strictly as unknowns (not tested / out of scope).\n\n"
-        "Recommendations policy:\n"
-        "- Recommendations must be customer-actionable. Do NOT suggest changes to the vendor's internal processes that we (the customer) cannot enforce.\n"
-        "- If the auditor identified a deficiency outside the customer's direct control, propose what the customer can do to protect themselves (e.g., compensating controls, monitoring, segmentation, data minimization, additional validations, contractual clauses, SLAs, audit rights).\n"
-        "- Provide up to 3 top risk mitigation recommendations (customer-side technical/operational).\n"
-        "- Provide up to 3 top contract enhancement recommendations (contractual/DPAs/SLAs).\n"
-        "- If the Privacy domain (TSC 'P*') appears to be excluded/not covered, include an appropriate contract enhancement recommending stronger privacy and DPA protections, especially if the vendor likely handles PII based on company/product context.\n\n"
-        "CUEC policy:\n"
-        "- Consider the CUEC control strength assessments when forming findings and recommendations. Include at least one CUEC insight in findings or recommendations when relevant.\n\n"
-        "Respond ONLY with a valid JSON object with these keys and types, and no extra text. Include all keys below.\n"
-        "{{\n"
-        "  \"about_company\": <string, brief narrative about '{company}' and product '{product}' in scope; include grade A/B/C/D>,\n"
-        "  \"key_findings\": [<string, 1–2 sentences each>],\n"
-        "  \"areas_of_concern\": [<string, 1–2 sentences each>],\n"
-        "  \"deviations_noted\": [{{\n"
-        "    \"control_id\": <string>,\n"
-        "    \"deviation_summary\": <string, concise meaningful issue/exception text>\n"
-        "  }}],\n"
-        "  \"unknown_coverage_gaps\": [<string, list notable gaps as 'unknown/not covered/not tested' without implying deficiency>],\n"
-        "  \"recommendations_risk_mitigations\": [<string, up to 3 items, 1–2 sentences each>],\n"
-        "  \"recommendations_contract_enhancements\": [<string, up to 3 items, 1–2 sentences each>],\n"
-        "  \"recommendations\": [<string, union of the two recommendation lists above for backward compatibility>]\n"
-        "}}\n\n"
-        "SOC 2 Executive Summary Stats:\n"
-        "- Subservice orgs: {suborg_count}\n"
-        "- CUECs: {cuec_count}\n"
-        "- TSC coverage: {tsc_covered} of {tsc_total}\n"
-        "- COSO coverage: {coso_covered} of {coso_total}\n\n"
-        "TSC Table (by section):\n{tsc_table}\n\n"
-        "COSO Table (by section):\n{coso_table}\n\n"
-        "Detected Deviations (from control-level fields; high-confidence only):\n{detected_deviations}\n\n"
-        "Control Test Results (high-confidence controls) for deviation analysis:\n{control_test_results}\n\n"
-        "CUEC Control Strength Assessments (High-Confidence CUECs ≥90%):\n{cuec_control_strengths}\n"
-    ),
-}
+# --- Analyzer/watchdog and timeouts (tunable) ---
+# Group timeout for parallel extractors. 0 disables timeout (wait indefinitely).
+PARALLEL_EXTRACTORS_TIMEOUT_SECONDS = int(os.getenv("PARALLEL_EXTRACTORS_TIMEOUT_SECONDS", "0"))
+# Job-level watchdog: if progress stays at/above this percent for idle seconds, finalize from disk. 0 disables.
+JOB_WATCHDOG_MIN_PROGRESS = int(os.getenv("JOB_WATCHDOG_MIN_PROGRESS", "95"))
+JOB_WATCHDOG_IDLE_SECONDS = int(os.getenv("JOB_WATCHDOG_IDLE_SECONDS", "0"))
+# Control extractor progress watchdog (used by analyze.py)
+CONTROL_WATCHDOG_ENABLED = os.getenv("CONTROL_WATCHDOG_ENABLED", "true").lower() == "true"
+CONTROL_WATCHDOG_MAX_MINUTES = int(os.getenv("CONTROL_WATCHDOG_MAX_MINUTES", "25"))
+
+# --- GPT Prompts for Section Detection and TOC Parsing ---
+
+SECTION_DETECTION_PROMPT = """
+You are an expert SOC 2 document analyst. Identify the most probable start position for each requested section topic in the provided report text.
+
+## Objective
+For every topic in {section_keys}, return a single best-guess section start using character offsets in the exact input string {text}. Output a JSON array of objects with:
+- topic: <string, the requested topic as provided>
+- offset: <int, 0-based character index in {text}>
+- percent: <float, (offset / len({text})) * 100, rounded to 3 decimals>
+- confidence: <float 0–100, your probability that this is the correct start>
+
+## Rules
+1. Use only the provided text. Do not infer content that is not present.
+2. Prefer the Table of Contents (if it appears early in {text}) to estimate a target page/position; then validate by scanning nearby content.
+3. A valid section start must align with a heading-like line (title-cased, numbered, or visually distinct) or a clear semantic boundary immediately preceding the section's body.
+4. Do NOT choose the first naive keyword hit. Validate that the surrounding lines look like a true section heading and that subsequent lines read like section content.
+5. If multiple candidates exist, apply this tie-breaker order:
+   (a) A TOC-referenced heading match (or close variant) at a plausible position,
+   (b) Exact/near-exact heading on its own line,
+   (c) Strong semantic boundary (e.g., preceding whitespace, numbering, or divider lines),
+   (d) Earliest plausible location that satisfies the above.
+6. Be tolerant of heading variants (e.g., punctuation, roman numerals, numbering, minor wording changes).
+7. If no credible start is found for a topic, omit that topic from the output (do not fabricate a result).
+
+## Computation Details
+- offset: index of the first character of the heading line (or its immediate boundary) in {text}.
+- percent: (offset / total_chars) * 100, where total_chars = len({text}); round to 3 decimals.
+- confidence: calibrated probability (0–100) reflecting signal strength from TOC corroboration, heading quality, and local context coherence.
+
+## Output
+Respond with ONLY a valid JSON array (no prose, no markdown). Each element must include all four fields in the exact types specified above.
+
+SOC Report Text:
+{text}
+"""
+
+EXTRACT_TOC_PROMPT = """
+You are an expert SOC 2 report analyst. Your goal is to extract only the Table of Contents (TOC) from the beginning portion of the provided report text.
+
+## Rules
+1. The TOC usually appears within the first few pages, often between "Contents" and the first major section heading.
+2. Capture the entire TOC exactly as it appears — including page numbers, dots, and indentation.
+3. Do not include any content before or after the TOC (e.g., disclaimers, titles, body sections).
+4. If no TOC or partial TOC is found, respond only with the string: TOC NOT FOUND.
+5. Do not summarize, interpret, or clean up the text.
+
+## Output
+Return the Table of Contents as plain text exactly as it appears.
+
+Report Text:
+{text}
+"""
+
+SECTION_HEADING_VALIDATION_PROMPT = """
+You are validating whether a given line in a SOC 2 report looks like a section heading.
+
+## Rules
+1. Consider capitalization, formatting cues (numbered or roman numerals), indentation, and standalone line structure.
+2. True headings are typically title-cased, may include numbering (e.g., "II. Description of System"), and are visually distinct from running text.
+3. Lines that are full sentences, contain punctuation like commas or periods (beyond numbering), or run into adjacent text are not section headings.
+4. Use the full context provided to make your decision.
+
+## Output
+Respond with one of:
+- Yes – followed by a short reason (e.g., "Yes – centered title case on its own line")
+- No – followed by a short reason (e.g., "No – appears as part of a paragraph")
+
+Context:
+{text}
+>>> {line}
+"""
+
+EXTRACT_TOC_HEADINGS_AND_PAGES_PROMPT = """
+You are parsing a Table of Contents extracted from a SOC 2 report.
+
+## Task
+Extract only MAIN section headings (not subsections or nested entries) and their corresponding page numbers.
+
+## Rules
+1. Ignore indented or obviously nested lines that represent subsections.
+2. Capture only high-level entries that correspond to major report sections (e.g., Management Assertion, Service Auditor's Report, Description of System, etc.).
+3. Return results as a JSON array of objects, each with:
+   - "heading": <string, section title exactly as shown>
+   - "page": <integer or string, page number if shown>
+4. Do not include any commentary, markdown, or text outside the JSON array.
+
+## Output Example
+[
+  {{"heading": "Section I – Assertion of Management", "page": 1}},
+  {{"heading": "Section II – Service Auditor's Report", "page": 3}}
+]
+
+TOC:
+{toc_text}
+"""
+
+# --- GPT Prompts for Extractors ---
+
+# CUEC Extraction Prompt
+CUEC_EXTRACTION_PROMPT = """
+You are an expert SOC 2 auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to {company_names} or {parent_company_names}.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{{
+    "cuecs": [
+        {{
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }}
+    ],
+    "excluded": [
+        {{"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}}
+    ]
+}}
+
+SOC 2 Report Text:
+{text}
+"""
+
+# CUEC Consolidation Prompt  
+CUEC_CONSOLIDATION_PROMPT = """
+You are an expert SOC 2 report analyst. Consolidate and deduplicate previously extracted CUECs.
+
+## Objective
+Merge similar or duplicate CUECs based on semantic similarity, description overlap, or identical TSC IDs.
+
+## Rules
+1. Combine entries that describe the same user responsibility, even if phrased slightly differently.
+2. Preserve the most complete or representative description for each merged group.
+3. Carry forward or average confidence indicators where applicable.
+4. Include reasoning for each merge or retention decision.
+
+## Output
+Return a single JSON array (no wrapper object, no extra text).  
+Each object must include:
+{{
+    "cuec_seq": <int>,
+    "cuec_tsc_id": <string or null>,
+    "cuec_description": <string>,
+    "cuec_line_ref": <int or null>,
+    "cuec_confidence": <float>,
+    "cuec_gpt_opinion": <"Yes" or "No">,
+    "cuec_distance_from_cuec_keywords": <int or null>,
+    "cuec_gpt_reasoning": <string>,
+    "cuec_framework_alignment": <string>,
+    "cuec_framework_alignment_id": <string or null>,
+    "cuec_justification": <string>
+}}
+
+Do not include commentary or markdown.
+
+Extracted CUECs:
+{cuecs}
+"""
+
+# Executive Summary Prompt
+EXECUTIVE_SUMMARY_PROMPT = """
+You are a senior risk analyst preparing a concise executive-level summary from SOC 2 report results.  
+Generate an accurate, structured JSON summary covering the organization, findings, and recommendations.
+
+## Scope
+Inputs include SOC 2 coverage statistics, CUECs, COSO and TSC mapping tables, and detected deviations.
+
+## Rules
+1. Use provided variables — company='{company}', product='{product}' — when composing the about_company section.
+2. Treat any missing sections as "unknown/not covered" but do not list them as deficiencies.
+3. Do not repeat input data; synthesize it into insights.
+4. Every finding or recommendation must be plausible and customer-relevant (not advice for the vendor's internal controls).
+5. Include at least one insight referencing CUEC control strength if applicable.
+6. Maintain neutral, audit-appropriate tone — no marketing language or speculation.
+
+## Output Format
+Return only a valid JSON object using this exact structure:
+{{
+    "about_company": "<brief narrative about {company} and product {product}, with grade A/B/C/D>",
+    "key_findings": ["<1–2 sentences each>"],
+    "areas_of_concern": ["<1–2 sentences each>"],
+    "deviations_noted": [
+        {{"control_id": "<string>", "deviation_summary": "<concise issue description>"}}
+    ],
+    "unknown_coverage_gaps": ["<not tested / out of scope descriptions>"],
+    "recommendations_risk_mitigations": ["<up to 3 actionable technical/operational recommendations>"],
+    "recommendations_contract_enhancements": ["<up to 3 actionable contractual/DPA/SLA recommendations>"],
+    "recommendations": ["<union of all recommendations above>"]
+}}
+
+## Inputs
+SOC 2 Executive Summary Stats:
+- Subservice orgs: {suborg_count}
+- CUECs: {cuec_count}
+- TSC coverage: {tsc_covered} of {tsc_total}
+- COSO coverage: {coso_covered} of {coso_total}
+
+TSC Table:
+{tsc_table}
+
+COSO Table:
+{coso_table}
+
+Detected Deviations:
+{detected_deviations}
+
+Control Test Results:
+{control_test_results}
+
+CUEC Control Strength Assessments:
+{cuec_control_strengths}
+"""
 
 # Prompt for extracting the auditor firm from the auditor section
-AUDITOR_EXTRACTION_PROMPT = (
-    "You are an expert at reading SOC 2 reports. Given the following text from the Service Auditor's Report section (and page 1), extract the name of the auditing firm that performed the SOC 2 examination. "
-    "Return a JSON object with these keys: 'auditor' (the firm name as it appears in the text), 'confidence' (0-1, your confidence in the extraction), and 'explanation' (brief reasoning). "
-    "If you cannot find the auditor, set 'auditor' to null and confidence to 0.\n\nText:\n{text}\n"
-)
+AUDITOR_EXTRACTION_PROMPT = """
+You are an expert SOC 2 report analyst. Your task is to identify the *independent auditing firm* that conducted the SOC 2 examination.
+
+## Rules
+1. Analyze only the provided text, which comes from the Service Auditor’s Report section (and possibly the first page of the report).
+2. Look specifically for the independent service auditor’s firm name—commonly appearing near phrases such as:
+     - “Independent Service Auditor’s Report”
+     - “performed by”, “issued by”, or “examined by”
+     - firm signatures or letterheads (e.g., Deloitte, EY, PwC, KPMG, Schellman)
+3. Do **not** return the company being audited, its parent, or affiliates as the auditor.
+4. If multiple firms are mentioned, choose the one most clearly identified as the *service auditor*.
+5. If the text does not clearly contain the auditor name, return null values instead of guessing.
+6. Always provide a brief explanation describing how you identified or ruled out the auditor.
+
+## Output Format
+Respond **only** with a valid JSON object using this exact structure:
+
+{{
+    "auditor": "<string | null>",
+    "confidence": <float between 0 and 1>,
+    "explanation": "<string (one concise sentence explaining your reasoning)>"
+}}
+
+## Input
+Text:
+{text}
+"""
 
 # Enhanced prompt for auditor extraction, excluding company and parent company
-AUDITOR_EXTRACTION_PROMPT_EXCLUDE = (
-    "You are an expert at reading SOC 2 reports. Given the following text from the Service Auditor's Report section (and page 1), extract the name of the auditing firm that performed the SOC 2 examination. "
-    "{company_line}"
-    "Do NOT return the company being audited or its parent/owner as the auditor. "
-    "Return a JSON object with these keys: 'auditor' (the firm name as it appears in the text, excluding the company and parent), 'confidence' (0-1, your confidence in the extraction), and 'explanation' (brief reasoning). "
-    "If you cannot find the auditor, set 'auditor' to null and confidence to 0.\n\nText:\n{text}\n"
-)
+AUDITOR_EXTRACTION_PROMPT_EXCLUDE = """
+You are an expert SOC 2 auditor. Identify the independent **auditing firm** that performed the SOC 2 examination.
+
+## Context
+- The text comes from the Service Auditor’s Report section or report front matter.
+- May also be found near auditor signatures or opinion language or headers or footers.
+- The audited company and its parent (if any) are usually provided below:
+    {company_line}
+
+## Rules
+1. Extract only the independent **service auditor firm name** (e.g., Deloitte, EY, PwC, KPMG, Schellman).
+2. Exclude:
+     - The company being audited.
+     - Any parent/owner company.
+     - References to subservice organizations or software vendors.
+3. Look near headings such as “Independent Service Auditor’s Report,” auditor signatures, or opinion language.
+4. If multiple firms are mentioned, choose the one explicitly responsible for the SOC 2 examination.
+5. If not found, set auditor = null and confidence = 0. DO NOT guess.
+6. Provide a one-sentence explanation of how you determined or ruled out the auditor.
+
+## Output
+Return one JSON object:
+{{
+    "auditor": "<string | null>",
+    "confidence": <float 0–1>,
+    "explanation": "<string>"
+}}
+
+SOC 2 Report Text:
+{text}
+"""
+
+# Retry prompt for auditor extraction with enhanced validation instructions
+AUDITOR_EXTRACTION_PROMPT_RETRY = """
+You are an expert SOC 2 auditor. Identify the independent **auditing firm** that performed the SOC 2 examination.
+
+## Context
+- The text comes from the Service Auditor's Report section or report front matter.
+- May also be found near auditor signatures or opinion language or headers or footers.
+- The audited company and its parent (if any) are usually provided below:
+    {company_line}
+
+## Rules
+1. Extract only the independent **service auditor firm name** (e.g., Deloitte, EY, PwC, KPMG, Schellman).
+2. Exclude:
+     - The company being audited.
+     - Any parent/owner company.
+     - References to subservice organizations or software vendors.
+3. Look near headings such as "Independent Service Auditor's Report," auditor signatures, or opinion language.
+4. If multiple firms are mentioned, choose the one explicitly responsible for the SOC 2 examination.
+5. If not found, set auditor = null and confidence = 0. DO NOT guess.
+6. Provide a one-sentence explanation of how you determined or ruled out the auditor.
+
+## CRITICAL VALIDATION REQUIREMENT
+**You must extract the auditor name EXACTLY as it appears in the text.**
+- Do NOT paraphrase, abbreviate, or use variations.
+- Copy the exact text string character-for-character.
+- If you cannot find an auditor firm name that appears verbatim in the text, set auditor = null.
+
+## Output
+Return one JSON object:
+{{
+    "auditor": "<string | null>",
+    "confidence": <float 0–1>,
+    "explanation": "<string>"
+}}
+
+SOC 2 Report Text:
+{text}
+"""
 
 # Prompt for extracting the company being audited and any parent company
-COMPANY_EXTRACTION_PROMPT = (
-    "You are an expert at reading SOC 2 reports. Given the following text, extract the name of the company (legal entity) being audited, and if present, the name of any parent or owner company (e.g., 'an Onit, Inc. company' or similar). "
-    "Return a JSON object with these keys: 'company' (the company name as it appears in the text, always present), 'parent_company' (the parent/owner company name, or null if not found), 'confidence' (0-1, your confidence in the extraction), and 'explanation' (brief reasoning). "
-    "If you cannot find a parent company, set 'parent_company' to null.\n\nText:\n{text}\n"
-)
+COMPANY_EXTRACTION_PROMPT = """
+You are an expert SOC 2 report analyst. Extract the company (legal entity) being audited, and any parent or owner company mentioned.
+
+## Rules
+1. Look for explicit entity names in the management assertion, title page, or system description (e.g., “XYZ Corp. (an ABC Company)”).
+2. Always extract the company being audited. Parent/owner is optional if clearly stated.
+3. Ignore auditor names, subservice orgs, and references to unrelated parties.
+4. If the company or parent cannot be determined, set those fields to null.
+5. Provide a confidence score (0–1) and a one-sentence explanation.
+
+## Output
+Return one JSON object:
+{{
+    "company": "<string | null>",
+    "parent_company": "<string | null>",
+    "confidence": <float 0–1>,
+    "explanation": "<string, concise reasoning>"
+}}
+
+SOC 2 Report Text:
+{text}
+"""
 
 # Prompt for extracting the product/service/system being audited
-PRODUCT_EXTRACTION_PROMPT = (
-    "You are an expert at reading SOC 2 reports. Given the following text, extract the name of the product, service, or system being audited (e.g., 'Experience Cloud', 'Okta Identity as a Service', etc.). "
-    "Return a JSON object with these keys: 'product' (the product/service/system name as it appears in the text), 'confidence' (0-1, your confidence in the extraction), and 'explanation' (brief reasoning). "
-    "If you cannot find the product/service/system, set 'product' to null and confidence to 0.\n\nText:\n{text}\n"
-)
+PRODUCT_EXTRACTION_PROMPT = """
+You are an expert SOC 2 systems auditor. Extract the **product, service, or system** that is in scope for the SOC 2 examination.
+
+## Rules
+1. Identify the specific platform, service, or product name being audited (e.g., “Okta Identity as a Service”, “Experience Cloud”).
+2. Prefer explicit scope statements (e.g., “system description covers…” or “controls relevant to…”).
+3. Exclude company names, parent organizations, and general descriptive phrases.
+4. If not clearly stated, set product = null and confidence = 0.
+5. Provide a confidence score and brief explanation.
+
+## Output
+Return one JSON object:
+{{
+    "product": "<string | null>",
+    "confidence": <float 0–1>,
+    "explanation": "<string>"
+}}
+
+SOC 2 Report Text:
+{text}
+"""
 
 # Prompt for extracting the report date
-REPORT_DATE_EXTRACTION_PROMPT = (
-    "You are an expert at reading SOC 2 reports. Given the following text from the end of the Service Auditor's Report section, what is the date the auditor signed the report? "
-    "Return the date as 'YYYY-MM-DD' if possible, or null if not found. Respond as JSON: {{ 'report_date': 'YYYY-MM-DD' or null, 'explanation': '...' }}\n\nText:\n{text}"
-)
+REPORT_DATE_EXTRACTION_PROMPT = """
+You are an expert SOC 2 auditor. Extract the **report signing date** (the date the auditor signed the opinion).
+
+## Rules
+1. Focus on the end of the Service Auditor’s Report section, near the signature block.
+2. Identify the most recent complete date (e.g., “June 30, 2024”) and convert it to ISO format (YYYY-MM-DD) when possible.
+3. Ignore coverage period dates and fieldwork references.
+4. If no date is found, set report_date = null.
+5. Always include a short explanation.
+
+## Output
+{{
+    "report_date": "<YYYY-MM-DD | null>",
+    "explanation": "<string>"
+}}
+
+SOC 2 Report Text:
+{text}
+"""
 
 # Prompt for extracting the coverage period
-COVERAGE_PERIOD_EXTRACTION_PROMPT = (
-    "You are an expert at reading SOC 2 reports. Given the following text from the beginning of the Service Auditor's Report section, extract the coverage period. "
-    "If the report is Type 2, return the start and end dates of the period (e.g., '2023-01-01' to '2023-12-31'). If Type 1, return only the as-of date as the end date, and set start date to null. "
-    "Respond as JSON: {{ 'type': 'Type 1' or 'Type 2', 'start_date': 'YYYY-MM-DD' or null, 'end_date': 'YYYY-MM-DD' or null, 'explanation': '...' }}\n\nText:\n{text}"
-)
+COVERAGE_PERIOD_EXTRACTION_PROMPT = """
+You are an expert SOC 2 auditor. Determine the **coverage period** and report type (Type 1 or Type 2) from the given text.
+
+## Rules
+1. A Type 2 report includes both start and end dates (period of review).
+2. A Type 1 report includes only a single “as-of” date — treat that as end_date and set start_date = null.
+3. Use ISO format (YYYY-MM-DD) for all dates when possible.
+4. Include an explanation describing how you identified the report type and dates.
+5. If the period cannot be determined, set both dates to null.
+
+## Output
+{{
+    "type": "<Type 1 | Type 2>",
+    "start_date": "<YYYY-MM-DD | null>",
+    "end_date": "<YYYY-MM-DD | null>",
+    "explanation": "<string>"
+}}
+
+SOC 2 Report Text:
+{text}
+"""
 
 
 # Path to .env file for API key
 ENV_PATH = str(PROJECT_ROOT / '.env')
 
 # Default model to use
-DEFAULT_GPT_MODEL = 'gpt-4o'
+DEFAULT_GPT_MODEL = os.getenv('DEFAULT_GPT_MODEL', 'gpt-4o')
 
 # Default generation parameters
-DEFAULT_TEMPERATURE = 0.0
-DEFAULT_TOP_P = 0.0  # Set to 0.0 for maximum determinism and minimal hallucination
+DEFAULT_TEMPERATURE = float(os.getenv('DEFAULT_TEMPERATURE', '0.0'))
+DEFAULT_TOP_P = float(os.getenv('DEFAULT_TOP_P', '0.0'))  # 0.0 for determinism
 # --- Control extractor consistency tuning ---
 # Reduce variability by disabling aggressive non-control detection and GPT-based next-start verification
 CONTROL_DETECT_NON_CONTROL_CONTENT = False
@@ -246,54 +586,70 @@ CONTROL_VERIFY_NEXT_START_ENABLED = False
 
 
 # --- Advanced GPT Token & Chunk Management ---
-CHARS_PER_TOKEN = 3.5  # Average chars per token for planning purposes
+# Character-per-token heuristic; make env configurable and slightly conservative for English prose.
+CHARS_PER_TOKEN = float(os.getenv('CHARS_PER_TOKEN', '4.0'))
 
-# Token Management
-MAX_TOTAL_TOKENS = 4096  # GPT-3.5's context window
-MAX_OUTPUT_TOKENS = 1000  # Maximum reasonable response
-MAX_INPUT_TOKENS = MAX_TOTAL_TOKENS - MAX_OUTPUT_TOKENS  # Available for input
+# Model-aware context window sizes with env overrides
+_CTX_GPT5 = int(os.getenv('GPT5_CONTEXT_TOKENS', '128000'))
+_CTX_GPT4O = int(os.getenv('GPT4O_CONTEXT_TOKENS', '128000'))
+_CTX_GPT41 = int(os.getenv('GPT41_CONTEXT_TOKENS', '128000'))
+_CTX_GPT35 = int(os.getenv('GPT35_CONTEXT_TOKENS', '16000'))
 
-# Token Budget Allocations
-GPT_SYSTEM_TOKENS = 400   # System prompts and instructions
-GPT_USER_TOKENS = 400     # User prompts and queries
-GPT_RESPONSE_TOKENS = 500 # Default expected response size
+LOGICAL_MODEL_CONTEXT = {
+    'gpt-5': _CTX_GPT5,
+    'gpt-4o': _CTX_GPT4O,
+    'gpt-4.1': _CTX_GPT41,
+    'gpt-3.5-turbo': _CTX_GPT35,
+}
+
+# Resolve context window from DEFAULT_GPT_MODEL; fall back to a safe large window
+MAX_TOTAL_TOKENS = LOGICAL_MODEL_CONTEXT.get(DEFAULT_GPT_MODEL, _CTX_GPT4O)
+
+# Token Management (env overridable)
+MAX_OUTPUT_TOKENS = int(os.getenv('MAX_OUTPUT_TOKENS', '2000'))
+MAX_INPUT_TOKENS = MAX_TOTAL_TOKENS - MAX_OUTPUT_TOKENS
+
+# Token Budget Allocations (these are logical planning budgets, not hard API limits)
+GPT_SYSTEM_TOKENS = int(os.getenv('GPT_SYSTEM_TOKENS', '400'))
+GPT_USER_TOKENS = int(os.getenv('GPT_USER_TOKENS', '400'))
+GPT_RESPONSE_TOKENS = int(os.getenv('GPT_RESPONSE_TOKENS', '500'))
 GPT_AVAILABLE_TOKENS = (
-    MAX_TOTAL_TOKENS 
-    - GPT_SYSTEM_TOKENS 
-    - GPT_USER_TOKENS 
+    MAX_TOTAL_TOKENS
+    - GPT_SYSTEM_TOKENS
+    - GPT_USER_TOKENS
     - GPT_RESPONSE_TOKENS
 )
 
-# Content Chunking Strategy
-DEFAULT_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.4)  # 40% of available space
-PRIMARY_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.6)  # 60% of available space for critical fields
-DESCRIPTION_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.4)  # 40% of available space
-SUBSERVICE_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.3)  # 30% of available space
-MAX_CHUNK_SIZE = int(MAX_INPUT_TOKENS * CHARS_PER_TOKEN * 0.8)  # 80% of max input tokens for safety
+# Content Chunking Strategy (derived from budgets)
+DEFAULT_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.40)  # ~40% of available space
+PRIMARY_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.60)  # ~60% for critical fields
+DESCRIPTION_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.40)
+SUBSERVICE_CHUNK_SIZE = int(GPT_AVAILABLE_TOKENS * CHARS_PER_TOKEN * 0.30)
+MAX_CHUNK_SIZE = int(MAX_INPUT_TOKENS * CHARS_PER_TOKEN * 0.80)  # 80% of max input tokens for safety
 
 # Executive Summary input budgeting (character-based) to avoid context overruns
 EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS = int(MAX_INPUT_TOKENS * CHARS_PER_TOKEN * 0.45)  # ~45% of input budget
-EXEC_SUMMARY_PER_CONTROL_MAX_CHARS = 700  # cap per control test_result snippet
-EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS = 60  # up to N non-deviation controls after deviations
+EXEC_SUMMARY_PER_CONTROL_MAX_CHARS = int(os.getenv('EXEC_SUMMARY_PER_CONTROL_MAX_CHARS', '700'))
+EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS = int(os.getenv('EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS', '60'))
 
 # Total Combined Text Limits
 TOTAL_PRIMARY_SIZE = PRIMARY_CHUNK_SIZE * 3  # Allow for multiple primary sections
 TOTAL_DESCRIPTION_SIZE = DESCRIPTION_CHUNK_SIZE * 3  # Allow for multiple description sections
-TEXT_OVERLAP = 1000  # Characters of overlap between chunks for context preservation
+# Overlap: default to 10% of primary chunk, min 200 chars; env overridable
+TEXT_OVERLAP = int(os.getenv('TEXT_OVERLAP', str(max(200, int(PRIMARY_CHUNK_SIZE * 0.10)))))
 
-# Configuration for GPT models
+# Configuration for GPT models - uses DEFAULT_GPT_MODEL unless specifically overridden
 GPT_MODELS = {
-    'control_extractor': 'gpt-4o',
-    'control_extractor_v2': 'gpt-4o',
-    'company_extractor': 'gpt-4o',
-    'auditor_extractor': 'gpt-4o',
-    'product_extractor': 'gpt-4o',
-    'report_date_extractor': 'gpt-4o',
-    'coverage_period_extractor': 'gpt-4o',
-    'cuec_extractor': 'gpt-4o',
-    'subservice_orgs_extractor': 'gpt-4o',
-    'subservice_orgs_gpt_verify': 'gpt-4o',
-    'executive_summary': 'gpt-4o',
+    'control_extractor_v2': DEFAULT_GPT_MODEL,
+    'company_extractor': DEFAULT_GPT_MODEL,
+    'auditor_extractor': DEFAULT_GPT_MODEL,
+    'product_extractor': DEFAULT_GPT_MODEL,
+    'report_date_extractor': DEFAULT_GPT_MODEL,
+    'coverage_period_extractor': DEFAULT_GPT_MODEL,
+    'cuec_extractor': DEFAULT_GPT_MODEL,
+    'subservice_orgs_extractor': DEFAULT_GPT_MODEL,
+    'subservice_orgs_gpt_verify': DEFAULT_GPT_MODEL,
+    'executive_summary': DEFAULT_GPT_MODEL,
 }
 
 SECTION_TOPICS = {
@@ -433,40 +789,153 @@ THIRD_PARTY_ALIAS_MAP = {
 
 SO_KEYWORDS = ["subservice", "subservice organization"]
 
-SUBSERVICE_ORG_GPT_FILTER_PROMPT = (
-    "You are reviewing extracted third-party entities from a SOC 2 report. "
-    "For each entry, answer: Is this an actual service offering or cloud provider? Keep service offerings and cloud providers (like AWS, Azure, GCP, etc.)."
-    "If not, specify what it is (framework, department, generic term, software, OS, component, etc.). "
-    "Exclude any entries that are frameworks, standards, open-source projects, software, operating systems, or elements within a cloud provider (e.g., Amazon Linux 2, Ubuntu, React, OWASP, Kubernetes, NIST, ISO, etc.). "
-    "Return a JSON object with: 'keep' (true/false), 'type' (company/framework/software/OS/component/department/etc.), 'reason' (why keep or exclude), and 'entry' (the original dict).\n"
-    "\nContext from the report:\n{context}\n"
-    "\nExample input:\nName: Linux\nDescription: Operating System\n\nExample output:\n{{\"keep\": false, \"type\": \"OS\", \"reason\": \"This is an operating system, not a company.\", \"entry\": ... }}\n\nNow review this entry:\nName: {name}\nDescription: {desc}"
-)
+SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT = """
+You are a SOC 2 report analysis expert. Your goal is to extract all third-party service providers (subservice organizations) mentioned in the provided text.
 
-SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT = (
-    "You are an expert at reading SOC 2 reports. Given the following text from the Description of System section, identify all third parties (companies, cloud providers, vendors, etc.) mentioned.\n"
-    "For each third party, research what they do and fill out the following fields as JSON objects in a list, using this exact format for each object:\n"
-    "{{\n"
-    "  \"third_party_name\": <string>,\n"
-    "  \"third_party_description\": <string>,\n"
-    "  \"third_party_page_ref\": <string>,\n"
-    "  \"third_party_confidence\": <float>,\n"
-    "  \"distance_from_so_keywords\": <int>,\n"
-    "  \"likely_so\": <\"Yes\" or \"No\">,\n"
-    "  \"common_so\": <\"Yes\" or \"No\">,\n"
-    "  \"third_party_controls\": [\n"
-    "    {{\n"
-    "      \"third_party_control_seq\": <int>,\n"
-    "      \"third_party_control_id\": <string or null>,\n"
-    "      \"third_party_control_desc\": <string or null>\n"
-    "    }}\n"
-    "    // ...repeat for each control...\n"
-    "  ]\n"
-    "}}\n"
-    "- Only include actual third-party service providers, not internal teams, departments, frameworks, generic terms, or software installed locally (e.g., Windows, Office, Linux, etc.).\n"
-    "- Do not include generic terms like 'third-party vendor', 'consulting partners', 'Open Web Application Security Project (OWASP)', or internal company teams.\n"
-    "- If you cannot find a value, use null. Output a single JSON array (list of objects, one per third party), and do not include any explanation, markdown, or extra text.\n\nText:\n{text}\n"
-)
+## Objective
+Identify each third party referenced in the “Description of System” or similar section.  
+For each, provide clear context about what they do and how they relate to the system.
+
+## Rules
+1. Include only **true third-party companies or service providers** (e.g., AWS, Azure, Google Cloud, Okta, Salesforce).
+2. Exclude:
+     - Internal teams, departments, or personnel.
+     - Frameworks, standards, or open-source tools (e.g., NIST, ISO, Kubernetes, Linux).
+     - Generic nouns (“vendor,” “service,” “consultant,” “support team,” etc.).
+     - Subcomponents within known cloud platforms.
+3. Use external knowledge *only for general recognition* of company functions (e.g., “Amazon Web Services – cloud hosting provider”).
+4. Provide the following fields for each valid entity:
+     - third_party_name
+     - third_party_description
+     - third_party_page_ref
+     - third_party_confidence (float 0–1)
+     - distance_from_so_keywords (integer distance from “subservice” keywords)
+     - likely_so (“Yes” or “No”)
+     - common_so (“Yes” or “No”)
+     - third_party_controls: array of objects, each containing:
+             - third_party_control_seq
+             - third_party_control_id (string or null)
+             - third_party_control_desc (string or null)
+5. If no valid subservice organizations are found, return an empty JSON array.
+6. Output only a valid JSON array (no commentary, markdown, or text).
+
+SOC 2 Report Text:
+{text}
+"""
+
+SUBSERVICE_ORG_GPT_FILTER_PROMPT = """
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}}
+
+Context from SOC 2 Report:
+{context}
+
+Entity to Evaluate:
+Name: {name}
+Description: {desc}
+"""
+
+SUBSERVICE_ORG_GPT_VERIFY_PROMPT = """
+You are a SOC 2 compliance specialist. Determine whether the provided entity is a likely **subservice organization** referenced in a SOC 2 report.
+
+## Rules
+1. A subservice organization is an **external company** that performs part of the in-scope services or supports system operations (e.g., hosting, infrastructure, authentication).
+2. Common examples: AWS, Azure, GCP, Google Cloud, Okta. 
+3. Exclude internal teams, departments, frameworks, generic software, and most SaaS/monitoring/business tools.
+4. Do NOT classify monitoring/logging/ticketing/alerting/HR/business/ITSM tools (e.g., Splunk, SolarWinds, ServiceNow, Workday, PagerDuty, Datadog, New Relic, Nagios, Jira, Grafana, Prometheus) as subservice organizations unless the context clearly shows they provide core system operations or hosting.
+5. Be conservative — only mark true if the entity clearly fits SOC 2 subservice organization criteria and is not just a supporting SaaS tool.
+6. Use the context and description to justify your decision.
+
+## Output
+Return a single JSON object:
+{{
+    "is_likely_subservice_org": <true or false>,
+    "reason": "<brief justification>"
+}}
+
+Entity:
+Name: {name}
+Description: {desc}
+"""
+
+# Prompt used by the intelligent deduplication logic (subservice_orgs_dedup.py)
+# Expects a JSON array string inserted as {json_data}. Returns a JSON object with a
+# top-level "groups" array. Each group should include canonical_name, variations[],
+# and a short reason explaining why they should be merged.
+DEDUPLICATION_PROMPT = """
+You are an expert data engineer and SOC 2 analyst. You will be given a JSON array of
+subservice organization summaries (name, description, confidence). Your task is to
+identify groups of names that should be canonicalized to a single canonical name.
+
+Input JSON (truncated for readability):
+{json_data}
+
+Rules:
+1. Group entries that are clearly the same organization (e.g., "AWS", "Amazon Web Services",
+     "Amazon Web Services, Inc.") into a single group.
+2. For each group return:
+     - canonical_name: the preferred canonical name to use in output
+     - variations: array of name variants that should map to canonical_name
+     - reason: one-sentence justification for the merge
+3. Be conservative: do not merge distinct legal entities even if names look similar.
+4. Return ONLY a JSON object with a single key "groups" whose value is an array of group objects.
+
+Example output:
+{
+    "groups": [
+        {"canonical_name": "Amazon Web Services", "variations": ["AWS", "Amazon Web Services, Inc."], "reason": "Common brand variants and parenthetical abbreviations"}
+    ]
+}
+"""
+
+# Prompt used by SaaS classification to lower confidence of entries that are clearly
+# SaaS/monitoring/business tools rather than subservice organizations providing core
+# hosting/operational services. Expects {json_data} as input and returns a JSON object
+# with an "adjustments" array of entries {"name":..., "adjust_to": <0-1>, "reason":...}
+SAAS_CLASSIFICATION_PROMPT = """
+You are an expert SOC 2 analyst. Given a JSON array of candidate subservice organizations
+with name, description, and current confidence, identify entries that are SaaS tools
+(monitoring, logging, HR, ticketing, analytics, CI/CD, etc.) which should have their
+confidence reduced because they are not core subservice organizations.
+
+Input:
+{json_data}
+
+Rules:
+1. For each input item, decide whether it represents a true subservice org (hosting,
+     infrastructure, managed service) or a supporting SaaS/tool.
+2. If an item should be downgraded, include an adjustment object with:
+     - name: exact input name
+     - adjust_to: new confidence value (float between 0 and 1)
+     - reason: brief justification
+3. Return ONLY a JSON object with an "adjustments" array.
+
+Example output:
+{
+    "adjustments": [
+        {"name": "Splunk", "adjust_to": 0.3, "reason": "Logging/analytics SaaS; not core hosting provider"}
+    ]
+}
+"""
 
 CUEC_KEYWORDS = [
     "complementary user entity",
@@ -481,33 +950,38 @@ CUEC_KEYWORDS = [
     # 'customer' and 'user' removed as requested
 ]
 
-CUEC_EXTRACTION_PROMPT = (
-    "You are an expert at reading SOC 2 reports. Given the following text from the Description of System section, extract only explicit Complementary User Entity Controls (CUECs) or customer/user entity responsibilities.\n"
-    "A valid CUEC must explicitly state responsibility to the user entity, customer, or client. Not just assign responsibility.\n"
-    "Only include controls that use clear responsibility language such as: 'user entity is responsible for...', 'customer must...', 'user must...', 'user entities are required to...', etc.\n"
-    "Do NOT include product features, internal controls, or vague statements unless they clearly assign responsibility to the user entity.\n"
-    "If a control assigns responsibility to the {company_names} (e.g., '{company_names} is responsible for...'), or {parent_company_names}, DO NOT include it as a CUEC.\n"
-    "For each CUEC, return a JSON object with these fields:\n"
-    "cuec_tsc_id: (string or null, the TSC ID if present),\n"
-    "cuec_description: (string, the CUEC control requirement/description),\n"
-    "cuec_line_ref: (integer, the line number in the text where the CUEC was found/extracted),\n"
-    "cuec_gpt_opinion: (Yes or No, does it sound like a CUEC?),\n"
-    "cuec_gpt_responsibility_phrase: (string, the exact phrase from the text that assigns responsibility to the user entity, or null if not found),\n"
-    "cuec_gpt_reasoning: (string, a concise explanation of why you classified this as a CUEC or not, and any relevant context or clues from the text),\n"
-    "cuec_framework_alignment: (string, does this CUEC align to the COSO Internal Control Framework, AICPA Trust Services Criteria, both, or neither? Respond with 'COSO', 'AICPA_TSC', 'COSO or AICPA_TSC', or 'Undetermined'),\n"
-    "cuec_framework_alignment_id: (string or null, the COSO or AICPA TSC ID it aligns to, or null if undetermined),\n"
-    "cuec_justification: (string, your justification for the framework alignment and ID),\n"
-    "If you cannot find a value, use null.\n"
-    "For every control or responsibility statement in the text that you do NOT include as a CUEC, output a JSON object in a separate array called 'excluded', with these fields: 'excluded_description', 'excluded_reason'.\n"
-    "Output a JSON object with two arrays: 'cuecs' (list of included CUECs as above), and 'excluded' (list of excluded controls with reasons). Do not include any explanation, markdown, or extra text.\n\nText:\n{text}\n"
-)
+CUEC_CONSOLIDATION_PROMPT = """
+You are a SOC 2 auditor consolidating extracted CUECs into a single, clean list.
 
-CUEC_CONSOLIDATION_PROMPT = (
-    "You are an expert at reading SOC 2 reports. Given the following extracted Complementary User Entity Controls (CUECs), consolidate and deduplicate the results.\n"
-    "For each unique CUEC, merge similar or duplicate controls (based on description and TSC ID). For each CUEC, provide a cuec_gpt_reasoning field with a concise explanation of why you merged or kept it, and any relevant context.\n"
-    "Output a single JSON array, one object per CUEC, with these fields: cuec_seq, cuec_tsc_id, cuec_description, cuec_line_ref, cuec_confidence, cuec_gpt_opinion, cuec_distance_from_cuec_keywords, cuec_gpt_reasoning, cuec_framework_alignment, cuec_framework_alignment_id, cuec_justification.\n"
-    "Do not include any explanation, markdown, or extra text.\n\nExtracted CUECs:\n{cuecs}\n"
-)
+## Objective
+Merge duplicate or significant overlapping Complementary User Entity Controls (CUECs) while retaining the most complete version of each unique responsibility.
+
+## Rules
+1. Merge CUECs with similar descriptions, identical TSC IDs, or overlapping meaning.
+2. Preserve the richest and clearest description when duplicates exist.
+3. Carry forward or average confidence values.
+4. Provide reasoning for each merge or retention choice.
+5. Do not add commentary, markdown, or wrapper text.
+
+## Output
+Return only a JSON array where each object includes:
+{{
+    "cuec_seq": <int>,
+    "cuec_tsc_id": "<string or null>",
+    "cuec_description": "<string>",
+    "cuec_line_ref": <int or null>,
+    "cuec_confidence": <float>,
+    "cuec_gpt_opinion": "<Yes | No>",
+    "cuec_distance_from_cuec_keywords": <int or null>,
+    "cuec_gpt_reasoning": "<string>",
+    "cuec_framework_alignment": "<string>",
+    "cuec_framework_alignment_id": "<string or null>",
+    "cuec_justification": "<string>"
+}}
+
+Extracted CUECs:
+{cuecs}
+"""
 
 # List of AICPA Trust Services Criteria (TSC) IDs, descriptions, and domains
 TSC_CRITERIA = [
@@ -711,66 +1185,49 @@ control_soc_domains = {
 
 # Prompt for extracting tested controls from the Control_Descriptions section
 CONTROL_EXTRACTION_PROMPT = """
-Your task is to extract detailed control information from the provided text and return it in JSON format. The text is structured in sections, 
-and your focus should be on identifying and extracting specific elements related to a control. Follow the 
-instructions carefully to ensure accurate extraction without inferring any information not explicitly stated in 
-the text.
+You are an expert SOC 2 control analyst. Your task is to extract a single control (and its related fields) from the provided text.
 
-Instructions:
+## Objective
+Analyze the text chunk (beginning at line {start_line}) and return one control record in structured JSON format.  
+Focus only on explicit, self-contained control information — not inferred or overlapping content.
 
-1. Identify Control IDs for a Single Control:
-   - Look for one or more control IDs, which may appear as random strings of letters, numbers, periods, dashes, 
-   or TSC IDs.
-   - Control IDs are unique identifiers for the control and are usually followed by a description.
-   - If you find multiple control IDs separated by descriptive text, you should only extract the first set.  The
-   next set of IDs will be for either a different control or other references which may be used later for 
-   another purpose.
+## Extraction Rules
+1. **Control ID**
+    - Look for one or more identifiers (combinations of letters that are usually all capitalized, numbers, strings separated by dashes, etc. like “CC6.1” or "EL-06-02").
+    - If multiple IDs appear, select the most detailed set associated with this control.  For example, if both “CC6.1” and “CC6.1a” appear, choose “CC6.1a”.  Or if “CC6.1” and “EL-06-02” both appear, include both.  In some cases, you may see a primary ID plus sub-IDs (e.g., “CC6.1” and “CC6.1a”); include all relevant IDs. You may also see a TSC ID plus an internal company code; include both.
+2. **Control Description**
+    - Extract 1–5 sentences or a concise bullet list describing the control’s intent and implementation.
+    - Keep the text as close to the original phrasing as possible.  Try to differentiate between control description, test procedures, results, control requirements, and entity controls.
+3. **Additional References**
+    - Capture any secondary identifiers or cross-references linked to this control.
+4. **Testing Comments**
+    - Identify language describing testing performed by the auditor (“examined”, “inquired”, “inspected”, “tested”, “observed”, etc.).
+5. **Test Results**
+    - Extract text summarizing the auditor’s test results.
+    - Do not include content that clearly belongs to a following control or section.
+6. **Deviation Assessment**
+    - Based only on the test results text, determine if a deviation/exception/problem is explicitly stated.
+    - If present, set has_deviation = true and provide a short, factual deviation_desc.
+    - Otherwise, set has_deviation = false and leave deviation_desc empty.
+7. **Ending Line Number**
+    - Estimate the line where this control’s text logically ends.
+8. **Confidence**
+    - Provide a float (0–1) indicating confidence in the completeness and accuracy of the extraction.
+    - Add a brief justification.
 
-2. Extract Control Description:
-   - Identify and extract 1-5 sentences or a bulleted list that describes the control. Usually follows the control ID.
-   - The description should provide a clear understanding of the control's purpose and implementation.
-
-3. Identify Additional Control References:
-   - Look for one or more additional reference strings related to the control, such as series of digits or strings.
-   - These references are usually separated by text from the control IDs or control description and may appear 
-   in different parts of the text.
-
-4. Extract Comments on Testing:
-   - Identify sentences that describe what was tested, examined, viewed, or reviewed.
-   - These comments provide insight into the testing process and methodology.
-
-5. Extract Test Results:
-   - Look for statements indicating test results, such as notes on deviations, findings, gaps, or errors.
-   - If no deviations or errors are found, note the absence of such findings.
-   - This is usually the last section of the control section.  Anything after this is either not part of the control, 
-   is a different control, or is a different section of the report.  Do not include anything after this as it will 
-   likely be extracted as part of the next chunk of content being processed.
-
-6. Evaluate Whether There Is a Deviation/Exception:
-    - Based STRICTLY on the extracted control_test_results text, determine if a deviation/exception/problem is present.
-    - Respond with two fields: has_deviation (true/false) and deviation_desc (a short sentence describing the deviation, or empty if none).
-    - Consider language variations and languages other than English; do not infer beyond what is stated in the test results text.
-
-7. Provide the Ending Line Number:
-   - After extracting the control information, provide the line number where this control information ends.
-   - This will be used to determine the starting position for the next chunk.
-
-8. Provide an Initial Confidence Score and Justification:
-   - Provide a confidence score between 0 and 1 indicating how confident you are that the extracted information represents a control.
-   - Include a brief justification for your confidence score, explaining why you believe this is a control.
-
-Return the extracted information in the following JSON format:
+## Output Format
+Return only one JSON object with this structure:
 {{
-    "control_id": "",
-    "control_desc": "",
-    "control_test": "",
-    "control_test_results": "",
-    "has_deviation": false,
-    "deviation_desc": "",
-    "additional_references": [],
-    "end_line": 0,
-    "control_confidence": 0.0,
-    "control_gpt_conf_justification": ""
+  "control_id": "<string>",
+  "control_desc": "<string>",
+  "control_test": "<string>",
+  "control_test_results": "<string>",
+  "has_deviation": <true or false>,
+  "deviation_desc": "<string>",
+  "additional_references": ["<string>", ...],
+  "end_line": <integer>,
+  "control_confidence": <float>,
+  "control_gpt_conf_justification": "<string>"
 }}
 
 Text to analyze (starting at line {start_line}):
@@ -778,75 +1235,181 @@ Text to analyze (starting at line {start_line}):
 """
 
 # Prompt for consolidating and deduplicating extracted controls
-CONTROL_CONSOLIDATION_PROMPT = (
-    "You are an expert at reading SOC 2 reports. Given the following extracted controls, consolidate and deduplicate the results.\n"
-    "For each unique control, merge similar or duplicate controls (based on description and control ID). For each control, provide a control_gpt_reasoning field with a concise explanation of why you merged or kept it, and any relevant context.\n"
-    "Output a single JSON array, one object per control, with these fields: control_seq, control_id, control_desc, control_test, control_test_results, control_page_ref, control_line_ref, control_gpt_opinion, control_gpt_reasoning.\n"
-    "Do not include any explanation, markdown, or extra text.\n\nExtracted Controls:\n{controls}\n"
-)
+CONTROL_CONSOLIDATION_PROMPT = """
+You are an expert SOC 2 control auditor. Your task is to merge and deduplicate extracted controls.
 
-# Refine CHUNK_ANALYSIS_PROMPT to emphasize using content directly from the text
+## Objective
+Combine controls that were likely split during chunking operations.
 
+## Rules
+1. Merge controls sharing the same control_id or nearly identical descriptions.
+2. Preserve the most complete and representative description.
+3. Combine or average relevant confidence values.
+4. Add reasoning for every merge or retention decision.
+5. Maintain a clean, flat list of unique controls — no wrapper objects, no commentary.
+
+## Output
+Return only a JSON array of consolidated controls, where each object contains:
+{{
+    "control_seq": <int>,
+    "control_id": "<string>",
+    "control_desc": "<string>",
+    "control_test": "<string>",
+    "control_test_results": "<string>",
+    "control_page_ref": "<string or null>",
+    "control_line_ref": <int or null>,
+    "control_gpt_opinion": "<string or null>",
+    "control_gpt_reasoning": "<string>",
+    "control_confidence": <float or null>
+}}
+
+Extracted Controls:
+{controls}
+"""
+
+# Optimized GPT-5: Section analysis breakpoint detection
 CHUNK_ANALYSIS_PROMPT = """
-You are analyzing a section of a SOC report. Your task is to identify logical breakpoints in the text where control sections start and end. Use only the information provided in the text and do not infer or assume additional details. Look for patterns such as control IDs, descriptions, test procedures, and results. Provide a list of character positions in the text where these breakpoints occur.
+You are a SOC 2 control section analyst. Your task is to identify logical breakpoints in the provided text where individual control sections start or end.
+
+## Objective
+Examine the given text and return a list of character offsets that mark likely boundaries between separate controls or sections.
+
+## Rules
+1. Use only the provided text — do not infer or assume missing context.
+2. Look for structural clues that signal a new control:
+    - Control IDs (e.g., “CC6.1”, “A1.2”, or numbered codes)
+    - Headings, bold identifiers, or bullet/numbered lists starting midline
+    - Transitional audit language (“The auditor tested…”, “No deviations were noted…”, etc.)
+3. Avoid splitting inside paragraphs that clearly belong to the same control.
+4. Do not infer missing headers or insert artificial breakpoints.
+5. If no clear breakpoints exist, return an empty list.
+
+## Output
+Return only a JSON array of integers representing character offsets.
+
+SOC 2 Report Text:
+{text}
 """
 
-# Refine SEGMENT_CLASSIFICATION_PROMPT to emphasize using content directly from the text
-
+# Optimized GPT-5: Segment classification for SOC 2 controls
 SEGMENT_CLASSIFICATION_PROMPT = """
-You are analyzing a section of a SOC report. Your task is to classify each segment of text into one of the following categories: control ID, control description, test procedure, test result. Use only the information provided in the text and do not infer or assume additional details. Provide a structured representation of the classified segments.
+You are an expert SOC 2 document classifier. Categorize each segment of the provided text into its appropriate role.
+
+## Objective
+Identify which part of the SOC 2 control lifecycle each segment belongs to.
+
+## Valid Categories
+- control_id
+- control_description
+- test_procedure
+- test_result
+
+## Rules
+1. Classify based only on the text content — do not assume beyond what is shown.
+2. Each segment should map to exactly one of the four valid categories.
+3. Use contextual cues:
+     - IDs or alphanumeric codes → control_id
+     - Descriptive, policy-style sentences → control_description
+     - Auditor actions (examined, inspected, inquired) → test_procedure
+     - Outcome/result language (no deviations, exceptions found, etc.) → test_result
+4. If the text does not fit any category, omit it from output.
+
+## Output
+Return a JSON array of objects:
+[
+    {{"type": "control_id", "text": "<...>"}},
+    {{"type": "control_description", "text": "<...>"}},
+    ...
+]
+
+SOC 2 Report Text:
+{text}
 """
 
-DYNAMIC_CHUNKING_PROMPT = (
-    "Identify the single numeric character position in the text where each control section header starts. "
-    "Do not infer or assume any details not present in the text."
-)
+# Optimized GPT-5: Dynamic chunk header detection
+DYNAMIC_CHUNKING_PROMPT = """
+You are segmenting a SOC 2 report into logical control chunks.
 
-SEGMENT_CLASSIFICATION_PROMPT = (
-    "You are an expert at analyzing SOC reports. Given the following text, classify each segment as 'control_id', 'control_description', 'test_procedure', or 'test_result'. "
-    "Return a JSON array of objects, each with keys: 'type' and 'text'. "
-    "If no segments are found, return an empty array."
-)
+## Objective
+Identify the exact numeric character position (0-based index) in the text where each control section header starts.
+
+## Rules
+1. Base your detection solely on actual heading patterns or identifiers (e.g., “CC6.1”, “A1.2”, “Control ID”).
+2. Do not infer missing headers or create artificial positions.
+3. Return precise numeric offsets only — not summaries or prose.
+4. If no control headers are found, return an empty array.
+
+## Output
+Return only a JSON array of integers (character positions).
+
+SOC 2 Report Text:
+{text}
+"""
+
+# Optimized GPT-5: Section heading validation as a dedicated constant
+SECTION_HEADING_VALIDATION_PROMPT = """
+You are verifying whether the marked line represents a valid section heading in a SOC 2 report.
+
+## Rules
+1. Headings typically appear in title case, may include roman numerals or numbering, and stand alone on their line.
+2. Lines forming part of a paragraph or containing punctuation beyond numbering are not headings.
+3. Consider surrounding text to judge if the line visually or semantically separates sections.
+4. Output only “Yes” or “No” followed by a short justification.
+
+## Output
+Yes – <reason>  
+No – <reason>
+
+Context:
+{text}
+>>> {line}
+"""
+
+# Optimized GPT-5: Refined chunk analysis offsets
+CHUNK_ANALYSIS_PROMPT_REFINED = """
+You are analyzing a SOC 2 report section to detect potential control boundaries.
+
+## Objective
+List the precise character offsets where each control or subsection likely begins.
+
+## Guidance
+- Recognize section transitions through control identifiers, bullet patterns, or repeated audit phrases.
+- Avoid splitting text within continuous paragraphs or mid-sentences.
+- Return only a JSON array of integer offsets (no explanations or markup).
+
+SOC 2 Report Text:
+{text}
+"""
+
+## Note: Legacy minimal overrides removed; using optimized versions defined above.
 
 # Minimal prompt to evaluate deviation strictly from control_test_results
 DEVIATION_EVAL_PROMPT = """
-You are given the context of a SOC 2 control. Decide whether a deviation/exception/problem is explicitly stated in the control_test_results.
+You are a SOC 2 auditor. Determine if the provided control_test_results text contains an explicit deviation, exception, or finding.
 
-Rules:
-- Use ONLY the control_test_results text. Do not infer beyond it.
-- If the text states there were no deviations/exceptions/issues (e.g., "No deviations noted"), set has_deviation to false and deviation_desc to an empty string.
-- Only set has_deviation to true if the text clearly reports a deviation/exception/problem; then set deviation_desc to a short, direct summary copied or paraphrased from the text.
-- If unclear, set has_deviation to false.
+## Rules
+1. Base your decision ONLY on the provided control_test_results — do not infer.
+2. Mark has_deviation = false if the text states “no deviations noted” or any similar clean result.
+3. Mark has_deviation = true only if the text clearly reports a deviation, exception, or issue.
+4. When has_deviation = true, summarize the issue in one short sentence (deviation_desc).
+5. If uncertain, default to has_deviation = false.
 
-Return ONLY this JSON object (no extra text):
-{
-  "has_deviation": <true|false>,
-  "deviation_desc": "<string if has_deviation is true, else empty>"
-}
+## Output
+Return only a valid JSON object:
+{{
+    "has_deviation": <true or false>,
+    "deviation_desc": "<string if true, else empty>"
+}}
 
 Context:
 Control ID: {control_id}
 Control Description: {control_desc}
 Control Test: {control_test}
-control_test_results:
+Control Test Results:
 <<<
 {control_test_results}
 >>>
 """
-
-# Model-specific settings
-GPT_MODEL_SETTINGS = {
-    'gpt-4o': {
-        'max_tokens': 4096,
-        'temperature': 0,
-        'top_p': 0
-    },
-    'gpt-3.5': {
-        'max_tokens': 2048,
-        'temperature': 0,
-        'top_p': 0
-    }
-}
 
 # --- Control Extraction Testing Config ---
 CONTROL_TESTING_ENABLED = False  # Set to False to disable test mode and process the full file
@@ -857,6 +1420,12 @@ CONTROL_HANG_PREVENTION_ENABLED = True  # Enable hang prevention safeguards
 CONTROL_MAX_PROCESSING_MINUTES = 30     # Maximum processing time before timeout
 CONTROL_MAX_CONSECUTIVE_FAILURES = 10   # Stop after this many consecutive failures
 CONTROL_DETECT_NON_CONTROL_CONTENT = False  # Detect and stop at mapping tables/non-control content (disabled due to false positives)
+
+# --- Control Stall Watchdog ---
+# If no forward line progress for CONTROL_STALL_MAX_IDLE_SECONDS, forcibly advance by CONTROL_STALL_FORCE_ADVANCE_LINES
+# Set CONTROL_STALL_MAX_IDLE_SECONDS=0 to disable.
+CONTROL_STALL_MAX_IDLE_SECONDS = int(os.getenv('CONTROL_STALL_MAX_IDLE_SECONDS', '180'))
+CONTROL_STALL_FORCE_ADVANCE_LINES = int(os.getenv('CONTROL_STALL_FORCE_ADVANCE_LINES', '120'))
 
 # List of key test words to check in control_desc for confidence adjustment
 CONTROL_TEST_WORDS = [
@@ -872,6 +1441,108 @@ CONTROL_TEST_WORDS = [
 CONTROL_LINES_PER_CHUNK = 160
 CONTROL_CHUNK_OVERLAP_LINES = 40
 CONTROL_CHUNK_TAIL_GUARD_LINES = 8
+
+# =============================================================================
+# CONTROL EXTRACTOR V4 - AWARE-CHUNK + CHAIN-OF-THOUGHT CONFIGURATION
+# =============================================================================
+
+# Control Extractor Version Selection
+# Options: "v2" (legacy line-based) or "v4" (aware-chunk + CoT)
+CONTROL_EXTRACTOR_VERSION = os.getenv("CONTROL_EXTRACTOR_VERSION", "v4")
+
+# V4 Architecture: Token-based aware chunking with continuation handling
+CONTROL_V4_TOKENS_PER_CHUNK = 500       # Approximate tokens per chunk (~4 chars = 1 token) - balanced for various report formats
+CONTROL_V4_OVERLAP_TOKENS = 100         # Token overlap between chunks for context continuity
+CONTROL_V4_MIN_CONFIDENCE = 0.5         # Minimum confidence threshold (controls below are filtered)
+CONTROL_V4_SAVE_REJECTED = True         # Save rejected low-confidence controls for review
+
+# V4 Prompt: Multi-control extraction with linguistic cue detection and CoT reasoning
+CONTROL_EXTRACTION_PROMPT_V4 = """
+You are a SOC 2 / COSO control extraction model. From unstructured SOC 2 text with all table structure removed, extract ALL complete control blocks in this chunk.
+
+## Goal
+Extract ALL complete control blocks found in this chunk. For each control, return:
+- the control identifier (if present)
+- the control description
+- one or more auditor test procedures
+- one or more test results
+- whether a deviation/exception is stated
+- where this control logically ends (line number estimate)
+
+## Expected Output
+Return a JSON object with a "controls" array containing one object per control found:
+
+{{
+  "controls": [
+    {{
+      "control_id": "<string or null>",
+      "control_desc": "<string>",
+      "control_tests": ["<string>", "<string>", ...],
+      "control_test_results": ["<string>", "<string>", ...],
+      "has_deviation": <true or false>,
+      "deviation_desc": "<string>",
+      "additional_references": [],
+      "end_line": <integer>,
+      "control_confidence": <float>,
+      "control_gpt_conf_justification": "<short reasoning>",
+      "continuation": <true or false>
+    }},
+    ... (repeat for each control found)
+  ]
+}}
+
+If only one control is found, return an array with one element.
+If a control starts but doesn't complete in this chunk, set "continuation": true for that control.
+
+## Parsing Strategy
+Analyze linguistic and structural cues — never rely on visible table columns.
+
+### 1. Ignore structural noise
+Skip any line that appears to be a **domain header** (e.g., "Communication and Information", "Logical and Physical Access")
+or a **principle statement** (e.g., "CC2.1 COSO Principle 13: …", "Common Criteria Related to…").  
+These provide section context only.
+
+### 2. Detect control boundaries
+Use these indicators to start a new control block:
+- Control identifiers like "CC2.1.1", "CC5.2.2", "ELC-01-02", "1 ", "2."
+- Entity-voice text starting with "The company…", "The entity…", "Personnel…"
+- Auditor verbs in past tense ("Inspected…", "Observed…", "Tested…", "Inquired…") after a previous result line.
+Stop the block when a new control ID, header, or whitespace separator appears.
+
+### 3. Classify sentences by role
+- **control_desc** – present-tense statements about control operation.
+- **control_tests[]** – auditor-voice procedures (verbs like "inspected", "tested", "inquired").
+- **control_test_results[]** – concise evaluations like "No exceptions noted."  
+  Record all, deduplicating identical phrases.
+
+### 4. Deviation detection
+- has_deviation = true if any result mentions "exception", "deviation", "failure", or "not effective".
+- deviation_desc = the phrase or short summary.
+- Otherwise, has_deviation = false and deviation_desc = "".
+
+### 5. Boundary sanity
+If a domain or principle header appears mid-text, treat it as the start of a new section and stop accumulating text.
+
+### 6. Confidence scoring
+- 0.9–1.0 → found control_id + description + ≥1 test + result.
+- 0.6–0.89 → missing ID but strong control/test/result linkage.
+- 0.3–0.59 → partial or inferred control.
+Include a brief justification.
+
+### 7. Continuation flag
+If this chunk ends mid-control (incomplete description or missing results), set "continuation": true for that control.
+Otherwise, set "continuation": false.
+
+### 8. Multiple controls in chunk
+Extract ALL complete controls found in this chunk. The chunk may contain:
+- Zero controls (just headers or narrative)
+- One control (typical for sparse reports)
+- Multiple controls (typical for dense reports like Adobe, KPMG)
+- Partial control (starts but doesn't complete - mark as continuation)
+
+Analyze this text (first line is line {start_line}). Extract ALL control blocks found:
+{text}
+"""
 
 # --- Deviation Detection Heuristics (English-only) ---
 # Positive signals indicate an exception/deviation; negatives indicate clean results
@@ -896,11 +1567,18 @@ TABLE_FIELD_MAP = {
     "product": ["name", "scan_id"]
 }
 
-SUBSERVICE_ORG_GPT_VERIFY_PROMPT = (
-    "You are an expert in SOC 2 compliance. "
-    "Is '{name}' (description: '{desc}') a likely subservice organization that would be identified in a SOC 2 report? "
-    "Respond with a JSON object: {{ 'is_likely_subservice_org': true/false, 'reason': '...' }} "
-    "If you are not sure, set 'is_likely_subservice_org' to false."
-)
+## Note: Removed legacy minimal SUBSERVICE_ORG_GPT_VERIFY_PROMPT override; retaining optimized JSON version defined earlier.
 
 SUBSERVICE_ORGS_TXT_PATH = str(PROJECT_ROOT / 'backend' / 'app' / 'extractors' / 'subservice_orgs.txt')
+
+# Legacy GPT_PROMPTS dictionary for backward compatibility with CLI tools
+# All production code should use the individual prompt constants defined above
+GPT_PROMPTS = {
+    'section_detection': SECTION_DETECTION_PROMPT,
+    'extract_toc': EXTRACT_TOC_PROMPT,
+    'section_heading_validation': SECTION_HEADING_VALIDATION_PROMPT,
+    'extract_toc_headings_and_pages': EXTRACT_TOC_HEADINGS_AND_PAGES_PROMPT,
+    'cuec_extraction': CUEC_EXTRACTION_PROMPT,
+    'cuec_consolidation': CUEC_CONSOLIDATION_PROMPT,
+    'executive_summary': EXECUTIVE_SUMMARY_PROMPT,
+}
