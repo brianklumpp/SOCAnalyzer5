@@ -211,9 +211,44 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         # --- Run company and auditor sequentially (prerequisites) ---
         # Wrapper for subservice_orgs to run both extraction and filtering sequentially
         def _run_subservice_orgs_extraction():
-            """Run subservice extraction + GPT filtering, return final filtered result."""
-            extract_subservice_orgs()  # Extracts and writes raw results to JSON
-            return filter_third_parties_with_gpt()  # Reads JSON, filters, writes back, returns result
+            """Run subservice extraction + GPT filtering, return final filtered result.
+
+            Also write a debug dump of the direct return value to
+            `data/logs/debug_subservice_postrun_dump.json` so end-to-end runs
+            can be compared with isolated extractor runs.
+            """
+            try:
+                extract_subservice_orgs()  # Extracts and writes raw results to JSON
+            except Exception:
+                # Let downstream filter attempt to load partial results if available
+                pass
+            try:
+                res = filter_third_parties_with_gpt()  # Reads JSON, filters, writes back, returns result
+            except Exception as e:
+                # If filtering fails, attempt to load on-disk JSON as a fallback
+                try:
+                    proj = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                    fallback_p = os.path.join(proj, 'data', 'json', 'subservice_orgs_result.json')
+                    if os.path.isfile(fallback_p):
+                        with open(fallback_p, 'r', encoding='utf-8') as pf:
+                            res = json.load(pf)
+                    else:
+                        raise
+                except Exception:
+                    # Re-raise original filtering error if fallback also fails
+                    raise
+            # Write a debug post-run dump for immediate inspection by the analyzer
+            try:
+                proj = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                log_dir = os.path.join(proj, 'data', 'logs')
+                os.makedirs(log_dir, exist_ok=True)
+                dump_path = os.path.join(log_dir, 'debug_subservice_postrun_dump.json')
+                with open(dump_path, 'w', encoding='utf-8') as df:
+                    json.dump({'type': str(type(res)), 'value': res}, df, indent=2, ensure_ascii=False)
+            except Exception:
+                # Non-fatal: don't let debug write break extraction
+                pass
+            return res
         
         # Wrapper for control extraction to use configured version (v2 or v4)
         def _run_control_extraction():
@@ -274,7 +309,10 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         flatten_map = {
             'control_extraction': ('controls', 'controls'),
             'cuec_extraction': ('cuecs', 'cuecs'),
-            'subservice_orgs_extraction': ('subservice_orgs', 'third_parties'),
+            # The subservice extractor writes a top-level 'subservice_orgs' list
+            # so use that as the inner key here to ensure the analyzer treats
+            # it as a list and runs enhancement/deduplication consistently.
+            'subservice_orgs_extraction': ('subservice_orgs', 'subservice_orgs'),
             'product_extraction': ('product', 'product'),
             'auditor_extraction': ('auditor', 'auditor'),
             'company_extraction': ('company', 'company'),
@@ -482,6 +520,16 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     logger.error(f"Failed to load {json_path} for {ext_key}: {e}")
         # --- FLATTEN AND ENFORCE: Only short keys in final result ---
         standardized_results = {}
+        # Debug: persist the raw extractor result for subservice orgs to help
+        # diagnose cases where the analyzer ends up with a dict instead of
+        # the expected list. This file is inspected when troubleshooting.
+        try:
+            debug_so = extractor_results.get('subservice_orgs_extraction')
+            debug_path = str(config.LOGS_DIR / 'debug_subservice_extraction_result.json')
+            with open(debug_path, 'w', encoding='utf-8') as df:
+                json.dump(debug_so, df, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
         for ext_key, (short_key, inner_key) in flatten_map.items():
             val = extractor_results.get(ext_key)
             if val is not None:

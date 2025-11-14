@@ -1,0 +1,179 @@
+{
+  "subservice_orgs": [
+    {
+      "third_party_name": "Splunk",
+      "third_party_description": "Centralized log repository providing visibility into asset information, network logs, and identity management.",
+      "third_party_page_ref": [
+        "21",
+        "23",
+        "Cloud Configuration Checks"
+      ],
+      "third_party_confidence": 0.8,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "nt-related tasks, including testing where required. \n=== PAGE 21 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n21 \nApplication \nDescription \nMoonbeam \nMoonbeam is a web application for continuous delivery flow. \nConfiguration Management \nHubble \nHubble module is an enterprise tool that provides on-demand profile-based auditing, real-\ntime security event notifications, automated remediation, alerting, and reporting. It is used \nto monitor Windows and Linux hosts for compliance with Adobe-defined security \nhardening and configuration baselines. \nMAVLink and Public \nCloud Lockdown (PCL) \nMAVLink collects available data from public cloud service providers, including access logs, \nresource configurations, security alerts, and best practice recommendations, into i",
+      "confidence_justification": [
+        "+0.4: in common subservice orgs list",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "splunk"
+    },
+    {
+      "third_party_name": "Datadog",
+      "third_party_description": "Software used to monitor the availability of production systems.",
+      "third_party_page_ref": [
+        "23"
+      ],
+      "third_party_confidence": 0.8,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "nd Workstream Applications \nJira \nJira is a ticketing application used to track and assign work items. \nSite Operations \nApogee/EcoStruxure \nApogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. \nCCURE \nCCURE is an identity management platform used to manage badge readers at Adobe-\nowned facilities. \nSecurity Access \nManagement System \n(SAMS) \nSAMS is an identity management platform used to facilitate physical access to Adobe-\nowned facilities. \nStruxureWare/\nEcoStruxure \nStruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure \nwithin OR1. \nSystems Monitoring \nNew Relic \nDatadog \nPrometheus \nNagios \nGrafana \nThese software products are used to monitor the availability of production systems and \ncommunicate alerts to appropriate personnel. \nPagerDuty \nPagerDuty software is used to communicate availability monitoring alerts to appropriate \npersonnel. \nServiceNow \nServiceNow is an enterprise IT service management solution use",
+      "confidence_justification": [
+        "+0.4: in common subservice orgs list",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "datadog"
+    },
+    {
+      "third_party_name": "Jira",
+      "third_party_description": "A ticketing application used to track and assign work items.",
+      "third_party_page_ref": [
+        "22"
+      ],
+      "third_party_confidence": 0.6,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ent for subsets of the organization’s users. \nMicrosoft Active \nDirectory (AD) \nAdobe’s AD stores user accounts, group memberships, and account data, and is used to \nmanage access to the Adobe corporate network. Internal users are required to have an \nAdobe AD username and password to be able to authenticate to the Adobe corporate \nnetwork and the Adobe Experience Cloud production servers. \nOkta \nAccess to production environments at Adobe requires Okta multifactor authentication.  \nSailPoint \nThe SailPoint identity management solution is the back-end technology that executes \napproved logical access changes requested within the IAM Portal. \n=== PAGE 22 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n22 \nApplication \nDescription \nZero-Trust Enterprise \nNetwork ",
+      "confidence_justification": [
+        "+0.4: in common subservice orgs list",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "-0.2: description indicates SaaS/monitoring tool",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Atlassian"
+    },
+    {
+      "third_party_name": "PagerDuty",
+      "third_party_description": "Software used to communicate availability monitoring alerts to appropriate personnel.",
+      "third_party_page_ref": [
+        "23"
+      ],
+      "third_party_confidence": 0.6,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "nd Workstream Applications \nJira \nJira is a ticketing application used to track and assign work items. \nSite Operations \nApogee/EcoStruxure \nApogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. \nCCURE \nCCURE is an identity management platform used to manage badge readers at Adobe-\nowned facilities. \nSecurity Access \nManagement System \n(SAMS) \nSAMS is an identity management platform used to facilitate physical access to Adobe-\nowned facilities. \nStruxureWare/\nEcoStruxure \nStruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure \nwithin OR1. \nSystems Monitoring \nNew Relic \nDatadog \nPrometheus \nNagios \nGrafana \nThese software products are used to monitor the availability of production systems and \ncommunicate alerts to appropriate personnel. \nPagerDuty \nPagerDuty software is used to communicate availability monitoring alerts to appropriate \npersonnel. \nServiceNow \nServiceNow is an enterprise IT service management solution use",
+      "confidence_justification": [
+        "+0.4: in common subservice orgs list",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "-0.2: description indicates SaaS/monitoring tool",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "pagerduty"
+    },
+    {
+      "third_party_name": "ServiceNow",
+      "third_party_description": "An enterprise IT service management solution used to document availability monitoring tickets.",
+      "third_party_page_ref": [
+        "23"
+      ],
+      "third_party_confidence": 0.6,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "nd Workstream Applications \nJira \nJira is a ticketing application used to track and assign work items. \nSite Operations \nApogee/EcoStruxure \nApogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. \nCCURE \nCCURE is an identity management platform used to manage badge readers at Adobe-\nowned facilities. \nSecurity Access \nManagement System \n(SAMS) \nSAMS is an identity management platform used to facilitate physical access to Adobe-\nowned facilities. \nStruxureWare/\nEcoStruxure \nStruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure \nwithin OR1. \nSystems Monitoring \nNew Relic \nDatadog \nPrometheus \nNagios \nGrafana \nThese software products are used to monitor the availability of production systems and \ncommunicate alerts to appropriate personnel. \nPagerDuty \nPagerDuty software is used to communicate availability monitoring alerts to appropriate \npersonnel. \nServiceNow \nServiceNow is an enterprise IT service management solution use",
+      "confidence_justification": [
+        "+0.4: in common subservice orgs list",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "-0.2: description indicates SaaS/monitoring tool",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "ServiceNow"
+    },
+    {
+      "third_party_name": "Equinix",
+      "third_party_description": "Colocation provider used for Adobe’s Experience Cloud solutions.",
+      "third_party_page_ref": [
+        "21"
+      ],
+      "third_party_confidence": 0.3,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": [
+        "+0.4: in common subservice orgs list",
+        "-0.1: likely_so is No",
+        "+0.1: common_so is Yes",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "equinix"
+    },
+    {
+      "third_party_name": "Okta",
+      "third_party_description": "Identity and access management platform used for integrating Adobe’s single sign-on and managing access control.",
+      "third_party_page_ref": [
+        "Description of System",
+        "22"
+      ],
+      "third_party_confidence": 0.3,
+      "distance_from_so_keywords": 6,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "mpliance with Adobe-defined security baselines. \nIdentity and Access Management \nSafeguard for Privileged \nSessions (Safeguard) \nSafeguard is a privileged session management tool that monitors remote administrative \naccess to servers and network devices. \nCAMP \nCAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and \nmanaging the “root” user for AWS accounts and Azure subscriptions. \nHashiCorp Vault \nHashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API \nkeys, and other secrets. \nIAM Portal \nIAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each \nLDAP group is assigned an owner who is responsible for approving who can have access \nto that specific group.  \nKLAM \nKLAM is Adobe’s proprietary tool for access management to the AWS console and \napplicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) \nand is used to map Adobe’s corporate AD groups to AWS IAM roles. ",
+      "confidence_justification": [
+        "+0.4: in common subservice orgs list",
+        "-0.1: likely_so is No",
+        "+0.1: common_so is Yes",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Okta"
+    },
+    {
+      "third_party_name": "Workday",
+      "third_party_description": "A People Resources tool used for managing account and employment information of Adobe personnel.",
+      "third_party_page_ref": [
+        "22",
+        "PR system context"
+      ],
+      "third_party_confidence": 0.3,
+      "distance_from_so_keywords": 5,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ent for subsets of the organization’s users. \nMicrosoft Active \nDirectory (AD) \nAdobe’s AD stores user accounts, group memberships, and account data, and is used to \nmanage access to the Adobe corporate network. Internal users are required to have an \nAdobe AD username and password to be able to authenticate to the Adobe corporate \nnetwork and the Adobe Experience Cloud production servers. \nOkta \nAccess to production environments at Adobe requires Okta multifactor authentication.  \nSailPoint \nThe SailPoint identity management solution is the back-end technology that executes \napproved logical access changes requested within the IAM Portal. \n=== PAGE 22 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n22 \nApplication \nDescription \nZero-Trust Enterprise \nNetwork ",
+      "confidence_justification": [
+        "+0.4: in common subservice orgs list",
+        "-0.1: likely_so is No",
+        "+0.1: common_so is Yes",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Workday"
+    }
+  ]
+}

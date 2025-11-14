@@ -366,9 +366,11 @@ def extract_subservice_orgs():
 
 def normalize_third_party_names(third_parties):
     """
-    Deduplicate third parties by mapping common/shortened names to canonical names and merging their data.
+    Map extracted third-party names to canonical names without destroying original rows.
+    This preserves raw findings (user policy) and normalizes page refs to lists of strings.
     """
     alias_map = THIRD_PARTY_ALIAS_MAP
+
     def canonical(name):
         if not name:
             return None
@@ -393,28 +395,34 @@ def normalize_third_party_names(third_parties):
             if abbrev in alias_map:
                 return alias_map[abbrev]
         return key
-    merged = {}
+
+    out = []
     for entry in third_parties:
-        canon = canonical(entry.get('third_party_name'))
-        if not canon:
-            continue
-        if canon not in merged:
-            merged[canon] = entry.copy()
-            merged[canon]['third_party_name'] = canon
+        # Keep original row intact (do not overwrite third_party_name)
+        e = entry.copy()
+        canon = canonical(e.get('third_party_name'))
+        if canon:
+            e['canonical_name'] = canon
+        # Normalize page refs to a list of strings
+        pr = e.get('third_party_page_ref')
+        if pr is None:
+            e['third_party_page_ref'] = []
         else:
-            # Merge page refs
-            prev = merged[canon]
-            if entry.get('third_party_page_ref') and prev.get('third_party_page_ref'):
-                prev['third_party_page_ref'] += ',' + entry['third_party_page_ref']
-            elif entry.get('third_party_page_ref'):
-                prev['third_party_page_ref'] = entry['third_party_page_ref']
-            # Merge controls
-            if entry.get('third_party_controls') and prev.get('third_party_controls'):
-                prev['third_party_controls'] += entry['third_party_controls']
-            elif entry.get('third_party_controls'):
-                prev['third_party_controls'] = entry['third_party_controls']
-            # Optionally, merge/average confidence, etc.
-    return list(merged.values())
+            if isinstance(pr, list):
+                e['third_party_page_ref'] = [str(x) for x in pr]
+            else:
+                # split comma-separated strings that may have been produced previously
+                if isinstance(pr, str) and ',' in pr:
+                    parts = [p.strip() for p in pr.split(',') if p.strip()]
+                    e['third_party_page_ref'] = [str(x) for x in parts]
+                else:
+                    e['third_party_page_ref'] = [str(pr)]
+        # Ensure controls is a list if present
+        if e.get('third_party_controls') is None:
+            e['third_party_controls'] = []
+        out.append(e)
+
+    return out
 
 def filter_company_references(third_parties, company_names):
     """
@@ -481,12 +489,27 @@ def clean_company_name(name):
     base = re.sub(r'\b(inc|llc|ltd|corp|corporation|incorporated|plc|gmbh|sarl|sa|bv|lp|llp|co)\b', '', base)
     return base.strip()
 
-def calculate_confidence(entry, company_names, so_list, likely_so, common_so, top2_distance_names):
+def calculate_confidence(entry, company_names, so_list, likely_so, common_so, top2_distance_names, is_service_provider=False, provider_confidence=0.0, is_common_so=False):
+    """
+    Calculate confidence for a subservice organization entry using weighted scoring.
+    
+    Scoring system:
+    - Common SO list match: +0.5
+    - GPT service provider confirmed: +0.4 (scaled by provider_confidence)
+    - likely_so=Yes: +0.2
+    - Distance proximity (top 2): +0.1
+    - Context indicators: variable adjustments
+    - Company/parent match: -0.8 (override penalty)
+    
+    Returns confidence (0.0-1.0) and updates entry['confidence_justification']
+    """
     conf = 0.0
     entry['confidence_justification'] = []
     name = (entry.get('third_party_name') or '').strip().lower()
     cleaned_name = clean_company_name(name)
     cleaned_company_names = [clean_company_name(n) for n in company_names if n]
+    
+    # PENALTY: Company/parent match (override - takes precedence)
     penalty_applied = False
     for cname in cleaned_company_names:
         if cname and (cname == cleaned_name or cname in cleaned_name or cleaned_name in cname or SequenceMatcher(None, cname, cleaned_name).ratio() > 0.85):
@@ -494,29 +517,77 @@ def calculate_confidence(entry, company_names, so_list, likely_so, common_so, to
             penalty_applied = True
             entry['confidence_justification'].append(f'-0.8: matches company or parent name ({cname})')
             break
-    # Only apply common_so bonus if not penalized for company match
-    if not penalty_applied and name in {so.strip().lower() for so in so_list}:
-        conf += 0.4
-        entry['confidence_justification'].append('+0.4: in common subservice orgs list')
+    
+    # BONUS: Common subservice orgs list (high weight)
+    # Use is_common_so flag passed from caller (already checked both third_party_name and canonical_name)
+    if not penalty_applied and is_common_so:
+        conf += 0.5
+        entry['confidence_justification'].append('+0.5: in common subservice orgs list')
+    
+    # BONUS: GPT service provider research confirmation (medium-high weight, scaled by provider confidence)
+    if is_service_provider and provider_confidence > 0.5:
+        bonus = round(0.4 * provider_confidence, 3)
+        conf += bonus
+        entry['confidence_justification'].append(f'+{bonus}: confirmed as service provider by GPT (confidence: {provider_confidence})')
+    
+    # BONUS: likely_so flag (medium weight)
     if likely_so == 'Yes':
-        conf += 0.1
-        entry['confidence_justification'].append('+0.1: likely_so is Yes')
+        conf += 0.2
+        entry['confidence_justification'].append('+0.2: likely_so is Yes')
     elif likely_so == 'No':
         conf -= 0.1
         entry['confidence_justification'].append('-0.1: likely_so is No')
-    if common_so == 'Yes' and not penalty_applied:
+    
+    # BONUS: common_so flag (small weight, only if not already matched common list)
+    if common_so == 'Yes' and not penalty_applied and not is_common_so:
         conf += 0.1
-        entry['confidence_justification'].append('+0.1: common_so is Yes')
+        entry['confidence_justification'].append('+0.1: common_so is Yes (fuzzy match)')
+    
+    # BONUS: Distance proximity (top 2 closest to SO keywords)
+    distance = entry.get('distance_from_so_keywords', 999)
     if name in top2_distance_names:
         conf += 0.1
-        entry['confidence_justification'].append('+0.1: top2 distance name')
-    # Context-based adjustment (example: penalize SaaS/monitoring tools)
+        entry['confidence_justification'].append(f'+0.1: distance_from_so_keywords is {distance} (very close)')
+    
+    # PENALTY: SaaS/monitoring tool indicators (but exclude major infrastructure providers)
     desc = (entry.get('third_party_description') or '').lower()
+    # Exclude entries that are clearly infrastructure/cloud/colocation providers
+    infra_keywords = ['infrastructure', 'cloud hosting', 'colocation', 'data center', 'iaas', 'paas']
+    is_infrastructure = any(kw in desc for kw in infra_keywords) or is_common_so
+    
     saas_keywords = ['monitoring', 'logging', 'ticketing', 'alert', 'hr', 'business application', 'it service management', 'endpoint detection', 'vulnerability assessment']
-    if any(kw in desc for kw in saas_keywords):
+    if not is_infrastructure and any(kw in desc for kw in saas_keywords):
         conf -= 0.2
         entry['confidence_justification'].append('-0.2: description indicates SaaS/monitoring tool')
+    
+    # Clamp to valid range
     return min(1.0, max(0.0, conf))
+
+def gpt_check_service_provider(entry):
+    """
+    Use GPT to determine if an entity is a known service provider.
+    Returns (is_provider: bool, confidence: float, reason: str)
+    """
+    from ..config import SUBSERVICE_ORG_SERVICE_PROVIDER_RESEARCH_PROMPT
+    
+    name = entry.get('third_party_name', '')
+    desc = entry.get('third_party_description', '')
+    
+    prompt = SUBSERVICE_ORG_SERVICE_PROVIDER_RESEARCH_PROMPT.format(name=name, desc=desc)
+    
+    try:
+        response = gpt_extract(prompt, 'subservice_orgs_service_provider_check')
+        clean_response = clean_gpt_json_response(response)
+        result = json.loads(clean_response)
+        
+        is_provider = result.get('is_service_provider', False)
+        confidence = float(result.get('confidence', 0.0))
+        reason = result.get('reason', '')
+        
+        return is_provider, confidence, reason
+    except Exception as e:
+        logger.error(f"GPT service provider check failed for {name}: {e}")
+        return False, 0.0, f"Error: {e}"
 
 def postprocess_third_parties(third_parties, company_names, so_list, heuristic_exclusions_log_path=None):
     processed = []
@@ -532,17 +603,43 @@ def postprocess_third_parties(third_parties, company_names, so_list, heuristic_e
     third_parties = set_likely_so_for_company_and_parent(third_parties, company_names)
     for entry in third_parties:
         name_lower = (entry.get('third_party_name') or '').strip().lower()
-        is_common_so = name_lower in so_names_lower
+        canonical_lower = (entry.get('canonical_name') or '').strip().lower()
+        # Check BOTH third_party_name and canonical_name against common list
+        is_common_so = name_lower in so_names_lower or canonical_lower in so_names_lower
+        
+        # Override likely_so for entries in common list (we know these are legitimate providers)
+        if is_common_so:
+            entry['likely_so'] = 'Yes'
+        
         likely_so = entry.get('likely_so', 'Yes')
-        common_so = 'Yes' if is_common_so else 'No'
+        # Set common_so: if exact match in common list, use 'Yes'; otherwise do fuzzy matching
         if is_common_so:
             entry['common_so'] = 'Yes'
         else:
             entry['common_so'] = calculate_common_so(entry, so_list)
         if is_heuristic_excluded(entry, company_names) and not is_common_so:
+            # Non-destructive behavior: preserve the finding but mark as excluded
+            # by setting confidence to 0 and adding a justification. Also
+            # record the exclusion in the heuristic_exclusions list for logs.
+            entry['third_party_confidence'] = 0.0
+            entry['confidence_justification'] = entry.get('confidence_justification', []) + ['-0.0: excluded by Python heuristic (keyword/company match)']
             heuristic_exclusions.append({'entry': entry, 'reason': 'Python heuristic exclusion (keyword/company match)'})
+            processed.append(entry)
+            # Skip further confidence calculations for excluded items
             continue
-        conf = calculate_confidence(entry, company_names, so_list, likely_so, entry['common_so'], top2_distance_names)
+        
+        # NEW: Run GPT service provider check for entries not in common list
+        is_provider = False
+        provider_conf = 0.0
+        if not is_common_so:
+            is_provider, provider_conf, provider_reason = gpt_check_service_provider(entry)
+            logger.info(f"[Service Provider Check] {entry.get('third_party_name')}: is_provider={is_provider}, confidence={provider_conf}, reason={provider_reason}")
+        
+        # Calculate confidence with new weighted system
+        conf = calculate_confidence(
+            entry, company_names, so_list, likely_so, entry['common_so'], 
+            top2_distance_names, is_provider, provider_conf, is_common_so
+        )
         conf = min(1.0, max(0.0, conf))  # Clamp after all calcs
         entry['third_party_confidence'] = round(conf, 3)
         processed.append(entry)
@@ -599,8 +696,11 @@ def filter_third_parties_with_gpt():
     with open(INPUT_JSON_PATH, 'r', encoding='utf-8') as f:
         data = json.load(f)
     third_parties = data.get('subservice_orgs', [])
-    # Normalize/deduplicate before filtering
+    
+    # IMPORTANT: Normalize/deduplicate EARLY before any processing
+    # This ensures canonical_name is available for common list matching
     third_parties = normalize_third_party_names(third_parties)
+    
     # Filter out company being audited and parent
     company_json_path = str(config.JSON_DIR / 'company_result.json')
     try:
@@ -665,6 +765,14 @@ def filter_third_parties_with_gpt():
     with open(str(OUTPUT_JSON_PATH), 'w', encoding='utf-8') as f:
         json.dump({'subservice_orgs': filtered}, f, indent=2, ensure_ascii=False)
     logging.info(f"Final filtered subservice orgs written to {OUTPUT_JSON_PATH}. Kept: {len(filtered)}. Excluded: {len(exclusions)}. See {FILTER_LOG_PATH} for details. Heuristic exclusions in {HEURISTIC_LOG_PATH}.")
+    # Return the final filtered result so callers (e.g., analyzer) receive the
+    # extractor output directly instead of relying solely on reading the JSON
+    # file from disk. This avoids race conditions where the analyzer attempts
+    # to load a partial/cleared file.
+    try:
+        return {'subservice_orgs': filtered, 'bad_chunks': bad_chunks} if bad_chunks else {'subservice_orgs': filtered}
+    except Exception:
+        return {'subservice_orgs': filtered}
 
 def elevate_and_group_control_ids(json_path=OUTPUT_JSON_PATH):
     """
@@ -699,8 +807,15 @@ def elevate_and_group_control_ids(json_path=OUTPUT_JSON_PATH):
     logging.info(f"Elevated and grouped control IDs for all third parties in {json_path}.")
 
 def calculate_common_so(entry, so_list):
+    """Check both third_party_name and canonical_name against common list"""
     name = (entry.get('third_party_name') or '').strip().lower()
-    return 'Yes' if any(name == so.strip().lower() for so in so_list) else 'No'
+    canonical = (entry.get('canonical_name') or '').strip().lower()
+    so_names_lower = {so.strip().lower() for so in so_list}
+    
+    # Check both names
+    if name in so_names_lower or canonical in so_names_lower:
+        return 'Yes'
+    return 'No'
 
 def gpt_verify_likely_subservice_orgs(subservice_orgs):
     for org in subservice_orgs:

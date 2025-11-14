@@ -1,0 +1,589 @@
+{
+  "subservice_orgs": [
+    {
+      "id": 179,
+      "third_party_name": "Amazon Web Services",
+      "third_party_description": "Provides infrastructure as a service through its AWS platform.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "Subservice Organization,PAGE 18,Page 19,1,CAMP,44,14,18",
+      "confidence_justification": [
+        "[]",
+        "Standardized from: Amazon Web Services, Inc. (AWS)",
+        "[]",
+        "Merged duplicate: Amazon Web Services (AWS)",
+        "[]",
+        "Merged duplicate: Amazon Web Services",
+        "[]",
+        "Merged duplicate: Amazon Web Services, Inc.",
+        "[]; Manually ignored in UI - confidence set to 0",
+        "Merged duplicate: AWS",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1, CC6.2, CC6.3",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Elastic Compute Cloud (EC2)"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Simple Storage Service (S3)"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Relational Database Service (RDS)"
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Identity Access Management (IAM)"
+        },
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Virtual Private Cloud (VPC)"
+        },
+        {
+          "third_party_control_seq": 6,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Security Groups"
+        },
+        {
+          "third_party_control_seq": 7,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Lambda Functions"
+        }
+      ],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 180,
+      "third_party_name": "Microsoft Azure",
+      "third_party_description": "Provides infrastructure as a service through its Azure platform.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "Subservice Organization,PAGE 18,19,1,CAMP",
+      "confidence_justification": [
+        "[]",
+        "Standardized from: Microsoft Corporation (Microsoft)",
+        "[]; Manually ignored in UI - confidence set to 0",
+        "Merged duplicate: Microsoft",
+        "[]",
+        "Merged duplicate: Microsoft Azure",
+        "[]",
+        "Merged duplicate: Azure",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Management of virtual machines and related infrastructure services for Adobe's production environments."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Physical security of data centers hosting Adobe's solutions."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Configuration of virtualization layer components and monitoring policies."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Provision and management of Azure cloud services, including Virtual Machines, Blob Storage, and Network Security Groups."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Azure is used by Adobe to deploy secure virtual machines using hardened VM images."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 181,
+      "third_party_name": "Google Cloud Platform (GCP)",
+      "third_party_description": "Provides infrastructure as a service through its Google Cloud Platform (GCP).",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "Subservice Organization,44,14,PAGE 18,Page 19",
+      "confidence_justification": [
+        "[]",
+        "Standardized from: Google LLC",
+        "[]; Manually ignored in UI - confidence set to 0",
+        "Merged duplicate: Google",
+        "[]",
+        "Merged duplicate: Google Cloud Platform (GCP)",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "GCP continually subscribes to a defined physical, environmental, and virtual security model."
+        }
+      ],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 184,
+      "third_party_name": "Equinix, Inc.",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "Subservice Organization,21,14",
+      "confidence_justification": [
+        "[]",
+        "Standardized from: Equinix, Inc. (Equinix)",
+        "[]",
+        "Merged duplicate: Equinix",
+        "[]",
+        "Merged duplicate: Equinix, Inc.",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 198,
+      "third_party_name": "Splunk",
+      "third_party_description": "Centralized logging and analysis tool used for consolidating cloud data such as access logs, resource configurations, security alerts, and best practice recommendations.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "21,23,1,Security Monitoring Alert Criteria",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 199,
+      "third_party_name": "SolarWinds",
+      "third_party_description": "Network device security tool used to monitor network devices for compliance with defined security baselines.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "21,1,1",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 202,
+      "third_party_name": "HashiCorp Vault",
+      "third_party_description": "Secrets management tool that secures, stores, and controls access to sensitive data such as tokens, passwords, and API keys.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "HashiCorp Vault",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 203,
+      "third_party_name": "Okta",
+      "third_party_description": "Identity and access management service providing single sign-on functionality and integration with Adobe tools like KLAM.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "KLAM,22",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 204,
+      "third_party_name": "Microsoft Active Directory (AD)",
+      "third_party_description": "Directory service storing and managing user accounts, group memberships, and account data.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "Microsoft Active Directory (AD)",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 205,
+      "third_party_name": "SailPoint",
+      "third_party_description": "SailPoint is an identity management solution managing logical access changes via the IAM Portal.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "22",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 206,
+      "third_party_name": "Workday",
+      "third_party_description": "Workday is used for managing account and employment information of Adobe personnel.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "22",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 210,
+      "third_party_name": "New Relic",
+      "third_party_description": "Software product used to monitor the availability of production systems and communicate alerts to appropriate personnel.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "23",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 211,
+      "third_party_name": "Datadog",
+      "third_party_description": "Software product used to monitor the availability of production systems and communicate alerts to appropriate personnel.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "23",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 212,
+      "third_party_name": "Nagios",
+      "third_party_description": "Software product used to monitor the availability of production systems and communicate alerts to appropriate personnel.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "23",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 213,
+      "third_party_name": "PagerDuty",
+      "third_party_description": "Software used to communicate availability monitoring alerts to appropriate personnel.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "23",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 214,
+      "third_party_name": "ServiceNow",
+      "third_party_description": "Enterprise IT service management solution used to document availability monitoring tickets.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "23",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 215,
+      "third_party_name": "Rapid7 Nexpose",
+      "third_party_description": "Vulnerability assessment tool that scans, identifies, and reports vulnerabilities found on the network.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "23",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 216,
+      "third_party_name": "CrowdStrike",
+      "third_party_description": "Next-generation endpoint detection and response (EDR) solution used for malware detection.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "23,Endpoint Detection Response Software",
+      "confidence_justification": [
+        "[]",
+        "Standardized from: CrowdStrike Falcon",
+        "[]",
+        "Merged duplicate: CrowdStrike",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Monitors and records activities on endpoints, providing real-time and historical visibility to detect and block malicious activity."
+        }
+      ],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 217,
+      "third_party_name": "Adobe-Managed Facility colocations",
+      "third_party_description": "Colocation facilities partnered with Adobe to provide secure and available services for its global customer base. These colocations allow physical access to Adobe personnel only for the equipment storage and operation areas.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "N/A",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 220,
+      "third_party_name": "Microsoft Corporation",
+      "third_party_description": "Cloud hosting and technology service provider.",
+      "third_party_confidence": 0.4,
+      "third_party_page_ref": "44,14",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1, CC6.2, CC6.3",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        }
+      ],
+      "likely_so": "Yes",
+      "common_so": "Yes"
+    },
+    {
+      "id": 182,
+      "third_party_name": "Cyxtera Technologies, Inc.",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_confidence": 0.3,
+      "third_party_page_ref": "Subservice Organization,21,14",
+      "confidence_justification": [
+        "[]",
+        "Standardized from: Cyxtera Technologies, Inc. (Cyxtera)",
+        "[]",
+        "Merged duplicate: Cyxtera",
+        "[]",
+        "Merged duplicate: Cyxtera Technologies, Inc.",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "No"
+    },
+    {
+      "id": 183,
+      "third_party_name": "Digital Realty Trust, Inc.",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_confidence": 0.3,
+      "third_party_page_ref": "Subservice Organization,21,14",
+      "confidence_justification": [
+        "[]",
+        "Standardized from: Digital Realty Trust, Inc. (formerly Interxion)",
+        "[]",
+        "Merged duplicate: Digital Realty Trust",
+        "[]",
+        "Merged duplicate: Digital Realty Trust, Inc.",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "No"
+    },
+    {
+      "id": 185,
+      "third_party_name": "NTT Ltd.",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_confidence": 0.3,
+      "third_party_page_ref": "Subservice Organization,21,14",
+      "confidence_justification": [
+        "[]",
+        "Standardized from: NTT ltd. (formerly Gyron)",
+        "[]",
+        "Merged duplicate: NTT Ltd.",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "No"
+    },
+    {
+      "id": 207,
+      "third_party_name": "StruxureWare/EcoStruxure",
+      "third_party_description": "Systems used to monitor HVAC/climate control within OR1.",
+      "third_party_confidence": 0.3,
+      "third_party_page_ref": "23,23",
+      "confidence_justification": [
+        "[]",
+        "Standardized from: Apogee/EcoStruxure",
+        "[]",
+        "Merged duplicate: StruxureWare/EcoStruxure",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "No"
+    },
+    {
+      "id": 208,
+      "third_party_name": "CCURE",
+      "third_party_description": "Identity management platform used to manage badge readers at Adobe-owned facilities.",
+      "third_party_confidence": 0.3,
+      "third_party_page_ref": "23",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "+0.1: likely_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "Yes",
+      "common_so": "No"
+    },
+    {
+      "id": 196,
+      "third_party_name": "GitHub Enterprise",
+      "third_party_description": "Centralized source code control system implemented internally for the management of code repositories.",
+      "third_party_confidence": 0.1,
+      "third_party_page_ref": "21",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "No",
+      "common_so": "Yes"
+    },
+    {
+      "id": 197,
+      "third_party_name": "GitLab",
+      "third_party_description": "Source code management platform for Git repositories and code deployment tool used for production environments.",
+      "third_party_confidence": 0.1,
+      "third_party_page_ref": "21",
+      "confidence_justification": [
+        "[]",
+        "Set low confidence: not canonical after deduplication",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "third_party_controls": [],
+      "likely_so": "No",
+      "common_so": "Yes"
+    }
+  ]
+}

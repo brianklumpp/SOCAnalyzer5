@@ -1,0 +1,32 @@
+Top 10 confidence changes (raw -> enhanced)
+Format: name | raw_conf | enhanced_conf | delta (enh - raw)
+
+1. Amazon Web Services, Inc. | 1.0 -> None | delta=-1.0
+   page_ref raw: 44,45 | enhanced: None
+
+2. Microsoft Corporation (Microsoft) | 1.0 -> None | delta=-1.0
+   page_ref raw: Subservice Organization | enhanced: None
+
+3. Equinix, Inc. | 1.0 -> 0.0 | delta=-1.0
+   page_ref raw: 45 | enhanced: None
+
+4. Google LLC | 1.0 -> None | delta=-1.0
+   page_ref raw: Subservice Organization,44,45 | enhanced: None
+
+5. Equinix, Inc. (Equinix) | 1.0 -> None | delta=-1.0
+   page_ref raw: Subservice Organization | enhanced: None
+
+6. Rapid7 Nexpose | 1.0 -> 0.0 | delta=-1.0
+   page_ref raw: 23 | enhanced: None
+
+7. AWS | 1.0 -> None | delta=-1.0
+   page_ref raw: 18,Description of System | enhanced: None
+
+8. Google Cloud Platform | 1.0 -> 0.0 | delta=-1.0
+   page_ref raw: Page 19 | enhanced: None
+
+9. Amazon Web Services | 1.0 -> 0.0 | delta=-1.0
+   page_ref raw: Page 19 | enhanced: None
+
+10. Amazon Web Services, Inc. (AWS) | 1.0 -> None | delta=-1.0
+   page_ref raw: Subservice Organization | enhanced: None

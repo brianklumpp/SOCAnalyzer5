@@ -1,0 +1,1538 @@
+{
+  "subservice_orgs": [
+    {
+      "third_party_name": "Equinix, Inc. (Equinix)",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_page_ref": [
+        "Subservice Organization"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        }
+      ],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ]
+    },
+    {
+      "third_party_name": "NTT ltd.",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers. Formerly known as Gyron.",
+      "third_party_page_ref": [
+        "Subservice Organization,20,45"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ]
+    },
+    {
+      "third_party_name": "Splunk",
+      "third_party_description": "A platform for consolidating and analyzing logs, providing asset information, network logs, and identity management insights.",
+      "third_party_page_ref": [
+        "21,Cloud Configuration Checks"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 6,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "nt-related tasks, including testing where required. \n=== PAGE 21 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n21 \nApplication \nDescription \nMoonbeam \nMoonbeam is a web application for continuous delivery flow. \nConfiguration Management \nHubble \nHubble module is an enterprise tool that provides on-demand profile-based auditing, real-\ntime security event notifications, automated remediation, alerting, and reporting. It is used \nto monitor Windows and Linux hosts for compliance with Adobe-defined security \nhardening and configuration baselines. \nMAVLink and Public \nCloud Lockdown (PCL) \nMAVLink collects available data from public cloud service providers, including access logs, \nresource configurations, security alerts, and best practice recommendations, into i",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ]
+    },
+    {
+      "third_party_name": "SolarWinds",
+      "third_party_description": "A network device security tool used to monitor network devices for compliance with security baselines.",
+      "third_party_page_ref": [
+        "21,Network Configuration Checks,Page containing information on Adobe's use of SolarWinds technology for device scanning and patch management."
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "nt-related tasks, including testing where required. \n=== PAGE 21 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n21 \nApplication \nDescription \nMoonbeam \nMoonbeam is a web application for continuous delivery flow. \nConfiguration Management \nHubble \nHubble module is an enterprise tool that provides on-demand profile-based auditing, real-\ntime security event notifications, automated remediation, alerting, and reporting. It is used \nto monitor Windows and Linux hosts for compliance with Adobe-defined security \nhardening and configuration baselines. \nMAVLink and Public \nCloud Lockdown (PCL) \nMAVLink collects available data from public cloud service providers, including access logs, \nresource configurations, security alerts, and best practice recommendations, into i",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ]
+    },
+    {
+      "third_party_name": "HashiCorp Vault",
+      "third_party_description": "Secrets management tool used to secure, store, and control access to sensitive data like tokens, passwords, and certificates.",
+      "third_party_page_ref": [
+        "Description of System,32"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Cryptographic keys are stored in Adobe-authorized repositories such as HashiCorp Vault."
+        }
+      ],
+      "source_context": "mpliance with Adobe-defined security baselines. \nIdentity and Access Management \nSafeguard for Privileged \nSessions (Safeguard) \nSafeguard is a privileged session management tool that monitors remote administrative \naccess to servers and network devices. \nCAMP \nCAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and \nmanaging the “root” user for AWS accounts and Azure subscriptions. \nHashiCorp Vault \nHashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API \nkeys, and other secrets. \nIAM Portal \nIAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each \nLDAP group is assigned an owner who is responsible for approving who can have access \nto that specific group.  \nKLAM \nKLAM is Adobe’s proprietary tool for access management to the AWS console and \napplicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) \nand is used to map Adobe’s corporate AD groups to AWS IAM roles. ",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes"
+      ]
+    },
+    {
+      "third_party_name": "Okta",
+      "third_party_description": "Identity and single sign-on provider used for integrating Adobe's authentication systems.",
+      "third_party_page_ref": [
+        "Description of System,Page 22"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Provides multifactor authentication for access to production environments."
+        }
+      ],
+      "source_context": "mpliance with Adobe-defined security baselines. \nIdentity and Access Management \nSafeguard for Privileged \nSessions (Safeguard) \nSafeguard is a privileged session management tool that monitors remote administrative \naccess to servers and network devices. \nCAMP \nCAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and \nmanaging the “root” user for AWS accounts and Azure subscriptions. \nHashiCorp Vault \nHashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API \nkeys, and other secrets. \nIAM Portal \nIAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each \nLDAP group is assigned an owner who is responsible for approving who can have access \nto that specific group.  \nKLAM \nKLAM is Adobe’s proprietary tool for access management to the AWS console and \napplicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) \nand is used to map Adobe’s corporate AD groups to AWS IAM roles. ",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 2.0 (very close)"
+      ]
+    },
+    {
+      "third_party_name": "Microsoft Active Directory (AD)",
+      "third_party_description": "Directory service used to store user accounts, group memberships, and account data.",
+      "third_party_page_ref": [
+        "Description of System,Page 22"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Used to manage access to the Adobe corporate network and production servers."
+        }
+      ],
+      "source_context": "mpliance with Adobe-defined security baselines. \nIdentity and Access Management \nSafeguard for Privileged \nSessions (Safeguard) \nSafeguard is a privileged session management tool that monitors remote administrative \naccess to servers and network devices. \nCAMP \nCAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and \nmanaging the “root” user for AWS accounts and Azure subscriptions. \nHashiCorp Vault \nHashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API \nkeys, and other secrets. \nIAM Portal \nIAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each \nLDAP group is assigned an owner who is responsible for approving who can have access \nto that specific group.  \nKLAM \nKLAM is Adobe’s proprietary tool for access management to the AWS console and \napplicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) \nand is used to map Adobe’s corporate AD groups to AWS IAM roles. ",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ]
+    },
+    {
+      "third_party_name": "SailPoint",
+      "third_party_description": "An identity management solution used to execute logical access changes requested in the IAM Portal.",
+      "third_party_page_ref": [
+        "Page 22,32"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Executes approved logical access changes for identity management."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Access to user public keys within SailPoint is limited to approved administrative staff."
+        }
+      ],
+      "source_context": "ent for subsets of the organization’s users. \nMicrosoft Active \nDirectory (AD) \nAdobe’s AD stores user accounts, group memberships, and account data, and is used to \nmanage access to the Adobe corporate network. Internal users are required to have an \nAdobe AD username and password to be able to authenticate to the Adobe corporate \nnetwork and the Adobe Experience Cloud production servers. \nOkta \nAccess to production environments at Adobe requires Okta multifactor authentication.  \nSailPoint \nThe SailPoint identity management solution is the back-end technology that executes \napproved logical access changes requested within the IAM Portal. \n=== PAGE 22 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n22 \nApplication \nDescription \nZero-Trust Enterprise \nNetwork ",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ]
+    },
+    {
+      "third_party_name": "Workday",
+      "third_party_description": "A People Resources tool used to manage employment and account information of Adobe personnel.",
+      "third_party_page_ref": [
+        "Page 22,34"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Used for managing employee data and employment information."
+        }
+      ],
+      "source_context": "ent for subsets of the organization’s users. \nMicrosoft Active \nDirectory (AD) \nAdobe’s AD stores user accounts, group memberships, and account data, and is used to \nmanage access to the Adobe corporate network. Internal users are required to have an \nAdobe AD username and password to be able to authenticate to the Adobe corporate \nnetwork and the Adobe Experience Cloud production servers. \nOkta \nAccess to production environments at Adobe requires Okta multifactor authentication.  \nSailPoint \nThe SailPoint identity management solution is the back-end technology that executes \napproved logical access changes requested within the IAM Portal. \n=== PAGE 22 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n22 \nApplication \nDescription \nZero-Trust Enterprise \nNetwork ",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 1.0 (very close)"
+      ]
+    },
+    {
+      "third_party_name": "Jira",
+      "third_party_description": "A ticketing application used by Adobe to track and assign work items.",
+      "third_party_page_ref": [
+        "Page 22"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Tracks and manages work items and tasks."
+        }
+      ],
+      "source_context": "ent for subsets of the organization’s users. \nMicrosoft Active \nDirectory (AD) \nAdobe’s AD stores user accounts, group memberships, and account data, and is used to \nmanage access to the Adobe corporate network. Internal users are required to have an \nAdobe AD username and password to be able to authenticate to the Adobe corporate \nnetwork and the Adobe Experience Cloud production servers. \nOkta \nAccess to production environments at Adobe requires Okta multifactor authentication.  \nSailPoint \nThe SailPoint identity management solution is the back-end technology that executes \napproved logical access changes requested within the IAM Portal. \n=== PAGE 22 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n22 \nApplication \nDescription \nZero-Trust Enterprise \nNetwork ",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 1.0 (very close)"
+      ]
+    },
+    {
+      "third_party_name": "New Relic",
+      "third_party_description": "Software product used for monitoring the availability of production systems.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "nd Workstream Applications \nJira \nJira is a ticketing application used to track and assign work items. \nSite Operations \nApogee/EcoStruxure \nApogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. \nCCURE \nCCURE is an identity management platform used to manage badge readers at Adobe-\nowned facilities. \nSecurity Access \nManagement System \n(SAMS) \nSAMS is an identity management platform used to facilitate physical access to Adobe-\nowned facilities. \nStruxureWare/\nEcoStruxure \nStruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure \nwithin OR1. \nSystems Monitoring \nNew Relic \nDatadog \nPrometheus \nNagios \nGrafana \nThese software products are used to monitor the availability of production systems and \ncommunicate alerts to appropriate personnel. \nPagerDuty \nPagerDuty software is used to communicate availability monitoring alerts to appropriate \npersonnel. \nServiceNow \nServiceNow is an enterprise IT service management solution use",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ]
+    },
+    {
+      "third_party_name": "Datadog",
+      "third_party_description": "Software product used for monitoring the availability of production systems.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "nd Workstream Applications \nJira \nJira is a ticketing application used to track and assign work items. \nSite Operations \nApogee/EcoStruxure \nApogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. \nCCURE \nCCURE is an identity management platform used to manage badge readers at Adobe-\nowned facilities. \nSecurity Access \nManagement System \n(SAMS) \nSAMS is an identity management platform used to facilitate physical access to Adobe-\nowned facilities. \nStruxureWare/\nEcoStruxure \nStruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure \nwithin OR1. \nSystems Monitoring \nNew Relic \nDatadog \nPrometheus \nNagios \nGrafana \nThese software products are used to monitor the availability of production systems and \ncommunicate alerts to appropriate personnel. \nPagerDuty \nPagerDuty software is used to communicate availability monitoring alerts to appropriate \npersonnel. \nServiceNow \nServiceNow is an enterprise IT service management solution use",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ]
+    },
+    {
+      "third_party_name": "ServiceNow",
+      "third_party_description": "Enterprise IT service management platform used to document availability monitoring tickets.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 4,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "nd Workstream Applications \nJira \nJira is a ticketing application used to track and assign work items. \nSite Operations \nApogee/EcoStruxure \nApogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. \nCCURE \nCCURE is an identity management platform used to manage badge readers at Adobe-\nowned facilities. \nSecurity Access \nManagement System \n(SAMS) \nSAMS is an identity management platform used to facilitate physical access to Adobe-\nowned facilities. \nStruxureWare/\nEcoStruxure \nStruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure \nwithin OR1. \nSystems Monitoring \nNew Relic \nDatadog \nPrometheus \nNagios \nGrafana \nThese software products are used to monitor the availability of production systems and \ncommunicate alerts to appropriate personnel. \nPagerDuty \nPagerDuty software is used to communicate availability monitoring alerts to appropriate \npersonnel. \nServiceNow \nServiceNow is an enterprise IT service management solution use",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ]
+    },
+    {
+      "third_party_name": "CrowdStrike Falcon",
+      "third_party_description": "Next-generation endpoint detection and response (EDR) solution for malware detection.",
+      "third_party_page_ref": [
+        "23"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Provides endpoint detection and malware response capabilities to secure the environment."
+        }
+      ],
+      "source_context": "s to Adobe personnel, \ncollect completed module results, and remind users and management of incomplete \nmodules. \n=== PAGE 23 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n23 \nApplication \nDescription \nVulnerability Management \nHubble \nHubble module is an enterprise tool that catalogs host properties including, but not \nlimited to, installed packages, version information, running processes, and outbound \nconnections. Hubble data is leveraged to quickly assess the environments’ exposure to \nexisting, or emerging, vulnerabilities and prioritize remediation. \nRapid7 Nexpose \nRapid7 Nexpose is a vulnerability assessment tool that scans, identifies, and reports \nvulnerabilities found on the network.  \nCrowdStrike Falcon \nNext-generation endpoint detection and res",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ]
+    },
+    {
+      "third_party_name": "MAVLink",
+      "third_party_description": "A tool used to collect data from public cloud service providers, including access logs, resource configurations, security alerts, and best practices, and consolidate it into a centralized log repository.",
+      "third_party_page_ref": [
+        "Cloud Configuration Checks"
+      ],
+      "third_party_confidence": 1.0,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Collects available data including logs, resource configurations, and security alerts from public cloud service providers."
+        }
+      ],
+      "source_context": "eline configuration standards. Hosts are monitored by a configuration management tool, which monitors file \nintegrity and configuration settings of individual hosts. Hosts with configurations that are not compliant with the \nbaseline configuration standard are flagged, and an alert is sent to appropriate personnel, who identify the host and \nremediate the issue. Agents are installed as part of the provisioning process for production hosts. Additionally, the \nSecurity team works with solution teams periodically to ensure that their host environments have the appropriate \nagents running. \nNetwork Configuration Checks \nConfigurations of Adobe’s production network devices is monitored by SolarWinds, which checks each network \ndevice for misaligned security hardening and baseline configurations. SolarWinds is used to monitor configurations \nof Adobe-managed network devices to ensure they are compliant with the security hardening and baseline \nconfiguration standard. Network devices that are",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ]
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Amazon Web Services",
+      "aliases": [
+        "Amazon Web Services, Inc.",
+        "Amazon Web Services, Inc. (AWS)",
+        "Amazon Web Services (AWS)",
+        "AWS",
+        "Amazon Web Services"
+      ],
+      "third_party_page_ref": [
+        "Subservice Organization",
+        "18,Page describing Adobe's deployment of CIS-hardened AWS machine images.",
+        "18,Description of System",
+        "Page 19",
+        "44,45"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Elastic Compute Cloud (EC2)"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Simple Storage Service (S3)"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Relational Database Service (RDS)"
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Identity Access Management (IAM)"
+        },
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Virtual Private Cloud (VPC)"
+        },
+        {
+          "third_party_control_seq": 6,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Security Groups"
+        },
+        {
+          "third_party_control_seq": 7,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Lambda Functions"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Periodic review of assurance reports to ensure compliance with physical, environmental, and virtual security standards."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC6.2",
+          "third_party_control_desc": "Logical access provisioning to information systems requires approval from appropriate personnel."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": "CC6.3",
+          "third_party_control_desc": "Logical access that is no longer required in the event of a termination is documented, communicated to management, and revoked."
+        }
+      ],
+      "dedup_reason": "These represent the same organization (Amazon Web Services), using various naming conventions including abbreviations and inclusion of 'Inc.'.",
+      "third_party_confidence": 1.0,
+      "confidence_justification": [
+        "Aggregated from 5 variant rows; canonical_confidence = max(variant_confidences) = 1.0",
+        "Variants: Amazon Web Services, Inc., Amazon Web Services, Inc. (AWS), Amazon Web Services (AWS), AWS, Amazon Web Services"
+      ],
+      "merged_from_count": 5,
+      "merged_from_variants": [
+        "Amazon Web Services, Inc.",
+        "Amazon Web Services, Inc. (AWS)",
+        "Amazon Web Services (AWS)",
+        "AWS",
+        "Amazon Web Services"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Microsoft Azure",
+      "aliases": [
+        "Microsoft Corporation (Microsoft)",
+        "Microsoft",
+        "Azure",
+        "Microsoft Corporation",
+        "Microsoft Azure"
+      ],
+      "third_party_page_ref": [
+        "Subservice Organization",
+        "18,19",
+        "Description of System",
+        "Page describing Adobe's deployment of CIS-hardened Azure VM images.",
+        "44,45"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Base configurations of CIS-hardened Azure VM images for infrastructure security."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC6.2",
+          "third_party_control_desc": "Logical access provisioning to information systems requires approval from appropriate personnel."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": "CC6.3",
+          "third_party_control_desc": "Logical access that is no longer required in the event of a termination is documented, communicated to management, and revoked."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "dedup_reason": "These are all variations of Microsoft and its Azure cloud platform, including abbreviations and alternative references.",
+      "third_party_confidence": 1.0,
+      "confidence_justification": [
+        "Aggregated from 5 variant rows; canonical_confidence = max(variant_confidences) = 1.0",
+        "Variants: Microsoft Corporation (Microsoft), Microsoft, Azure, Microsoft Corporation, Microsoft Azure"
+      ],
+      "merged_from_count": 5,
+      "merged_from_variants": [
+        "Microsoft Corporation (Microsoft)",
+        "Microsoft",
+        "Azure",
+        "Microsoft Corporation",
+        "Microsoft Azure"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Google Cloud Platform",
+      "aliases": [
+        "Google LLC",
+        "Google Cloud Platform",
+        "Google Cloud"
+      ],
+      "third_party_page_ref": [
+        "Subservice Organization,44,45",
+        "18",
+        "Page 19"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC6.2",
+          "third_party_control_desc": "Logical access provisioning to information systems requires approval from appropriate personnel."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": "CC6.3",
+          "third_party_control_desc": "Logical access that is no longer required in the event of a termination is documented, communicated to management, and revoked."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Directs, controls, monitors policies and procedures for production environments."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Manages virtualization layer and physical security of facilities."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Periodic review of assurance reports to ensure compliance with physical, environmental, and virtual security standards."
+        }
+      ],
+      "dedup_reason": "These references point to Google's cloud platform, using variations such as 'Google Cloud' and the legal entity name 'Google LLC'.",
+      "third_party_confidence": 1.0,
+      "confidence_justification": [
+        "Aggregated from 3 variant rows; canonical_confidence = max(variant_confidences) = 1.0",
+        "Variants: Google LLC, Google Cloud Platform, Google Cloud"
+      ],
+      "merged_from_count": 3,
+      "merged_from_variants": [
+        "Google LLC",
+        "Google Cloud Platform",
+        "Google Cloud"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Equinix, Inc.",
+      "aliases": [
+        "Equinix, Inc.",
+        "Equinix"
+      ],
+      "third_party_page_ref": [
+        "20",
+        "45"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "dedup_reason": "These represent the same colocation provider, with variations being a common abbreviation and inclusion of 'Inc.'.",
+      "third_party_confidence": 1.0,
+      "confidence_justification": [
+        "Aggregated from 2 variant rows; canonical_confidence = max(variant_confidences) = 1.0",
+        "Variants: Equinix, Inc., Equinix"
+      ],
+      "merged_from_count": 2,
+      "merged_from_variants": [
+        "Equinix, Inc.",
+        "Equinix"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Cyxtera Technologies, Inc.",
+      "aliases": [
+        "Cyxtera Technologies, Inc. (Cyxtera)",
+        "Cyxtera Technologies, Inc.",
+        "Cyxtera"
+      ],
+      "third_party_page_ref": [
+        "Subservice Organization",
+        "20",
+        "45"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "dedup_reason": "These represent the same colocation provider, using both the full legal entity name and abbreviated versions.",
+      "third_party_confidence": 1.0,
+      "confidence_justification": [
+        "Aggregated from 3 variant rows; canonical_confidence = max(variant_confidences) = 1.0",
+        "Variants: Cyxtera Technologies, Inc. (Cyxtera), Cyxtera Technologies, Inc., Cyxtera"
+      ],
+      "merged_from_count": 3,
+      "merged_from_variants": [
+        "Cyxtera Technologies, Inc. (Cyxtera)",
+        "Cyxtera Technologies, Inc.",
+        "Cyxtera"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Digital Realty Trust",
+      "aliases": [
+        "Digital Realty Trust, Inc.",
+        "Digital Realty Trust"
+      ],
+      "third_party_page_ref": [
+        "Subservice Organization,45",
+        "20"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "dedup_reason": "These refer to the same colocation provider, with one being the full legal name including 'Inc.' and the other a shorter version.",
+      "third_party_confidence": 1.0,
+      "confidence_justification": [
+        "Aggregated from 2 variant rows; canonical_confidence = max(variant_confidences) = 1.0",
+        "Variants: Digital Realty Trust, Inc., Digital Realty Trust"
+      ],
+      "merged_from_count": 2,
+      "merged_from_variants": [
+        "Digital Realty Trust, Inc.",
+        "Digital Realty Trust"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Rapid7 Nexpose",
+      "aliases": [
+        "Rapid7 Nexpose",
+        "Nexpose"
+      ],
+      "third_party_page_ref": [
+        "23"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Scans and identifies network vulnerabilities to prioritize remediation efforts."
+        }
+      ],
+      "dedup_reason": "These refer to the same vulnerability assessment tool, with the former including the parent organization's name 'Rapid7'.",
+      "third_party_confidence": 1.0,
+      "confidence_justification": [
+        "Aggregated from 2 variant rows; canonical_confidence = max(variant_confidences) = 1.0",
+        "Variants: Rapid7 Nexpose, Nexpose"
+      ],
+      "merged_from_count": 2,
+      "merged_from_variants": [
+        "Rapid7 Nexpose",
+        "Nexpose"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "third_party_name": "CCURE",
+      "third_party_description": "Identity management platform used to manage badge readers at Adobe-owned facilities.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.95,
+      "distance_from_so_keywords": 4,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "nd Workstream Applications \nJira \nJira is a ticketing application used to track and assign work items. \nSite Operations \nApogee/EcoStruxure \nApogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. \nCCURE \nCCURE is an identity management platform used to manage badge readers at Adobe-\nowned facilities. \nSecurity Access \nManagement System \n(SAMS) \nSAMS is an identity management platform used to facilitate physical access to Adobe-\nowned facilities. \nStruxureWare/\nEcoStruxure \nStruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure \nwithin OR1. \nSystems Monitoring \nNew Relic \nDatadog \nPrometheus \nNagios \nGrafana \nThese software products are used to monitor the availability of production systems and \ncommunicate alerts to appropriate personnel. \nPagerDuty \nPagerDuty software is used to communicate availability monitoring alerts to appropriate \npersonnel. \nServiceNow \nServiceNow is an enterprise IT service management solution use",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes"
+      ]
+    },
+    {
+      "third_party_name": "PagerDuty",
+      "third_party_description": "Software used to communicate monitoring alerts about production system availability to appropriate personnel.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.95,
+      "distance_from_so_keywords": 4,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "nd Workstream Applications \nJira \nJira is a ticketing application used to track and assign work items. \nSite Operations \nApogee/EcoStruxure \nApogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. \nCCURE \nCCURE is an identity management platform used to manage badge readers at Adobe-\nowned facilities. \nSecurity Access \nManagement System \n(SAMS) \nSAMS is an identity management platform used to facilitate physical access to Adobe-\nowned facilities. \nStruxureWare/\nEcoStruxure \nStruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure \nwithin OR1. \nSystems Monitoring \nNew Relic \nDatadog \nPrometheus \nNagios \nGrafana \nThese software products are used to monitor the availability of production systems and \ncommunicate alerts to appropriate personnel. \nPagerDuty \nPagerDuty software is used to communicate availability monitoring alerts to appropriate \npersonnel. \nServiceNow \nServiceNow is an enterprise IT service management solution use",
+      "confidence_justification": [
+        "+0.1: likely_so is Yes"
+      ]
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "GitHub",
+      "aliases": [
+        "GitHub Enterprise"
+      ],
+      "third_party_page_ref": [
+        "20"
+      ],
+      "aggregated_third_party_controls": [],
+      "dedup_reason": "GitHub Enterprise is a specific offering of GitHub, and the name variations reference the same platform with different scopes.",
+      "third_party_confidence": 0.95,
+      "confidence_justification": [
+        "Aggregated from 1 variant rows; canonical_confidence = max(variant_confidences) = 0.95",
+        "Variants: GitHub Enterprise"
+      ],
+      "merged_from_count": 1,
+      "merged_from_variants": [
+        "GitHub Enterprise"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "GitLab",
+      "aliases": [
+        "GitLab"
+      ],
+      "third_party_page_ref": [
+        "20"
+      ],
+      "aggregated_third_party_controls": [],
+      "dedup_reason": "No alternate variations recognized for GitLab.",
+      "third_party_confidence": 0.95,
+      "confidence_justification": [
+        "Aggregated from 1 variant rows; canonical_confidence = max(variant_confidences) = 0.95",
+        "Variants: GitLab"
+      ],
+      "merged_from_count": 1,
+      "merged_from_variants": [
+        "GitLab"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "EcoStruxure",
+      "aliases": [
+        "Apogee/EcoStruxure",
+        "EcoStruxure"
+      ],
+      "third_party_page_ref": [
+        "Page 22"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Referenced for site operation infrastructure management."
+        }
+      ],
+      "dedup_reason": "These represent the same infrastructure monitoring system, with one variation including additional branding.",
+      "third_party_confidence": 0.9,
+      "confidence_justification": [
+        "Aggregated from 2 variant rows; canonical_confidence = max(variant_confidences) = 0.9",
+        "Variants: Apogee/EcoStruxure, EcoStruxure"
+      ],
+      "merged_from_count": 2,
+      "merged_from_variants": [
+        "Apogee/EcoStruxure",
+        "EcoStruxure"
+      ],
+      "merged_at": "2025-11-13T23:12:47Z"
+    },
+    {
+      "third_party_name": "Amazon Web Services, Inc. (AWS)",
+      "third_party_description": "Provides infrastructure as a service through its AWS platform.",
+      "third_party_page_ref": [
+        "Subservice Organization"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        }
+      ],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": [
+        "Marked as variant of Amazon Web Services; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Microsoft Corporation (Microsoft)",
+      "third_party_description": "Provides infrastructure as a service through its Azure platform.",
+      "third_party_page_ref": [
+        "Subservice Organization"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        }
+      ],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": [
+        "Marked as variant of Microsoft Azure; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ],
+      "canonical_name": "Microsoft Azure"
+    },
+    {
+      "third_party_name": "Google LLC",
+      "third_party_description": "Provides infrastructure as a service through its Google Cloud Platform (GCP) for Adobe Workfront.",
+      "third_party_page_ref": [
+        "Subservice Organization,44,45"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC6.2",
+          "third_party_control_desc": "Logical access provisioning to information systems requires approval from appropriate personnel."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": "CC6.3",
+          "third_party_control_desc": "Logical access that is no longer required in the event of a termination is documented, communicated to management, and revoked."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": [
+        "Marked as variant of Google Cloud Platform; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ],
+      "canonical_name": "Google Cloud Platform"
+    },
+    {
+      "third_party_name": "Cyxtera Technologies, Inc. (Cyxtera)",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers.",
+      "third_party_page_ref": [
+        "Subservice Organization"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        }
+      ],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": [
+        "Marked as variant of Cyxtera Technologies, Inc.; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ],
+      "canonical_name": "Cyxtera Technologies, Inc."
+    },
+    {
+      "third_party_name": "Digital Realty Trust, Inc.",
+      "third_party_description": "Colocation provider that provides physical security and environmental controls over its colocation data centers. Formerly known as Interxion.",
+      "third_party_page_ref": [
+        "Subservice Organization,45"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "The description does not disclose the actual controls at the subservice organizations."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "ed on the nature of Adobe’s Experience Cloud system, mobile devices do not serve as information assets in relation \nto the system. As such, mobile device and security controls are not included in Section IV of this report. \nAdobe uses subservice organizations to perform certain services. A list of these subservice organizations and the \nservices performed is provided in the following table. The description does not disclose the actual controls at the \nsubservice organizations. \nSubservice Organization \nServices Performed \nAmazon Web Services, Inc. (AWS) \nProvides infrastructure as a service through its AWS platform. \nMicrosoft Corporation (Microsoft) \nProvides infrastructure as a service through its Azure platform. \nGoogle LLC \n(Adobe Workfront Only) Provides infrastructure as a service through its \nGoogle Cloud Platform (GCP). \nCyxtera Technologies, Inc. (Cyxtera) \nDigital Realty Trust, Inc. (formerly Interxion) \nEquinix, Inc. (Equinix) \nNTT ltd. (formerly Gyron) \nColocation providers",
+      "confidence_justification": [
+        "Marked as variant of Digital Realty Trust; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ],
+      "canonical_name": "Digital Realty Trust"
+    },
+    {
+      "third_party_name": "Amazon Web Services (AWS)",
+      "third_party_description": "Cloud hosting provider utilized for infrastructure management and colocation services.",
+      "third_party_page_ref": [
+        "18,Page describing Adobe's deployment of CIS-hardened AWS machine images."
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "y system incidents that occurred during the period November 1, 2022 to October 31, 2023 \nresulting in Adobe’s failure to achieve one or more of its service commitments or system requirements based on \nthese considerations. \nComponents of the System Used to Provide the Services \nAdobe maintains a Common Controls Framework (CCF) that is used in the implementation of control measures as \na risk mitigation strategy to support Adobe operations, technology infrastructure, and security management activities. \nThe domains are stated in the beginning of Section IV. Further details on these control domains and associated \ncontrol activities are detailed throughout Section III and are identified by the phrase “(CCF XXX)” where XXX identifies \nthe short acronym for the CCF domain. All CCF domains are explicitly mentioned in Section III except for Risk \nManagement (CCF RM), which is detailed within multiple COSO Common Criteria (e.g., Risk Assessment, Monitoring \nActivities, Control Activities, Ris",
+      "confidence_justification": [
+        "Marked as variant of Amazon Web Services; confidence reduced 0.95 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 2.0 (very close)"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Google Cloud",
+      "third_party_description": "Cloud hosting and service provider used for infrastructure management and colocation services.",
+      "third_party_page_ref": [
+        "18"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "y system incidents that occurred during the period November 1, 2022 to October 31, 2023 \nresulting in Adobe’s failure to achieve one or more of its service commitments or system requirements based on \nthese considerations. \nComponents of the System Used to Provide the Services \nAdobe maintains a Common Controls Framework (CCF) that is used in the implementation of control measures as \na risk mitigation strategy to support Adobe operations, technology infrastructure, and security management activities. \nThe domains are stated in the beginning of Section IV. Further details on these control domains and associated \ncontrol activities are detailed throughout Section III and are identified by the phrase “(CCF XXX)” where XXX identifies \nthe short acronym for the CCF domain. All CCF domains are explicitly mentioned in Section III except for Risk \nManagement (CCF RM), which is detailed within multiple COSO Common Criteria (e.g., Risk Assessment, Monitoring \nActivities, Control Activities, Ris",
+      "confidence_justification": [
+        "Marked as variant of Google Cloud Platform; confidence reduced 0.95 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 2.0 (very close)"
+      ],
+      "canonical_name": "Google Cloud Platform"
+    },
+    {
+      "third_party_name": "Microsoft",
+      "third_party_description": "Cloud hosting provider that supports infrastructure and colocation services.",
+      "third_party_page_ref": [
+        "18,19"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "y system incidents that occurred during the period November 1, 2022 to October 31, 2023 \nresulting in Adobe’s failure to achieve one or more of its service commitments or system requirements based on \nthese considerations. \nComponents of the System Used to Provide the Services \nAdobe maintains a Common Controls Framework (CCF) that is used in the implementation of control measures as \na risk mitigation strategy to support Adobe operations, technology infrastructure, and security management activities. \nThe domains are stated in the beginning of Section IV. Further details on these control domains and associated \ncontrol activities are detailed throughout Section III and are identified by the phrase “(CCF XXX)” where XXX identifies \nthe short acronym for the CCF domain. All CCF domains are explicitly mentioned in Section III except for Risk \nManagement (CCF RM), which is detailed within multiple COSO Common Criteria (e.g., Risk Assessment, Monitoring \nActivities, Control Activities, Ris",
+      "confidence_justification": [
+        "Marked as variant of Microsoft Azure; confidence reduced 0.95 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 2.0 (very close)"
+      ],
+      "canonical_name": "Microsoft Azure"
+    },
+    {
+      "third_party_name": "AWS",
+      "third_party_description": "Cloud hosting and service provider responsible for various infrastructure and virtualization operations supporting Adobe’s Experience Cloud.",
+      "third_party_page_ref": [
+        "18,Description of System"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Elastic Compute Cloud (EC2)"
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Simple Storage Service (S3)"
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Relational Database Service (RDS)"
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Identity Access Management (IAM)"
+        },
+        {
+          "third_party_control_seq": 5,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Virtual Private Cloud (VPC)"
+        },
+        {
+          "third_party_control_seq": 6,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Security Groups"
+        },
+        {
+          "third_party_control_seq": 7,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Lambda Functions"
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "iated components within \nthese environments is executed by the infrastructure team within Adobe’s Experience Cloud department. \n=== PAGE 18 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n18 \nKey elements of the infrastructure and subservice organizations are included in the following table: \nInfrastructure \nDescription \nAWS (Subservice \nOrganization) \nAWS directs and controls operations as well as establishes, communicates, and monitors \npolicies and procedures for some of the production environments for Adobe’s Experience \nCloud solutions. In addition, it operates, manages, and controls the components from the \nvirtualization layer to the physical security of the facilities in which Adobe’s Experience \nCloud components operate. In turn, Adobe assumes respons",
+      "confidence_justification": [
+        "Marked as variant of Amazon Web Services; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Amazon Web Services",
+      "third_party_description": "Cloud hosting provider; supports infrastructure elements for Adobe systems including physical, environmental, and virtual security model.",
+      "third_party_page_ref": [
+        "Page 19"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Periodic review of assurance reports to ensure compliance with physical, environmental, and virtual security standards."
+        }
+      ],
+      "source_context": "S) \n• Identity Access Management (IAM) \n• Virtual Private Cloud (VPC) \n• Security Groups \n• Lambda Functions \n \nAdobe periodically reviews third-party assurance reports to verify that AWS continually \nsubscribes to a defined physical, environmental, and virtual security model. \nGoogle (Subservice \nOrganization) \n(Workfront only) Google Cloud Platform (GCP) directs and controls operations as well as \nestablishes, communicates, and monitors policies and procedures for some of the \nproduction environments for Adobe Workfront solutions. In addition, it operates, manages, \nand controls the components from the virtualization layer to the physical security of the \nfacilities in which Adobe Workfront components operate. In turn, Adobe assumes \nresponsibility and management of the operating system (including updates and security \npatches), application software, and the configuration of the security group firewall provided \nby the subservice organization. \nKey GCP services utilized by Adobe incl",
+      "confidence_justification": [
+        "Marked as variant of Amazon Web Services; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Google Cloud Platform",
+      "third_party_description": "Cloud hosting provider for Adobe Workfront production environments; manages virtualization and physical security while Adobe handles OS, security patches, and application configurations.",
+      "third_party_page_ref": [
+        "Page 19"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Directs, controls, monitors policies and procedures for production environments."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Manages virtualization layer and physical security of facilities."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Periodic review of assurance reports to ensure compliance with physical, environmental, and virtual security standards."
+        }
+      ],
+      "source_context": "S) \n• Identity Access Management (IAM) \n• Virtual Private Cloud (VPC) \n• Security Groups \n• Lambda Functions \n \nAdobe periodically reviews third-party assurance reports to verify that AWS continually \nsubscribes to a defined physical, environmental, and virtual security model. \nGoogle (Subservice \nOrganization) \n(Workfront only) Google Cloud Platform (GCP) directs and controls operations as well as \nestablishes, communicates, and monitors policies and procedures for some of the \nproduction environments for Adobe Workfront solutions. In addition, it operates, manages, \nand controls the components from the virtualization layer to the physical security of the \nfacilities in which Adobe Workfront components operate. In turn, Adobe assumes \nresponsibility and management of the operating system (including updates and security \npatches), application software, and the configuration of the security group firewall provided \nby the subservice organization. \nKey GCP services utilized by Adobe incl",
+      "confidence_justification": [
+        "Marked as variant of Google Cloud Platform; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 1.0 (very close)"
+      ],
+      "canonical_name": "Google Cloud Platform"
+    },
+    {
+      "third_party_name": "Cyxtera",
+      "third_party_description": "A colocation provider used by Adobe’s Experience Cloud solutions.",
+      "third_party_page_ref": [
+        "20"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": [
+        "Marked as variant of Cyxtera Technologies, Inc.; confidence reduced 0.95 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 1.0 (very close)"
+      ],
+      "canonical_name": "Cyxtera Technologies, Inc."
+    },
+    {
+      "third_party_name": "Digital Realty Trust",
+      "third_party_description": "A colocation provider used by Adobe’s Experience Cloud solutions.",
+      "third_party_page_ref": [
+        "20"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": [
+        "Marked as variant of Digital Realty Trust; confidence reduced 0.95 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 1.0 (very close)"
+      ],
+      "canonical_name": "Digital Realty Trust"
+    },
+    {
+      "third_party_name": "Equinix",
+      "third_party_description": "A colocation provider used by Adobe’s Experience Cloud solutions.",
+      "third_party_page_ref": [
+        "20"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": [
+        "Marked as variant of Equinix, Inc.; confidence reduced 0.95 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 1.0 (very close)"
+      ],
+      "canonical_name": "Equinix, Inc."
+    },
+    {
+      "third_party_name": "Azure",
+      "third_party_description": "Cloud hosting provider used for creating subscriptions and managing infrastructure.",
+      "third_party_page_ref": [
+        "Description of System"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 2,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "mpliance with Adobe-defined security baselines. \nIdentity and Access Management \nSafeguard for Privileged \nSessions (Safeguard) \nSafeguard is a privileged session management tool that monitors remote administrative \naccess to servers and network devices. \nCAMP \nCAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and \nmanaging the “root” user for AWS accounts and Azure subscriptions. \nHashiCorp Vault \nHashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API \nkeys, and other secrets. \nIAM Portal \nIAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each \nLDAP group is assigned an owner who is responsible for approving who can have access \nto that specific group.  \nKLAM \nKLAM is Adobe’s proprietary tool for access management to the AWS console and \napplicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) \nand is used to map Adobe’s corporate AD groups to AWS IAM roles. ",
+      "confidence_justification": [
+        "Marked as variant of Microsoft Azure; confidence reduced 0.95 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 2.0 (very close)"
+      ],
+      "canonical_name": "Microsoft Azure"
+    },
+    {
+      "third_party_name": "Rapid7 Nexpose",
+      "third_party_description": "Vulnerability assessment tool that scans, identifies, and reports vulnerabilities found on the network.",
+      "third_party_page_ref": [
+        "23"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Scans and identifies network vulnerabilities to prioritize remediation efforts."
+        }
+      ],
+      "source_context": "s to Adobe personnel, \ncollect completed module results, and remind users and management of incomplete \nmodules. \n=== PAGE 23 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n23 \nApplication \nDescription \nVulnerability Management \nHubble \nHubble module is an enterprise tool that catalogs host properties including, but not \nlimited to, installed packages, version information, running processes, and outbound \nconnections. Hubble data is leveraged to quickly assess the environments’ exposure to \nexisting, or emerging, vulnerabilities and prioritize remediation. \nRapid7 Nexpose \nRapid7 Nexpose is a vulnerability assessment tool that scans, identifies, and reports \nvulnerabilities found on the network.  \nCrowdStrike Falcon \nNext-generation endpoint detection and res",
+      "confidence_justification": [
+        "Marked as variant of Rapid7 Nexpose; confidence reduced 1 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ],
+      "canonical_name": "Rapid7 Nexpose"
+    },
+    {
+      "third_party_name": "Microsoft Azure",
+      "third_party_description": "Cloud hosting provider supplying CIS-hardened Azure VM images for Adobe's environment.",
+      "third_party_page_ref": [
+        "Page describing Adobe's deployment of CIS-hardened Azure VM images."
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 0,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Base configurations of CIS-hardened Azure VM images for infrastructure security."
+        }
+      ],
+      "source_context": "the approved whitelist \nof Transmission Control Protocol (TCP) and User Datagram Protocol (UDP) ports. \nNetwork segmentation is implemented within the Adobe Experience Cloud production environment to restrict access \nto authorized services, systems, and users. Users can only access the production environment from the Adobe \ncorporate network. \nVulnerability Management (CCF VM) \nVulnerability Assessment \nAdobe proactively monitors the production environment to identify and resolve vulnerabilities that could \ncompromise the security of critical data. Vulnerability assessments are performed against the infrastructure, platform, \nand applications that make up the Adobe Experience Cloud. \nNetwork Patch Management \nFor services hosted at Adobe-owned or managed facilities, Adobe conducts network device vulnerability scanning via \nthe SolarWinds technology, which is implemented at Adobe to monitor both physical and virtual network device \ndeployments. SolarWinds checks each device for updated ",
+      "confidence_justification": [
+        "Marked as variant of Microsoft Azure; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 0.0 (very close)"
+      ],
+      "canonical_name": "Microsoft Azure"
+    },
+    {
+      "third_party_name": "Unspecified third-party security firms",
+      "third_party_description": "Organizations hired to perform annual network and application penetration testing, identifying potential vulnerabilities to enhance security.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 5,
+      "likely_so": "No",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": " has developed base configurations of CIS-hardened Amazon Machine Images (AMIs), as well as CIS-hardened \nAzure VM images, which are deployed within the production environment. These images contain the latest patches \nas notified by CIS and are available for service teams to use. \nIn addition to AMI hardening, Adobe also conducts host vulnerability scanning on a scheduled basis via Nexpose. \nNexpose is used to query all hosts on the Adobe Experience Cloud production network. Completed scans deliver a \nreport that enumerates identified vulnerabilities and assigns them a score. Tickets are created and assigned to \nappropriate personnel for identified vulnerabilities, which are prioritized based on risk and used to document and \ntrack patching. The Nexpose database of known host vulnerabilities is updated on an ongoing basis to ensure the \nlatest known exploitable vulnerabilities are removed from Adobe’s environment. \nPenetration Testing \nAdobe regularly engages approved third-party secur",
+      "confidence_justification": [
+        "-0.2: likely_so is No"
+      ]
+    },
+    {
+      "third_party_name": "Amazon Web Services, Inc.",
+      "third_party_description": "Cloud hosting and infrastructure provider.",
+      "third_party_page_ref": [
+        "44,45"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC6.2",
+          "third_party_control_desc": "Logical access provisioning to information systems requires approval from appropriate personnel."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": "CC6.3",
+          "third_party_control_desc": "Logical access that is no longer required in the event of a termination is documented, communicated to management, and revoked."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "d at the beginning of Section III under Scope \nand Boundaries of the System. The following CSOCs are those controls that Adobe’s management assumed, in the \ndesign of the system, would be implemented by a subservice organization and are necessary, in combination with \ncontrols at Adobe, to provide reasonable assurance that the service organization’s service commitments and system \nrequirements are achieved. \nNumber \nCSOC \nApplicable Criteria \nAmazon Web Services, Inc., Microsoft Corporation, and Google LLC \n1. \nPolicies and procedures exist to ensure that logical access to production systems \nis restricted to authorized personnel. \nCC6.1, CC6.2, CC6.3 \n=== PAGE 44 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n44 \nNumber \nCSOC \nApplicable Criteria \n2. \nLogica",
+      "confidence_justification": [
+        "Marked as variant of Amazon Web Services; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 1.0 (very close)"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Microsoft Corporation",
+      "third_party_description": "Provider of cloud services and infrastructure (e.g., Azure).",
+      "third_party_page_ref": [
+        "44,45"
+      ],
+      "third_party_confidence": 0.5,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.1",
+          "third_party_control_desc": "Policies and procedures exist to ensure that logical access to production systems is restricted to authorized personnel."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC6.2",
+          "third_party_control_desc": "Logical access provisioning to information systems requires approval from appropriate personnel."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": "CC6.3",
+          "third_party_control_desc": "Logical access that is no longer required in the event of a termination is documented, communicated to management, and revoked."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "d at the beginning of Section III under Scope \nand Boundaries of the System. The following CSOCs are those controls that Adobe’s management assumed, in the \ndesign of the system, would be implemented by a subservice organization and are necessary, in combination with \ncontrols at Adobe, to provide reasonable assurance that the service organization’s service commitments and system \nrequirements are achieved. \nNumber \nCSOC \nApplicable Criteria \nAmazon Web Services, Inc., Microsoft Corporation, and Google LLC \n1. \nPolicies and procedures exist to ensure that logical access to production systems \nis restricted to authorized personnel. \nCC6.1, CC6.2, CC6.3 \n=== PAGE 44 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n44 \nNumber \nCSOC \nApplicable Criteria \n2. \nLogica",
+      "confidence_justification": [
+        "Marked as variant of Microsoft Azure; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes",
+        "+0.1: distance_from_so_keywords is 1.0 (very close)"
+      ],
+      "canonical_name": "Microsoft Azure"
+    },
+    {
+      "third_party_name": "Apogee/EcoStruxure",
+      "third_party_description": "Site Operations tools referred to in the report. Provides infrastructure-related operational support.",
+      "third_party_page_ref": [
+        "Page 22"
+      ],
+      "third_party_confidence": 0.4,
+      "distance_from_so_keywords": 1,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Referenced for site operation infrastructure management."
+        }
+      ],
+      "source_context": "ent for subsets of the organization’s users. \nMicrosoft Active \nDirectory (AD) \nAdobe’s AD stores user accounts, group memberships, and account data, and is used to \nmanage access to the Adobe corporate network. Internal users are required to have an \nAdobe AD username and password to be able to authenticate to the Adobe corporate \nnetwork and the Adobe Experience Cloud production servers. \nOkta \nAccess to production environments at Adobe requires Okta multifactor authentication.  \nSailPoint \nThe SailPoint identity management solution is the back-end technology that executes \napproved logical access changes requested within the IAM Portal. \n=== PAGE 22 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. \nIt may ONLY be used for the purpose for which it is provided. \n22 \nApplication \nDescription \nZero-Trust Enterprise \nNetwork ",
+      "confidence_justification": [
+        "Marked as variant of EcoStruxure; confidence reduced 0.85 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: distance_from_so_keywords is 1.0 (very close)"
+      ],
+      "canonical_name": "EcoStruxure"
+    },
+    {
+      "third_party_name": "Cyxtera Technologies, Inc.",
+      "third_party_description": "Provider of colocation and data center infrastructure services.",
+      "third_party_page_ref": [
+        "45"
+      ],
+      "third_party_confidence": 0.4,
+      "distance_from_so_keywords": -1,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "ter. \nCorrective actions are taken where applicable. \nA1.3 \n14. \nRedundant systems or periodic backups of data to resume system operations in \nthe event of a failure are performed. \nA1.3 \n15. \nAnnual backup restoration or failover and failback tests are performed to \nconfirm reliability and integrity of system backups and redundancy. \nA1.3 \nAmazon Web Services, Inc., Microsoft Corporation, Google LLC, Cyxtera Technologies, Inc., Digital Realty Trust, \nInc., Equinix, Inc., and NTT ltd.  \n16. \nPolicies and procedures exist to ensure that physical access to facilities housing \ninformation systems is restricted to authorized personnel. \nCC6.4 \n17. \nPhysical access to restricted areas of the facility is protected by walls with non-\npartitioned ceilings, secured entry points, and/or manned reception desks. \nCC6.4 \n=== PAGE 45 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others withou",
+      "confidence_justification": [
+        "Marked as variant of Cyxtera Technologies, Inc.; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: distance_from_so_keywords is -1.0 (very close)"
+      ],
+      "canonical_name": "Cyxtera Technologies, Inc."
+    },
+    {
+      "third_party_name": "Equinix, Inc.",
+      "third_party_description": "Global colocation data center and interconnection provider.",
+      "third_party_page_ref": [
+        "45"
+      ],
+      "third_party_confidence": 0.4,
+      "distance_from_so_keywords": -1,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "ter. \nCorrective actions are taken where applicable. \nA1.3 \n14. \nRedundant systems or periodic backups of data to resume system operations in \nthe event of a failure are performed. \nA1.3 \n15. \nAnnual backup restoration or failover and failback tests are performed to \nconfirm reliability and integrity of system backups and redundancy. \nA1.3 \nAmazon Web Services, Inc., Microsoft Corporation, Google LLC, Cyxtera Technologies, Inc., Digital Realty Trust, \nInc., Equinix, Inc., and NTT ltd.  \n16. \nPolicies and procedures exist to ensure that physical access to facilities housing \ninformation systems is restricted to authorized personnel. \nCC6.4 \n17. \nPhysical access to restricted areas of the facility is protected by walls with non-\npartitioned ceilings, secured entry points, and/or manned reception desks. \nCC6.4 \n=== PAGE 45 ===\n \nSection III \n\nThis document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others withou",
+      "confidence_justification": [
+        "Marked as variant of Equinix, Inc.; confidence reduced 1.0 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: distance_from_so_keywords is -1.0 (very close)"
+      ],
+      "canonical_name": "Equinix, Inc."
+    },
+    {
+      "third_party_name": "EcoStruxure",
+      "third_party_description": "System used to monitor HVAC/climate control and power to critical infrastructure within Adobe facilities.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.3,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "nd Workstream Applications \nJira \nJira is a ticketing application used to track and assign work items. \nSite Operations \nApogee/EcoStruxure \nApogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. \nCCURE \nCCURE is an identity management platform used to manage badge readers at Adobe-\nowned facilities. \nSecurity Access \nManagement System \n(SAMS) \nSAMS is an identity management platform used to facilitate physical access to Adobe-\nowned facilities. \nStruxureWare/\nEcoStruxure \nStruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure \nwithin OR1. \nSystems Monitoring \nNew Relic \nDatadog \nPrometheus \nNagios \nGrafana \nThese software products are used to monitor the availability of production systems and \ncommunicate alerts to appropriate personnel. \nPagerDuty \nPagerDuty software is used to communicate availability monitoring alerts to appropriate \npersonnel. \nServiceNow \nServiceNow is an enterprise IT service management solution use",
+      "confidence_justification": [
+        "Marked as variant of EcoStruxure; confidence reduced 0.9 -> 0.2",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "EcoStruxure"
+    },
+    {
+      "third_party_name": "Nexpose",
+      "third_party_description": "Vulnerability scanning tool used to query hosts in Adobe's production network, identify vulnerabilities, and produce reports for remediation.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.3,
+      "distance_from_so_keywords": 4,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": " has developed base configurations of CIS-hardened Amazon Machine Images (AMIs), as well as CIS-hardened \nAzure VM images, which are deployed within the production environment. These images contain the latest patches \nas notified by CIS and are available for service teams to use. \nIn addition to AMI hardening, Adobe also conducts host vulnerability scanning on a scheduled basis via Nexpose. \nNexpose is used to query all hosts on the Adobe Experience Cloud production network. Completed scans deliver a \nreport that enumerates identified vulnerabilities and assigns them a score. Tickets are created and assigned to \nappropriate personnel for identified vulnerabilities, which are prioritized based on risk and used to document and \ntrack patching. The Nexpose database of known host vulnerabilities is updated on an ongoing basis to ensure the \nlatest known exploitable vulnerabilities are removed from Adobe’s environment. \nPenetration Testing \nAdobe regularly engages approved third-party secur",
+      "confidence_justification": [
+        "Marked as variant of Rapid7 Nexpose; confidence reduced 0.9 -> 0.2",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "Rapid7 Nexpose"
+    },
+    {
+      "third_party_name": "GitHub Enterprise",
+      "third_party_description": "A centralized source code control system used internally for managing code repositories.",
+      "third_party_page_ref": [
+        "20"
+      ],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": [
+        "Marked as variant of GitHub; confidence reduced 0.95 -> 0.2",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "GitHub"
+    },
+    {
+      "third_party_name": "GitLab",
+      "third_party_description": "A source code management platform and deployment tool used for Git repositories and production environments by Workfront.",
+      "third_party_page_ref": [
+        "20"
+      ],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "ure and controlling physical access for other Adobe personnel. \n \nColocation providers used by Adobe’s Experience Cloud solutions are as follows: \n• Cyxtera \n• Digital Realty Trust \n• Equinix \n• NTT ltd. \nAdobe periodically reviews third-party assurance reports to verify that they continually \nsubscribe to a defined physical and environmental security model. \nSoftware \nAdobe Management has a focus on scaling software solutions to efficiently support Adobe’s Experience Cloud \noperational environment. The following key systems and applications are leveraged to support Adobe’s Experience \nCloud core solutions: \nApplication \nDescription \nChange Management \nGitHub Enterprise \nGitHub is a centralized source code control system. It is implemented internally for the \nmanagement of code repositories. \nGitLab \n(Workfront only) GitLab is a source code management platform for Git repositories, as well \nas a code deployment tool used for production environments \nService Knowledge \nManagement System",
+      "confidence_justification": [
+        "Marked as variant of GitLab; confidence reduced 0.95 -> 0.2",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "GitLab"
+    }
+  ]
+}

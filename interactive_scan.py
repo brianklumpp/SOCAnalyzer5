@@ -34,6 +34,9 @@ SCRIPT_DIR = Path(__file__).parent
 BACKEND_DIR = SCRIPT_DIR / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
+# Configuration
+ENABLE_GPT_CONFIG_SCREEN = False  # Set to True to show GPT model configuration screen
+
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -327,7 +330,7 @@ def display_results_summary(results: Dict[str, Any]):
     
     subservice_orgs = results.get('subservice_orgs', [])
     if isinstance(subservice_orgs, dict):
-        subservice_orgs = subservice_orgs.get('third_parties', [])
+        subservice_orgs = subservice_orgs.get('subservice_orgs', [])
     
     # Handle company, auditor, product - they can be strings or dicts
     company = results.get('company', 'N/A')
@@ -393,9 +396,9 @@ def display_results_summary(results: Dict[str, Any]):
     if subservice_orgs:
         print_section("Subservice Organizations")
         for i, org in enumerate(subservice_orgs[:10], 1):  # Show first 10
-            confidence = org.get('confidence', 0)
+            confidence = org.get('third_party_confidence', 0)
             conf_color = Colors.GREEN if confidence > 0.8 else Colors.YELLOW if confidence > 0.5 else Colors.RED
-            print(f"  {i:2d}. {org.get('name', 'Unknown'):<40} "
+            print(f"  {i:2d}. {org.get('third_party_name', 'Unknown'):<40} "
                   f"{conf_color}({confidence:.0%}){Colors.RESET}")
         
         if len(subservice_orgs) > 10:
@@ -677,26 +680,27 @@ def main_menu():
 
 def analysis_workflow():
     """Complete analysis workflow"""
-    # Show GPT model configuration
-    clear_screen()
-    print_header("GPT Model Configuration")
-    
-    try:
-        from app.config import DATAIKU_CATALOG_MAP, DEFAULT_GPT_MODEL
-        actual_model_id = DATAIKU_CATALOG_MAP.get(DEFAULT_GPT_MODEL, "unknown")
-        # Extract the actual model name from the catalog ID (e.g., "azureopenai:Azure-OpenAI-Prod:gpt-4o" -> "gpt-4o")
-        if ':' in actual_model_id:
-            actual_model_name = actual_model_id.split(':')[-1]
-        else:
-            actual_model_name = actual_model_id
+    # Show GPT model configuration (if enabled)
+    if ENABLE_GPT_CONFIG_SCREEN:
+        clear_screen()
+        print_header("GPT Model Configuration")
         
-        print_info(f"Configured model: {DEFAULT_GPT_MODEL}")
-        print_info(f"Actual model being used: {Colors.BOLD}{Colors.GREEN}{actual_model_name}{Colors.RESET}")
-        print_info(f"Dataiku LLM ID: {actual_model_id}\n")
-    except Exception as e:
-        print_warning(f"Could not load model config: {e}\n")
-    
-    input(f"{Colors.CYAN}Press Enter to continue to file selection...{Colors.RESET}")
+        try:
+            from app.config import DATAIKU_CATALOG_MAP, DEFAULT_GPT_MODEL
+            actual_model_id = DATAIKU_CATALOG_MAP.get(DEFAULT_GPT_MODEL, "unknown")
+            # Extract the actual model name from the catalog ID (e.g., "azureopenai:Azure-OpenAI-Prod:gpt-4o" -> "gpt-4o")
+            if ':' in actual_model_id:
+                actual_model_name = actual_model_id.split(':')[-1]
+            else:
+                actual_model_name = actual_model_id
+            
+            print_info(f"Configured model: {DEFAULT_GPT_MODEL}")
+            print_info(f"Actual model being used: {Colors.BOLD}{Colors.GREEN}{actual_model_name}{Colors.RESET}")
+            print_info(f"Dataiku LLM ID: {actual_model_id}\n")
+        except Exception as e:
+            print_warning(f"Could not load model config: {e}\n")
+        
+        input(f"{Colors.CYAN}Press Enter to continue to file selection...{Colors.RESET}")
     
     # Step 1: Select file
     pdf_path = select_pdf_file()

@@ -3,6 +3,6 @@
   "parent_company": null,
   "confidence": 1.0,
   "raw_gpt_responses": [
-    "{\n    \"company\": \"Adobe Incorporated\",\n    \"parent_company\": null,\n    \"confidence\": 1.0,\n    \"explanation\": \"The report explicitly identifies Adobe Incorporated as the audited entity multiple times, and there is no indication of a parent or owner company in the provided text.\"\n}"
+    "{\n    \"company\": \"Adobe Incorporated\",\n    \"parent_company\": null,\n    \"confidence\": 1.0,\n    \"explanation\": \"Adobe Incorporated is explicitly identified as the audited entity multiple times in the report, whereas no parent or owner company is mentioned.\"\n}"
   ]
 }

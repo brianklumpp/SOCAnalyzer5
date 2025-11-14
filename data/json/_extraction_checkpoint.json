@@ -1,5 +1,5 @@
 {
-  "timestamp": 1763058300.5703802,
+  "timestamp": 1763093703.026592,
   "completed": [
     "control_extraction",
     "cuec_extraction",
@@ -39,7 +39,7 @@
     },
     {
       "name": "subservice_orgs_extraction",
-      "status": "partial"
+      "status": "done"
     },
     {
       "name": "product_extraction",

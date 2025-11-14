@@ -2,6 +2,6 @@
   "type": "Type 2",
   "start_date": "2022-11-01",
   "end_date": "2023-10-31",
-  "explanation": "The report specifies a coverage period ('November 1, 2022 to October 31, 2023'), which includes both a start and end date, making it a Type 2 SOC 2 report. A Type 2 report evaluates the operating effectiveness of controls over a period of time.",
-  "raw_gpt_response": "{\n    \"type\": \"Type 2\",\n    \"start_date\": \"2022-11-01\",\n    \"end_date\": \"2023-10-31\",\n    \"explanation\": \"The report specifies a coverage period ('November 1, 2022 to October 31, 2023'), which includes both a start and end date, making it a Type 2 SOC 2 report. A Type 2 report evaluates the operating effectiveness of controls over a period of time.\"\n}"
+  "explanation": "The report references a period of review from 'November 1, 2022 to October 31, 2023.' A Type 2 SOC 2 report covers a specific period, making this a Type 2 report. The start date is 2022-11-01, and the end date is 2023-10-31.",
+  "raw_gpt_response": "{\n    \"type\": \"Type 2\",\n    \"start_date\": \"2022-11-01\",\n    \"end_date\": \"2023-10-31\",\n    \"explanation\": \"The report references a period of review from 'November 1, 2022 to October 31, 2023.' A Type 2 SOC 2 report covers a specific period, making this a Type 2 report. The start date is 2022-11-01, and the end date is 2023-10-31.\"\n}"
 }

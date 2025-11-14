@@ -1,0 +1,8 @@
+{
+  "company": "Adobe Incorporated",
+  "parent_company": null,
+  "confidence": 1.0,
+  "raw_gpt_responses": [
+    "{\n    \"company\": \"Adobe Incorporated\",\n    \"parent_company\": null,\n    \"confidence\": 1.0,\n    \"explanation\": \"The management assertion and auditor's report explicitly state that Adobe Incorporated is the audited company, with no parent or owner company mentioned.\"\n}"
+  ]
+}

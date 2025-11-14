@@ -1,0 +1,11 @@
+
+[STANDARDIZED RESULT VALIDATION]
+controls: dict, keys=[]
+cuecs: dict, keys=[]
+subservice_orgs: dict, keys=[]
+product: dict, keys=[]
+auditor: type=<class 'str'>
+company: type=<class 'str'>
+report_date: dict, keys=[]
+coverage_period: dict, keys=[]
+Full standardized results keys: ['controls', 'cuecs', 'subservice_orgs', 'product', 'auditor', 'company', 'report_date', 'coverage_period', 'sections']

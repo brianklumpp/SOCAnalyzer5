@@ -13,6 +13,26 @@ import json
 import logging
 import time
 from ..config import DEDUPLICATION_PROMPT, SAAS_CLASSIFICATION_PROMPT
+from ..gpt_client import gpt_extract
+
+# Module logger
+logger = logging.getLogger(__name__)
+
+
+def _ensure_list(val):
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return val
+    return [val]
+
+
+def _merge_unique(a, b):
+    out = list(a or [])
+    for item in (b or []):
+        if item not in out:
+            out.append(item)
+    return out
 
 
 def deduplicate_with_gpt(subservice_orgs):
@@ -27,30 +47,30 @@ def deduplicate_with_gpt(subservice_orgs):
     """
     if not subservice_orgs:
         return subservice_orgs
-    
+
     logger.info(f"[Dedup] Starting GPT-based deduplication for {len(subservice_orgs)} entries...")
-    
-    # Prepare simplified data for GPT
+
+    # Prepare simplified data for GPT (include all entries so GPT can see lower-confidence variants)
     simplified = [
         {
             "name": org.get("third_party_name"),
-            "description": org.get("third_party_description", "")[:200],  # Truncate long descriptions
+            "description": org.get("third_party_description", "")[:200],
             "confidence": org.get("third_party_confidence")
         }
         for org in subservice_orgs
-        if org.get("third_party_confidence", 0) >= 0.7  # Only look at high-confidence entries
     ]
-    
+
     if len(simplified) < 2:
         logger.info("[Dedup] Less than 2 entries, skipping deduplication")
         return subservice_orgs
-    
-    prompt = DEDUPLICATION_PROMPT.format(json_data=json.dumps(simplified, indent=2))
-    
+
+    # Use replace instead of format to avoid KeyError when the prompt contains braces
+    prompt = DEDUPLICATION_PROMPT.replace("{json_data}", json.dumps(simplified, indent=2))
+
     try:
         response = gpt_extract(prompt, 'subservice_orgs_dedup')
-        
-        # Parse response
+
+        # Parse response defensively
         clean_response = response.strip()
         if clean_response.startswith('```json'):
             clean_response = clean_response[7:]
@@ -59,102 +79,145 @@ def deduplicate_with_gpt(subservice_orgs):
         if clean_response.endswith('```'):
             clean_response = clean_response[:-3]
         clean_response = clean_response.strip()
-        
+
         result = json.loads(clean_response)
         groups = result.get("groups", [])
-        
+
         if not groups:
             logger.info("[Dedup] No duplicate groups found")
             return subservice_orgs
-        
+
         logger.info(f"[Dedup] Found {len(groups)} duplicate groups")
-        
-        # Build mapping: variation name (lowercase) -> canonical name
+
+        # Build variation -> canonical mapping and store group reasons and variations
         variation_to_canonical = {}
+        canonical_groups = {}
         for group in groups:
             canonical = group.get("canonical_name")
             variations = group.get("variations", [])
             reason = group.get("reason", "")
-            
+            if not canonical:
+                continue
+            canonical_lower = canonical.lower().strip()
+            canonical_groups[canonical_lower] = {
+                "canonical_name": canonical,
+                "aliases": [v for v in variations],
+                "dedup_reason": reason,
+                "aggregated_third_party_page_ref": [],
+                "aggregated_third_party_controls": [],
+                "canonical_confidence": 0.0,
+            }
             logger.info(f"[Dedup] Group: {canonical} with {len(variations)} variations - {reason}")
-            
             for var in variations:
                 variation_to_canonical[var.lower().strip()] = canonical
-        
-        # Merge entries
-        merged = {}
-        low_conf_variations = set()
+
+        # Annotate originals and gather aggregation for canonical summaries
         for org in subservice_orgs:
+            # Normalize page refs to lists
+            pr = org.get("third_party_page_ref")
+            if pr is not None:
+                if isinstance(pr, list):
+                    pr_list = [str(x) for x in pr]
+                else:
+                    pr_list = [str(pr)]
+            else:
+                pr_list = []
+            org["third_party_page_ref"] = pr_list
+
             name = org.get("third_party_name", "")
             name_lower = name.lower().strip()
-            # Check if this is a variation that should be merged
+
+            # If this entry maps to a canonical, annotate and adjust confidence (non-destructive)
             if name_lower in variation_to_canonical:
                 canonical = variation_to_canonical[name_lower]
                 canonical_lower = canonical.lower().strip()
-                if canonical_lower in merged:
-                    # Merge with existing canonical entry
-                    existing = merged[canonical_lower]
-                    # Merge page refs
-                    if org.get("third_party_page_ref"):
-                        if existing.get("third_party_page_ref"):
-                            existing["third_party_page_ref"] += "," + str(org["third_party_page_ref"])
-                        else:
-                            existing["third_party_page_ref"] = str(org["third_party_page_ref"])
-                    # Merge controls
-                    if org.get("third_party_controls"):
-                        if existing.get("third_party_controls"):
-                            existing["third_party_controls"].extend(org["third_party_controls"])
-                        else:
-                            existing["third_party_controls"] = org["third_party_controls"]
-                    # Use higher confidence
-                    if org.get("third_party_confidence", 0) > existing.get("third_party_confidence", 0):
-                        existing["third_party_confidence"] = org["third_party_confidence"]
-                    # Merge confidence justifications
-                    existing_just = existing.get("confidence_justification", [])
-                    if isinstance(existing_just, str):
-                        existing_just = [existing_just]
-                    org_just = org.get("confidence_justification", [])
-                    if isinstance(org_just, str):
-                        org_just = [org_just]
-                    existing["confidence_justification"] = existing_just + org_just + [f"Merged duplicate: {name}"]
-                    logger.info(f"[Dedup] Merged '{name}' into '{canonical}'")
-                    # Mark this variation for low confidence
-                    low_conf_variations.add(name_lower)
+                org["canonical_name"] = canonical
+                
+                # Only reduce confidence if this is NOT the canonical form itself
+                # (e.g., "AWS" is a variant, but "Amazon Web Services, Inc. (AWS)" is canonical)
+                is_canonical_form = (name_lower == canonical_lower)
+                
+                old_conf = org.get("third_party_confidence", 0)
+                if not is_canonical_form:
+                    # Lower variant confidence (keep primary high). Use conservative reduction.
+                    new_conf = min(old_conf, 0.2)
+                    if new_conf != old_conf:
+                        org["third_party_confidence"] = new_conf
+                        just = org.get("confidence_justification", [])
+                        if isinstance(just, str):
+                            just = [just]
+                        just.append(f"Marked as variant of {canonical}; confidence reduced {old_conf} -> {new_conf}")
+                        org["confidence_justification"] = just
                 else:
-                    # First entry for this canonical name
-                    org_copy = org.copy()
-                    org_copy["third_party_name"] = canonical
-                    # Add justification
-                    just = org_copy.get("confidence_justification", [])
+                    # This IS the canonical form - preserve confidence, just annotate
+                    just = org.get("confidence_justification", [])
                     if isinstance(just, str):
                         just = [just]
-                    if name.lower() != canonical.lower():
-                        just.append(f"Standardized from: {name}")
-                    org_copy["confidence_justification"] = just
-                    merged[canonical_lower] = org_copy
-                    logger.info(f"[Dedup] Standardized '{name}' to '{canonical}'")
-                    # Mark this variation for low confidence
-                    low_conf_variations.add(name_lower)
+                    just.append(f"Identified as canonical form of group; confidence preserved at {old_conf}")
+                    org["confidence_justification"] = just
+                # Aggregate into canonical summary
+                cg = canonical_groups.get(canonical_lower)
+                if cg is not None:
+                    cg["aggregated_third_party_page_ref"] = _merge_unique(cg["aggregated_third_party_page_ref"], pr_list)
+                    cg["aggregated_third_party_controls"] = _merge_unique(cg["aggregated_third_party_controls"], org.get("third_party_controls") or [])
+                    try:
+                        cg["canonical_confidence"] = max(cg.get("canonical_confidence", 0.0), float(old_conf or 0))
+                    except Exception:
+                        pass
             else:
-                # No duplicate, keep as-is
-                if name_lower not in merged:
-                    merged[name_lower] = org
-        # After merging, set low confidence for all variations except canonical
-        result_list = list(merged.values())
-        for org in result_list:
-            canonical = org["third_party_name"].lower().strip()
-            # If this is a canonical entry, keep its confidence
-            # If not, set confidence low and add justification
-            if canonical not in variation_to_canonical.values():
-                org["third_party_confidence"] = 0.2
-                just = org.get("confidence_justification", [])
-                if isinstance(just, str):
-                    just = [just]
-                just.append("Set low confidence: not canonical after deduplication")
-                org["confidence_justification"] = just
-        logger.info(f"[Dedup] Reduced from {len(subservice_orgs)} to {len(result_list)} entries")
-        return result_list
-        
+                # If entry itself looks like the canonical name, include it in aggregation
+                if name_lower in canonical_groups:
+                    org["canonical_name"] = canonical_groups[name_lower]["canonical_name"]
+                    cg = canonical_groups[name_lower]
+                    cg["aggregated_third_party_page_ref"] = _merge_unique(cg["aggregated_third_party_page_ref"], pr_list)
+                    cg["aggregated_third_party_controls"] = _merge_unique(cg["aggregated_third_party_controls"], org.get("third_party_controls") or [])
+                    try:
+                        cg["canonical_confidence"] = max(cg.get("canonical_confidence", 0.0), float(org.get("third_party_confidence", 0) or 0))
+                    except Exception:
+                        pass
+
+        # Build canonical summary objects to return alongside originals
+        canonical_summaries = []
+        for cl, cg in canonical_groups.items():
+            # Ensure lists are unique and strings
+            page_refs = [str(x) for x in cg.get("aggregated_third_party_page_ref", [])]
+            controls = cg.get("aggregated_third_party_controls", [])
+
+            # Deterministic aggregation: canonical confidence is the max of member confidences
+            canonical_conf = round(cg.get("canonical_confidence", 0.0) or 0.0, 3)
+
+            # Merge justifications from member variants where present (de-duplicate)
+            merged_just = []
+            aliases = cg.get("aliases", []) or []
+            # Build a short aggregation summary
+            merged_just.append(f"Aggregated from {len(aliases)} variant rows; canonical_confidence = max(variant_confidences) = {canonical_conf}")
+            # We will not attempt to harvest every variant's justification here (they remain on the variants),
+            # but include a note that variants exist and where to find them.
+            if aliases:
+                merged_just.append("Variants: " + ", ".join(aliases[:10]))
+
+            summary_obj = {
+                "is_canonical_summary": True,
+                "canonical_name": cg["canonical_name"],
+                "aliases": aliases,
+                # Expose aggregated page refs under the canonical standard field name used elsewhere
+                "third_party_page_ref": page_refs or None,
+                "aggregated_third_party_controls": controls,
+                "dedup_reason": cg.get("dedup_reason", ""),
+                # Provide canonical confidence in the same field used by downstream logic
+                "third_party_confidence": canonical_conf,
+                # Helpful audit/provenance
+                "confidence_justification": merged_just,
+                "merged_from_count": len(aliases),
+                "merged_from_variants": aliases,
+                "merged_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            }
+            canonical_summaries.append(summary_obj)
+
+        logger.info(f"[Dedup] Annotated {len(subservice_orgs)} originals; produced {len(canonical_summaries)} canonical summaries")
+        # Return originals (possibly adjusted) plus canonical summaries (non-destructive)
+        return list(subservice_orgs) + canonical_summaries
+
     except Exception as e:
         logger.error(f"[Dedup] GPT deduplication failed: {e}")
         return subservice_orgs
@@ -195,7 +258,8 @@ def adjust_saas_confidence(subservice_orgs):
         for org in high_conf
     ]
     
-    prompt = SAAS_CLASSIFICATION_PROMPT.format(json_data=json.dumps(simplified, indent=2))
+    # Use replace instead of format to avoid KeyError when prompt contains braces
+    prompt = SAAS_CLASSIFICATION_PROMPT.replace("{json_data}", json.dumps(simplified, indent=2))
     
     try:
         response = gpt_extract(prompt, 'subservice_orgs_saas_classify')
@@ -230,24 +294,32 @@ def adjust_saas_confidence(subservice_orgs):
         # Apply adjustments
         adjusted_count = 0
         for org in subservice_orgs:
+            # Match against raw name and optional canonical_name
             name = org.get("third_party_name", "").lower().strip()
-            
+            cname = (org.get("canonical_name") or "").lower().strip()
+
+            key = None
             if name in adjustment_map:
-                adj = adjustment_map[name]
+                key = name
+            elif cname and cname in adjustment_map:
+                key = cname
+
+            if key:
+                adj = adjustment_map[key]
                 old_conf = org.get("third_party_confidence", 0)
                 new_conf = adj.get("suggested_confidence", old_conf)
-                
+
                 org["third_party_confidence"] = new_conf
-                
+
                 # Add justification
                 just = org.get("confidence_justification", [])
                 if isinstance(just, str):
                     just = [just]
                 just.append(f"Confidence adjusted: {old_conf} -> {new_conf}. Reason: {adj.get('reason', 'SaaS tool classification')}")
                 org["confidence_justification"] = just
-                
+
                 adjusted_count += 1
-                logger.info(f"[SaaS Adjust] Applied adjustment to {org['third_party_name']}")
+                logger.info(f"[SaaS Adjust] Applied adjustment to {org.get('third_party_name')} (matched {key})")
         
         logger.info(f"[SaaS Adjust] Adjusted {adjusted_count} entries")
         

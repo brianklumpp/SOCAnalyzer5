@@ -1,0 +1,22 @@
+Raw TOC text from extract_toc_with_gpt:
+Contents 
+
+2 
+I. 
+Independent Service Auditor’s Report on a SOC 2 Examination......................................................................................................... 3 
+II. 
+Assertion of Adobe Incorporated Management .................................................................................................................................................8 
+III. 
+Adobe Incorporated’s Description of Its Experience Cloud System ............................................................................................... 10 
+IV. 
+Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests ............................................................. 46 
+V. 
+Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent 
+Service Auditor’s Report on a SOC 2 Examination ........................................................................................................................................ 112
+
+Parsed TOC headings from extract_toc_headings_and_pages_with_gpt:
+  Heading: 'Independent Service Auditor’s Report on a SOC 2 Examination' | Page: 3 | Raw: 'Independent Service Auditor’s Report on a SOC 2 Examination'
+  Heading: 'Assertion of Adobe Incorporated Management' | Page: 8 | Raw: 'Assertion of Adobe Incorporated Management'
+  Heading: 'Adobe Incorporated’s Description of Its Experience Cloud System' | Page: 10 | Raw: 'Adobe Incorporated’s Description of Its Experience Cloud System'
+  Heading: 'Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests' | Page: 46 | Raw: 'Trust Services Criteria, Related Controls, Tests of Controls, and Results of Tests'
+  Heading: 'Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent Service Auditor’s Report on a SOC 2 Examination' | Page: 112 | Raw: 'Other Information Provided by Adobe Incorporated That Is Not Covered by the Independent Service Auditor’s Report on a SOC 2 Examination'

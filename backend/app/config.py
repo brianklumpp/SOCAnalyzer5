@@ -877,6 +877,44 @@ Name: {name}
 Description: {desc}
 """
 
+# GPT prompt to classify whether an entity is a known service provider
+SUBSERVICE_ORG_SERVICE_PROVIDER_RESEARCH_PROMPT = """
+You are a SOC 2 compliance and IT infrastructure expert. Determine whether the provided entity is a known infrastructure, cloud, colocation, or managed service provider that would typically be referenced as a subservice organization in a SOC 2 report.
+
+## Service Provider Categories to Identify:
+1. **Cloud/IaaS Providers**: AWS, Azure, GCP, Oracle Cloud, IBM Cloud, Alibaba Cloud, etc.
+2. **Colocation/Data Center**: Equinix, Digital Realty, Cyxtera, NTT, CoreSite, QTS, Switch, Iron Mountain, etc.
+3. **CDN/Edge**: Cloudflare, Akamai, Fastly, etc.
+4. **Managed Hosting**: Rackspace, Liquid Web, etc.
+5. **Network/Connectivity**: CenturyLink/Lumen, Verizon, AT&T, Level 3, Zayo, etc.
+6. **Authentication/IAM Services** (when providing core identity infrastructure): Okta, Auth0, Ping Identity, etc.
+
+## Exclusions:
+- SaaS business applications (Salesforce, Workday, ServiceNow, SAP, Oracle apps)
+- Monitoring/logging/ticketing tools (Splunk, Datadog, New Relic, PagerDuty, Jira)
+- Productivity/collaboration tools (Slack, Microsoft 365, Google Workspace)
+- Security tools (unless providing managed infrastructure services)
+
+## Rules:
+1. Use your knowledge of the IT industry to classify the entity
+2. Consider the entity name and description provided
+3. Be conservative - only mark as service provider if it clearly fits the categories above
+4. Focus on entities that provide INFRASTRUCTURE or PLATFORM services, not software applications
+
+## Output:
+Return a single JSON object:
+{{
+    "is_service_provider": <true or false>,
+    "provider_type": "<cloud|colocation|cdn|hosting|network|identity|unknown>",
+    "confidence": <float 0.0-1.0>,
+    "reason": "<brief justification>"
+}}
+
+Entity to Evaluate:
+Name: {name}
+Description: {desc}
+"""
+
 # Prompt used by the intelligent deduplication logic (subservice_orgs_dedup.py)
 # Expects a JSON array string inserted as {json_data}. Returns a JSON object with a
 # top-level "groups" array. Each group should include canonical_name, variations[],

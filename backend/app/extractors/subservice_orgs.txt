@@ -6,6 +6,34 @@ Ally Bank
 Allianz
 Alteryx
 Amazon Web Services
+AWS
+Microsoft Azure
+Azure
+Microsoft Corporation
+Google Cloud Platform
+Google Cloud
+GCP
+Google LLC
+Equinix
+Equinix, Inc.
+Cyxtera
+Cyxtera Technologies
+Cyxtera Technologies, Inc.
+Digital Realty
+Digital Realty Trust
+Digital Realty Trust, Inc.
+NTT
+NTT Ltd
+NTT ltd.
+Interxion
+Rackspace
+Rackspace Technology
+QTS Realty Trust
+CoreSite
+Switch
+Lumen Technologies
+Level 3
+Zayo
 American Express
 Asana
 Atlassian
