@@ -40,6 +40,9 @@ from .config import (
     EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS,
     EXEC_SUMMARY_PER_CONTROL_MAX_CHARS,
     EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS,
+    EXEC_SUMMARY_TOKEN_WARNING_THRESHOLD,
+    MAX_INPUT_TOKENS,
+    CHARS_PER_TOKEN,
 )
 from .explicit_sql_insert import insert_extracted_data
 import concurrent.futures
@@ -364,6 +367,7 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
             # "pdf_file": getattr(scan_row, "pdf_file", None),
             "company_id": getattr(scan_row, "company_id", None),
             "executive_summary_stale": getattr(scan_row, "executive_summary_stale", False),
+            "is_sox_vendor": getattr(scan_row, "is_sox_vendor", False),
             # Temporarily return empty lists to isolate serialization issues
             "subservice_organizations": [
                 {
@@ -1887,15 +1891,26 @@ async def docker_start(container: str):
 @app.get("/history")
 async def get_history(db=Depends(get_db)):
     result = await db.execute(select(Scan).order_by(Scan.scan_date.desc()).limit(20))
-    history = [
-        {
+    scan_rows = result.scalars().all()
+    
+    history = []
+    for row in scan_rows:
+        # Get company name from Company table
+        company_name = None
+        if row.company_id:
+            company_result = await db.execute(select(Company).where(Company.id == row.company_id))
+            company = company_result.scalar_one_or_none()
+            if company:
+                company_name = company.name
+        
+        history.append({
             "id": row.id,
             "timestamp": row.scan_date.isoformat() if row.scan_date else None,
             "filename": row.pdf_filename,
+            "company": company_name,
             "results": row.result_json
-        }
-        for row in result.scalars()
-    ]
+        })
+    
     return history
 
 @app.get("/report_diag/{scan_id}")
@@ -2119,6 +2134,23 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     product_row = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
     if product_row:
         product_name = getattr(product_row, 'name', '') or ''
+    
+    # Get SOX vendor status
+    is_sox_vendor = getattr(scan_row, 'is_sox_vendor', False)
+    sox_vendor_str = "Yes - Subject to SOX Compliance" if is_sox_vendor else "No"
+    
+    # Get coverage period dates
+    coverage_start = getattr(scan_row, 'coverage_start', None)
+    coverage_end = getattr(scan_row, 'coverage_end', None)
+    if coverage_start and coverage_end:
+        coverage_period_str = f"{coverage_start.strftime('%B %d, %Y')} to {coverage_end.strftime('%B %d, %Y')}"
+    elif coverage_start:
+        coverage_period_str = f"starting {coverage_start.strftime('%B %d, %Y')}"
+    elif coverage_end:
+        coverage_period_str = f"ending {coverage_end.strftime('%B %d, %Y')}"
+    else:
+        coverage_period_str = "the audit period"
+    
     prompt = EXECUTIVE_SUMMARY_PROMPT.format(
         suborg_count=suborg_count,
         cuec_count=cuec_count,
@@ -2128,11 +2160,13 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
         coso_total=len(coso_table),
         tsc_table=tsc_table_str,
         coso_table=coso_table_str,
+        coverage_period=coverage_period_str,
         control_test_results=control_test_results_str,
         detected_deviations=detected_deviations_str,
         cuec_control_strengths=cuec_control_strengths_str,
         company=company_name,
-        product=product_name
+        product=product_name,
+        is_sox_vendor=sox_vendor_str
     )
     # No heuristic pre-computed deviations; rely on GPT to analyze control_test_results in the prompt
     import json
@@ -2141,6 +2175,35 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     
     print(f"REGENERATE DEBUG: Generating new executive summary for scan {scan_id}")
     print(f"REGENERATE DEBUG: Calling GPT to generate real summary")
+    
+    # Calculate prompt size and check token limits
+    prompt_chars = len(prompt)
+    estimated_tokens = prompt_chars / CHARS_PER_TOKEN
+    token_percentage = estimated_tokens / MAX_INPUT_TOKENS
+    
+    # Log prompt size metrics
+    print(f"REGENERATE DEBUG: Prompt size: {prompt_chars:,} chars, ~{estimated_tokens:,.0f} tokens ({token_percentage:.1%} of limit)")
+    
+    # Check if prompt exceeds token limits
+    if token_percentage >= 1.0:
+        error_msg = (
+            f"Executive summary cannot be generated - prompt size ({estimated_tokens:,.0f} tokens) "
+            f"exceeds token limit ({MAX_INPUT_TOKENS:,} tokens). "
+            f"Report has {len(high_conf_controls)} controls, {len(detected_deviations_list)} deviations, "
+            f"and {len(high_conf_cuecs_with_strength)} CUECs. Please contact support."
+        )
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+    
+    # Warn if approaching token limit
+    if token_percentage >= EXEC_SUMMARY_TOKEN_WARNING_THRESHOLD:
+        warning_msg = (
+            f"Executive summary prompt approaching token limit: {estimated_tokens:,.0f} tokens "
+            f"({token_percentage:.1%} of {MAX_INPUT_TOKENS:,} max). "
+            f"Report has {len(high_conf_controls)} controls, {len(detected_deviations_list)} deviations, "
+            f"and {len(high_conf_cuecs_with_strength)} CUECs."
+        )
+        logger.warning(warning_msg)
     
     # Log the full prompt being sent to GPT
     print(f"REGENERATE DEBUG: Executive Summary GPT Prompt:")
@@ -2161,6 +2224,10 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
         f.write(f"{'='*80}\n")
         f.write(f"EXECUTIVE SUMMARY GENERATION - {timestamp}\n")
         f.write(f"Scan ID: {scan_id}\n")
+        f.write(f"Prompt Size: {prompt_chars:,} chars (~{estimated_tokens:,.0f} tokens, {token_percentage:.1%} of {MAX_INPUT_TOKENS:,} limit)\n")
+        if token_percentage >= EXEC_SUMMARY_TOKEN_WARNING_THRESHOLD:
+            f.write(f"⚠️  WARNING: Prompt size exceeds {EXEC_SUMMARY_TOKEN_WARNING_THRESHOLD:.0%} threshold\n")
+        f.write(f"Report Stats: {len(high_conf_controls)} controls, {len(detected_deviations_list)} deviations, {len(high_conf_cuecs_with_strength)} CUECs\n")
         f.write(f"{'='*80}\n")
         f.write(f"PROMPT:\n{prompt}\n")
         f.write(f"{'-'*80}\n")
@@ -2234,12 +2301,16 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     
     # Save the generated summary to the database and reset staleness flag
     print(f"REGENERATE DEBUG: Saving new executive summary to database for scan {scan_id}")
+    print(f"REGENERATE DEBUG: Summary JSON keys being saved: {list(summary_json.keys())}")
+    print(f"REGENERATE DEBUG: Has sox_objective: {'sox_objective' in summary_json}")
+    print(f"REGENERATE DEBUG: Has sox_assessors_conclusion: {'sox_assessors_conclusion' in summary_json}")
     scan_row.executive_summary = summary_json
     scan_row.executive_summary_stale = False  # Reset staleness flag
     db.add(scan_row)
     await db.commit()
     
     print(f"REGENERATE DEBUG: Executive summary saved successfully for scan {scan_id}")
+    print(f"REGENERATE DEBUG: Returning summary with keys: {list(summary_json.keys())}")
     return {"executive_summary": summary_json, "is_stale": False}
 
 @app.post("/executive_summary/{scan_id}")
@@ -2320,11 +2391,14 @@ async def patch_report_overview(scan_id: int, data: dict, db=Depends(get_db)):
             scan_row.auditor = data["auditor"]
         if "scanDate" in data:
             scan_row.scan_date = parse_date(data["scanDate"])
+        if "isSoxVendor" in data:
+            scan_row.is_sox_vendor = bool(data["isSoxVendor"])
+        
+        # Mark executive summary as stale since overview data changed (especially SOX vendor status affects summary)
+        scan_row.executive_summary_stale = True
+        
         db.add(scan_row)
         await db.commit()
-        
-        # Mark executive summary as stale since overview data changed
-        await mark_executive_summary_stale(scan_id, db)
         
         return {"status": "ok"}
     except Exception as e:
@@ -2629,52 +2703,119 @@ async def patch_cuec_by_tsc(scan_id: int, cuec_tsc_id: str, data: Dict[str, Any]
 
 @app.post("/report/{scan_id}/cuecs/{cuec_id}/recompute_frameworks")
 async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_db)):
-    """Recompute TSC/COSO mapping for a CUEC description using embeddings.
-    Updates and persists: cuec_tsc_id, cuec_coso_id, cuec_tsc_similarity, cuec_coso_similarity,
+    """Recompute TSC/COSO mapping for a CUEC description using multi-match mapping.
+    Updates and persists: cuec_tsc_mappings, cuec_coso_mappings (JSON arrays),
+    plus legacy columns: cuec_tsc_id, cuec_coso_id, cuec_tsc_similarity, cuec_coso_similarity,
     cuec_tsc_confidence_pct, cuec_coso_confidence_pct, cuec_closest_framework, and framework_alignment fields.
+    
+    Note: For CUECs, we reuse the same map_control_to_frameworks_multi function since the logic is identical.
+    CUECs typically don't have deviations, but the function handles this gracefully.
     """
+    from ..extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    
     try:
         cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.id == cuec_id))).scalar_one_or_none()
         if not cuec:
             return JSONResponse({"error": "CUEC not found"}, status_code=404)
+        
         desc = getattr(cuec, "cuec_description", None) or getattr(cuec, "description", None)
         if not desc or not isinstance(desc, str) or not desc.strip():
             return JSONResponse({"error": "CUEC description is empty; cannot compute mapping"}, status_code=400)
-        try:
-            tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, TSC_CRITERIA, COSO_2013_CRITERIA)
-        except Exception as e:
-            # Embedding provider or network issue
-            return JSONResponse({"error": f"Mapping failed: {e}"}, status_code=503)
+        
+        # Call multi-match mapping if enabled, otherwise use legacy single-match
+        if config.ENABLE_MULTI_MATCH_MAPPING:
+            try:
+                tsc_matches, coso_matches = map_control_to_frameworks_multi(
+                    control_desc=desc,
+                    control_id=f"CUEC_{cuec.id}",
+                    has_deviation=False,  # CUECs typically don't have deviations
+                    deviation_desc="",
+                    tsc_criteria=TSC_CRITERIA,
+                    coso_criteria=COSO_2013_CRITERIA,
+                    top_k=3
+                )
+                
+                # Store arrays
+                cuec.cuec_tsc_mappings = tsc_matches
+                cuec.cuec_coso_mappings = coso_matches
+                
+                # Populate legacy columns with highest confidence match
+                if tsc_matches:
+                    top_tsc = tsc_matches[0]
+                    cuec.cuec_tsc_id = top_tsc.get("id")
+                    cuec.cuec_tsc_similarity = top_tsc.get("confidence")
+                    cuec.cuec_tsc_confidence_pct = int(round(top_tsc.get("confidence", 0) * 100))
+                
+                if coso_matches:
+                    top_coso = coso_matches[0]
+                    cuec.cuec_coso_id = top_coso.get("id")
+                    cuec.cuec_coso_similarity = top_coso.get("confidence")
+                    cuec.cuec_coso_confidence_pct = int(round(top_coso.get("confidence", 0) * 100))
+                
+                # Determine closest framework
+                if tsc_matches and coso_matches:
+                    if tsc_matches[0].get("confidence", 0) > coso_matches[0].get("confidence", 0):
+                        cuec.cuec_closest_framework = "TSC"
+                    elif coso_matches[0].get("confidence", 0) > tsc_matches[0].get("confidence", 0):
+                        cuec.cuec_closest_framework = "COSO"
+                    else:
+                        cuec.cuec_closest_framework = "Equal"
+                elif tsc_matches:
+                    cuec.cuec_closest_framework = "TSC"
+                elif coso_matches:
+                    cuec.cuec_closest_framework = "COSO"
+                else:
+                    cuec.cuec_closest_framework = "Undetermined"
+                
+                # Alignment fields prefer TSC when available
+                if tsc_matches:
+                    cuec.cuec_framework_alignment = 'TSC'
+                    cuec.cuec_framework_alignment_id = tsc_matches[0].get("id")
+                elif coso_matches:
+                    cuec.cuec_framework_alignment = 'COSO'
+                    cuec.cuec_framework_alignment_id = coso_matches[0].get("id")
+                else:
+                    cuec.cuec_framework_alignment = 'Undetermined'
+                    cuec.cuec_framework_alignment_id = None
+                    
+            except Exception as e:
+                return JSONResponse({"error": f"Multi-match mapping failed: {e}"}, status_code=503)
+        else:
+            # Legacy single-match fallback
+            try:
+                tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, TSC_CRITERIA, COSO_2013_CRITERIA)
+            except Exception as e:
+                return JSONResponse({"error": f"Mapping failed: {e}"}, status_code=503)
 
-        # Persist fields
-        cuec.cuec_tsc_id = tsc_id
-        cuec.cuec_coso_id = coso_id
-        cuec.cuec_tsc_similarity = tsc_sim
-        cuec.cuec_coso_similarity = coso_sim
-        cuec.cuec_tsc_confidence_pct = int(round(100 * (tsc_sim + 1) / 2)) if isinstance(tsc_sim, (int, float)) and tsc_sim != -1 else None
-        cuec.cuec_coso_confidence_pct = int(round(100 * (coso_sim + 1) / 2)) if isinstance(coso_sim, (int, float)) and coso_sim != -1 else None
-        # Derive closest/framework alignment
-        if (isinstance(tsc_sim, (int, float)) and isinstance(coso_sim, (int, float))):
-            if tsc_sim > coso_sim:
-                cuec.cuec_closest_framework = 'TSC'
-            elif coso_sim > tsc_sim:
-                cuec.cuec_closest_framework = 'COSO'
-            elif tsc_sim == coso_sim and tsc_sim != -1:
-                cuec.cuec_closest_framework = 'Equal'
+            # Persist fields
+            cuec.cuec_tsc_id = tsc_id
+            cuec.cuec_coso_id = coso_id
+            cuec.cuec_tsc_similarity = tsc_sim
+            cuec.cuec_coso_similarity = coso_sim
+            cuec.cuec_tsc_confidence_pct = int(round(100 * (tsc_sim + 1) / 2)) if isinstance(tsc_sim, (int, float)) and tsc_sim != -1 else None
+            cuec.cuec_coso_confidence_pct = int(round(100 * (coso_sim + 1) / 2)) if isinstance(coso_sim, (int, float)) and coso_sim != -1 else None
+            # Derive closest/framework alignment
+            if (isinstance(tsc_sim, (int, float)) and isinstance(coso_sim, (int, float))):
+                if tsc_sim > coso_sim:
+                    cuec.cuec_closest_framework = 'TSC'
+                elif coso_sim > tsc_sim:
+                    cuec.cuec_closest_framework = 'COSO'
+                elif tsc_sim == coso_sim and tsc_sim != -1:
+                    cuec.cuec_closest_framework = 'Equal'
+                else:
+                    cuec.cuec_closest_framework = 'Undetermined'
             else:
                 cuec.cuec_closest_framework = 'Undetermined'
-        else:
-            cuec.cuec_closest_framework = 'Undetermined'
-        # Alignment fields prefer TSC when available
-        if tsc_id and isinstance(tsc_id, str):
-            cuec.cuec_framework_alignment = 'TSC'
-            cuec.cuec_framework_alignment_id = tsc_id
-        elif coso_id and isinstance(coso_id, str):
-            cuec.cuec_framework_alignment = 'COSO'
-            cuec.cuec_framework_alignment_id = coso_id
-        else:
-            cuec.cuec_framework_alignment = 'Undetermined'
-            cuec.cuec_framework_alignment_id = None
+            # Alignment fields prefer TSC when available
+            if tsc_id and isinstance(tsc_id, str):
+                cuec.cuec_framework_alignment = 'TSC'
+                cuec.cuec_framework_alignment_id = tsc_id
+            elif coso_id and isinstance(coso_id, str):
+                cuec.cuec_framework_alignment = 'COSO'
+                cuec.cuec_framework_alignment_id = coso_id
+            else:
+                cuec.cuec_framework_alignment = 'Undetermined'
+                cuec.cuec_framework_alignment_id = None
 
         # Mark executive summary stale
         scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
@@ -2683,7 +2824,8 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
             db.add(scan_row)
         db.add(cuec)
         await db.commit()
-        return {
+        
+        response = {
             "status": "ok",
             "cuec": {
                 "id": cuec.id,
@@ -2698,6 +2840,14 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
                 "cuec_framework_alignment_id": cuec.cuec_framework_alignment_id,
             }
         }
+        
+        # Include multi-match arrays if enabled
+        if config.ENABLE_MULTI_MATCH_MAPPING:
+            response["cuec"]["cuec_tsc_mappings"] = cuec.cuec_tsc_mappings
+            response["cuec"]["cuec_coso_mappings"] = cuec.cuec_coso_mappings
+        
+        return response
+        
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/cuecs/{cuec_id}/recompute_frameworks error: {e}")
@@ -2705,42 +2855,96 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
 
 @app.post("/report/{scan_id}/controls/id/{control_db_id}/recompute_frameworks")
 async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depends(get_db)):
-    """Recompute TSC/COSO mapping for a Control using its description or test text.
-    Updates and persists: control_tsc_id, control_coso_id, control_tsc_similarity, control_coso_similarity,
+    """Recompute TSC/COSO mapping for a Control using multi-match mapping.
+    Updates and persists: control_tsc_mappings, control_coso_mappings (JSON arrays),
+    plus legacy columns: control_tsc_id, control_coso_id, control_tsc_similarity, control_coso_similarity,
     control_tsc_confidence_pct, control_coso_confidence_pct, control_closest_framework.
     """
+    from ..extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    
     try:
         ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id))).scalar_one_or_none()
         if not ctrl:
             return JSONResponse({"error": "Control not found"}, status_code=404)
+        
         # Prefer control_desc; fallback to control_test
         desc = (getattr(ctrl, "control_desc", None) or "").strip()
         if not desc:
             desc = (getattr(ctrl, "control_test", None) or "").strip()
         if not desc:
             return JSONResponse({"error": "No suitable text (desc/test) to compute mapping"}, status_code=400)
-        try:
-            tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, TSC_CRITERIA, COSO_2013_CRITERIA)
-        except Exception as e:
-            return JSONResponse({"error": f"Mapping failed: {e}"}, status_code=503)
+        
+        # Call multi-match mapping if enabled, otherwise use legacy single-match
+        if config.ENABLE_MULTI_MATCH_MAPPING:
+            try:
+                tsc_matches, coso_matches = map_control_to_frameworks_multi(
+                    control_desc=desc,
+                    control_id=ctrl.control_id or f"Control_{ctrl.id}",
+                    has_deviation=ctrl.has_deviation or False,
+                    deviation_desc=ctrl.deviation_desc or "",
+                    tsc_criteria=TSC_CRITERIA,
+                    coso_criteria=COSO_2013_CRITERIA,
+                    top_k=3
+                )
+                
+                # Store arrays
+                ctrl.control_tsc_mappings = tsc_matches
+                ctrl.control_coso_mappings = coso_matches
+                
+                # Populate legacy columns with highest confidence match
+                if tsc_matches:
+                    top_tsc = tsc_matches[0]
+                    ctrl.control_tsc_id = top_tsc.get("id")
+                    ctrl.control_tsc_similarity = top_tsc.get("confidence")
+                    ctrl.control_tsc_confidence_pct = int(round(top_tsc.get("confidence", 0) * 100))
+                
+                if coso_matches:
+                    top_coso = coso_matches[0]
+                    ctrl.control_coso_id = top_coso.get("id")
+                    ctrl.control_coso_similarity = top_coso.get("confidence")
+                    ctrl.control_coso_confidence_pct = int(round(top_coso.get("confidence", 0) * 100))
+                
+                # Determine closest framework
+                if tsc_matches and coso_matches:
+                    if tsc_matches[0].get("confidence", 0) > coso_matches[0].get("confidence", 0):
+                        ctrl.control_closest_framework = "TSC"
+                    elif coso_matches[0].get("confidence", 0) > tsc_matches[0].get("confidence", 0):
+                        ctrl.control_closest_framework = "COSO"
+                    else:
+                        ctrl.control_closest_framework = "Equal"
+                elif tsc_matches:
+                    ctrl.control_closest_framework = "TSC"
+                elif coso_matches:
+                    ctrl.control_closest_framework = "COSO"
+                else:
+                    ctrl.control_closest_framework = "Undetermined"
+                    
+            except Exception as e:
+                return JSONResponse({"error": f"Multi-match mapping failed: {e}"}, status_code=503)
+        else:
+            # Legacy single-match fallback
+            try:
+                tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, TSC_CRITERIA, COSO_2013_CRITERIA)
+            except Exception as e:
+                return JSONResponse({"error": f"Mapping failed: {e}"}, status_code=503)
 
-        ctrl.control_tsc_id = tsc_id
-        ctrl.control_coso_id = coso_id
-        ctrl.control_tsc_similarity = tsc_sim
-        ctrl.control_coso_similarity = coso_sim
-        ctrl.control_tsc_confidence_pct = int(round(100 * (tsc_sim + 1) / 2)) if isinstance(tsc_sim, (int, float)) and tsc_sim != -1 else None
-        ctrl.control_coso_confidence_pct = int(round(100 * (coso_sim + 1) / 2)) if isinstance(coso_sim, (int, float)) and coso_sim != -1 else None
-        if (isinstance(tsc_sim, (int, float)) and isinstance(coso_sim, (int, float))):
-            if tsc_sim > coso_sim:
-                ctrl.control_closest_framework = 'TSC'
-            elif coso_sim > tsc_sim:
-                ctrl.control_closest_framework = 'COSO'
-            elif tsc_sim == coso_sim and tsc_sim != -1:
-                ctrl.control_closest_framework = 'Equal'
+            ctrl.control_tsc_id = tsc_id
+            ctrl.control_coso_id = coso_id
+            ctrl.control_tsc_similarity = tsc_sim
+            ctrl.control_coso_similarity = coso_sim
+            ctrl.control_tsc_confidence_pct = int(round(100 * (tsc_sim + 1) / 2)) if isinstance(tsc_sim, (int, float)) and tsc_sim != -1 else None
+            ctrl.control_coso_confidence_pct = int(round(100 * (coso_sim + 1) / 2)) if isinstance(coso_sim, (int, float)) and coso_sim != -1 else None
+            if (isinstance(tsc_sim, (int, float)) and isinstance(coso_sim, (int, float))):
+                if tsc_sim > coso_sim:
+                    ctrl.control_closest_framework = 'TSC'
+                elif coso_sim > tsc_sim:
+                    ctrl.control_closest_framework = 'COSO'
+                elif tsc_sim == coso_sim and tsc_sim != -1:
+                    ctrl.control_closest_framework = 'Equal'
+                else:
+                    ctrl.control_closest_framework = 'Undetermined'
             else:
                 ctrl.control_closest_framework = 'Undetermined'
-        else:
-            ctrl.control_closest_framework = 'Undetermined'
 
         # Mark executive summary stale
         scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
@@ -2749,7 +2953,8 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
             db.add(scan_row)
         db.add(ctrl)
         await db.commit()
-        return {
+        
+        response = {
             "status": "ok",
             "control": {
                 "id": ctrl.id,
@@ -2762,9 +2967,243 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
                 "control_closest_framework": ctrl.control_closest_framework,
             }
         }
+        
+        # Include multi-match arrays if enabled
+        if config.ENABLE_MULTI_MATCH_MAPPING:
+            response["control"]["control_tsc_mappings"] = ctrl.control_tsc_mappings
+            response["control"]["control_coso_mappings"] = ctrl.control_coso_mappings
+        
+        return response
+        
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/controls/id/{control_db_id}/recompute_frameworks error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/controls/batch_recompute_frameworks")
+async def batch_recompute_control_frameworks(
+    scan_id: int,
+    data: dict,
+    throttle_ms: int = None,
+    db=Depends(get_db)
+):
+    """
+    Batch recompute TSC/COSO mappings for multiple controls with rate limiting and CPU throttling.
+    
+    Request body:
+    {
+        "control_ids": [1, 5, 23, ...],  // Optional - defaults to all controls in scan
+    }
+    
+    Query params:
+    - throttle_ms: Milliseconds to sleep between batches (default from config, supports "auto")
+    
+    Returns:
+    {
+        "updated_count": 150,
+        "elapsed_seconds": 123.4,
+        "avg_time_per_control": 0.82,
+        "throttle_ms": 100,
+        "throttle_adjustments": [...]  // If auto throttle enabled
+    }
+    """
+    import asyncio
+    import time as time_module
+    from ..extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    
+    try:
+        start_time = time_module.time()
+        
+        # Get configuration
+        batch_size = config.BATCH_MAPPING_BATCH_SIZE
+        max_concurrent = config.MAX_BATCH_MAPPING_CONCURRENT
+        default_throttle = config.BATCH_MAPPING_DEFAULT_THROTTLE_MS
+        enable_auto_throttle = config.BATCH_MAPPING_ENABLE_AUTO_THROTTLE
+        target_cpu_pct = config.BATCH_MAPPING_TARGET_CPU_PCT
+        
+        # Determine throttle setting
+        if throttle_ms is None:
+            throttle_ms = default_throttle
+        elif throttle_ms == "auto":
+            throttle_ms = default_throttle
+            enable_auto_throttle = True
+        
+        throttle_adjustments = []
+        
+        # Get control IDs to process
+        control_ids = data.get("control_ids")
+        if control_ids:
+            controls = (await db.execute(
+                select(Control).where(Control.scan_id == scan_id, Control.id.in_(control_ids))
+            )).scalars().all()
+        else:
+            controls = (await db.execute(
+                select(Control).where(Control.scan_id == scan_id)
+            )).scalars().all()
+        
+        if not controls:
+            return {"updated_count": 0, "elapsed_seconds": 0, "message": "No controls found"}
+        
+        total_controls = len(controls)
+        updated_count = 0
+        
+        logging.info(f"Batch recompute starting for {total_controls} controls (throttle: {throttle_ms}ms, batch_size: {batch_size})")
+        
+        # Process in batches with rate limiting
+        for batch_idx in range(0, total_controls, batch_size):
+            batch = controls[batch_idx:batch_idx + batch_size]
+            batch_num = (batch_idx // batch_size) + 1
+            
+            # Monitor CPU if auto throttle enabled
+            cpu_before = None
+            if enable_auto_throttle:
+                try:
+                    import psutil
+                    cpu_before = psutil.cpu_percent(interval=0.1)
+                except:
+                    pass
+            
+            # Process batch with semaphore-controlled concurrency
+            semaphore = asyncio.Semaphore(max_concurrent)
+            
+            async def process_control(ctrl):
+                async with semaphore:
+                    try:
+                        desc = (ctrl.control_desc or "").strip()
+                        if not desc:
+                            desc = (ctrl.control_test or "").strip()
+                        if not desc:
+                            return False
+                        
+                        # Call multi-match mapping
+                        tsc_matches, coso_matches = map_control_to_frameworks_multi(
+                            control_desc=desc,
+                            control_id=ctrl.control_id or f"Control_{ctrl.id}",
+                            has_deviation=ctrl.has_deviation or False,
+                            deviation_desc=ctrl.deviation_desc or "",
+                            tsc_criteria=TSC_CRITERIA,
+                            coso_criteria=COSO_2013_CRITERIA,
+                            top_k=3
+                        )
+                        
+                        # Store arrays
+                        ctrl.control_tsc_mappings = tsc_matches
+                        ctrl.control_coso_mappings = coso_matches
+                        
+                        # Populate legacy columns with highest confidence match
+                        if tsc_matches:
+                            top_tsc = tsc_matches[0]
+                            ctrl.control_tsc_id = top_tsc.get("id")
+                            ctrl.control_tsc_similarity = top_tsc.get("confidence")
+                            ctrl.control_tsc_confidence_pct = int(round(top_tsc.get("confidence", 0) * 100))
+                        
+                        if coso_matches:
+                            top_coso = coso_matches[0]
+                            ctrl.control_coso_id = top_coso.get("id")
+                            ctrl.control_coso_similarity = top_coso.get("confidence")
+                            ctrl.control_coso_confidence_pct = int(round(top_coso.get("confidence", 0) * 100))
+                        
+                        # Determine closest framework
+                        if tsc_matches and coso_matches:
+                            if tsc_matches[0].get("confidence", 0) > coso_matches[0].get("confidence", 0):
+                                ctrl.control_closest_framework = "TSC"
+                            elif coso_matches[0].get("confidence", 0) > tsc_matches[0].get("confidence", 0):
+                                ctrl.control_closest_framework = "COSO"
+                            else:
+                                ctrl.control_closest_framework = "Equal"
+                        elif tsc_matches:
+                            ctrl.control_closest_framework = "TSC"
+                        elif coso_matches:
+                            ctrl.control_closest_framework = "COSO"
+                        
+                        db.add(ctrl)
+                        return True
+                    except Exception as e:
+                        logging.error(f"Failed to map control {ctrl.id}: {e}")
+                        return False
+            
+            # Process batch concurrently
+            results = await asyncio.gather(*[process_control(ctrl) for ctrl in batch])
+            batch_updated = sum(1 for r in results if r)
+            updated_count += batch_updated
+            
+            # Commit every 25 controls or at end of batch
+            if (batch_idx + batch_size) % 25 == 0 or (batch_idx + batch_size) >= total_controls:
+                await db.commit()
+            
+            # Log progress
+            elapsed = time_module.time() - start_time
+            pct_complete = ((batch_idx + batch_size) / total_controls) * 100
+            avg_time = elapsed / (batch_idx + batch_size) if (batch_idx + batch_size) > 0 else 0
+            
+            logging.info(
+                f"Processed {min(batch_idx + batch_size, total_controls)}/{total_controls} controls "
+                f"({pct_complete:.1f}%), elapsed: {elapsed:.1f}s, avg: {avg_time:.2f}s/control"
+            )
+            
+            # Auto-adjust throttle based on CPU
+            if enable_auto_throttle and cpu_before is not None:
+                try:
+                    import psutil
+                    cpu_after = psutil.cpu_percent(interval=0.1)
+                    cpu_delta = cpu_after - cpu_before
+                    
+                    old_throttle = throttle_ms
+                    
+                    if cpu_after > target_cpu_pct:
+                        throttle_ms = min(throttle_ms + 50, 500)  # Increase throttle, max 500ms
+                    elif cpu_after < (target_cpu_pct - 20):
+                        throttle_ms = max(throttle_ms - 20, 50)  # Decrease throttle, min 50ms
+                    
+                    if throttle_ms != old_throttle:
+                        throttle_adjustments.append({
+                            "batch": batch_num,
+                            "old_ms": old_throttle,
+                            "new_ms": throttle_ms,
+                            "cpu_pct": cpu_after
+                        })
+                        logging.info(
+                            f"Batch {batch_num}: CPU {cpu_before:.1f}%→{cpu_after:.1f}% ({cpu_delta:+.1f}%), "
+                            f"throttle: {old_throttle}ms → {throttle_ms}ms"
+                        )
+                except:
+                    pass
+            
+            # Sleep between batches (CPU breathing room)
+            await asyncio.sleep(throttle_ms / 1000.0)
+        
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        
+        await db.commit()
+        
+        elapsed_total = time_module.time() - start_time
+        avg_time_per_control = elapsed_total / total_controls if total_controls > 0 else 0
+        
+        result = {
+            "updated_count": updated_count,
+            "total_controls": total_controls,
+            "elapsed_seconds": round(elapsed_total, 2),
+            "avg_time_per_control": round(avg_time_per_control, 2),
+            "throttle_ms": throttle_ms
+        }
+        
+        if throttle_adjustments:
+            result["throttle_adjustments"] = throttle_adjustments
+        
+        logging.info(
+            f"Batch recompute completed: {updated_count}/{total_controls} controls updated "
+            f"in {elapsed_total:.1f}s (avg: {avg_time_per_control:.2f}s/control)"
+        )
+        
+        return result
+        
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"/report/{scan_id}/controls/batch_recompute_frameworks error: {e}", exc_info=True)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.patch("/report/{scan_id}/suborgs/{suborg_id}/annotation")

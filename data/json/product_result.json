@@ -2,6 +2,6 @@
   "product": "Adobe Experience Cloud",
   "confidence": 1.0,
   "raw_gpt_responses": [
-    "{\n  \"product\": \"Adobe Experience Cloud\",\n  \"confidence\": 1.0,\n  \"explanation\": \"The report explicitly states that the Adobe Experience Cloud system is the focus of the SOC 2 examination. Phrases such as 'Adobe's Description of its Adobe Experience Cloud System,' 'Adobe Incorporated's Description of Its Experience Cloud System,' and 'description includes Adobe’s Experience Cloud system' clearly outline the product in scope.\"\n}"
+    "{\n  \"product\": \"Adobe Experience Cloud\",\n  \"confidence\": 1.0,\n  \"explanation\": \"The SOC 2 report explicitly states that the scope of the examination covers Adobe's Experience Cloud system. This is referenced multiple times, including in the system description and the assertion by management.\"\n}"
   ]
 }

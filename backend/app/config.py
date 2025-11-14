@@ -95,6 +95,19 @@ OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada
 # Toggle for control/CUEC framework mapping (now uses GPT instead of embeddings)
 CONTROL_EMBEDDING_MAPPING_ENABLED = os.getenv("CONTROL_EMBEDDING_MAPPING_ENABLED", "true").lower() == "true"
 
+# Multi-match framework mapping configuration
+ENABLE_MULTI_MATCH_MAPPING = os.getenv("ENABLE_MULTI_MATCH_MAPPING", "false").lower() == "true"
+FRAMEWORK_CATEGORY_SCORE_THRESHOLD = int(os.getenv("FRAMEWORK_CATEGORY_SCORE_THRESHOLD", "7"))
+FRAMEWORK_MAX_CATEGORIES = int(os.getenv("FRAMEWORK_MAX_CATEGORIES", "2"))
+FRAMEWORK_MAX_CRITERIA_PER_PASS = int(os.getenv("FRAMEWORK_MAX_CRITERIA_PER_PASS", "15"))
+
+# Batch mapping endpoint configuration
+MAX_BATCH_MAPPING_CONCURRENT = int(os.getenv("MAX_BATCH_MAPPING_CONCURRENT", "3"))
+BATCH_MAPPING_BATCH_SIZE = int(os.getenv("BATCH_MAPPING_BATCH_SIZE", "10"))
+BATCH_MAPPING_DEFAULT_THROTTLE_MS = int(os.getenv("BATCH_MAPPING_DEFAULT_THROTTLE_MS", "100"))
+BATCH_MAPPING_ENABLE_AUTO_THROTTLE = os.getenv("BATCH_MAPPING_ENABLE_AUTO_THROTTLE", "true").lower() == "true"
+BATCH_MAPPING_TARGET_CPU_PCT = int(os.getenv("BATCH_MAPPING_TARGET_CPU_PCT", "60"))
+
 # Docker control (frontend UI) enable flag
 DOCKER_CONTROL_ENABLED = os.getenv("DOCKER_CONTROL_ENABLED", "false").lower() == "true"
 
@@ -329,28 +342,72 @@ You are a senior risk analyst preparing a concise executive-level summary from S
 Generate an accurate, structured JSON summary covering the organization, findings, and recommendations.
 
 ## Scope
-Inputs include SOC 2 coverage statistics, CUECs, COSO and TSC mapping tables, and detected deviations.
+Inputs include SOC 2 coverage statistics, CUECs, COSO and TSC mapping tables, detected deviations, and SOX vendor status.
+
+## Context
+- **SOX Vendor Status**: {is_sox_vendor}
+- If this is a SOX vendor (subject to Sarbanes-Oxley compliance), include specific assessments of:
+  * SOX-relevant controls and their effectiveness
+  * Financial reporting system controls
+  * Access controls and segregation of duties
+  * Change management and audit trail completeness
+  * Any SOX compliance gaps or concerns
 
 ## Rules
-1. Use provided variables — company='{company}', product='{product}' — when composing the about_company section.
-2. Treat any missing sections as "unknown/not covered" but do not list them as deficiencies.
-3. Do not repeat input data; synthesize it into insights.
-4. Every finding or recommendation must be plausible and customer-relevant (not advice for the vendor's internal controls).
-5. Include at least one insight referencing CUEC control strength if applicable.
-6. Maintain neutral, audit-appropriate tone — no marketing language or speculation.
+1. Use provided variables — company='{company}', product='{product}', is_sox_vendor='{is_sox_vendor}' — when composing the about_company section.
+2. **SOX-Specific Analysis**: If is_sox_vendor is True/Yes, dedicate at least one key finding and one recommendation specifically to SOX compliance implications.
+3. **Coverage Analysis**: Explicitly mention TSC coverage percentage ({tsc_covered}/{tsc_total}) and COSO coverage percentage ({coso_covered}/{coso_total}).
+4. **CUEC Analysis**: Analyze CUEC control strength assessments and identify:
+   - CUECs marked as "Weak" or "Not Effective" - these are HIGH RISK
+   - CUECs marked as "Adequate" or "Moderate" - these need monitoring
+   - Gaps where CUECs have no control strength assessment
+5. **Gap Analysis**: Identify and highlight:
+   - Missing TSC criteria (uncovered items from table)
+   - Missing COSO components (uncovered items from table)
+   - CUECs without control strength ratings
+   - Subservice organizations with inadequate controls
+6. Treat any missing sections as "unknown/not covered" but do not list them as deficiencies unless they are SOX-relevant gaps.
+7. Do not repeat input data; synthesize it into insights.
+8. Every finding or recommendation must be plausible and customer-relevant (not advice for the vendor's internal controls).
+9. Maintain neutral, audit-appropriate tone — no marketing language or speculation.
+10. **SOX-Specific Sections**: If is_sox_vendor is True/Yes, include:
+   - "sox_objective": Review objective statement
+   - "sox_assessors_conclusion": Structured assessment with Adequacy, Operating Effectiveness, and Material Weaknesses subsections
 
 ## Output Format
-Return only a valid JSON object using this exact structure:
+Return only a valid JSON object. The structure depends on whether this is a SOX vendor:
+
+### If is_sox_vendor is "Yes" or "True", you MUST include these additional fields:
 {{
-    "about_company": "<brief narrative about {company} and product {product}, with grade A/B/C/D>",
-    "key_findings": ["<1–2 sentences each>"],
-    "areas_of_concern": ["<1–2 sentences each>"],
+    "about_company": "<brief narrative about {company} and product {product}, with grade A/B/C/D. Mention if SOX vendor and implications.>",
+    "sox_objective": "<REQUIRED for SOX vendors. Use this exact template: 'The objective of this review was to assess the effectiveness and reliability of the internal controls over protecting the security, confidentiality, integrity, and availability of the system responsible for {product} for Solidigm during the period {coverage_period}. This review was carried out in accordance with the agreed-upon procedures and standards established by the American Institute of Certified Public Accountants (AICPA).'>",
+    "key_findings": ["<1–2 sentences each. Include TSC/COSO coverage stats, CUEC control strength summary, deviations count, and SOX implications.>"],
+    "areas_of_concern": ["<1–2 sentences each. Focus on weak CUECs, coverage gaps, deviations, and SOX gaps.>"],
+    "sox_assessors_conclusion": {{
+        "adequacy": "<REQUIRED for SOX vendors. Assess the adequacy of control coverage for SOX compliance. Address whether controls are sufficient in design to meet financial reporting and security requirements. Be specific about what is adequate and what is not.>",
+        "operating_effectiveness": "<REQUIRED for SOX vendors. Provide conclusions about operating effectiveness. If deficiencies were found, explicitly state them and their impact on SOX compliance. If no deficiencies, state that clearly.>",
+        "material_weaknesses": "<REQUIRED for SOX vendors. Identify any gaps that would SIGNIFICANTLY impact integrity, availability, confidentiality, and security RELEVANT TO SOLIDIGM. If none found, state exactly: 'No material weaknesses identified that would significantly impact Solidigm operations.'>"
+    }},
     "deviations_noted": [
         {{"control_id": "<string>", "deviation_summary": "<concise issue description>"}}
     ],
-    "unknown_coverage_gaps": ["<not tested / out of scope descriptions>"],
-    "recommendations_risk_mitigations": ["<up to 3 actionable technical/operational recommendations>"],
-    "recommendations_contract_enhancements": ["<up to 3 actionable contractual/DPA/SLA recommendations>"],
+    "unknown_coverage_gaps": ["<List missing TSC/COSO criteria, CUECs without control strength, not tested items.>"],
+    "recommendations_risk_mitigations": ["<up to 3 actionable technical/operational recommendations. Prioritize weak CUEC controls and SOX gaps.>"],
+    "recommendations_contract_enhancements": ["<up to 3 actionable contractual/DPA/SLA recommendations. Include CUEC control requirements and SOX attestations.>"],
+    "recommendations": ["<union of all recommendations above>"]
+}}
+
+### If is_sox_vendor is "No" or "False", use this structure (omit sox_objective and sox_assessors_conclusion):
+{{
+    "about_company": "<brief narrative about {company} and product {product}, with grade A/B/C/D.>",
+    "key_findings": ["<1–2 sentences each. Include TSC/COSO coverage stats, CUEC control strength summary, deviations count.>"],
+    "areas_of_concern": ["<1–2 sentences each. Focus on weak CUECs, coverage gaps, deviations.>"],
+    "deviations_noted": [
+        {{"control_id": "<string>", "deviation_summary": "<concise issue description>"}}
+    ],
+    "unknown_coverage_gaps": ["<List missing TSC/COSO criteria, CUECs without control strength, not tested items.>"],
+    "recommendations_risk_mitigations": ["<up to 3 actionable technical/operational recommendations.>"],
+    "recommendations_contract_enhancements": ["<up to 3 actionable contractual/DPA/SLA recommendations.>"],
     "recommendations": ["<union of all recommendations above>"]
 }}
 
@@ -631,6 +688,7 @@ MAX_CHUNK_SIZE = int(MAX_INPUT_TOKENS * CHARS_PER_TOKEN * 0.80)  # 80% of max in
 EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS = int(MAX_INPUT_TOKENS * CHARS_PER_TOKEN * 0.45)  # ~45% of input budget
 EXEC_SUMMARY_PER_CONTROL_MAX_CHARS = int(os.getenv('EXEC_SUMMARY_PER_CONTROL_MAX_CHARS', '700'))
 EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS = int(os.getenv('EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS', '60'))
+EXEC_SUMMARY_TOKEN_WARNING_THRESHOLD = float(os.getenv('EXEC_SUMMARY_TOKEN_WARNING_THRESHOLD', '0.90'))  # Warn at 90% of token limit
 
 # Total Combined Text Limits
 TOTAL_PRIMARY_SIZE = PRIMARY_CHUNK_SIZE * 3  # Allow for multiple primary sections
@@ -1608,6 +1666,91 @@ TABLE_FIELD_MAP = {
 ## Note: Removed legacy minimal SUBSERVICE_ORG_GPT_VERIFY_PROMPT override; retaining optimized JSON version defined earlier.
 
 SUBSERVICE_ORGS_TXT_PATH = str(PROJECT_ROOT / 'backend' / 'app' / 'extractors' / 'subservice_orgs.txt')
+
+# === Multi-Match Framework Mapping Prompts (Adaptive Token Management) ===
+
+FRAMEWORK_CATEGORY_SELECTION_PROMPT = """
+You are an expert SOC 2 auditor analyzing controls for AICPA TSC framework alignment.
+
+Control Description:
+{control_desc}
+
+Score each TSC category from 0-10 based on relevance to this control:
+- Common Criteria (CC1-CC9): General governance, risk assessment, control activities, communication, monitoring
+- Security (C1.x): Logical/physical access, change management, security event/incident response
+- Availability (A1.x): System availability, recovery procedures
+- Privacy (P*.x): Personal information collection, use, disclosure, retention
+- Confidentiality (Conf*.x): Confidential information protection
+- Processing Integrity (PI*.x): Processing accuracy, completeness, timeliness
+
+Respond ONLY with JSON:
+{{
+  "category_scores": [
+    {{"category": "Common Criteria", "score": 0-10}},
+    {{"category": "Security (C1.x)", "score": 0-10}},
+    {{"category": "Availability (A1.x)", "score": 0-10}},
+    {{"category": "Privacy (P*.x)", "score": 0-10}},
+    {{"category": "Confidentiality (Conf*.x)", "score": 0-10}},
+    {{"category": "Processing Integrity (PI*.x)", "score": 0-10}}
+  ],
+  "reasoning": "Brief 1-sentence explanation of top scoring categories"
+}}
+
+Select categories with score ≥ 7. If control is general/governance, emphasize Common Criteria.
+If control is technical/operational, emphasize specific domain categories.
+"""
+
+FRAMEWORK_MULTI_MATCH_PROMPT_TSC = """
+You are an expert SOC 2 auditor. Select the top 3 most relevant AICPA TSC criteria for this control.
+
+Control Description:
+{control_desc}
+
+Available TSC Criteria:
+{tsc_criteria_list}
+
+Respond ONLY with JSON:
+{{
+  "matches": [
+    {{
+      "id": "ID from list above (e.g., CC7.2)",
+      "confidence": 0.0-1.0,
+      "reasoning": "Max 50 chars - why this criterion matches"
+    }}
+  ]
+}}
+
+Return 1-3 matches ordered by confidence (highest first).
+Include only matches with confidence ≥ 0.5.
+Keep reasoning concise - focus on key alignment factors.
+If no good matches exist, return {{"matches": []}}.
+"""
+
+FRAMEWORK_MULTI_MATCH_PROMPT_COSO = """
+You are an expert SOC 2 auditor. Select the top 3 most relevant COSO 2013 principles for this control.
+
+Control Description:
+{control_desc}
+
+Available COSO 2013 Principles:
+{coso_criteria_list}
+
+Respond ONLY with JSON:
+{{
+  "matches": [
+    {{
+      "id": "ID from list above (e.g., 10)",
+      "confidence": 0.0-1.0,
+      "reasoning": "Max 50 chars - why this principle matches"
+    }}
+  ]
+}}
+
+Return 1-3 matches ordered by confidence (highest first).
+Include only matches with confidence ≥ 0.5.
+Keep reasoning concise - focus on key alignment factors.
+If no good matches exist, return {{"matches": []}}.
+"""
 
 # Legacy GPT_PROMPTS dictionary for backward compatibility with CLI tools
 # All production code should use the individual prompt constants defined above

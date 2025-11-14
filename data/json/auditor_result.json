@@ -1,11 +1,10 @@
 {
-  "auditor": "BDO USA, P.C.",
-  "confidence": 0.9,
-  "source_section": "I. Independent Service Auditor’s Report on a SOC 2 Examination",
+  "auditor": "Unknown",
+  "confidence": 0,
+  "source_section": "Independent Service Auditor’s Report on a SOC 2 Examination",
   "source_page": 5,
   "raw_gpt_responses": [
-    "{\n    \"auditor\": \"BDO USA, P.C.\",\n    \"confidence\": 1.0,\n    \"explanation\": \"The 'Independent Service Auditor’s Report' explicitly states that BDO USA, P.C. conducted the SOC 2 examination, which is confirmed near the auditor’s contact details and in the opinion language.\"\n}"
+    "{\n    \"auditor\": \"null\",\n    \"confidence\": 0,\n    \"explanation\": \"The provided text does not explicitly mention the name of the independent auditing firm responsible for conducting the SOC 2 examination. Without a verbatim reference, the auditor cannot be determined.\"\n}"
   ],
-  "validation_note": "Validated on attempt 1",
-  "confirmation_explanation": "BDO USA, P.C. is a well-known accounting and consulting firm that provides audit and assurance services, including SOC audits. BDO is recognized as a reputable firm for SOC 2 compliance services, based on its offerings and industry presence. However, exact details about their current SOC audit services would need to be confirmed with BDO directly."
+  "validation_note": "Failed text validation after 5 attempts"
 }

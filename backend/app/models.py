@@ -25,6 +25,7 @@ class Scan(Base):
     gpt_usage_details = Column(JSON)
     executive_summary = Column(JSON)
     executive_summary_stale = Column(Boolean, default=False)  # Flag when summary needs regeneration
+    is_sox_vendor = Column(Boolean, default=False)  # Flag if vendor is subject to SOX compliance
 
 # --- Entity tables for extracted data ---
 class Company(Base):
@@ -47,8 +48,8 @@ class Control(Base):
     control_page_ref = Column(Integer)
     control_line_ref = Column(Integer)
     control_seq = Column(Integer)
-    control_tsc_id = Column(String(128))
-    control_coso_id = Column(String(128))
+    control_tsc_id = Column(String(128))  # Legacy: highest confidence TSC match
+    control_coso_id = Column(String(128))  # Legacy: highest confidence COSO match
     control_tsc_similarity = Column(Float)
     control_coso_similarity = Column(Float)
     control_tsc_confidence_pct = Column(Integer)
@@ -57,6 +58,9 @@ class Control(Base):
     control_tsc_section = Column(String(128))
     control_coso_section = Column(String(128))
     control_soc_domain = Column(String(128))
+    # Multi-match framework mappings (JSON arrays)
+    control_tsc_mappings = Column(JSON)  # [{"id": "CC7.2", "confidence": 0.95, "reasoning": "...", "deviation": "..."}]
+    control_coso_mappings = Column(JSON)  # [{"id": "10", "confidence": 0.88, "reasoning": "...", "deviation": "..."}]
     control_status = Column(String(64))
     merged_to_control_id = Column(String(128))
     control_gpt_opinion = Column(Text)
@@ -70,7 +74,7 @@ class CUEC(Base):
     __tablename__ = "cuec"
     id = Column(Integer, primary_key=True, autoincrement=True)
     cuec_seq = Column(Integer)
-    cuec_tsc_id = Column(String(128))
+    cuec_tsc_id = Column(String(128))  # Legacy: highest confidence TSC match
     cuec_description = Column(Text)
     cuec_line_ref = Column(Integer)
     cuec_confidence = Column(Float)
@@ -80,13 +84,16 @@ class CUEC(Base):
     cuec_framework_alignment = Column(String(128))
     cuec_framework_alignment_id = Column(String(128))
     cuec_justification = Column(Text)
-    cuec_coso_id = Column(String(128))
+    cuec_coso_id = Column(String(128))  # Legacy: highest confidence COSO match
     cuec_tsc_similarity = Column(Float)
     cuec_coso_similarity = Column(Float)
     cuec_tsc_confidence_pct = Column(Integer)
     cuec_coso_confidence_pct = Column(Integer)
     cuec_closest_framework = Column(String(128))
     cuec_confidence_justification = Column(Text)
+    # Multi-match framework mappings (JSON arrays)
+    cuec_tsc_mappings = Column(JSON)  # [{"id": "CC7.2", "confidence": 0.95, "reasoning": "...", "deviation": null}]
+    cuec_coso_mappings = Column(JSON)  # [{"id": "10", "confidence": 0.88, "reasoning": "...", "deviation": null}]
     scan_id = Column(Integer)
     annotation = Column(Text)
     control_strength = Column(String(32))  # High, Medium, Low

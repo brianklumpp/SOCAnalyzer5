@@ -51,7 +51,7 @@ RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Amazon Web Services (AWS) is a legitimate external service provider offering infrastructure as a service (IaaS) through its cloud platform. This qualifies it as a valid subservice organization under SOC 2.",
+    "reason": "Amazon Web Services, Inc. (AWS) provides infrastructure as a service through its AWS platform, which makes it a legitimate subservice organization providing a distinct external service.",
     "entry": "Amazon Web Services, Inc. (AWS)"
 }
 ---
@@ -108,7 +108,7 @@ RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Microsoft Corporation is a legitimate external service provider offering infrastructure as a service (IaaS) through its Azure platform. It provides distinct services that support Adobe’s system, qualifying it as a subservice organization under SOC 2.",
+    "reason": "Microsoft Corporation is a valid external service provider offering infrastructure as a service (IaaS) through its Azure platform. This qualifies as a legitimate subservice organization under SOC 2 criteria.",
     "entry": "Microsoft Corporation (Microsoft)"
 }
 ---
@@ -165,7 +165,7 @@ RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "The entity Google LLC provides infrastructure as a service through its Google Cloud Platform (GCP), which qualifies as a distinct external service necessary for Adobe's operations. It aligns with the definition of a subservice organization in the SOC 2 context.",
+    "reason": "Google LLC is an external service provider offering infrastructure as a service through its Google Cloud Platform (GCP), which qualifies as a legitimate subservice organization under SOC 2 criteria.",
     "entry": {
         "name": "Google LLC",
         "description": "(Adobe Workfront Only) Provides infrastructure as a service through its Google Cloud Platform (GCP)."
@@ -219,13 +219,13 @@ Colocation providers
 
 Entity to Evaluate:
 Name: Cyxtera Technologies, Inc. (Cyxtera)
-Description: Colocation providers that provide physical security and environmental controls over their colocation data centers.
+Description: Colocation provider that provides physical security and environmental controls over its colocation data centers.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Cyxtera Technologies, Inc. provides colocation services, which are a distinct external service involving physical security and environmental controls over data centers. These services qualify as subservice organization activities in a SOC 2 context.",
+    "reason": "Cyxtera Technologies, Inc. is a legitimate subservice organization providing colocation services, which are external services offering physical security and environmental controls for data centers. This aligns with the categorization of a subservice organization under SOC 2, as it contributes specific infrastructure-related services to the overall system.",
     "entry": "Cyxtera Technologies, Inc. (Cyxtera)"
 }
 ---
@@ -276,13 +276,13 @@ Colocation providers
 
 Entity to Evaluate:
 Name: Digital Realty Trust, Inc. (formerly Interxion)
-Description: Colocation providers that provide physical security and environmental controls over their colocation data centers.
+Description: Colocation provider that provides physical security and environmental controls over its colocation data centers.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Digital Realty Trust, Inc. (formerly Interxion) provides colocation services, which means they offer physical data center space, security, and environmental controls for hosting IT infrastructure. As a service provider responsible for critical and distinct external services, they qualify as a legitimate subservice organization.",
+    "reason": "Digital Realty Trust, Inc. (formerly Interxion) is a colocation provider, which qualifies as a legitimate subservice organization because it provides a crucial, external service involving physical security and environmental controls over its data centers. This directly supports the infrastructure where services are delivered and aligns with SOC 2 requirements for evaluating subservice organizations.",
     "entry": "Digital Realty Trust, Inc. (formerly Interxion)"
 }
 ---
@@ -333,13 +333,13 @@ Colocation providers
 
 Entity to Evaluate:
 Name: Equinix, Inc. (Equinix)
-Description: Colocation providers that provide physical security and environmental controls over their colocation data centers.
+Description: Colocation provider that provides physical security and environmental controls over its colocation data centers.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Equinix, Inc. (Equinix) qualifies as a true external service provider since it offers colocation services, which are a distinct external service involving the provision of physical data center space, security, and environmental controls. These services directly support Adobe’s systems.",
+    "reason": "Equinix, Inc. is a legitimate external service provider offering colocation services, which involve physical security and environmental controls over data centers. These are distinct external services provided to tenants like Adobe for hosting critical infrastructure.",
     "entry": "Equinix, Inc. (Equinix)"
 }
 ---
@@ -390,13 +390,13 @@ Colocation providers
 
 Entity to Evaluate:
 Name: NTT Ltd. (formerly Gyron)
-Description: Colocation providers that provide physical security and environmental controls over their colocation data centers.
+Description: Colocation provider that provides physical security and environmental controls over its colocation data centers.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "NTT Ltd. (formerly Gyron) is a legitimate subservice organization as it provides distinct colocation services, including physical security and environmental controls for data centers. These services are relevant to supporting Adobe’s infrastructure and security controls.",
+    "reason": "NTT Ltd. is a legitimate external service provider offering colocation services. These services include physical security and environmental controls over data centers, which are critical components supporting Adobe's infrastructure in a SOC 2 context.",
     "entry": "NTT Ltd. (formerly Gyron)"
 }
 ---
@@ -438,17 +438,17 @@ Management (CCF RM), which is detailed within multiple COSO Common Criteria (e.g
 Activities, Control Activities, Ris
 
 Entity to Evaluate:
-Name: AWS
-Description: Cloud hosting provider offering infrastructure services.
+Name: Amazon Web Services
+Description: Cloud hosting provider supporting Adobe's Experience Cloud infrastructure.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "AWS is a legitimate external service provider offering cloud hosting and infrastructure services, which aligns with the rules for valid subservice organizations.",
+    "reason": "Amazon Web Services (AWS) is a legitimate external service provider that delivers cloud hosting services. It provides a distinct platform used by Adobe for hosting infrastructure related to its Experience Cloud offerings, which qualifies it as a subservice organization.",
     "entry": {
-        "name": "AWS",
-        "description": "Cloud hosting provider offering infrastructure services."
+        "name": "Amazon Web Services",
+        "description": "Cloud hosting provider supporting Adobe's Experience Cloud infrastructure."
     }
 }
 ---
@@ -491,16 +491,16 @@ Activities, Control Activities, Ris
 
 Entity to Evaluate:
 Name: Google
-Description: Cloud provider offering infrastructure and platform services.
+Description: Cloud platform provider for Adobe's Experience Cloud infrastructure.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Google provides distinct external services, specifically cloud infrastructure and platform services, which qualify it as a legitimate subservice organization under SOC 2 criteria.",
+    "reason": "Google is a legitimate external cloud platform provider that offers infrastructure services used by Adobe's Experience Cloud. It qualifies as a valid subservice organization because it provides distinct external services.",
     "entry": {
         "name": "Google",
-        "description": "Cloud provider offering infrastructure and platform services."
+        "description": "Cloud platform provider for Adobe's Experience Cloud infrastructure."
     }
 }
 ---
@@ -543,16 +543,76 @@ Activities, Control Activities, Ris
 
 Entity to Evaluate:
 Name: Microsoft
-Description: Cloud provider (Azure platform) offering infrastructure and platform services.
+Description: Cloud platform provider for Adobe's Experience Cloud infrastructure.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Microsoft provides a distinct external service (the Azure platform) offering infrastructure and platform services that could be part of the system used by Adobe to deliver its services. As a cloud provider, Microsoft meets the criteria for a legitimate subservice organization.",
+    "reason": "Microsoft provides an external cloud platform service leveraged by Adobe for its Experience Cloud infrastructure, which fits the definition of a legitimate external service provider for SOC 2 purposes.",
     "entry": {
         "name": "Microsoft",
-        "description": "Cloud provider (Azure platform) offering infrastructure and platform services."
+        "description": "Cloud platform provider for Adobe's Experience Cloud infrastructure."
+    }
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+iated components within 
+these environments is executed by the infrastructure team within Adobe’s Experience Cloud department. 
+=== PAGE 18 ===
+ 
+Section III 
+
+This document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. 
+It may ONLY be used for the purpose for which it is provided. 
+18 
+Key elements of the infrastructure and subservice organizations are included in the following table: 
+Infrastructure 
+Description 
+AWS (Subservice 
+Organization) 
+AWS directs and controls operations as well as establishes, communicates, and monitors 
+policies and procedures for some of the production environments for Adobe’s Experience 
+Cloud solutions. In addition, it operates, manages, and controls the components from the 
+virtualization layer to the physical security of the facilities in which Adobe’s Experience 
+Cloud components operate. In turn, Adobe assumes respons
+
+Entity to Evaluate:
+Name: Amazon Web Services (AWS)
+Description: AWS directs and controls operations, establishes, communicates, and monitors policies and procedures for production environments within Adobe's Experience Cloud solutions. It operates, manages, and controls the components from the virtualization layer to the physical security of the facilities in which Adobe's Experience Cloud components operate.
+
+RESPONSE:
+{
+    "keep": true,
+    "type": "company",
+    "reason": "AWS (Amazon Web Services) is a distinct external service provider offering infrastructure services for Adobe's Experience Cloud solutions. It manages and controls critical operational components, which qualifies it as a legitimate subservice organization in the SOC 2 context.",
+    "entry": {
+        "name": "Amazon Web Services (AWS)",
+        "description": "AWS directs and controls operations, establishes, communicates, and monitors policies and procedures for production environments within Adobe's Experience Cloud solutions. It operates, manages, and controls the components from the virtualization layer to the physical security of the facilities in which Adobe's Experience Cloud components operate."
     }
 }
 ---
@@ -603,14 +663,76 @@ Key GCP services utilized by Adobe incl
 
 Entity to Evaluate:
 Name: Google Cloud Platform (GCP)
-Description: Cloud platform providing infrastructure and services to support Adobe Workfront solution production environments.
+Description: Cloud hosting platform utilized by Adobe for Adobe Workfront solutions, managing components from virtualization to physical security of facilities. Key services include Compute Engine, Kubernetes Engine, VPC, Cloud Load Balancer, and Cloud Storage.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Google Cloud Platform (GCP) is a legitimate external service provider offering cloud infrastructure and services. It is responsible for the management of virtualization layers, physical security, and other components supporting Adobe Workfront solutions, fulfilling the criteria of a subservice organization.",
-    "entry": "Google Cloud Platform (GCP)"
+    "reason": "Google Cloud Platform (GCP) is a legitimate external service provider offering cloud hosting and infrastructure services. It directly provides distinct external services (e.g., Compute Engine, Kubernetes Engine, VPC, Cloud Load Balancer, Cloud Storage), which Adobe relies on for hosting and managing its Workfront solutions. As a subservice organization, GCP guarantees physical security and virtualization layer management.",
+    "entry": {
+        "name": "Google Cloud Platform (GCP)",
+        "description": "Cloud hosting platform utilized by Adobe for Adobe Workfront solutions, managing components from virtualization to physical security of facilities. Key services include Compute Engine, Kubernetes Engine, VPC, Cloud Load Balancer, and Cloud Storage."
+    }
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+IDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. 
+It may ONLY be used for the purpose for which it is provided. 
+19 
+Infrastructure 
+Description 
+Microsoft (Subservice 
+Organization) 
+Microsoft directs and controls operations as well as establishes, communicates, and 
+monitors policies and procedures for some of the production environments for Adobe’s 
+Experience Cloud solutions. In addition, it operates, manages, and controls the 
+components from the virtualization layer to the physical security of the facilities in which 
+Adobe’s Experience Cloud components operate. In turn, Adobe assumes responsibility and 
+management of the operating system (including updates and security patches), 
+application software, and the configuration of the security group firewall provided by the 
+subservice organization. 
+ 
+Key Azure services utilized by Adobe include: 
+• Virtual Mac
+
+Entity to Evaluate:
+Name: Azure
+Description: A cloud computing service provided by Microsoft that supports key infrastructure used by Adobe, including Virtual Machines, Managed Disk, Blob Storage, Azure Active Directory, and other services.
+
+RESPONSE:
+{
+    "keep": true,
+    "type": "company/service",
+    "reason": "Azure is a legitimate external cloud computing service provider owned by Microsoft. It provides distinct external services such as Virtual Machines, Managed Disks, Blob Storage, Azure Active Directory, and others that Adobe utilizes as part of its infrastructure for Experience Cloud solutions. This aligns with the definition of a subservice organization in SOC 2, as it is responsible for providing critical and controllable components of the service environment.",
+    "entry": {
+        "name": "Azure",
+        "description": "A cloud computing service provided by Microsoft that supports key infrastructure used by Adobe, including Virtual Machines, Managed Disk, Blob Storage, Azure Active Directory, and other services."
+    }
 }
 ---
 PROMPT:
@@ -665,16 +787,16 @@ Management System
 
 Entity to Evaluate:
 Name: Cyxtera
-Description: Colocation provider used by Adobe's Experience Cloud solutions.
+Description: A colocation provider used by Adobe’s Experience Cloud solutions for hosting and physical infrastructure.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Cyxtera provides colocation services, which involve hosting and managing physical IT infrastructure, such as servers, in its data centers. This makes it a true external service provider supporting Adobe's Experience Cloud solutions.",
+    "reason": "Cyxtera is a distinct external service provider offering colocation services for hosting and physical infrastructure. This aligns with the criteria of a legitimate subservice organization as it provides tangible external services necessary for Adobe's Experience Cloud solutions.",
     "entry": {
         "name": "Cyxtera",
-        "description": "Colocation provider used by Adobe's Experience Cloud solutions."
+        "description": "A colocation provider used by Adobe’s Experience Cloud solutions for hosting and physical infrastructure."
     }
 }
 ---
@@ -730,14 +852,17 @@ Management System
 
 Entity to Evaluate:
 Name: Digital Realty Trust
-Description: Colocation provider used by Adobe's Experience Cloud solutions.
+Description: A colocation provider used by Adobe’s Experience Cloud solutions for hosting and physical infrastructure.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Digital Realty Trust is a legitimate external service provider because it is a colocation provider offering specialized hosting, physical infrastructure, and facilities for Adobe’s Experience Cloud solutions. As such, it directly supports Adobe's operations with distinct external services.",
-    "entry": "Digital Realty Trust"
+    "reason": "Digital Realty Trust is a legitimate external service provider offering colocation and physical infrastructure services. It meets the criteria of providing an external platform or service used by Adobe's Experience Cloud solutions for hosting and physical infrastructure.",
+    "entry": {
+        "name": "Digital Realty Trust",
+        "description": "A colocation provider used by Adobe’s Experience Cloud solutions for hosting and physical infrastructure."
+    }
 }
 ---
 PROMPT:
@@ -792,13 +917,13 @@ Management System
 
 Entity to Evaluate:
 Name: Equinix
-Description: Colocation provider used by Adobe's Experience Cloud solutions.
+Description: A colocation provider used by Adobe’s Experience Cloud solutions for hosting and physical infrastructure.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Equinix is a legitimate subservice organization that provides colocation and interconnection services, enabling Adobe's Experience Cloud solutions to operate by providing physical infrastructure for hosting and network services.",
+    "reason": "Equinix provides a distinct external service as a colocation provider, offering physical infrastructure and hosting services, which qualifies as a legitimate subservice organization supporting Adobe’s Experience Cloud solutions.",
     "entry": "Equinix"
 }
 ---
@@ -853,15 +978,18 @@ Service Knowledge
 Management System
 
 Entity to Evaluate:
-Name: NTT ltd.
-Description: Colocation provider used by Adobe's Experience Cloud solutions.
+Name: NTT Ltd.
+Description: A colocation provider used by Adobe’s Experience Cloud solutions for hosting and physical infrastructure.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "NTT Ltd. is a legitimate external service provider offering colocation services, which are physical hosting environments for servers and IT infrastructure. This aligns with the criteria for subservice organizations providing distinct external services required for SOC 2 compliance.",
-    "entry": "NTT ltd."
+    "reason": "NTT Ltd. is a distinct external service provider offering colocation services, which involve physical infrastructure and hosting. Their services represent a legitimate subservice organization within the context of Adobe’s SOC 2 report.",
+    "entry": {
+        "name": "NTT Ltd.",
+        "description": "A colocation provider used by Adobe’s Experience Cloud solutions for hosting and physical infrastructure."
+    }
 }
 ---
 PROMPT:
@@ -914,17 +1042,14 @@ resource configurations, security alerts, and best practice recommendations, int
 
 Entity to Evaluate:
 Name: Splunk
-Description: Splunk provides centralized log repository and data consolidation for asset information, network logs, and identity management.
+Description: Splunk provides centralized log repository capabilities for consolidating logs, asset information, network data, and identity management within the system.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Splunk is a legitimate external service provider that offers a centralized log repository and data consolidation services. This qualifies it as a subservice organization because it provides a distinct and external platform utilized by Adobe for SOC 2-related operations such as log and data management.",
-    "entry": {
-        "Name": "Splunk",
-        "Description": "Splunk provides centralized log repository and data consolidation for asset information, network logs, and identity management."
-    }
+    "reason": "Splunk is a legitimate external service provider that offers centralized log repository capabilities, which meet the criteria for a distinct external service/platform as it provides logging and data analysis services critical to system monitoring and compliance.",
+    "entry": "Splunk"
 }
 ---
 PROMPT:
@@ -977,75 +1102,17 @@ resource configurations, security alerts, and best practice recommendations, int
 
 Entity to Evaluate:
 Name: SolarWinds
-Description: SolarWinds is a network device security tool used to monitor network devices for compliance with Adobe-defined security baselines.
-
-RESPONSE:
-{
-    "keep": false,
-    "type": "software/tool",
-    "reason": "SolarWinds is a network device security tool, which is a software product used for monitoring and compliance. It does not represent a distinct external service provider or platform but rather a tool utilized internally by the organization.",
-    "entry": {
-        "name": "SolarWinds",
-        "description": "SolarWinds is a network device security tool used to monitor network devices for compliance with Adobe-defined security baselines."
-    }
-}
----
-PROMPT:
-
-You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
-
-## Task
-Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
-
-## Rules
-1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
-2. Exclude entries that are:
-     - Frameworks, standards, operating systems, software, tools, or code libraries.
-     - Departments, job titles, internal teams, or descriptive terms.
-3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
-4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
-
-## Output
-Return a single JSON object:
-{
-    "keep": <true or false>,
-    "type": "<company/framework/software/OS/component/etc.>",
-    "reason": "<brief justification>",
-    "entry": <original entry as provided>
-}
-
-Context from SOC 2 Report:
-mpliance with Adobe-defined security baselines. 
-Identity and Access Management 
-Safeguard for Privileged 
-Sessions (Safeguard) 
-Safeguard is a privileged session management tool that monitors remote administrative 
-access to servers and network devices. 
-CAMP 
-CAMP is Adobe’s proprietary tool for creating AWS accounts or Azure subscriptions and 
-managing the “root” user for AWS accounts and Azure subscriptions. 
-HashiCorp Vault 
-HashiCorp Vault secures, stores, and controls access to tokens, passwords, certificates, API 
-keys, and other secrets. 
-IAM Portal 
-IAM Portal is an Adobe proprietary tool used to manage access to LDAP groups. Each 
-LDAP group is assigned an owner who is responsible for approving who can have access 
-to that specific group.  
-KLAM 
-KLAM is Adobe’s proprietary tool for access management to the AWS console and 
-applicable production systems. KLAM is integrated with Adobe single sign-on (via Okta) 
-and is used to map Adobe’s corporate AD groups to AWS IAM roles. 
-
-Entity to Evaluate:
-Name: Amazon Web Services
-Description: Cloud hosting and computing services provider.
+Description: SolarWinds is used as a network security monitoring tool, ensuring compliance with Adobe’s security baselines for network devices.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Amazon Web Services (AWS) is a legitimate external service provider offering cloud hosting and computing services that are commonly used by organizations to host systems, store data, and enable scalable computing capabilities. It clearly qualifies as a subservice organization in the SOC 2 context.",
-    "entry": "Amazon Web Services"
+    "reason": "SolarWinds is a legitimate external service provider offering network security monitoring as a service, which aligns with SOC 2 criteria for subservice organizations providing distinct external services used in the system environment.",
+    "entry": {
+        "name": "SolarWinds",
+        "description": "SolarWinds is used as a network security monitoring tool, ensuring compliance with Adobe’s security baselines for network devices."
+    }
 }
 ---
 PROMPT:
@@ -1096,13 +1163,13 @@ and is used to map Adobe’s corporate AD groups to AWS IAM roles.
 
 Entity to Evaluate:
 Name: Microsoft Azure
-Description: Cloud hosting and computing services provider.
+Description: Cloud platform used for account creation and subscription management.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Microsoft Azure is a legitimate external service provider offering cloud hosting and computing services, which aligns with the definition of a subservice organization as it provides distinct external services used in SOC 2-compliant environments.",
+    "reason": "Microsoft Azure is a legitimate external service provider offering a cloud platform with distinct services such as account creation, subscription management, and cloud computing. It provides critical external infrastructure services commonly evaluated in SOC 2 reports.",
     "entry": "Microsoft Azure"
 }
 ---
@@ -1153,15 +1220,15 @@ applicable production systems. KLAM is integrated with Adobe single sign-on (via
 and is used to map Adobe’s corporate AD groups to AWS IAM roles. 
 
 Entity to Evaluate:
-Name: HashiCorp Vault
-Description: A tool designed to secure, store, and control access to secrets such as tokens, passwords, and API keys.
+Name: Okta
+Description: Identity and access management provider integrated with Adobe's single sign-on for mapping AD groups to AWS IAM roles.
 
 RESPONSE:
 {
-    "keep": false,
-    "type": "software/tool",
-    "reason": "HashiCorp Vault is a tool for managing and securing secrets like tokens, passwords, and API keys, but it does not represent an external service provider. It is a software component rather than a third-party subservice organization.",
-    "entry": "HashiCorp Vault"
+    "keep": true,
+    "type": "company",
+    "reason": "Okta is a legitimate external service provider offering identity and access management services, which integrates with Adobe's single sign-on for managing access to resources. It is not a framework, tool, or an internal Adobe component.",
+    "entry": "Okta"
 }
 ---
 PROMPT:
@@ -1211,18 +1278,76 @@ applicable production systems. KLAM is integrated with Adobe single sign-on (via
 and is used to map Adobe’s corporate AD groups to AWS IAM roles. 
 
 Entity to Evaluate:
-Name: Okta
-Description: Identity management and single sign-on provider.
+Name: HashiCorp Vault
+Description: Tool used to secure, store, and manage access to tokens, passwords, certificates, API keys, and other secrets.
 
 RESPONSE:
 {
-    "keep": true,
-    "type": "company",
-    "reason": "Okta is a distinct external service provider used for identity management and single sign-on. It is not a framework, tool, or internal system, but a legitimate subservice organization that provides services integral to the security and management of access in enterprise environments.",
-    "entry": {
-        "name": "Okta",
-        "description": "Identity management and single sign-on provider."
-    }
+    "keep": false,
+    "type": "software",
+    "reason": "HashiCorp Vault is a software tool and not a distinct external service provider. It is used to securely manage secrets and access credentials within an organization but does not provide an external service or platform like AWS or Salesforce.",
+    "entry": "HashiCorp Vault"
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+ent for subsets of the organization’s users. 
+Microsoft Active 
+Directory (AD) 
+Adobe’s AD stores user accounts, group memberships, and account data, and is used to 
+manage access to the Adobe corporate network. Internal users are required to have an 
+Adobe AD username and password to be able to authenticate to the Adobe corporate 
+network and the Adobe Experience Cloud production servers. 
+Okta 
+Access to production environments at Adobe requires Okta multifactor authentication.  
+SailPoint 
+The SailPoint identity management solution is the back-end technology that executes 
+approved logical access changes requested within the IAM Portal. 
+=== PAGE 22 ===
+ 
+Section III 
+
+This document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. 
+It may ONLY be used for the purpose for which it is provided. 
+22 
+Application 
+Description 
+Zero-Trust Enterprise 
+Network 
+
+Entity to Evaluate:
+Name: Microsoft Active Directory
+Description: Directory service for storing user accounts, group memberships, and account data, used to manage access to the Adobe corporate network and Adobe Experience Cloud production servers.
+
+RESPONSE:
+{
+    "keep": false,
+    "type": "software",
+    "reason": "Microsoft Active Directory is a directory service and software platform, not an external subservice organization. It is internally used by Adobe to manage user accounts and access within its corporate network and production environments, rather than serving as a distinct external service provider.",
+    "entry": "Microsoft Active Directory"
 }
 ---
 PROMPT:
@@ -1276,14 +1401,17 @@ Network
 
 Entity to Evaluate:
 Name: SailPoint
-Description: Provides identity management solutions, executing approved logical access changes.
+Description: Identity management solution executing approved logical access changes requested within the IAM Portal.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "SailPoint is a legitimate external service provider that delivers identity management solutions. These services are distinct and external, as they facilitate access control and execute approved logical access changes within Adobe's IAM (Identity and Access Management) Portal.",
-    "entry": "SailPoint"
+    "reason": "SailPoint is an external service provider that offers an identity management solution. It is described as a tool used to execute approved logical access changes, which aligns with its role as a subservice organization providing a distinct external service.",
+    "entry": {
+        "name": "SailPoint",
+        "description": "Identity management solution executing approved logical access changes requested within the IAM Portal."
+    }
 }
 ---
 PROMPT:
@@ -1337,14 +1465,17 @@ Network
 
 Entity to Evaluate:
 Name: Workday
-Description: A human resources tool used to manage account and employment information of Adobe personnel.
+Description: HR and People Resources tool used to manage account and employment information of Adobe personnel.
 
 RESPONSE:
 {
     "keep": false,
     "type": "software",
-    "reason": "Workday is a human resources management software used internally by Adobe to manage account and employment information of personnel, and does not represent an external service provider integral to the system or service evaluated under SOC 2.",
-    "entry": "Workday"
+    "reason": "Workday is a software platform used for HR and people resource management. It does not provide a distinct external service to support Adobe's SOC 2 applicable infrastructure or systems but is used internally for employee management purposes.",
+    "entry": {
+        "name": "Workday",
+        "description": "HR and People Resources tool used to manage account and employment information of Adobe personnel."
+    }
 }
 ---
 PROMPT:
@@ -1372,188 +1503,42 @@ Return a single JSON object:
 }
 
 Context from SOC 2 Report:
-nd Workstream Applications 
-Jira 
-Jira is a ticketing application used to track and assign work items. 
-Site Operations 
-Apogee/EcoStruxure 
-Apogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. 
-CCURE 
-CCURE is an identity management platform used to manage badge readers at Adobe-
-owned facilities. 
-Security Access 
-Management System 
-(SAMS) 
-SAMS is an identity management platform used to facilitate physical access to Adobe-
-owned facilities. 
-StruxureWare/
-EcoStruxure 
-StruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure 
-within OR1. 
-Systems Monitoring 
-New Relic 
-Datadog 
-Prometheus 
-Nagios 
-Grafana 
-These software products are used to monitor the availability of production systems and 
-communicate alerts to appropriate personnel. 
-PagerDuty 
-PagerDuty software is used to communicate availability monitoring alerts to appropriate 
-personnel. 
-ServiceNow 
-ServiceNow is an enterprise IT service management solution use
+ent for subsets of the organization’s users. 
+Microsoft Active 
+Directory (AD) 
+Adobe’s AD stores user accounts, group memberships, and account data, and is used to 
+manage access to the Adobe corporate network. Internal users are required to have an 
+Adobe AD username and password to be able to authenticate to the Adobe corporate 
+network and the Adobe Experience Cloud production servers. 
+Okta 
+Access to production environments at Adobe requires Okta multifactor authentication.  
+SailPoint 
+The SailPoint identity management solution is the back-end technology that executes 
+approved logical access changes requested within the IAM Portal. 
+=== PAGE 22 ===
+ 
+Section III 
+
+This document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not be reproduced, transmitted, published, or disclosed to others without Adobe Incorporated’s prior written consent. 
+It may ONLY be used for the purpose for which it is provided. 
+22 
+Application 
+Description 
+Zero-Trust Enterprise 
+Network 
 
 Entity to Evaluate:
 Name: Jira
-Description: Ticketing application used to track and assign work items.
+Description: Ticketing application used to track and assign work items within Adobe's risk management and workstream processes.
 
 RESPONSE:
 {
     "keep": false,
     "type": "software",
-    "reason": "Jira is a software tool used for tracking and managing work items, not a distinct external service provider. It does not function as an independent subservice organization providing a significant external service.",
-    "entry": "Jira"
-}
----
-PROMPT:
-
-You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
-
-## Task
-Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
-
-## Rules
-1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
-2. Exclude entries that are:
-     - Frameworks, standards, operating systems, software, tools, or code libraries.
-     - Departments, job titles, internal teams, or descriptive terms.
-3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
-4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
-
-## Output
-Return a single JSON object:
-{
-    "keep": <true or false>,
-    "type": "<company/framework/software/OS/component/etc.>",
-    "reason": "<brief justification>",
-    "entry": <original entry as provided>
-}
-
-Context from SOC 2 Report:
-nd Workstream Applications 
-Jira 
-Jira is a ticketing application used to track and assign work items. 
-Site Operations 
-Apogee/EcoStruxure 
-Apogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. 
-CCURE 
-CCURE is an identity management platform used to manage badge readers at Adobe-
-owned facilities. 
-Security Access 
-Management System 
-(SAMS) 
-SAMS is an identity management platform used to facilitate physical access to Adobe-
-owned facilities. 
-StruxureWare/
-EcoStruxure 
-StruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure 
-within OR1. 
-Systems Monitoring 
-New Relic 
-Datadog 
-Prometheus 
-Nagios 
-Grafana 
-These software products are used to monitor the availability of production systems and 
-communicate alerts to appropriate personnel. 
-PagerDuty 
-PagerDuty software is used to communicate availability monitoring alerts to appropriate 
-personnel. 
-ServiceNow 
-ServiceNow is an enterprise IT service management solution use
-
-Entity to Evaluate:
-Name: New Relic
-Description: Software product used to monitor the availability of production systems and communicate alerts.
-
-RESPONSE:
-{
-    "keep": false,
-    "type": "software",
-    "reason": "New Relic is a software product used for monitoring the availability of production systems and communicating alerts. It does not operate as a distinct external service provider or platform but is instead a tool used internally for system monitoring.",
-    "entry": "New Relic"
-}
----
-PROMPT:
-
-You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
-
-## Task
-Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
-
-## Rules
-1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
-2. Exclude entries that are:
-     - Frameworks, standards, operating systems, software, tools, or code libraries.
-     - Departments, job titles, internal teams, or descriptive terms.
-3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
-4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
-
-## Output
-Return a single JSON object:
-{
-    "keep": <true or false>,
-    "type": "<company/framework/software/OS/component/etc.>",
-    "reason": "<brief justification>",
-    "entry": <original entry as provided>
-}
-
-Context from SOC 2 Report:
-nd Workstream Applications 
-Jira 
-Jira is a ticketing application used to track and assign work items. 
-Site Operations 
-Apogee/EcoStruxure 
-Apogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. 
-CCURE 
-CCURE is an identity management platform used to manage badge readers at Adobe-
-owned facilities. 
-Security Access 
-Management System 
-(SAMS) 
-SAMS is an identity management platform used to facilitate physical access to Adobe-
-owned facilities. 
-StruxureWare/
-EcoStruxure 
-StruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure 
-within OR1. 
-Systems Monitoring 
-New Relic 
-Datadog 
-Prometheus 
-Nagios 
-Grafana 
-These software products are used to monitor the availability of production systems and 
-communicate alerts to appropriate personnel. 
-PagerDuty 
-PagerDuty software is used to communicate availability monitoring alerts to appropriate 
-personnel. 
-ServiceNow 
-ServiceNow is an enterprise IT service management solution use
-
-Entity to Evaluate:
-Name: Datadog
-Description: Software product used to monitor the availability of production systems and communicate alerts.
-
-RESPONSE:
-{
-    "keep": false,
-    "type": "software",
-    "reason": "Datadog is a software product used for monitoring and alerting, not a distinct external subservice organization. It does not provide a platform or service directly managing any part of the organization's SOC 2 controls.",
+    "reason": "Jira is a software application used for project and ticketing management. While it is a valuable tool for tracking work items, it does not provide a distinct external service or platform in the context of SOC 2 subservice organizations. It is classified as internal work management software rather than an external subservice organization.",
     "entry": {
-        "name": "Datadog",
-        "description": "Software product used to monitor the availability of production systems and communicate alerts."
+        "name": "Jira",
+        "description": "Ticketing application used to track and assign work items within Adobe's risk management and workstream processes."
     }
 }
 ---
@@ -1615,17 +1600,86 @@ ServiceNow
 ServiceNow is an enterprise IT service management solution use
 
 Entity to Evaluate:
-Name: Nagios
-Description: Software product used to monitor the availability of production systems and communicate alerts.
+Name: AWS
+Description: Amazon Web Services - cloud hosting provider.
 
 RESPONSE:
 {
-    "keep": false,
-    "type": "software",
-    "reason": "Nagios is a monitoring software and not a distinct external service provider. It is used internally to track the availability of production systems but does not qualify as a subservice organization.",
+    "keep": true,
+    "type": "company",
+    "reason": "AWS (Amazon Web Services) is a legitimate subservice organization as it provides a distinct external service—cloud hosting. It is an external service provider commonly relied on for infrastructure and platform services in SOC 2 environments.",
+    "entry": "AWS"
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+nd Workstream Applications 
+Jira 
+Jira is a ticketing application used to track and assign work items. 
+Site Operations 
+Apogee/EcoStruxure 
+Apogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. 
+CCURE 
+CCURE is an identity management platform used to manage badge readers at Adobe-
+owned facilities. 
+Security Access 
+Management System 
+(SAMS) 
+SAMS is an identity management platform used to facilitate physical access to Adobe-
+owned facilities. 
+StruxureWare/
+EcoStruxure 
+StruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure 
+within OR1. 
+Systems Monitoring 
+New Relic 
+Datadog 
+Prometheus 
+Nagios 
+Grafana 
+These software products are used to monitor the availability of production systems and 
+communicate alerts to appropriate personnel. 
+PagerDuty 
+PagerDuty software is used to communicate availability monitoring alerts to appropriate 
+personnel. 
+ServiceNow 
+ServiceNow is an enterprise IT service management solution use
+
+Entity to Evaluate:
+Name: ServiceNow
+Description: ServiceNow is an enterprise IT service management solution used to document availability monitoring tickets.
+
+RESPONSE:
+{
+    "keep": true,
+    "type": "company",
+    "reason": "ServiceNow provides a distinct external service as an enterprise IT service management solution that supports availability monitoring and ticketing, indicating that it is a legitimate external service provider.",
     "entry": {
-        "name": "Nagios",
-        "description": "Software product used to monitor the availability of production systems and communicate alerts."
+        "name": "ServiceNow",
+        "description": "ServiceNow is an enterprise IT service management solution used to document availability monitoring tickets."
     }
 }
 ---
@@ -1687,17 +1741,17 @@ ServiceNow
 ServiceNow is an enterprise IT service management solution use
 
 Entity to Evaluate:
-Name: Grafana
-Description: Software product used to monitor the availability of production systems and communicate alerts.
+Name: CCURE
+Description: CCURE is an identity management platform used to manage badge readers at Adobe-owned facilities.
 
 RESPONSE:
 {
     "keep": false,
     "type": "software",
-    "reason": "Grafana is a software product used for monitoring and visualization, not a distinct external service provider. It is a tool rather than a subservice organization.",
+    "reason": "CCURE is a software platform for identity management and managing badge readers. It does not represent an external service provider but rather a tool or software used internally.",
     "entry": {
-        "name": "Grafana",
-        "description": "Software product used to monitor the availability of production systems and communicate alerts."
+        "name": "CCURE",
+        "description": "CCURE is an identity management platform used to manage badge readers at Adobe-owned facilities."
     }
 }
 ---
@@ -1760,14 +1814,17 @@ ServiceNow is an enterprise IT service management solution use
 
 Entity to Evaluate:
 Name: PagerDuty
-Description: Software used to communicate availability monitoring alerts to appropriate personnel.
+Description: PagerDuty software is used to communicate availability monitoring alerts to appropriate personnel.
 
 RESPONSE:
 {
-    "keep": false,
-    "type": "software",
-    "reason": "PagerDuty is a software tool used for managing alerts and notifications for monitoring systems. It is not a distinct external service provider or subservice organization as it does not deliver infrastructure, hosting, or other service functionality that SOC 2 would typically rely on for fulfilling system requirements.",
-    "entry": "PagerDuty"
+    "keep": true,
+    "type": "company",
+    "reason": "PagerDuty is a legitimate external service provider offering a distinct platform for managing and communicating availability monitoring alerts, which qualifies it as a subservice organization.",
+    "entry": {
+        "name": "PagerDuty",
+        "description": "PagerDuty software is used to communicate availability monitoring alerts to appropriate personnel."
+    }
 }
 ---
 PROMPT:
@@ -1828,15 +1885,87 @@ ServiceNow
 ServiceNow is an enterprise IT service management solution use
 
 Entity to Evaluate:
-Name: ServiceNow
-Description: Enterprise IT service management solution used to document availability monitoring tickets.
+Name: Datadog
+Description: Datadog is used to monitor the availability of production systems and communicate alerts to appropriate personnel.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "ServiceNow is a distinct external service provider offering enterprise IT service management solutions, making it a legitimate subservice organization as it provides specific services relevant to SOC 2 compliance.",
-    "entry": "ServiceNow"
+    "reason": "Datadog is a legitimate external service provider that offers an infrastructure monitoring and observability platform, which is used to track the availability and performance of production systems. It provides a distinct external service that aligns with the scope of SOC 2 subservice organizations.",
+    "entry": {
+        "name": "Datadog",
+        "description": "Datadog is used to monitor the availability of production systems and communicate alerts to appropriate personnel."
+    }
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+nd Workstream Applications 
+Jira 
+Jira is a ticketing application used to track and assign work items. 
+Site Operations 
+Apogee/EcoStruxure 
+Apogee/EcoStruxure are the systems used to monitor HVAC/climate control within OR1. 
+CCURE 
+CCURE is an identity management platform used to manage badge readers at Adobe-
+owned facilities. 
+Security Access 
+Management System 
+(SAMS) 
+SAMS is an identity management platform used to facilitate physical access to Adobe-
+owned facilities. 
+StruxureWare/
+EcoStruxure 
+StruxureWare/EcoStruxure are the systems used to monitor power to critical infrastructure 
+within OR1. 
+Systems Monitoring 
+New Relic 
+Datadog 
+Prometheus 
+Nagios 
+Grafana 
+These software products are used to monitor the availability of production systems and 
+communicate alerts to appropriate personnel. 
+PagerDuty 
+PagerDuty software is used to communicate availability monitoring alerts to appropriate 
+personnel. 
+ServiceNow 
+ServiceNow is an enterprise IT service management solution use
+
+Entity to Evaluate:
+Name: New Relic
+Description: New Relic is used to monitor production system availability and communicate alerts.
+
+RESPONSE:
+{
+    "keep": false,
+    "type": "software",
+    "reason": "New Relic is a software tool used for monitoring production system availability and communicating alerts. It does not constitute an external subservice organization but rather a specialized software product used for system monitoring.",
+    "entry": "New Relic"
 }
 ---
 PROMPT:
@@ -1890,17 +2019,14 @@ Next-generation endpoint detection and res
 
 Entity to Evaluate:
 Name: Rapid7 Nexpose
-Description: Vulnerability assessment tool that scans, identifies, and reports vulnerabilities found on the network.
+Description: A vulnerability assessment tool that scans, identifies, and reports vulnerabilities found on the network.
 
 RESPONSE:
 {
     "keep": false,
     "type": "software",
-    "reason": "Rapid7 Nexpose is a vulnerability assessment tool, which qualifies as software rather than an external subservice organization providing a distinct service. It is an internally used tool rather than a third-party service provider.",
-    "entry": {
-        "name": "Rapid7 Nexpose",
-        "description": "Vulnerability assessment tool that scans, identifies, and reports vulnerabilities found on the network."
-    }
+    "reason": "Rapid7 Nexpose is a software tool used to perform vulnerability assessments. It does not provide a distinct external service or platform—it is a tool implemented within the organization rather than a managed external service.",
+    "entry": "Rapid7 Nexpose"
 }
 ---
 PROMPT:
@@ -1954,17 +2080,14 @@ Next-generation endpoint detection and res
 
 Entity to Evaluate:
 Name: CrowdStrike Falcon
-Description: Next-generation endpoint detection and response (EDR) solution (malware detection).
+Description: A next-generation endpoint detection and response (EDR) solution used for malware detection.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "CrowdStrike Falcon is a product provided by CrowdStrike, which is an external service provider offering endpoint detection and response services. It qualifies as a legitimate external subservice organization due to its distinct and managed service offering.",
-    "entry": {
-        "name": "CrowdStrike Falcon",
-        "description": "Next-generation endpoint detection and response (EDR) solution (malware detection)."
-    }
+    "reason": "CrowdStrike Falcon provides a distinct external service, specifically next-generation endpoint detection and response (EDR) capabilities to detect and remediate malware. As it offers an external and specialized service utilized by the organization, it qualifies as a legitimate subservice organization.",
+    "entry": "CrowdStrike Falcon"
 }
 ---
 PROMPT:
@@ -1992,29 +2115,31 @@ Return a single JSON object:
 }
 
 Context from SOC 2 Report:
-sical security system to work only with specific 
-physical badge readers. Within the physical security system, roles are defined and configured. When physical access 
-to the site is requested, the requester must select the role(s) that are desired. Upon approval, that role will grant the 
-access to a user based upon the configuration of those roles. Each role has been created with consideration to least 
-privilege to ensure that physical access can be granted on a granular level. 
-Adobe-Managed Facilities 
-Secured Facility 
-Adobe has partnered with several data center subservice providers to ensure it can provide secure and available 
-services for its global customer base. Adobe-managed facilities (i.e., colocations) only allow Adobe personnel with 
-physical access into the cage where Adobe equipment is stored and operated. Other colocation customers do not 
-have access to Adobe cages. Colocation assurance reports are reviewed on an annual basis, and infractions to physical 
-or environ
+eline configuration standards. Hosts are monitored by a configuration management tool, which monitors file 
+integrity and configuration settings of individual hosts. Hosts with configurations that are not compliant with the 
+baseline configuration standard are flagged, and an alert is sent to appropriate personnel, who identify the host and 
+remediate the issue. Agents are installed as part of the provisioning process for production hosts. Additionally, the 
+Security team works with solution teams periodically to ensure that their host environments have the appropriate 
+agents running. 
+Network Configuration Checks 
+Configurations of Adobe’s production network devices is monitored by SolarWinds, which checks each network 
+device for misaligned security hardening and baseline configurations. SolarWinds is used to monitor configurations 
+of Adobe-managed network devices to ensure they are compliant with the security hardening and baseline 
+configuration standard. Network devices that are
 
 Entity to Evaluate:
-Name: Adobe Data Center Subservice Providers
-Description: Organizations responsible for providing colocation data center services for Adobe to ensure secure and available services for its global customer base.
+Name: MAVLink
+Description: Collects available data from public cloud service providers, including access logs, resource configurations, security alerts, and recommendations.
 
 RESPONSE:
 {
-    "keep": true,
-    "type": "company",
-    "reason": "The entity 'Adobe Data Center Subservice Providers' refers to third-party organizations providing external colocation data center services. These providers are distinct external entities ensuring secure and available services for Adobe's global customer base, making them legitimate subservice organizations.",
-    "entry": "Adobe Data Center Subservice Providers"
+    "keep": false,
+    "type": "framework",
+    "reason": "MAVLink is a communication protocol primarily designed for drones and unmanned vehicles. It is not an external service provider but rather a framework or standard used for communication. It does not provide distinct external services or platforms like AWS or Salesforce.",
+    "entry": {
+        "name": "MAVLink",
+        "description": "Collects available data from public cloud service providers, including access logs, resource configurations, security alerts, and recommendations."
+    }
 }
 ---
 PROMPT:
@@ -2058,17 +2183,66 @@ the SolarWinds technology, which is implemented at Adobe to monitor both physica
 deployments. SolarWinds checks each device for updated 
 
 Entity to Evaluate:
-Name: Amazon Web Services (AWS)
-Description: Provider of CIS-hardened Amazon Machine Images (AMIs), which are deployed to ensure secure system configurations.
+Name: CISCO
+Description: Provider of the PSIRT repository used by Adobe for reviewing network device vulnerabilities.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Amazon Web Services (AWS) is a legitimate external service provider offering cloud computing services and hardened AMIs, which are critical for ensuring secure configurations in hosting environments. AWS clearly functions as a subservice organization in this context.",
+    "reason": "Cisco is a legitimate external service provider. It supplies the PSIRT repository, which Adobe uses to review network device vulnerabilities. This represents a distinct external service integral to Adobe's security operations.",
+    "entry": "CISCO"
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+ has developed base configurations of CIS-hardened Amazon Machine Images (AMIs), as well as CIS-hardened 
+Azure VM images, which are deployed within the production environment. These images contain the latest patches 
+as notified by CIS and are available for service teams to use. 
+In addition to AMI hardening, Adobe also conducts host vulnerability scanning on a scheduled basis via Nexpose. 
+Nexpose is used to query all hosts on the Adobe Experience Cloud production network. Completed scans deliver a 
+report that enumerates identified vulnerabilities and assigns them a score. Tickets are created and assigned to 
+appropriate personnel for identified vulnerabilities, which are prioritized based on risk and used to document and 
+track patching. The Nexpose database of known host vulnerabilities is updated on an ongoing basis to ensure the 
+latest known exploitable vulnerabilities are removed from Adobe’s environment. 
+Penetration Testing 
+Adobe regularly engages approved third-party secur
+
+Entity to Evaluate:
+Name: Nexpose
+Description: Vulnerability management tool used for performing host vulnerability scans and identifying security risks within production environments.
+
+RESPONSE:
+{
+    "keep": false,
+    "type": "software",
+    "reason": "Nexpose is a vulnerability management tool/software used to scan for security risks within production environments. It is not a distinct external service provider but rather a tool utilized within the organization to perform a specific function.",
     "entry": {
-        "Name": "Amazon Web Services (AWS)",
-        "Description": "Provider of CIS-hardened Amazon Machine Images (AMIs), which are deployed to ensure secure system configurations."
+        "name": "Nexpose",
+        "description": "Vulnerability management tool used for performing host vulnerability scans and identifying security risks within production environments."
     }
 }
 ---
@@ -2125,17 +2299,14 @@ Logica
 
 Entity to Evaluate:
 Name: Amazon Web Services, Inc.
-Description: Cloud hosting and infrastructure provider.
+Description: Cloud hosting and infrastructure provider used to support Adobe's production systems.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Amazon Web Services, Inc. is a legitimate external service provider offering cloud hosting, infrastructure, and platform services. As a distinct external organization, AWS qualifies as a subservice organization within the SOC 2 framework.",
-    "entry": {
-        "name": "Amazon Web Services, Inc.",
-        "description": "Cloud hosting and infrastructure provider."
-    }
+    "reason": "Amazon Web Services, Inc. (AWS) is a legitimate external subservice organization that provides cloud hosting and infrastructure services, which are foundational to Adobe's production systems. AWS is a distinct external service provider and fits the criteria for inclusion as a subservice organization in a SOC 2 report.",
+    "entry": "Amazon Web Services, Inc."
 }
 ---
 PROMPT:
@@ -2191,16 +2362,16 @@ Logica
 
 Entity to Evaluate:
 Name: Microsoft Corporation
-Description: Cloud hosting and infrastructure provider.
+Description: Cloud service provider offering hosted infrastructure and services for Adobe's systems.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Microsoft Corporation provides external cloud hosting and infrastructure services (e.g., Azure), which qualify it as a legitimate subservice organization supporting the system described in the report.",
+    "reason": "Microsoft Corporation is a legitimate external service provider offering hosted infrastructure and cloud services. It meets the criteria for a subservice organization as it provides distinct services and platforms essential to Adobe's operations and system requirements.",
     "entry": {
         "name": "Microsoft Corporation",
-        "description": "Cloud hosting and infrastructure provider."
+        "description": "Cloud service provider offering hosted infrastructure and services for Adobe's systems."
     }
 }
 ---
@@ -2258,16 +2429,16 @@ This document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not 
 
 Entity to Evaluate:
 Name: Cyxtera Technologies, Inc.
-Description: Provider of data center colocation services, offering secure physical infrastructure for hosting information systems.
+Description: Provider of data center colocation and interconnection services.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Cyxtera Technologies, Inc. is a legitimate external service provider offering data center colocation services, which would be a distinct external platform or service utilized in hosting information systems and ensuring physical infrastructure security.",
+    "reason": "Cyxtera Technologies, Inc. provides external data center colocation and interconnection services, which qualify as a distinct external service supporting the entity's system operations. This makes it a valid subservice organization.",
     "entry": {
         "name": "Cyxtera Technologies, Inc.",
-        "description": "Provider of data center colocation services, offering secure physical infrastructure for hosting information systems."
+        "description": "Provider of data center colocation and interconnection services."
     }
 }
 ---
@@ -2325,14 +2496,17 @@ This document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not 
 
 Entity to Evaluate:
 Name: Digital Realty Trust, Inc.
-Description: Global provider of data center, colocation, and interconnection solutions for hosting applications and ensuring physical infrastructure security.
+Description: Data center solutions provider, including colocation and interconnection.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Digital Realty Trust, Inc. is a legitimate external service provider that offers distinct data center, colocation, and interconnection services for hosting applications and ensuring physical infrastructure security. These services directly relate to supporting SOC 2 requirements for system availability and physical security.",
-    "entry": "Digital Realty Trust, Inc."
+    "reason": "Digital Realty Trust, Inc. provides external data center solutions, including colocation and interconnection services, making it a legitimate external service provider that could support the evaluated organization’s infrastructure or services.",
+    "entry": {
+        "name": "Digital Realty Trust, Inc.",
+        "description": "Data center solutions provider, including colocation and interconnection."
+    }
 }
 ---
 PROMPT:
@@ -2389,16 +2563,16 @@ This document is CONFIDENTIAL AND PROPRIETARY to Adobe Incorporated and may not 
 
 Entity to Evaluate:
 Name: Equinix, Inc.
-Description: Provider of data center colocation and interconnection services, enabling secure physical hosting for systems.
+Description: Global data center and interconnection services provider.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Equinix, Inc. is a legitimate external service provider offering data center colocation and interconnection services. This qualifies as a subservice organization under SOC 2 since it provides a distinct service that supports physical hosting and interconnection for systems.",
+    "reason": "Equinix, Inc. is a legitimate external service provider offering global data center and interconnection services, which aligns with the SOC 2 criteria for subservice organizations that provide distinct external services crucial to system operations.",
     "entry": {
-        "Name": "Equinix, Inc.",
-        "Description": "Provider of data center colocation and interconnection services, enabling secure physical hosting for systems."
+        "name": "Equinix, Inc.",
+        "description": "Global data center and interconnection services provider."
     }
 }
 ---
