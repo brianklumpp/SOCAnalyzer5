@@ -1701,69 +1701,257 @@ If control is technical/operational, emphasize specific domain categories.
 """
 
 FRAMEWORK_MULTI_MATCH_PROMPT_TSC = """
-You are an expert SOC 2 auditor. Select the top 3 most relevant AICPA TSC criteria for this control.
+You are an expert SOC 2 auditor. Select the top 3-5 most relevant AICPA TSC criteria for this control.
 
 Control Description:
 {control_desc}
 
-Available TSC Criteria:
+{deviation_context}
+
+Available TSC Criteria (with full descriptions):
 {tsc_criteria_list}
 
-IMPORTANT INSTRUCTIONS:
-- Each match must have a DISTINCT TSC ID with UNIQUE reasoning
-- Focus on the specific control description provided
-- Consider technical vs. operational context
-- Avoid selecting duplicate IDs
-- Provide specific reasoning for each criterion (not generic statements)
+## Semantic Matching Guidelines:
+
+**Look for synonyms and related concepts:**
+- "backup" / "restore" / "recovery" / "data replication" → Availability (A1.x)
+- "access control" / "authentication" / "authorization" / "user provisioning" / "identity management" → Security (C1.2)
+- "change management" / "change control" / "deployment" / "SDLC" → Security (C1.3)
+- "monitoring" / "logging" / "alerting" / "SIEM" → Security (C1.5, C1.6)
+- "incident response" / "security events" / "threat detection" → Security (C1.5, C1.6)
+- "encryption" / "data protection" / "secure transmission" → Security (C1.7) or Confidentiality (Conf1.3)
+- "risk assessment" / "risk identification" / "risk analysis" → Risk Assessment (CC6.x)
+- "policies" / "procedures" / "documentation" / "standards" → Control Activities (CC7.3)
+- "DR testing" / "disaster recovery drill" / "business continuity" / "failover testing" → Availability (A1.1, A1.2)
+- "penetration testing" / "vulnerability scanning" / "security testing" → Security (C1.5)
+- "privacy notice" / "consent" / "data subject rights" / "GDPR" → Privacy (P*.x)
+
+## Multi-Mapping Rules:
+
+**A single control often maps to MULTIPLE TSC criteria** when it:
+1. Addresses multiple aspects (e.g., backup with access controls → A1.1 + C1.2)
+2. Involves both general governance and specific technical controls (e.g., CC7.2 + C1.3)
+3. Spans multiple phases (e.g., risk assessment + control implementation → CC6.2 + CC7.1)
+4. Includes monitoring components (e.g., primary control + monitoring → C1.x + CC9.1)
+
+**Examples of multi-mapping:**
+- "Access control policies with annual review" → C1.2 (access control) + CC7.3 (policies) + CC9.1 (review)
+- "Backup procedures with encryption" → A1.1 (backup) + C1.7 (encryption)
+- "Change management with testing" → C1.3 (change management) + PI1.2 (testing/accuracy)
+- "Incident response with logging" → C1.6 (incident response) + C1.5 (event detection)
+
+## Matching Instructions:
+
+1. **Semantic Keyword Matching**: Match control intent using synonyms and related terms (not just exact keywords)
+
+2. **Domain Alignment**: Consider primary and secondary domains
+   - Primary: Main focus of control
+   - Secondary: Supporting aspects of control
+
+3. **Deviation Consideration**: If deviation exists, ADD criteria related to:
+   - Monitoring (CC9.x) - regardless of primary domain
+   - Deficiency reporting (CC9.2)
+   - Control evaluation (CC9.1)
+
+4. **Return 3-5 matches** (not just top 3):
+   - Include all criteria with confidence ≥ 0.6
+   - Prefer more matches with distinct reasoning over fewer matches
+   - Each match must address a DIFFERENT aspect of the control
+
+5. **Reasoning Structure**: For each match, provide:
+   - Semantic keywords from control (including synonyms identified)
+   - Specific aspect of control this criterion addresses
+   - Domain/intent alignment explanation
 
 Respond ONLY with JSON:
 {{
   "matches": [
     {{
-      "id": "ID from list above (e.g., CC7.2)",
+      "id": "TSC ID (e.g., CC7.2)",
       "confidence": 0.0-1.0,
-      "reasoning": "Max 50 chars - specific alignment with control description"
+      "keywords_matched": ["keyword1", "synonym1", "related_term1"],
+      "aspect_addressed": "Which specific part of control this criterion covers",
+      "reasoning": "Specific explanation with semantic matches (100 chars max)"
     }}
   ]
 }}
 
-Return 1-3 matches ordered by confidence (highest first).
-Include only matches with confidence ≥ 0.5.
-Keep reasoning concise but specific to this control.
+**Return 3-5 matches** (extend to 5 if multiple strong matches exist).
+Include only matches with confidence ≥ 0.6.
+Each match MUST have DISTINCT TSC ID and address a DIFFERENT aspect of the control.
+IMPORTANT: Do not limit to 3 - return up to 5 matches if warranted.
 If no good matches exist, return {{"matches": []}}.
 """
 
 FRAMEWORK_MULTI_MATCH_PROMPT_COSO = """
-You are an expert SOC 2 auditor. Select the top 3 most relevant COSO 2013 principles for this control.
+You are an expert SOC 2 auditor. Select the top 3-5 most relevant COSO 2013 principles for this control.
 
 Control Description:
 {control_desc}
 
-Available COSO 2013 Principles:
+{deviation_context}
+
+Available COSO 2013 Principles (with full descriptions):
 {coso_criteria_list}
 
-IMPORTANT INSTRUCTIONS:
-- Each match must have a DISTINCT COSO principle ID with UNIQUE reasoning
-- Focus on the specific control description provided
-- Consider control environment, risk assessment, control activities, information & communication, or monitoring context
-- Avoid selecting duplicate principle IDs
-- Provide specific reasoning for each principle (not generic statements)
+## COSO Semantic Mapping Guide:
+
+**Control Environment (P1-5)**: Organizational foundation
+- P1: Integrity, ethics, code of conduct, ethical culture, values, tone at the top
+- P2: Board oversight, governance, board independence, board meetings, audit committee
+- P3: Organizational structure, reporting lines, authority, responsibility, roles, segregation of duties
+- P4: Competence, hiring, training, development, retention, succession planning, skills
+- P5: Accountability, performance measures, incentives, consequences, enforcement, discipline
+
+**Risk Assessment (P6-9)**: Risk identification and management
+- P6: Objectives, strategic goals, operational objectives, compliance objectives, objective setting
+- P7: Risk identification, risk analysis, risk evaluation, inherent risk, residual risk, risk appetite
+- P8: Fraud risk, fraud schemes, fraud prevention, fraud detection, anti-fraud programs
+- P9: Change assessment, business changes, regulatory changes, technology changes, change impact
+
+**Control Activities (P10-12)**: Specific control implementation
+- P10: Control selection, control design, preventive controls, detective controls, risk mitigation, compensating controls
+- P11: Technology controls, IT general controls, access controls, change controls, operations controls, IT security
+- P12: Policies, procedures, standards, guidelines, documentation, control deployment, formalization
+
+**Information & Communication (P13-15)**: Data and reporting
+- P13: Information quality, data accuracy, data relevance, data timeliness, data completeness, reporting
+- P14: Internal communication, top-down communication, bottom-up communication, whistleblower, issue escalation
+- P15: External communication, stakeholder reporting, regulatory reporting, customer communication, vendor communication
+
+**Monitoring Activities (P16-17)**: Control evaluation
+- P16: Control testing, control reviews, ongoing evaluations, separate evaluations, management reviews, internal audit, control assessments
+- P17: Deficiency identification, deficiency reporting, deficiency communication, remediation, corrective action
+
+## Multi-Mapping Rules:
+
+**A single control typically maps to MULTIPLE COSO principles** because:
+1. Controls span multiple components (e.g., technical control → P11 + P10)
+2. Controls include monitoring/review → Always add P16 or P17
+3. Controls require documentation → Add P12
+4. Controls involve communication → Add P14 or P15
+
+**Common multi-mapping patterns:**
+- "Access control policy with quarterly review" → P11 (technology) + P12 (policies) + P16 (review)
+- "Backup procedures documented and tested" → P11 (technology) + P12 (procedures) + P16 (testing)
+- "Risk assessment process with board reporting" → P7 (risk analysis) + P15 (external communication to board)
+- "Change management with approval workflow" → P11 (technology controls) + P9 (change assessment)
+- "Incident response with escalation procedures" → P11 (security controls) + P14 (internal communication)
+
+## Semantic Keyword Mapping:
+
+- "backup/restore/recovery" → P11 (technology controls) + P10 (risk mitigation)
+- "access control/authentication" → P11 (technology controls)
+- "monitoring/logging/alerting" → P16 (ongoing evaluations) + P11 (technology)
+- "policies/procedures/documentation" → P12 (policies and procedures)
+- "training/awareness" → P4 (competence)
+- "review/testing/audit" → P16 (evaluations)
+- "exception/deviation/deficiency" → P17 (deficiency communication)
+- "reporting/escalation/communication" → P14 (internal) or P15 (external)
+- "risk assessment/risk analysis" → P7 (risk identification)
+- "change management/change control" → P9 (change assessment) + P11 (technology)
+
+## Matching Instructions:
+
+1. **Identify ALL relevant components**: Most controls touch 2-4 COSO principles
+
+2. **Component Mapping**:
+   - Technical/IT controls → Almost always P11 (technology controls)
+   - Control documentation → Almost always P12 (policies/procedures)
+   - Control monitoring/testing → Almost always P16 (evaluations)
+   - Deficiencies/exceptions → Almost always P17 (deficiency communication)
+
+3. **Semantic Matching**: Use synonyms and related concepts
+   - "backup" relates to P11 even if "technology" not mentioned
+   - "quarterly review" relates to P16 even if "monitoring" not mentioned
+   - "incident response" relates to P11 + P14 (security + communication)
+
+4. **Deviation Consideration**: If deviation exists, ADD:
+   - P17: Deficiency communication (always add for deviations)
+   - P16: Ongoing evaluations (control testing revealed issue)
+   - P10: Control activities (control effectiveness in question)
+
+5. **Return 3-5 matches**:
+   - Include all principles with confidence ≥ 0.6
+   - Each match must address a DIFFERENT component or aspect
+   - Prefer more comprehensive coverage over limiting to 3
 
 Respond ONLY with JSON:
 {{
   "matches": [
     {{
-      "id": "ID from list above (e.g., 10)",
+      "id": "COSO Principle ID (e.g., 11)",
       "confidence": 0.0-1.0,
-      "reasoning": "Max 50 chars - specific alignment with control description"
+      "component": "Control Environment|Risk Assessment|Control Activities|Information & Communication|Monitoring Activities",
+      "keywords_matched": ["keyword1", "synonym1", "related_term1"],
+      "aspect_addressed": "Which specific part of control this principle covers",
+      "reasoning": "Specific explanation with semantic matches (100 chars max)"
     }}
   ]
 }}
 
-Return 1-3 matches ordered by confidence (highest first).
-Include only matches with confidence ≥ 0.5.
-Keep reasoning concise but specific to this control.
+**Return 3-5 matches** (extend to 5 if multiple strong matches exist).
+Include only matches with confidence ≥ 0.6.
+Each match MUST have DISTINCT COSO principle ID and address a DIFFERENT aspect of the control.
+IMPORTANT: Do not limit to 3 - return up to 5 matches if warranted.
 If no good matches exist, return {{"matches": []}}.
+"""
+
+FRAMEWORK_CROSS_VALIDATION_PROMPT = """
+You are an expert SOC 2 auditor validating framework alignment consistency.
+
+Control Description:
+{control_desc}
+
+Top TSC Matches:
+{tsc_matches}
+
+Top COSO Matches:
+{coso_matches}
+
+## Validation Task:
+
+Assess whether the selected TSC and COSO frameworks are mutually consistent for this control type.
+
+## Expected Alignments:
+
+**Strong Alignment** (both frameworks focus on same aspect):
+- TSC CC1-CC5 + COSO P1-P5 (governance/environment)
+- TSC CC6 + COSO P6-P9 (risk assessment)
+- TSC CC7 + COSO P10-P12 (control activities)
+- TSC CC8 + COSO P13-P15 (communication)
+- TSC CC9 + COSO P16-P17 (monitoring)
+- TSC C1.x (security) + COSO P11 (technology controls)
+- TSC A1.x (availability) + COSO P10 or P11 (control activities/technology)
+
+**Moderate Alignment** (related but not identical focus):
+- TSC security (C1.x) + COSO P10 (general control activities)
+- TSC domain-specific + COSO governance (P1-P5)
+
+**Weak/Conflicting Alignment** (frameworks focus on different aspects):
+- TSC governance (CC1-CC5) + COSO monitoring (P16-P17)
+- TSC security (C1.x) + COSO communication (P13-P15)
+- TSC risk (CC6) + COSO control activities (P10-P12)
+
+## Output Requirements:
+
+Respond ONLY with JSON:
+{{
+  "alignment_quality": "Strong|Moderate|Weak|Conflicting",
+  "consistency_score": 0.0-1.0,
+  "reasoning": "2-3 sentence explanation of alignment assessment",
+  "flags": ["list", "of", "any", "concerns", "or", "misalignments"],
+  "confidence_adjustments": {{
+    "tsc_confidence_multiplier": 0.8-1.2,
+    "coso_confidence_multiplier": 0.8-1.2,
+    "justification": "Why confidence should be adjusted up or down"
+  }}
+}}
+
+- alignment_quality: Overall coherence between TSC and COSO selections
+- consistency_score: 0-1 score (1.0 = perfect alignment, 0.0 = completely misaligned)
+- flags: Specific concerns (e.g., "TSC focuses on security but COSO on governance")
+- confidence_adjustments: Multipliers to apply to original confidence scores (0.8 = reduce 20%, 1.2 = increase 20%)
 """
 
 # Legacy GPT_PROMPTS dictionary for backward compatibility with CLI tools

@@ -867,15 +867,15 @@ def map_control_to_frameworks_multi(
     deviation_desc: str,
     tsc_criteria: List[Dict[str, Any]],
     coso_criteria: List[Dict[str, Any]],
-    top_k: int = 3
+    top_k: int = 5
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
-    Map a control to multiple TSC and COSO framework criteria using adaptive multi-pass GPT strategy.
+    Map a control to multiple TSC and COSO framework criteria using three-pass GPT strategy.
     
     Three-pass approach:
-    1. Category scoring - identify relevant TSC categories (8 candidates → 2 selected)
-    2. TSC matching - select top 3 TSC criteria from filtered subset (15 criteria max)
-    3. COSO matching - select top 3 COSO principles from full list (17 principles)
+    1. TSC matching - select top 3-5 TSC criteria from full list with semantic keyword matching
+    2. COSO matching - select top 3-5 COSO principles from full list with semantic keyword matching
+    3. Cross-validation - validate TSC/COSO alignment consistency and adjust confidence scores
     
     Args:
         control_desc: Control description text
@@ -884,7 +884,7 @@ def map_control_to_frameworks_multi(
         deviation_desc: Deviation description text (truncated to 80 chars)
         tsc_criteria: Full list of TSC criteria dicts with keys: id, description, domain
         coso_criteria: Full list of COSO criteria dicts with keys: id, component, principle, description
-        top_k: Maximum matches to return per framework (default 3)
+        top_k: Maximum matches to return per framework (default 5, increased from 3)
         
     Returns:
         Tuple of (tsc_matches, coso_matches) where each is a list of dicts:
@@ -902,166 +902,150 @@ def map_control_to_frameworks_multi(
         else:
             deviation_text = deviation_desc
     
-    # ========== PASS 1: Category Selection (Adaptive Filtering) ==========
-    try:
-        category_prompt = config.FRAMEWORK_CATEGORY_SELECTION_PROMPT.format(
-            control_desc=control_desc
-        )
-        
-        response_pass1 = gpt_extract(category_prompt, "framework_category_selection")
-        token_usage["pass1"] = len(category_prompt) // 4  # Rough estimate
-        
-        if not response_pass1:
-            logging.warning(f"[{control_id}] Pass 1 (category selection) returned empty response")
-            return [], []
-        
-        category_result = json.loads(response_pass1.strip())
-        category_scores = category_result.get("category_scores", [])
-        
-        # Filter categories by threshold
-        threshold = config.FRAMEWORK_CATEGORY_SCORE_THRESHOLD
-        selected_categories = [
-            cat for cat in category_scores 
-            if cat.get("score", 0) >= threshold
-        ]
-        
-        # Sort by score and limit to max categories
-        selected_categories.sort(key=lambda x: x.get("score", 0), reverse=True)
-        selected_categories = selected_categories[:config.FRAMEWORK_MAX_CATEGORIES]
-        
-        logging.info(f"[{control_id}] Pass 1: Selected {len(selected_categories)} categories with score ≥ {threshold}")
-        
-    except Exception as e:
-        logging.error(f"[{control_id}] Pass 1 (category selection) failed: {e}")
-        return [], []
+    # Prepare deviation context for prompts
+    deviation_context = ""
+    if has_deviation and deviation_desc:
+        deviation_context = f"\nNOTE: This control has a documented deviation/exception: {deviation_text}\nConsider criteria related to monitoring, deficiency reporting, or control evaluation."
     
-    # ========== PASS 2: TSC Matching (Filtered Criteria) ==========
+    # ========== PASS 1: TSC Matching (Full Criteria List with Semantic Matching) ==========
     try:
-        # Map category names to TSC ID prefixes
-        category_map = {
-            "Common Criteria": ["CC"],
-            "Security (C1.x)": ["C1"],
-            "Availability (A1.x)": ["A1"],
-            "Privacy (P*.x)": ["P"],
-            "Confidentiality (Conf*.x)": ["Conf"],
-            "Processing Integrity (PI*.x)": ["PI"]
-        }
-        
-        # Build list of prefixes from selected categories
-        selected_prefixes = []
-        for cat in selected_categories:
-            cat_name = cat.get("category", "")
-            prefixes = category_map.get(cat_name, [])
-            selected_prefixes.extend(prefixes)
-        
-        # Filter TSC criteria by selected categories
-        if selected_prefixes:
-            filtered_tsc = [
-                c for c in tsc_criteria 
-                if any(c.get("id", "").startswith(prefix) for prefix in selected_prefixes)
-            ]
-        else:
-            # Fallback to Common Criteria if no categories selected
-            filtered_tsc = [c for c in tsc_criteria if c.get("id", "").startswith("CC")]
-        
-        # If still too many, take only top category
-        if len(filtered_tsc) > config.FRAMEWORK_MAX_CRITERIA_PER_PASS and selected_categories:
-            top_category = selected_categories[0].get("category", "")
-            top_prefixes = category_map.get(top_category, ["CC"])
-            filtered_tsc = [
-                c for c in tsc_criteria 
-                if any(c.get("id", "").startswith(prefix) for prefix in top_prefixes)
-            ]
-        
-        # Format TSC criteria for prompt (truncate descriptions to 60 chars)
+        # Format ALL TSC criteria for prompt with full descriptions (no truncation)
         tsc_list_text = "\n".join([
-            f"- {c['id']}: {c.get('description', '')[:60]}{'...' if len(c.get('description', '')) > 60 else ''}"
-            for c in filtered_tsc[:config.FRAMEWORK_MAX_CRITERIA_PER_PASS]
+            f"- {c['id']}: {c.get('description', '')}"
+            for c in tsc_criteria
         ])
         
         tsc_prompt = config.FRAMEWORK_MULTI_MATCH_PROMPT_TSC.format(
             control_desc=control_desc,
-            tsc_criteria_list=tsc_list_text
+            tsc_criteria_list=tsc_list_text,
+            deviation_context=deviation_context
         )
         
-        response_pass2 = gpt_extract(tsc_prompt, "framework_tsc_matching")
-        token_usage["pass2"] = len(tsc_prompt) // 4
+        response_pass1 = gpt_extract(tsc_prompt, "framework_tsc_matching")
+        token_usage["pass1"] = len(tsc_prompt) // 4
         
-        if not response_pass2:
-            logging.warning(f"[{control_id}] Pass 2 (TSC matching) returned empty response")
+        if not response_pass1:
+            logging.warning(f"[{control_id}] Pass 1 (TSC matching) returned empty response")
             tsc_matches = []
         else:
-            tsc_result = json.loads(response_pass2.strip())
+            tsc_result = json.loads(response_pass1.strip())
             tsc_matches = tsc_result.get("matches", [])
             
-            # Validate IDs and filter by confidence
-            valid_tsc_ids = {c["id"] for c in filtered_tsc}
+            # Validate IDs and filter by confidence (raised threshold to 0.6)
+            valid_tsc_ids = {c["id"] for c in tsc_criteria}
             tsc_matches = [
                 m for m in tsc_matches 
-                if m.get("id") in valid_tsc_ids and m.get("confidence", 0) >= 0.5
+                if m.get("id") in valid_tsc_ids and m.get("confidence", 0) >= 0.6
             ]
             
-            # Limit to top_k
+            # Limit to top_k (now 5)
             tsc_matches = tsc_matches[:top_k]
             
             # Add deviation to each match
             for match in tsc_matches:
                 match["deviation"] = deviation_text
-                # Ensure reasoning is truncated
-                if "reasoning" in match and len(match["reasoning"]) > 50:
-                    match["reasoning"] = match["reasoning"][:50]
             
-            logging.info(f"[{control_id}] Pass 2: Found {len(tsc_matches)} TSC matches from {len(filtered_tsc)} criteria")
+            logging.info(f"[{control_id}] Pass 1: Found {len(tsc_matches)} TSC matches from {len(tsc_criteria)} criteria")
         
     except Exception as e:
-        logging.error(f"[{control_id}] Pass 2 (TSC matching) failed: {e}")
+        logging.error(f"[{control_id}] Pass 1 (TSC matching) failed: {e}")
         tsc_matches = []
     
-    # ========== PASS 3: COSO Matching (Full List) ==========
+    # ========== PASS 2: COSO Matching (Full List with Semantic Matching) ==========
     try:
-        # Format COSO criteria for prompt (truncate descriptions to 60 chars)
+        # Format ALL COSO criteria for prompt with full descriptions (no truncation)
         coso_list_text = "\n".join([
-            f"- {c['id']}: {c.get('principle', '')[:60]}{'...' if len(c.get('principle', '')) > 60 else ''}"
+            f"- {c['id']}: {c.get('principle', '')} - {c.get('description', '')}"
             for c in coso_criteria
         ])
         
         coso_prompt = config.FRAMEWORK_MULTI_MATCH_PROMPT_COSO.format(
             control_desc=control_desc,
-            coso_criteria_list=coso_list_text
+            coso_criteria_list=coso_list_text,
+            deviation_context=deviation_context
         )
         
-        response_pass3 = gpt_extract(coso_prompt, "framework_coso_matching")
-        token_usage["pass3"] = len(coso_prompt) // 4
+        response_pass2 = gpt_extract(coso_prompt, "framework_coso_matching")
+        token_usage["pass2"] = len(coso_prompt) // 4
         
-        if not response_pass3:
-            logging.warning(f"[{control_id}] Pass 3 (COSO matching) returned empty response")
+        if not response_pass2:
+            logging.warning(f"[{control_id}] Pass 2 (COSO matching) returned empty response")
             coso_matches = []
         else:
-            coso_result = json.loads(response_pass3.strip())
+            coso_result = json.loads(response_pass2.strip())
             coso_matches = coso_result.get("matches", [])
             
-            # Validate IDs and filter by confidence
+            # Validate IDs and filter by confidence (raised threshold to 0.6)
             valid_coso_ids = {c["id"] for c in coso_criteria}
             coso_matches = [
                 m for m in coso_matches 
-                if m.get("id") in valid_coso_ids and m.get("confidence", 0) >= 0.5
+                if m.get("id") in valid_coso_ids and m.get("confidence", 0) >= 0.6
             ]
             
-            # Limit to top_k
+            # Limit to top_k (now 5)
             coso_matches = coso_matches[:top_k]
             
             # Add deviation to each match
             for match in coso_matches:
                 match["deviation"] = deviation_text
-                # Ensure reasoning is truncated
-                if "reasoning" in match and len(match["reasoning"]) > 50:
-                    match["reasoning"] = match["reasoning"][:50]
             
-            logging.info(f"[{control_id}] Pass 3: Found {len(coso_matches)} COSO matches from {len(coso_criteria)} principles")
+            logging.info(f"[{control_id}] Pass 2: Found {len(coso_matches)} COSO matches from {len(coso_criteria)} principles")
         
     except Exception as e:
-        logging.error(f"[{control_id}] Pass 3 (COSO matching) failed: {e}")
+        logging.error(f"[{control_id}] Pass 2 (COSO matching) failed: {e}")
         coso_matches = []
+    
+    # ========== PASS 3: Cross-Framework Validation ==========
+    alignment_quality = "Undetermined"
+    consistency_score = 0.5
+    
+    if tsc_matches and coso_matches:
+        try:
+            # Format matches for validation prompt
+            tsc_summary = "\n".join([
+                f"- {m['id']} (confidence: {m['confidence']:.2f}): {m.get('reasoning', 'N/A')}"
+                for m in tsc_matches
+            ])
+            coso_summary = "\n".join([
+                f"- {m['id']} (confidence: {m['confidence']:.2f}): {m.get('reasoning', 'N/A')}"
+                for m in coso_matches
+            ])
+            
+            validation_prompt = config.FRAMEWORK_CROSS_VALIDATION_PROMPT.format(
+                control_desc=control_desc,
+                tsc_matches=tsc_summary,
+                coso_matches=coso_summary
+            )
+            
+            response_pass3 = gpt_extract(validation_prompt, "framework_cross_validation")
+            token_usage["pass3"] = len(validation_prompt) // 4
+            
+            if response_pass3:
+                validation_result = json.loads(response_pass3.strip())
+                alignment_quality = validation_result.get("alignment_quality", "Undetermined")
+                consistency_score = validation_result.get("consistency_score", 0.5)
+                adjustments = validation_result.get("confidence_adjustments", {})
+                
+                # Apply confidence multipliers
+                tsc_multiplier = adjustments.get("tsc_confidence_multiplier", 1.0)
+                coso_multiplier = adjustments.get("coso_confidence_multiplier", 1.0)
+                
+                for match in tsc_matches:
+                    original_conf = match["confidence"]
+                    match["confidence"] = min(1.0, original_conf * tsc_multiplier)
+                    match["alignment_quality"] = alignment_quality
+                    match["consistency_score"] = consistency_score
+                
+                for match in coso_matches:
+                    original_conf = match["confidence"]
+                    match["confidence"] = min(1.0, original_conf * coso_multiplier)
+                    match["alignment_quality"] = alignment_quality
+                    match["consistency_score"] = consistency_score
+                
+                logging.info(f"[{control_id}] Pass 3: Alignment quality={alignment_quality}, consistency={consistency_score:.2f}")
+            
+        except Exception as e:
+            logging.error(f"[{control_id}] Pass 3 (cross-validation) failed: {e}")
     
     # Log token usage
     log_token_usage("CONTROL", control_id, token_usage)
