@@ -1709,20 +1709,27 @@ Control Description:
 Available TSC Criteria:
 {tsc_criteria_list}
 
+IMPORTANT INSTRUCTIONS:
+- Each match must have a DISTINCT TSC ID with UNIQUE reasoning
+- Focus on the specific control description provided
+- Consider technical vs. operational context
+- Avoid selecting duplicate IDs
+- Provide specific reasoning for each criterion (not generic statements)
+
 Respond ONLY with JSON:
 {{
   "matches": [
     {{
       "id": "ID from list above (e.g., CC7.2)",
       "confidence": 0.0-1.0,
-      "reasoning": "Max 50 chars - why this criterion matches"
+      "reasoning": "Max 50 chars - specific alignment with control description"
     }}
   ]
 }}
 
 Return 1-3 matches ordered by confidence (highest first).
 Include only matches with confidence ≥ 0.5.
-Keep reasoning concise - focus on key alignment factors.
+Keep reasoning concise but specific to this control.
 If no good matches exist, return {{"matches": []}}.
 """
 
@@ -1735,20 +1742,27 @@ Control Description:
 Available COSO 2013 Principles:
 {coso_criteria_list}
 
+IMPORTANT INSTRUCTIONS:
+- Each match must have a DISTINCT COSO principle ID with UNIQUE reasoning
+- Focus on the specific control description provided
+- Consider control environment, risk assessment, control activities, information & communication, or monitoring context
+- Avoid selecting duplicate principle IDs
+- Provide specific reasoning for each principle (not generic statements)
+
 Respond ONLY with JSON:
 {{
   "matches": [
     {{
       "id": "ID from list above (e.g., 10)",
       "confidence": 0.0-1.0,
-      "reasoning": "Max 50 chars - why this principle matches"
+      "reasoning": "Max 50 chars - specific alignment with control description"
     }}
   ]
 }}
 
 Return 1-3 matches ordered by confidence (highest first).
 Include only matches with confidence ≥ 0.5.
-Keep reasoning concise - focus on key alignment factors.
+Keep reasoning concise but specific to this control.
 If no good matches exist, return {{"matches": []}}.
 """
 

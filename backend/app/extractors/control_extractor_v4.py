@@ -471,10 +471,126 @@ def filter_by_confidence(controls: List[Dict[str, Any]], min_confidence: float =
     return accepted, rejected
 
 # ============================================================================
+# 5-FACTOR CONFIDENCE CALCULATION
+# ============================================================================
+
+def _calculate_multi_factor_confidence(
+    control: Dict[str, Any],
+    weights: Dict[str, float],
+    gpt_confidence: float,
+    pattern_confidence: float
+) -> Dict[str, Any]:
+    """
+    Calculate confidence using 5-factor scoring system.
+    
+    Factors:
+    1. GPT Confidence (default 25%): Base extraction quality
+    2. Pattern Confidence (default 20%): ID pattern recognition
+    3. Structure Score (default 20%): Completeness of fields
+    4. Framework Score (default 20%): Quality of TSC/COSO mappings
+    5. Deviation Score (default 15%): Deviation flag consistency
+    
+    Args:
+        control: Control dictionary
+        weights: Weight configuration dict
+        gpt_confidence: GPT extraction confidence
+        pattern_confidence: Pattern library score
+        
+    Returns:
+        Dictionary with all scores and final confidence
+    """
+    from datetime import datetime
+    
+    # Factor 3: Structure Score (0.0-1.0)
+    # Checks presence of key fields: control_test, control_test_results, control_desc
+    structure_fields_present = 0
+    structure_fields_total = 3
+    
+    if control.get("control_test") or control.get("control_tests"):
+        structure_fields_present += 1
+    if control.get("control_test_results"):
+        structure_fields_present += 1
+    if control.get("control_desc"):
+        structure_fields_present += 1
+    
+    structure_score = structure_fields_present / structure_fields_total if structure_fields_total > 0 else 0.0
+    
+    # Factor 4: Framework Score (0.0-1.0)
+    # Average confidence from TSC and COSO mappings
+    framework_confidences = []
+    
+    # Check TSC mappings
+    if control.get("control_tsc_mappings"):
+        for mapping in control["control_tsc_mappings"]:
+            if isinstance(mapping, dict) and "confidence" in mapping:
+                framework_confidences.append(mapping["confidence"])
+    
+    # Check COSO mappings
+    if control.get("control_coso_mappings"):
+        for mapping in control["control_coso_mappings"]:
+            if isinstance(mapping, dict) and "confidence" in mapping:
+                framework_confidences.append(mapping["confidence"])
+    
+    framework_score = sum(framework_confidences) / len(framework_confidences) if framework_confidences else 0.5
+    
+    # Factor 5: Deviation Score (0.0-1.0)
+    # Checks consistency between has_deviation flag and deviation_desc content
+    has_deviation = control.get("has_deviation", False)
+    deviation_desc = control.get("deviation_desc", "")
+    
+    # Consistent if: (has_deviation=True AND deviation_desc exists) OR (has_deviation=False AND no deviation_desc)
+    if has_deviation and deviation_desc:
+        deviation_score = 1.0  # Consistent: flag set and description provided
+    elif not has_deviation and not deviation_desc:
+        deviation_score = 1.0  # Consistent: no flag and no description
+    else:
+        deviation_score = 0.3  # Inconsistent: flag doesn't match description
+    
+    # Calculate weighted final confidence
+    final_confidence = (
+        weights["gpt_weight"] * gpt_confidence +
+        weights["pattern_weight"] * pattern_confidence +
+        weights["structure_weight"] * structure_score +
+        weights["framework_weight"] * framework_score +
+        weights["deviation_weight"] * deviation_score
+    )
+    
+    # Prepare detailed metadata
+    factor_scores = {
+        "gpt_confidence": round(gpt_confidence, 3),
+        "pattern_confidence": round(pattern_confidence, 3),
+        "structure_score": round(structure_score, 3),
+        "framework_score": round(framework_score, 3),
+        "deviation_score": round(deviation_score, 3)
+    }
+    
+    weighted_contributions = {
+        "gpt_contribution": round(weights["gpt_weight"] * gpt_confidence, 3),
+        "pattern_contribution": round(weights["pattern_weight"] * pattern_confidence, 3),
+        "structure_contribution": round(weights["structure_weight"] * structure_score, 3),
+        "framework_contribution": round(weights["framework_weight"] * framework_score, 3),
+        "deviation_contribution": round(weights["deviation_weight"] * deviation_score, 3)
+    }
+    
+    return {
+        "factor_scores": factor_scores,
+        "weighted_contributions": weighted_contributions,
+        "weights_used": weights.copy(),
+        "final_confidence": round(final_confidence, 3),
+        "calculated_at": datetime.utcnow().isoformat(),
+        "method": "5-factor"
+    }
+
+# ============================================================================
 # POST-MERGE VALIDATION
 # ============================================================================
 
-def validate_controls(controls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def validate_controls(
+    controls: List[Dict[str, Any]], 
+    organization: str = None,
+    pattern_library = None,
+    db_session = None
+) -> List[Dict[str, Any]]:
     """
     Validate and clean controls post-merge.
     
@@ -482,9 +598,12 @@ def validate_controls(controls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     1. Required fields present
     2. Line ranges don't overlap
     3. Schema compliance
+    4. Pattern-based confidence scoring (if pattern_library provided)
     
     Args:
         controls: List of controls to validate
+        organization: Organization name for pattern scoring
+        pattern_library: ControlPatternLibrary instance (optional)
         
     Returns:
         List of validated controls
@@ -506,6 +625,54 @@ def validate_controls(controls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             if field in control:
                 if not isinstance(control[field], list):
                     control[field] = [control[field]] if control[field] else []
+        
+        # TYPE VALIDATION FIX: Ensure framework mappings are always lists (fix type misalignment)
+        for mapping_field in ["control_tsc_mappings", "control_coso_mappings"]:
+            if mapping_field in control:
+                value = control[mapping_field]
+                if isinstance(value, str):
+                    # Try to parse JSON string
+                    try:
+                        parsed = json.loads(value)
+                        if isinstance(parsed, list):
+                            control[mapping_field] = parsed
+                            logging.info(f"Control {i+1}: Parsed {mapping_field} from JSON string to list")
+                        else:
+                            logging.warning(f"Control {i+1}: {mapping_field} parsed but not a list, setting to empty list")
+                            control[mapping_field] = []
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logging.warning(f"Control {i+1}: Failed to parse {mapping_field} JSON string: {e}, setting to empty list")
+                        control[mapping_field] = []
+                elif not isinstance(value, list):
+                    logging.warning(f"Control {i+1}: {mapping_field} is not a list or string, setting to empty list")
+                    control[mapping_field] = []
+        
+        # DATA FLOW FIX: Convert arrays to TEXT for database insertion
+        # Database expects TEXT fields, but extraction produces arrays
+        if "control_tests" in control and isinstance(control["control_tests"], list):
+            control["control_test"] = "\n".join(str(t) for t in control["control_tests"] if t)
+        elif "control_test" not in control:
+            control["control_test"] = ""
+        
+        if "control_test_results" in control and isinstance(control.get("control_test_results"), list):
+            control["control_test_results"] = "\n".join(str(r) for r in control["control_test_results"] if r)
+        elif "control_test_results" not in control:
+            control["control_test_results"] = ""
+        
+        # DATA FLOW FIX: Extract page and line references
+        # Import page number extraction function
+        try:
+            from ..pdf_handler import get_page_for_line
+            # Extract page number from === PAGE X === markers if source_start_line is available
+            if "source_start_line" in control and "text_lines" in control:
+                page_num = get_page_for_line(control["text_lines"], control["source_start_line"])
+                control["control_page_ref"] = page_num
+                control["control_line_ref"] = control["source_start_line"]
+            elif "source_start_line" in control:
+                control["control_line_ref"] = control["source_start_line"]
+        except Exception as e:
+            logging.warning(f"Failed to extract page/line refs for control {i}: {e}")
+        
         # Ensure boolean fields
         if "has_deviation" not in control:
             control["has_deviation"] = False
@@ -515,6 +682,72 @@ def validate_controls(controls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if "control_confidence" not in control:
             control["control_confidence"] = 0.5
             control["control_gpt_conf_justification"] = "Default confidence (no GPT score provided)"
+        
+        # Load confidence weights from database
+        weights = {"gpt_weight": 0.25, "pattern_weight": 0.20, "structure_weight": 0.20, "framework_weight": 0.20, "deviation_weight": 0.15}
+        if db_session and organization:
+            try:
+                from ..models import ConfidenceWeights
+                from sqlalchemy import select
+                # Try to get organization-specific weights
+                result = db_session.execute(
+                    select(ConfidenceWeights).where(ConfidenceWeights.organization == organization)
+                )
+                weight_config = result.scalar_one_or_none()
+                
+                # Fall back to global default if no org-specific weights
+                if not weight_config:
+                    result = db_session.execute(
+                        select(ConfidenceWeights).where(ConfidenceWeights.organization == None)
+                    )
+                    weight_config = result.scalar_one_or_none()
+                
+                if weight_config:
+                    weights = {
+                        "gpt_weight": weight_config.gpt_weight,
+                        "pattern_weight": weight_config.pattern_weight,
+                        "structure_weight": weight_config.structure_weight,
+                        "framework_weight": weight_config.framework_weight,
+                        "deviation_weight": weight_config.deviation_weight
+                    }
+            except Exception as e:
+                logging.warning(f"Failed to load confidence weights: {e}. Using defaults.")
+        
+        # Calculate 5-factor confidence score
+        gpt_conf = control.get("control_confidence", 0.5)
+        pattern_score = 0.5  # Default
+        
+        if pattern_library and organization:
+            try:
+                pattern_score = pattern_library.score_control_id(
+                    control.get("control_id"),
+                    organization
+                )
+            except Exception as e:
+                logging.warning(f"Pattern scoring failed for control {i}: {e}")
+        
+        # Calculate multi-factor confidence
+        confidence_result = _calculate_multi_factor_confidence(
+            control, weights, gpt_conf, pattern_score
+        )
+        
+        # Store results
+        control["pattern_confidence"] = pattern_score
+        control["final_confidence"] = confidence_result["final_confidence"]
+        control["verification_metadata"] = confidence_result
+        
+        # Enhanced justification with all factor scores
+        original_just = control.get("control_gpt_conf_justification", "")
+        factor_summary = " | ".join([
+            f"GPT: {confidence_result['factor_scores']['gpt_confidence']:.2f}",
+            f"Pattern: {confidence_result['factor_scores']['pattern_confidence']:.2f}",
+            f"Structure: {confidence_result['factor_scores']['structure_score']:.2f}",
+            f"Framework: {confidence_result['factor_scores']['framework_score']:.2f}",
+            f"Deviation: {confidence_result['factor_scores']['deviation_score']:.2f}",
+            f"Final: {confidence_result['final_confidence']:.2f}"
+        ])
+        control["control_gpt_conf_justification"] = f"{original_just} | {factor_summary}"
+        
         # Ensure closest framework fields
         if "control_closest_framework" not in control:
             control["control_closest_framework"] = "Undetermined"
@@ -841,7 +1074,10 @@ def map_control_to_frameworks_multi(
 
 def extract_controls_v4(
     start_at_control: Optional[int] = None,
-    start_at_line: Optional[int] = None
+    start_at_line: Optional[int] = None,
+    organization: str = None,
+    pattern_library = None,
+    db_session = None
 ) -> Dict[str, Any]:
     """
     Main extraction pipeline using AWARE-CHUNK + CoT architecture.
@@ -852,12 +1088,15 @@ def extract_controls_v4(
     3. Extract controls with Chain-of-Thought
     4. Merge continuations
     5. Filter by confidence
-    6. Validate and clean
+    6. Validate and clean (with 5-factor confidence scoring)
     7. Return structured results
     
     Args:
         start_at_control: Resume from control sequence number
         start_at_line: Resume from line number
+        organization: Organization name for pattern scoring and weights
+        pattern_library: ControlPatternLibrary instance for scoring
+        db_session: Database session for loading confidence weights
         
     Returns:
         Dict with extraction results and diagnostics
@@ -923,8 +1162,17 @@ def extract_controls_v4(
     min_confidence = getattr(config, 'CONTROL_V4_MIN_CONFIDENCE', 0.5)
     accepted_controls, rejected_controls = filter_by_confidence(merged_controls, min_confidence)
     
-    # Step 5: Validate
-    validated_controls = validate_controls(accepted_controls)
+    # Add text_lines context to controls for page number extraction
+    for control in accepted_controls:
+        control["text_lines"] = text_lines
+    
+    # Step 5: Validate with 5-factor confidence scoring
+    validated_controls = validate_controls(
+        accepted_controls,
+        organization=organization,
+        pattern_library=pattern_library,
+        db_session=db_session
+    )
     
     # Step 6: Add sequence numbers
     for i, control in enumerate(validated_controls, 1):

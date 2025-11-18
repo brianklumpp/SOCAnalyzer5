@@ -58,7 +58,21 @@ class Control(Base):
     control_tsc_section = Column(String(128))
     control_coso_section = Column(String(128))
     control_soc_domain = Column(String(128))
+    
     # Multi-match framework mappings (JSON arrays)
+    # Expected schema for both TSC and COSO mappings:
+    # [
+    #   {
+    #     "id": "CC7.2",           # Framework criterion ID (TSC ID or COSO principle number)
+    #     "confidence": 0.95,      # Match confidence score (0.0-1.0)
+    #     "reasoning": "...",      # Brief explanation of why this criterion matches
+    #     "deviation": "..." or null  # Optional deviation text if applicable
+    #   },
+    #   ...
+    # ]
+    # IMPORTANT: These fields MUST be JSON arrays (not strings). The database enforces this
+    # with CHECK constraints. Backend validation in control_extractor_v4.py and main.py converts
+    # any malformed string data to proper arrays before insertion.
     control_tsc_mappings = Column(JSON)  # [{"id": "CC7.2", "confidence": 0.95, "reasoning": "...", "deviation": "..."}]
     control_coso_mappings = Column(JSON)  # [{"id": "10", "confidence": 0.88, "reasoning": "...", "deviation": "..."}]
     control_status = Column(String(64))
@@ -69,6 +83,11 @@ class Control(Base):
     confidence_calc = Column(Text)
     scan_id = Column(Integer)
     annotation = Column(Text)
+    # Verification and pattern scoring fields
+    verification_status = Column(String(32))  # 'verified', 'pending', null
+    verification_metadata = Column(JSON)  # Detailed scoring breakdown
+    pattern_confidence = Column(Float)  # Score from pattern library (0.0-1.0)
+    final_confidence = Column(Float)  # Combined multi-factor confidence
 
 class CUEC(Base):
     __tablename__ = "cuec"
@@ -91,7 +110,11 @@ class CUEC(Base):
     cuec_coso_confidence_pct = Column(Integer)
     cuec_closest_framework = Column(String(128))
     cuec_confidence_justification = Column(Text)
+    
     # Multi-match framework mappings (JSON arrays)
+    # Same schema as Control mappings above - see control_tsc_mappings documentation
+    # IMPORTANT: Must be JSON arrays, enforced by database CHECK constraints
+    # Backend validation in main.py ensures type safety before insertion
     cuec_tsc_mappings = Column(JSON)  # [{"id": "CC7.2", "confidence": 0.95, "reasoning": "...", "deviation": null}]
     cuec_coso_mappings = Column(JSON)  # [{"id": "10", "confidence": 0.88, "reasoning": "...", "deviation": null}]
     scan_id = Column(Integer)
@@ -125,3 +148,82 @@ class Setting(Base):
     __tablename__ = "settings"
     key = Column(String(64), primary_key=True)
     value = Column(Text, nullable=False)
+
+class ControlPattern(Base):
+    """
+    Learned control ID patterns per organization.
+    Used for pattern-based confidence scoring.
+    """
+    __tablename__ = "control_pattern"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    organization = Column(String(256), nullable=False)
+    pattern = Column(String(128), nullable=False)  # e.g., "IAM-XX-XX", "IM.X.X"
+    frequency = Column(Integer, default=1)  # Number of times seen
+    first_seen = Column(DateTime, nullable=False)
+    last_seen = Column(DateTime, nullable=False)
+    scan_ids = Column(JSON)  # List of scan IDs where this pattern appeared
+
+class PatternReviewQueue(Base):
+    """
+    Queue for manual review of ambiguous pattern merge suggestions.
+    """
+    __tablename__ = "pattern_review_queue"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    organization = Column(String(256), nullable=False)
+    pattern1 = Column(String(128), nullable=False)
+    pattern2 = Column(String(128), nullable=False)
+    merged_pattern = Column(String(128), nullable=False)
+    similarity_score = Column(Float, nullable=False)
+    status = Column(String(32), default='pending')  # 'pending', 'approved', 'rejected'
+    created_at = Column(DateTime, nullable=False)
+    reviewed_at = Column(DateTime)
+    reviewed_by = Column(String(128))
+
+class ConfidenceWeights(Base):
+    """
+    Configurable weights for 5-factor confidence scoring.
+    Supports global defaults and organization-specific overrides.
+    """
+    __tablename__ = "confidence_weights"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    organization = Column(String(256), nullable=True)  # NULL = global default
+    gpt_weight = Column(Float, nullable=False, default=0.25)
+    pattern_weight = Column(Float, nullable=False, default=0.20)
+    structure_weight = Column(Float, nullable=False, default=0.20)
+    framework_weight = Column(Float, nullable=False, default=0.20)
+    deviation_weight = Column(Float, nullable=False, default=0.15)
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class ConfidenceWeightAudit(Base):
+    """
+    Audit log for confidence weight changes (compliance tracking).
+    """
+    __tablename__ = "confidence_weight_audit"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    weight_config_id = Column(Integer, nullable=True)  # FK to confidence_weights, NULL if deleted
+    organization = Column(String(256), nullable=True)  # Denormalized for deleted configs
+    changed_by_user_id = Column(Integer, nullable=True)  # User who made the change
+    old_weights = Column(JSON, nullable=True)  # {"gpt": 0.25, "pattern": 0.20, ...}
+    new_weights = Column(JSON, nullable=False)  # {"gpt": 0.30, "pattern": 0.15, ...}
+    change_reason = Column(Text, nullable=True)  # Admin-provided reason
+    change_type = Column(String(32), nullable=False)  # 'create', 'update', 'delete', 'reset'
+    changed_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+class ControlReview(Base):
+    """
+    Admin review records for low-confidence controls.
+    Used to collect feedback for weight tuning.
+    """
+    __tablename__ = "control_review"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    control_id = Column(Integer, nullable=False)  # FK to control.id
+    scan_id = Column(Integer, nullable=False)  # Denormalized for easier querying
+    organization = Column(String(256), nullable=True)  # Denormalized from company
+    reviewed_by_user_id = Column(Integer, nullable=True)  # User who reviewed
+    review_status = Column(String(32), nullable=False)  # 'correct', 'false_positive', 'uncertain'
+    review_notes = Column(Text, nullable=True)  # Admin notes
+    low_factor_flags = Column(JSON, nullable=True)  # ["pattern", "structure", "framework", ...]
+    final_confidence_at_review = Column(Float, nullable=True)  # Snapshot of confidence when reviewed
+    reviewed_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)

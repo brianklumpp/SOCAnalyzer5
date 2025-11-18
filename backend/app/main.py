@@ -29,7 +29,8 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.exc import SQLAlchemyError
 from .models import Company, Control, CUEC, SubserviceOrg, Product, Setting, Base
-from .models import Scan
+from .models import Scan, ConfidenceWeights, ConfidenceWeightAudit, ControlReview
+from .models import ControlPattern, PatternReviewQueue
 from .database import engine, get_db
 from .config import AUTO_CREATE_SCHEMA, RUN_MIGRATIONS_ON_START, ALEMBIC_INI_PATH, LOG_LEVEL, EXCLUDE_ACCESS_LOG_PATHS, DOCKER_CONTROL_ENABLED
 from .analyze import analyze_pdf_file
@@ -1410,6 +1411,7 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
 
     # Try to persist to DB (optional)
     insert_summary = None
+    scan_id_for_learning = None
     if force_save:
         try:
             import tempfile
@@ -1420,6 +1422,29 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
             loop = asyncio.get_event_loop()
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 insert_summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
+            
+            # After successful insertion, learn patterns from this scan
+            if insert_summary and insert_summary.get("control", 0) > 0:
+                try:
+                    # Get scan_id from the latest scan (just inserted)
+                    scan_result = await db.execute(
+                        select(Scan).order_by(Scan.id.desc()).limit(1)
+                    )
+                    latest_scan = scan_result.scalar_one_or_none()
+                    
+                    if latest_scan:
+                        scan_id_for_learning = latest_scan.id
+                        from .services.verification_service import ControlVerificationService
+                        
+                        service = ControlVerificationService()
+                        learning_stats = await service.learn_patterns_from_scan(
+                            scan_id_for_learning, 
+                            db
+                        )
+                        logging.info(f"[/analyze/finalize] Pattern learning complete: {learning_stats}")
+                except Exception as learn_err:
+                    logging.warning(f"[/analyze/finalize] Pattern learning failed: {learn_err}")
+                    # Don't fail the finalize if pattern learning fails
         except Exception as e:
             logging.error(f"[/analyze/finalize] DB insertion failed: {e}")
 
@@ -2735,9 +2760,25 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
                     top_k=3
                 )
                 
-                # Store arrays
-                cuec.cuec_tsc_mappings = tsc_matches
-                cuec.cuec_coso_mappings = coso_matches
+                # Store arrays (with type validation)
+                # TYPE VALIDATION: Ensure mappings are arrays (defensive programming)
+                if isinstance(tsc_matches, str):
+                    try:
+                        tsc_matches = json.loads(tsc_matches)
+                        if not isinstance(tsc_matches, list):
+                            tsc_matches = []
+                    except (json.JSONDecodeError, TypeError):
+                        tsc_matches = []
+                if isinstance(coso_matches, str):
+                    try:
+                        coso_matches = json.loads(coso_matches)
+                        if not isinstance(coso_matches, list):
+                            coso_matches = []
+                    except (json.JSONDecodeError, TypeError):
+                        coso_matches = []
+                
+                cuec.cuec_tsc_mappings = tsc_matches if isinstance(tsc_matches, list) else []
+                cuec.cuec_coso_mappings = coso_matches if isinstance(coso_matches, list) else []
                 
                 # Populate legacy columns with highest confidence match
                 if tsc_matches:
@@ -3205,6 +3246,718 @@ async def batch_recompute_control_frameworks(
         await db.rollback()
         logging.error(f"/report/{scan_id}/controls/batch_recompute_frameworks error: {e}", exc_info=True)
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# VERIFICATION ENDPOINTS
+# ============================================================================
+
+@app.post("/verify/{scan_id}")
+async def trigger_verification(scan_id: int, db=Depends(get_db)):
+    """
+    Manually trigger verification for a scan's controls.
+    Applies pattern library scoring and multi-factor confidence analysis.
+    """
+    try:
+        from .services.verification_service import ControlVerificationService
+        
+        # Get organization name from scan
+        scan_result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan = scan_result.scalar_one_or_none()
+        
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        organization = None
+        if scan.company_id:
+            company_result = await db.execute(
+                select(Company).where(Company.id == scan.company_id)
+            )
+            company = company_result.scalar_one_or_none()
+            if company:
+                organization = company.name
+        
+        if not organization:
+            organization = "Unknown"
+        
+        # Run verification
+        service = ControlVerificationService()
+        stats = await service.start_verification(scan_id, db, organization)
+        
+        return {
+            "status": "completed",
+            "stats": stats
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Verification error for scan {scan_id}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/verify/{scan_id}/status")
+async def get_verification_status(scan_id: int, db=Depends(get_db)):
+    """
+    Get verification status and statistics for a scan.
+    """
+    try:
+        from .services.verification_service import ControlVerificationService
+        
+        service = ControlVerificationService()
+        stats = await service.get_verification_status(scan_id, db)
+        
+        return stats
+        
+    except Exception as e:
+        logging.error(f"Error fetching verification status for scan {scan_id}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/verify/{scan_id}/learn_patterns")
+async def learn_patterns(scan_id: int, db=Depends(get_db)):
+    """
+    Learn patterns from a scan's validated controls.
+    Called automatically after extraction, but can be triggered manually.
+    """
+    try:
+        from .services.verification_service import ControlVerificationService
+        
+        service = ControlVerificationService()
+        stats = await service.learn_patterns_from_scan(scan_id, db)
+        
+        return {
+            "status": "completed",
+            "stats": stats
+        }
+        
+    except Exception as e:
+        logging.error(f"Pattern learning error for scan {scan_id}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/patterns/review-queue")
+async def get_pattern_review_queue(organization: Optional[str] = None, db=Depends(get_db)):
+    """
+    Get pending pattern merge suggestions for manual review.
+    """
+    try:
+        from .models import PatternReviewQueue
+        
+        query = select(PatternReviewQueue).where(
+            PatternReviewQueue.status == 'pending'
+        )
+        
+        if organization:
+            query = query.where(PatternReviewQueue.organization == organization)
+        
+        query = query.order_by(PatternReviewQueue.created_at.desc())
+        
+        result = await db.execute(query)
+        items = result.scalars().all()
+        
+        return {
+            "items": [
+                {
+                    "id": item.id,
+                    "organization": item.organization,
+                    "pattern1": item.pattern1,
+                    "pattern2": item.pattern2,
+                    "merged_pattern": item.merged_pattern,
+                    "similarity_score": item.similarity_score,
+                    "created_at": item.created_at.isoformat() if item.created_at else None
+                }
+                for item in items
+            ]
+        }
+        
+    except Exception as e:
+        logging.error(f"Error fetching pattern review queue: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/patterns/approve-merge/{review_id}")
+async def approve_pattern_merge(review_id: int, db=Depends(get_db)):
+    """
+    Approve a pattern merge suggestion.
+    Merges the two patterns into one and updates existing controls.
+    """
+    try:
+        from .models import PatternReviewQueue, ControlPattern
+        from datetime import datetime
+        
+        # Get review item
+        result = await db.execute(
+            select(PatternReviewQueue).where(PatternReviewQueue.id == review_id)
+        )
+        review = result.scalar_one_or_none()
+        
+        if not review:
+            raise HTTPException(status_code=404, detail="Review item not found")
+        
+        if review.status != 'pending':
+            raise HTTPException(status_code=400, detail="Review already processed")
+        
+        # Get both patterns
+        patterns_result = await db.execute(
+            select(ControlPattern).where(
+                sqlalchemy.and_(
+                    ControlPattern.organization == review.organization,
+                    ControlPattern.pattern.in_([review.pattern1, review.pattern2])
+                )
+            )
+        )
+        patterns = patterns_result.scalars().all()
+        
+        if len(patterns) != 2:
+            raise HTTPException(status_code=400, detail="Patterns not found in database")
+        
+        # Merge patterns: combine frequencies and scan_ids
+        pattern1 = next(p for p in patterns if p.pattern == review.pattern1)
+        pattern2 = next(p for p in patterns if p.pattern == review.pattern2)
+        
+        combined_frequency = pattern1.frequency + pattern2.frequency
+        combined_scan_ids = list(set((pattern1.scan_ids or []) + (pattern2.scan_ids or [])))
+        
+        # Create merged pattern
+        merged = ControlPattern(
+            organization=review.organization,
+            pattern=review.merged_pattern,
+            frequency=combined_frequency,
+            first_seen=min(pattern1.first_seen, pattern2.first_seen),
+            last_seen=datetime.utcnow(),
+            scan_ids=combined_scan_ids
+        )
+        db.add(merged)
+        
+        # Delete old patterns
+        await db.delete(pattern1)
+        await db.delete(pattern2)
+        
+        # Update review status
+        review.status = 'approved'
+        review.reviewed_at = datetime.utcnow()
+        db.add(review)
+        
+        await db.commit()
+        
+        return {
+            "status": "approved",
+            "merged_pattern": review.merged_pattern,
+            "combined_frequency": combined_frequency
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error approving pattern merge {review_id}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/patterns/reject-merge/{review_id}")
+async def reject_pattern_merge(review_id: int, db=Depends(get_db)):
+    """
+    Reject a pattern merge suggestion.
+    Keeps patterns separate.
+    """
+    try:
+        from .models import PatternReviewQueue
+        from datetime import datetime
+        
+        result = await db.execute(
+            select(PatternReviewQueue).where(PatternReviewQueue.id == review_id)
+        )
+        review = result.scalar_one_or_none()
+        
+        if not review:
+            raise HTTPException(status_code=404, detail="Review item not found")
+        
+        if review.status != 'pending':
+            raise HTTPException(status_code=400, detail="Review already processed")
+        
+        review.status = 'rejected'
+        review.reviewed_at = datetime.utcnow()
+        db.add(review)
+        
+        await db.commit()
+        
+        return {
+            "status": "rejected"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error rejecting pattern merge {review_id}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/patterns/organization/{organization}")
+async def get_organization_patterns(organization: str, db=Depends(get_db)):
+    """
+    Get pattern profile for an organization.
+    """
+    try:
+        from .utils.pattern_library import ControlPatternLibrary
+        
+        pattern_lib = ControlPatternLibrary(db_session=db)
+        profile = pattern_lib.get_org_profile(organization)
+        
+        return profile
+        
+    except Exception as e:
+        logging.error(f"Error fetching patterns for {organization}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# CONFIDENCE WEIGHTS MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.get("/api/confidence-weights")
+async def get_global_confidence_weights(db=Depends(get_db)):
+    """Get global default confidence weights."""
+    try:
+        result = await db.execute(
+            select(ConfidenceWeights).where(ConfidenceWeights.organization == None)
+        )
+        weights = result.scalar_one_or_none()
+        
+        if not weights:
+            # Return defaults if not in database
+            return {
+                "gpt_weight": 0.25,
+                "pattern_weight": 0.20,
+                "structure_weight": 0.20,
+                "framework_weight": 0.20,
+                "deviation_weight": 0.15
+            }
+        
+        return {
+            "id": weights.id,
+            "gpt_weight": weights.gpt_weight,
+            "pattern_weight": weights.pattern_weight,
+            "structure_weight": weights.structure_weight,
+            "framework_weight": weights.framework_weight,
+            "deviation_weight": weights.deviation_weight,
+            "created_at": weights.created_at.isoformat() if weights.created_at else None,
+            "updated_at": weights.updated_at.isoformat() if weights.updated_at else None
+        }
+    except Exception as e:
+        logging.error(f"Error fetching global weights: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/confidence-weights/org/{organization}")
+async def get_org_confidence_weights(organization: str, db=Depends(get_db)):
+    """Get organization-specific confidence weights (falls back to global if not found)."""
+    try:
+        # Try org-specific first
+        result = await db.execute(
+            select(ConfidenceWeights).where(ConfidenceWeights.organization == organization)
+        )
+        weights = result.scalar_one_or_none()
+        
+        # Fall back to global
+        if not weights:
+            result = await db.execute(
+                select(ConfidenceWeights).where(ConfidenceWeights.organization == None)
+            )
+            weights = result.scalar_one_or_none()
+        
+        if not weights:
+            return {
+                "organization": None,
+                "gpt_weight": 0.25,
+                "pattern_weight": 0.20,
+                "structure_weight": 0.20,
+                "framework_weight": 0.20,
+                "deviation_weight": 0.15,
+                "is_default": True
+            }
+        
+        return {
+            "id": weights.id,
+            "organization": weights.organization,
+            "gpt_weight": weights.gpt_weight,
+            "pattern_weight": weights.pattern_weight,
+            "structure_weight": weights.structure_weight,
+            "framework_weight": weights.framework_weight,
+            "deviation_weight": weights.deviation_weight,
+            "created_at": weights.created_at.isoformat() if weights.created_at else None,
+            "updated_at": weights.updated_at.isoformat() if weights.updated_at else None,
+            "is_default": weights.organization is None
+        }
+    except Exception as e:
+        logging.error(f"Error fetching weights for {organization}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.put("/api/confidence-weights")
+async def update_global_confidence_weights(data: dict, db=Depends(get_db)):
+    """Update global confidence weights with validation."""
+    try:
+        # Extract weights
+        gpt = data.get("gpt_weight")
+        pattern = data.get("pattern_weight")
+        structure = data.get("structure_weight")
+        framework = data.get("framework_weight")
+        deviation = data.get("deviation_weight")
+        
+        # Validation: each factor 0.05-0.60, sum = 1.0
+        weights_list = [gpt, pattern, structure, framework, deviation]
+        
+        if any(w is None for w in weights_list):
+            return JSONResponse({"error": "All weight fields are required"}, status_code=400)
+        
+        if any(w < 0.05 or w > 0.60 for w in weights_list):
+            return JSONResponse({"error": "Each weight must be between 0.05 and 0.60"}, status_code=400)
+        
+        total = sum(weights_list)
+        if abs(total - 1.0) > 0.001:  # Allow small floating point tolerance
+            return JSONResponse({"error": f"Weights must sum to 1.0 (got {total:.3f})"}, status_code=400)
+        
+        # Get existing global weights
+        result = await db.execute(
+            select(ConfidenceWeights).where(ConfidenceWeights.organization == None)
+        )
+        weights = result.scalar_one_or_none()
+        
+        # Store old weights for audit
+        old_weights = None
+        if weights:
+            old_weights = {
+                "gpt_weight": weights.gpt_weight,
+                "pattern_weight": weights.pattern_weight,
+                "structure_weight": weights.structure_weight,
+                "framework_weight": weights.framework_weight,
+                "deviation_weight": weights.deviation_weight
+            }
+        
+        # Update or create
+        if weights:
+            weights.gpt_weight = gpt
+            weights.pattern_weight = pattern
+            weights.structure_weight = structure
+            weights.framework_weight = framework
+            weights.deviation_weight = deviation
+            weights.updated_at = datetime.utcnow()
+            change_type = "update"
+        else:
+            weights = ConfidenceWeights(
+                organization=None,
+                gpt_weight=gpt,
+                pattern_weight=pattern,
+                structure_weight=structure,
+                framework_weight=framework,
+                deviation_weight=deviation
+            )
+            db.add(weights)
+            change_type = "create"
+        
+        await db.commit()
+        await db.refresh(weights)
+        
+        # Create audit log
+        audit = ConfidenceWeightAudit(
+            weight_config_id=weights.id,
+            organization=None,
+            changed_by_user_id=data.get("user_id"),  # Optional user tracking
+            old_weights=old_weights,
+            new_weights={
+                "gpt_weight": gpt,
+                "pattern_weight": pattern,
+                "structure_weight": structure,
+                "framework_weight": framework,
+                "deviation_weight": deviation
+            },
+            change_reason=data.get("reason", ""),
+            change_type=change_type
+        )
+        db.add(audit)
+        await db.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Global weights {change_type}d successfully",
+            "weights": {
+                "gpt_weight": gpt,
+                "pattern_weight": pattern,
+                "structure_weight": structure,
+                "framework_weight": framework,
+                "deviation_weight": deviation
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"Error updating global weights: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.put("/api/confidence-weights/org/{organization}")
+async def update_org_confidence_weights(organization: str, data: dict, db=Depends(get_db)):
+    """Create or update organization-specific confidence weights."""
+    try:
+        # Extract and validate weights (same as global)
+        gpt = data.get("gpt_weight")
+        pattern = data.get("pattern_weight")
+        structure = data.get("structure_weight")
+        framework = data.get("framework_weight")
+        deviation = data.get("deviation_weight")
+        
+        weights_list = [gpt, pattern, structure, framework, deviation]
+        
+        if any(w is None for w in weights_list):
+            return JSONResponse({"error": "All weight fields are required"}, status_code=400)
+        
+        if any(w < 0.05 or w > 0.60 for w in weights_list):
+            return JSONResponse({"error": "Each weight must be between 0.05 and 0.60"}, status_code=400)
+        
+        total = sum(weights_list)
+        if abs(total - 1.0) > 0.001:
+            return JSONResponse({"error": f"Weights must sum to 1.0 (got {total:.3f})"}, status_code=400)
+        
+        # Get existing org weights
+        result = await db.execute(
+            select(ConfidenceWeights).where(ConfidenceWeights.organization == organization)
+        )
+        weights = result.scalar_one_or_none()
+        
+        old_weights = None
+        if weights:
+            old_weights = {
+                "gpt_weight": weights.gpt_weight,
+                "pattern_weight": weights.pattern_weight,
+                "structure_weight": weights.structure_weight,
+                "framework_weight": weights.framework_weight,
+                "deviation_weight": weights.deviation_weight
+            }
+        
+        if weights:
+            weights.gpt_weight = gpt
+            weights.pattern_weight = pattern
+            weights.structure_weight = structure
+            weights.framework_weight = framework
+            weights.deviation_weight = deviation
+            weights.updated_at = datetime.utcnow()
+            change_type = "update"
+        else:
+            weights = ConfidenceWeights(
+                organization=organization,
+                gpt_weight=gpt,
+                pattern_weight=pattern,
+                structure_weight=structure,
+                framework_weight=framework,
+                deviation_weight=deviation
+            )
+            db.add(weights)
+            change_type = "create"
+        
+        await db.commit()
+        await db.refresh(weights)
+        
+        # Audit log
+        audit = ConfidenceWeightAudit(
+            weight_config_id=weights.id,
+            organization=organization,
+            changed_by_user_id=data.get("user_id"),
+            old_weights=old_weights,
+            new_weights={
+                "gpt_weight": gpt,
+                "pattern_weight": pattern,
+                "structure_weight": structure,
+                "framework_weight": framework,
+                "deviation_weight": deviation
+            },
+            change_reason=data.get("reason", ""),
+            change_type=change_type
+        )
+        db.add(audit)
+        await db.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Weights for {organization} {change_type}d successfully",
+            "organization": organization,
+            "weights": {
+                "gpt_weight": gpt,
+                "pattern_weight": pattern,
+                "structure_weight": structure,
+                "framework_weight": framework,
+                "deviation_weight": deviation
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"Error updating weights for {organization}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.delete("/api/confidence-weights/org/{organization}")
+async def delete_org_confidence_weights(organization: str, data: dict, db=Depends(get_db)):
+    """Delete organization-specific weights (falls back to global default)."""
+    try:
+        result = await db.execute(
+            select(ConfidenceWeights).where(ConfidenceWeights.organization == organization)
+        )
+        weights = result.scalar_one_or_none()
+        
+        if not weights:
+            return JSONResponse({"error": "No organization-specific weights found"}, status_code=404)
+        
+        old_weights = {
+            "gpt_weight": weights.gpt_weight,
+            "pattern_weight": weights.pattern_weight,
+            "structure_weight": weights.structure_weight,
+            "framework_weight": weights.framework_weight,
+            "deviation_weight": weights.deviation_weight
+        }
+        
+        weight_id = weights.id
+        
+        # Delete weights
+        await db.delete(weights)
+        await db.commit()
+        
+        # Audit log
+        audit = ConfidenceWeightAudit(
+            weight_config_id=None,  # Deleted, no longer exists
+            organization=organization,
+            changed_by_user_id=data.get("user_id"),
+            old_weights=old_weights,
+            new_weights={},  # Empty = deleted
+            change_reason=data.get("reason", ""),
+            change_type="delete"
+        )
+        db.add(audit)
+        await db.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Weights for {organization} deleted. Will use global defaults.",
+            "organization": organization
+        }
+        
+    except Exception as e:
+        logging.error(f"Error deleting weights for {organization}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/confidence-weights/reset")
+async def reset_confidence_weights(data: dict, db=Depends(get_db)):
+    """Reset weights to defaults: GPT 25%, Pattern 20%, Structure 20%, Framework 20%, Deviation 15%."""
+    try:
+        organization = data.get("organization")  # None = global, or specific org
+        
+        if organization:
+            result = await db.execute(
+                select(ConfidenceWeights).where(ConfidenceWeights.organization == organization)
+            )
+        else:
+            result = await db.execute(
+                select(ConfidenceWeights).where(ConfidenceWeights.organization == None)
+            )
+        
+        weights = result.scalar_one_or_none()
+        
+        old_weights = None
+        if weights:
+            old_weights = {
+                "gpt_weight": weights.gpt_weight,
+                "pattern_weight": weights.pattern_weight,
+                "structure_weight": weights.structure_weight,
+                "framework_weight": weights.framework_weight,
+                "deviation_weight": weights.deviation_weight
+            }
+        
+        # Reset to defaults
+        if weights:
+            weights.gpt_weight = 0.25
+            weights.pattern_weight = 0.20
+            weights.structure_weight = 0.20
+            weights.framework_weight = 0.20
+            weights.deviation_weight = 0.15
+            weights.updated_at = datetime.utcnow()
+        else:
+            weights = ConfidenceWeights(
+                organization=organization,
+                gpt_weight=0.25,
+                pattern_weight=0.20,
+                structure_weight=0.20,
+                framework_weight=0.20,
+                deviation_weight=0.15
+            )
+            db.add(weights)
+        
+        await db.commit()
+        await db.refresh(weights)
+        
+        # Audit log
+        audit = ConfidenceWeightAudit(
+            weight_config_id=weights.id,
+            organization=organization,
+            changed_by_user_id=data.get("user_id"),
+            old_weights=old_weights,
+            new_weights={
+                "gpt_weight": 0.25,
+                "pattern_weight": 0.20,
+                "structure_weight": 0.20,
+                "framework_weight": 0.20,
+                "deviation_weight": 0.15
+            },
+            change_reason=data.get("reason", "Reset to defaults"),
+            change_type="reset"
+        )
+        db.add(audit)
+        await db.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Weights reset to defaults for {organization or 'global'}",
+            "weights": {
+                "gpt_weight": 0.25,
+                "pattern_weight": 0.20,
+                "structure_weight": 0.20,
+                "framework_weight": 0.20,
+                "deviation_weight": 0.15
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"Error resetting weights: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/confidence-weights/audit-log")
+async def get_confidence_weights_audit_log(
+    organization: str = None,
+    limit: int = 50,
+    db=Depends(get_db)
+):
+    """Get audit log of confidence weight changes for compliance tracking."""
+    try:
+        query = select(ConfidenceWeightAudit).order_by(ConfidenceWeightAudit.changed_at.desc())
+        
+        if organization:
+            query = query.where(ConfidenceWeightAudit.organization == organization)
+        
+        query = query.limit(limit)
+        
+        result = await db.execute(query)
+        logs = result.scalars().all()
+        
+        return {
+            "logs": [
+                {
+                    "id": log.id,
+                    "organization": log.organization,
+                    "changed_by_user_id": log.changed_by_user_id,
+                    "old_weights": log.old_weights,
+                    "new_weights": log.new_weights,
+                    "change_reason": log.change_reason,
+                    "change_type": log.change_type,
+                    "changed_at": log.changed_at.isoformat()
+                }
+                for log in logs
+            ],
+            "total": len(logs)
+        }
+        
+    except Exception as e:
+        logging.error(f"Error fetching audit log: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# END VERIFICATION ENDPOINTS
+# ============================================================================
 
 @app.patch("/report/{scan_id}/suborgs/{suborg_id}/annotation")
 async def patch_suborg_annotation(scan_id: int, suborg_id: int, data: dict, db=Depends(get_db)):

@@ -1,7 +1,1 @@
-{
-  "type": "Type 2",
-  "start_date": "2022-11-01",
-  "end_date": "2023-10-31",
-  "explanation": "The report specifies a review period from November 1, 2022 to October 31, 2023. This indicates a Type 2 report, which examines both the suitability of the design and the operating effectiveness of controls over an entire period.",
-  "raw_gpt_response": "{\n    \"type\": \"Type 2\",\n    \"start_date\": \"2022-11-01\",\n    \"end_date\": \"2023-10-31\",\n    \"explanation\": \"The report specifies a review period from November 1, 2022 to October 31, 2023. This indicates a Type 2 report, which examines both the suitability of the design and the operating effectiveness of controls over an entire period.\"\n}"
-}
+{}
