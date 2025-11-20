@@ -63,7 +63,7 @@ def extract_coverage_period():
     first_lines = '\n'.join(lines[:20])
     prompt = config.COVERAGE_PERIOD_EXTRACTION_PROMPT.format(text=first_lines)
     response = gpt_extract(prompt, 'coverage_period_extractor')
-    result = {'type': None, 'start_date': None, 'end_date': None, 'explanation': '', 'raw_gpt_response': response}
+    result = {'type': None, 'start_date': None, 'end_date': None, 'as_of_date': None, 'explanation': '', 'raw_gpt_response': response}
     if not response:
         logging.error('No response from GPT.')
         result['explanation'] = 'No response from GPT.'
@@ -73,6 +73,7 @@ def extract_coverage_period():
             result['type'] = data.get('type')
             result['start_date'] = data.get('start_date')
             result['end_date'] = data.get('end_date')
+            result['as_of_date'] = data.get('as_of_date')
             result['explanation'] = data.get('explanation', '')
         except Exception as e:
             logging.error(f'Failed to parse GPT response: {response} | Error: {e}')

@@ -708,10 +708,11 @@ You are an expert SOC 2 auditor. Determine the **coverage period** and report ty
     "type": "<Type 1 | Type 2>",
     "start_date": "<YYYY-MM-DD | null>",
     "end_date": "<YYYY-MM-DD | null>",
+    "as_of_date": "<YYYY-MM-DD | null>",
     "explanation": "<string>"
 }}
 
-SOC 2 Report Text:
+Report Text:
 {text}
 """
 
