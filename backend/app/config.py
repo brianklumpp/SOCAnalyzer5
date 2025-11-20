@@ -1815,6 +1815,117 @@ Analyze this text (first line is line {start_line}). Extract ALL control blocks 
 {text}
 """
 
+# V4 SOC 1 Prompt: Control extraction with financial assertion mapping
+CONTROL_EXTRACTION_PROMPT_V4_SOC1 = """
+You are a SOC 1 Type 2 control extraction model specialized in Internal Control over Financial Reporting (ICFR). From unstructured SOC 1 text with all table structure removed, extract ALL complete control blocks in this chunk.
+
+## Goal
+Extract ALL complete control blocks found in this chunk. For each control, return:
+- the control identifier (if present)
+- the control description (financial reporting focus)
+- one or more auditor test procedures
+- one or more test results
+- whether a deviation/exception is stated
+- which financial assertions this control addresses
+- where this control logically ends (line number estimate)
+
+## Expected Output
+Return a JSON object with a "controls" array containing one object per control found:
+
+{{
+  "controls": [
+    {{
+      "control_id": "<string or null>",
+      "control_desc": "<string>",
+      "control_tests": ["<string>", "<string>", ...],
+      "control_test_results": ["<string>", "<string>", ...],
+      "has_deviation": <true or false>,
+      "deviation_desc": "<string>",
+      "financial_assertions": ["EO", "C", "A", "CV", ...],
+      "assertion_reasoning": "<brief explanation of assertion mapping>",
+      "end_line": <integer>,
+      "control_confidence": <float>,
+      "control_gpt_conf_justification": "<short reasoning>",
+      "continuation": <true or false>
+    }},
+    ... (repeat for each control found)
+  ]
+}}
+
+## Financial Assertions (Management Assertions per PCAOB AS 2201)
+Map each control to relevant assertions:
+- **EO** (Existence/Occurrence): Transactions occurred and pertain to entity
+- **C** (Completeness): All transactions recorded
+- **A** (Accuracy): Amounts recorded appropriately
+- **CO** (Cutoff): Transactions in correct period
+- **CL** (Classification): Transactions in proper accounts
+- **E** (Existence - Balance): Assets, liabilities exist
+- **R** (Rights and Obligations): Entity holds/controls rights
+- **CV** (Completeness and Valuation): Balances at appropriate amounts
+- **REV** (Revenue Recognition): Revenue controls
+- **AP** (Accounts Payable): Vendor payment controls
+- **AR** (Accounts Receivable): Customer billing controls
+- **INV** (Inventory): Inventory controls
+- **PPE** (Property, Plant & Equipment): Fixed asset controls
+- **PAY** (Payroll): Compensation controls
+- **CASH** (Cash Management): Cash controls
+- **JE** (Journal Entries): Journal entry controls
+- **FR** (Financial Reporting): Period-end close controls
+- **TAX** (Tax Compliance): Tax controls
+
+## Parsing Strategy
+Analyze linguistic and structural cues — never rely on visible table columns.
+
+### 1. Ignore structural noise
+Skip lines that are domain headers (e.g., "Financial Reporting Controls", "Transaction Processing")
+or section titles. These provide context only.
+
+### 2. Detect control boundaries
+Use these indicators to start a new control block:
+- Control identifiers like "FR-001", "REV-01", "AP.02", "1 ", "2."
+- Entity-voice text starting with "The company…", "Management…", "Finance personnel…"
+- Auditor verbs in past tense ("Inspected…", "Observed…", "Tested…", "Inquired…") after a previous result line.
+Stop the block when a new control ID, header, or whitespace separator appears.
+
+### 3. Classify sentences by role
+- **control_desc** – present-tense statements about control operation with financial reporting context
+- **control_tests[]** – auditor-voice procedures (verbs like "inspected", "tested", "inquired")
+- **control_test_results[]** – concise evaluations like "No exceptions noted"
+
+### 4. Deviation detection
+- has_deviation = true if any result mentions "exception", "deviation", "failure", or "not effective"
+- deviation_desc = the phrase or short summary
+- Otherwise, has_deviation = false and deviation_desc = ""
+
+### 5. Financial assertion mapping
+Analyze control_desc and identify which financial assertions are addressed:
+- Look for transaction cycle keywords (revenue, purchases, payroll, inventory)
+- Look for assertion keywords (completeness, accuracy, existence, authorization, cutoff)
+- Look for account balance references (AR, AP, cash, PPE, revenue, COGS)
+- List ALL applicable assertion codes in financial_assertions array
+- Provide brief reasoning in assertion_reasoning (max 150 chars)
+
+### 6. Confidence scoring
+- 0.9–1.0 → found control_id + description + ≥1 test + result + clear assertion mapping
+- 0.6–0.89 → missing ID but strong control/test/result linkage with assertions
+- 0.3–0.59 → partial or inferred control
+Include a brief justification.
+
+### 7. Continuation flag
+If this chunk ends mid-control (incomplete description or missing results), set "continuation": true for that control.
+Otherwise, set "continuation": false.
+
+### 8. Multiple controls in chunk
+Extract ALL complete controls found in this chunk. The chunk may contain:
+- Zero controls (just headers or narrative)
+- One control (typical for sparse reports)
+- Multiple controls (typical for dense reports)
+- Partial control (starts but doesn't complete - mark as continuation)
+
+Analyze this text (first line is line {start_line}). Extract ALL control blocks found:
+{text}
+"""
+
 # --- Deviation Detection Heuristics (English-only) ---
 # Positive signals indicate an exception/deviation; negatives indicate clean results
 # These are regex patterns (case-insensitive). Customize as needed.
