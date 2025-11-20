@@ -16,14 +16,51 @@ from .extractors.report_date import extract_report_date
 from .extractors.coverage_period import extract_coverage_period
 from .pdf_handler import extract_text_from_pdf, find_section_candidates
 from . import config
+from .models import ReportType
 import glob
 
 
-def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json', progress_callback=None, checklist_callback=None):
+def validate_report_type(report_type_str):
+    """
+    Validate and convert report_type string to ReportType enum.
+    
+    Args:
+        report_type_str: String value ('SOC1', 'SOC2', 'COMBINED', or None for default)
+        
+    Returns:
+        ReportType enum value
+        
+    Raises:
+        ValueError: If report_type_str is invalid
+    """
+    if report_type_str is None or report_type_str == '':
+        return ReportType.SOC2  # Default to SOC2 for backward compatibility
+    
+    # Normalize input
+    report_type_upper = str(report_type_str).strip().upper()
+    
+    # Try to match to enum
+    try:
+        return ReportType[report_type_upper]
+    except KeyError:
+        valid_types = ', '.join([t.value for t in ReportType])
+        raise ValueError(f"Invalid report_type '{report_type_str}'. Must be one of: {valid_types}")
+
+
+def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json', report_type='SOC2', 
+                      progress_callback=None, checklist_callback=None):
     # Reset GPT tracking at start of analysis
     from .gpt_tracker import reset_tracking, get_usage_summary
     reset_tracking()
     logger = logging.getLogger(__name__)
+    
+    # Validate and normalize report_type
+    try:
+        validated_report_type = validate_report_type(report_type)
+        logger.info(f"Analysis starting for report type: {validated_report_type.value}")
+    except ValueError as e:
+        logger.error(f"Invalid report_type: {e}")
+        raise
 
     # --- Reset logs and JSON outputs at the start of each run ---
     # List of files to clear
@@ -631,6 +668,10 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         gpt_summary = get_usage_summary()
         standardized_results.update(gpt_summary)
         logger.debug(f"Added GPT usage summary: {gpt_summary['total_calls']} calls, ${gpt_summary['gpt_cost']}")
+        
+        # Add report type to results
+        standardized_results["report_type"] = validated_report_type.value
+        logger.debug(f"Added report type: {validated_report_type.value}")
         
         # Add PDF filename and file bytes to results for database storage
         try:
