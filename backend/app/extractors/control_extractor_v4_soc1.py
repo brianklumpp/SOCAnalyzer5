@@ -139,6 +139,104 @@ def create_aware_chunks(
     return chunks
 
 # ============================================================================
+# FINANCIAL ASSERTION MAPPING (SOC 1 Specific)
+# ============================================================================
+
+def map_financial_assertions(control: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Auto-map control to financial assertions using keyword matching.
+    
+    Args:
+        control: Control dictionary with control_desc, control_test fields
+        
+    Returns:
+        List of assertion mappings with individual confidence scores
+        Schema: [{"id": "EO", "name": "Existence/Occurrence", "confidence": 0.85, "reasoning": "..."}]
+    """
+    from .. import config
+    
+    # Combine control description and test procedure for analysis
+    control_text = " ".join([
+        str(control.get("control_desc") or ""),
+        str(control.get("control_test") or "")
+    ]).lower()
+    
+    if not control_text.strip():
+        return []
+    
+    assertions = []
+    
+    # Check each financial assertion for keyword matches
+    for assertion in config.FINANCIAL_ASSERTIONS:
+        assertion_id = assertion["id"]
+        assertion_name = assertion["name"]
+        keywords = config.FINANCIAL_ASSERTION_KEYWORDS.get(assertion_id, [])
+        
+        # Count keyword matches
+        matches = sum(1 for keyword in keywords if keyword.lower() in control_text)
+        
+        if matches > 0:
+            # Calculate confidence based on match density
+            # Base confidence + bonus for multiple matches
+            base_confidence = 0.50
+            match_bonus = min(0.40, matches * 0.10)  # Max 0.40 bonus
+            confidence = min(0.95, base_confidence + match_bonus)
+            
+            # Generate reasoning (max 200 chars)
+            matched_keywords = [kw for kw in keywords if kw.lower() in control_text][:3]
+            reasoning = f"Matched keywords: {', '.join(matched_keywords)}"
+            if len(reasoning) > config.FINANCIAL_ASSERTION_MAX_REASONING_CHARS:
+                reasoning = reasoning[:config.FINANCIAL_ASSERTION_MAX_REASONING_CHARS - 3] + "..."
+            
+            assertions.append({
+                "id": assertion_id,
+                "name": assertion_name,
+                "confidence": round(confidence, 2),
+                "reasoning": reasoning
+            })
+    
+    # Sort by confidence descending
+    assertions.sort(key=lambda x: x["confidence"], reverse=True)
+    
+    # Keep only assertions above threshold
+    assertions = [
+        a for a in assertions 
+        if a["confidence"] >= config.FINANCIAL_ASSERTION_CONFIDENCE_THRESHOLD
+    ]
+    
+    logging.info(f"Mapped {len(assertions)} financial assertions for control {control.get('control_id', 'N/A')}")
+    return assertions
+
+
+def detect_partial_extraction(control: Dict[str, Any]) -> bool:
+    """
+    Detect if control has incomplete financial assertion mapping.
+    
+    A control is flagged as PARTIAL_EXTRACTION if:
+    - It has financial_assertions field
+    - But only 1 assertion mapped (likely incomplete)
+    - Or no assertions mapped despite having control text
+    
+    Args:
+        control: Control dictionary
+        
+    Returns:
+        True if partial extraction detected
+    """
+    financial_assertions = control.get("financial_assertions", [])
+    control_desc = control.get("control_desc") or ""
+    
+    # Has text but no assertions
+    if len(control_desc.strip()) > 50 and len(financial_assertions) == 0:
+        return True
+    
+    # Only one assertion (potentially incomplete)
+    if len(financial_assertions) == 1:
+        return True
+    
+    return False
+
+# ============================================================================
 # CHAIN-OF-THOUGHT EXTRACTION
 # ============================================================================
 
@@ -1334,6 +1432,21 @@ def extract_controls_v4(
         pattern_library=pattern_library,
         db_session=db_session
     )
+    
+    # Step 5.5: Map financial assertions (SOC 1 specific)
+    logging.info("Mapping financial assertions to controls...")
+    for control in validated_controls:
+        financial_assertions = map_financial_assertions(control)
+        control["financial_assertions"] = financial_assertions
+        
+        # Detect partial extraction
+        if detect_partial_extraction(control):
+            control["framework_category"] = "PARTIAL_EXTRACTION"
+            logging.warning(f"Control {control.get('control_id', 'N/A')} flagged as PARTIAL_EXTRACTION")
+        else:
+            control["framework_category"] = "SOC1"
+    
+    logging.info(f"Mapped financial assertions for {len(validated_controls)} controls")
     
     # Step 6: Add sequence numbers
     for i, control in enumerate(validated_controls, 1):
