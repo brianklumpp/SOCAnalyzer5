@@ -513,6 +513,8 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
             "coverage_end": (getattr(scan_row, "coverage_end", None).date().isoformat() if getattr(scan_row, "coverage_end", None) else None),
             "report_date": report_date,
             "product": product.name if product else None,
+            "report_type": getattr(scan_row, "report_type", "SOC2"),
+            "as_of_date": (getattr(scan_row, "as_of_date", None).date().isoformat() if getattr(scan_row, "as_of_date", None) else None),
             "gpt_cost": getattr(scan_row, "gpt_cost", None),
             "gpt_model": getattr(scan_row, "gpt_model", None),
             "estimated_time_seconds": getattr(scan_row, "estimated_time_seconds", None),
@@ -602,7 +604,9 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                     "verification_metadata",
                     "pattern_confidence",
                     "final_confidence",
-                    "annotation"
+                    "annotation",
+                    "financial_assertions",
+                    "framework_category"
                 ]}) for ctrl in controls
             ],
             "bad_chunks": bad_chunks if any(bad_chunks.values()) else persisted_bad_chunks,
