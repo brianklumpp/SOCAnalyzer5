@@ -324,6 +324,116 @@ if FRONTEND_BUILD_DIR.exists():
         return JSONResponse(status_code=404, content={"error": "asset-manifest not found"})
 
 
+@app.get("/estimate-time")
+async def estimate_processing_time(report_type: str = "SOC2", db=Depends(get_db)):
+    """
+    Estimate processing time based on historical data.
+    
+    Args:
+        report_type: Report type (SOC1, SOC2, COMBINED)
+        
+    Returns:
+        {
+            "report_type": str,
+            "estimated_seconds": float,
+            "based_on_scans": int,  # Number of historical scans used
+            "is_fixed_estimate": bool  # True if <3 scans, using fixed 25 min
+        }
+    """
+    try:
+        from .models import ReportType
+        
+        # Validate report type
+        try:
+            rt_enum = ReportType[report_type.upper()]
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"Invalid report_type: {report_type}")
+        
+        # Query last 10 scans of this type with elapsed_seconds data
+        result = await db.execute(
+            select(Scan)
+            .where(Scan.report_type == rt_enum)
+            .where(Scan.elapsed_seconds.isnot(None))
+            .order_by(Scan.id.desc())
+            .limit(10)
+        )
+        scans = result.scalars().all()
+        
+        # If less than 3 scans, use fixed estimate of 25 minutes
+        if len(scans) < 3:
+            return {
+                "report_type": report_type,
+                "estimated_seconds": 1500.0,  # 25 minutes
+                "based_on_scans": len(scans),
+                "is_fixed_estimate": True
+            }
+        
+        # Calculate average from historical data
+        elapsed_times = [s.elapsed_seconds for s in scans if s.elapsed_seconds]
+        avg_seconds = sum(elapsed_times) / len(elapsed_times)
+        
+        return {
+            "report_type": report_type,
+            "estimated_seconds": round(avg_seconds, 1),
+            "based_on_scans": len(elapsed_times),
+            "is_fixed_estimate": False
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error estimating time: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/scan/{scan_id}/progress")
+async def get_scan_progress(scan_id: int, db=Depends(get_db)):
+    """
+    Get real-time progress status for a scan.
+    
+    Returns:
+        {
+            "scan_id": int,
+            "progress_status": str,  # Current extraction step
+            "elapsed_seconds": float,  # Time elapsed so far
+            "estimated_seconds": float,  # Total estimated time (from historical data)
+            "estimated_remaining": float,  # Estimated time remaining
+            "percent_complete": int  # Rough percentage (0-100)
+        }
+    """
+    try:
+        result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan = result.scalar_one_or_none()
+        
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        progress_status = scan.progress_status or "Not started"
+        elapsed_seconds = scan.elapsed_seconds or 0.0
+        estimated_seconds = scan.estimated_time_seconds or 1500.0  # Default 25 minutes
+        
+        # Calculate remaining time
+        estimated_remaining = max(0, estimated_seconds - elapsed_seconds)
+        
+        # Calculate percent complete (rough estimate based on elapsed vs estimated)
+        if estimated_seconds > 0:
+            percent_complete = min(100, int((elapsed_seconds / estimated_seconds) * 100))
+        else:
+            percent_complete = 0
+        
+        return {
+            "scan_id": scan_id,
+            "progress_status": progress_status,
+            "elapsed_seconds": round(elapsed_seconds, 1),
+            "estimated_seconds": round(estimated_seconds, 1),
+            "estimated_remaining": round(estimated_remaining, 1),
+            "percent_complete": percent_complete
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error getting scan progress: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/report/{scan_id}")
 async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):

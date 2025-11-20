@@ -54,6 +54,10 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
     reset_tracking()
     logger = logging.getLogger(__name__)
     
+    # Track start time for elapsed_seconds
+    import time
+    analysis_start_time = time.time()
+    
     # Validate and normalize report_type
     try:
         validated_report_type = validate_report_type(report_type)
@@ -672,6 +676,11 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         # Add report type to results
         standardized_results["report_type"] = validated_report_type.value
         logger.debug(f"Added report type: {validated_report_type.value}")
+        
+        # Add elapsed time to results
+        elapsed_seconds = time.time() - analysis_start_time
+        standardized_results["elapsed_seconds"] = elapsed_seconds
+        logger.debug(f"Analysis completed in {elapsed_seconds:.1f} seconds")
         
         # Add PDF filename and file bytes to results for database storage
         try:
