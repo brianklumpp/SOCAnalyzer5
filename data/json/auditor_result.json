@@ -1,11 +1,10 @@
 {
-  "auditor": "Ernst & Young LLP",
-  "confidence": 0.9,
-  "source_section": "Section 2: Independent Service Auditor’s Assurance Report",
+  "auditor": null,
+  "confidence": 0,
+  "source_section": "SECTION I. INDEPENDENT SERVICE AUDITOR’S REPORT",
   "source_page": 5,
   "raw_gpt_responses": [
-    "{\n    \"auditor\": \"Ernst & Young LLP\",\n    \"confidence\": 1.0,\n    \"explanation\": \"The independent service auditor firm is explicitly identified as 'Ernst & Young LLP' in multiple sections of the report, including the footer containing 'A member firm of Ernst & Young Global Limited' and the opinion section of the Service Auditor's Report.\"\n}"
+    "{\n    \"auditor\": null,\n    \"confidence\": 0.0,\n    \"reasoning\": \"The provided list of companies does not include any known SOC 2 auditing firms like Deloitte, PwC, KPMG, EY, or other CPA firms. The companies listed (e.g., SimpleLegal, AWS, AICPA) are either the entity being audited, subservice organizations, or governing bodies (AICPA) and are not audit firms. Without additional information or context from the report, I cannot confidently identify the independent auditing firm.\"\n}"
   ],
-  "validation_note": "Validated on attempt 1",
-  "confirmation_explanation": "Ernst & Young LLP is one of the 'Big Four' accounting firms and is known to provide various audit and assurance services, including SOC audits for organizations seeking compliance."
+  "validation_note": "Stage 2 identified no auditor, regex fallback unsuccessful"
 }

@@ -1,0 +1,337 @@
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+ the achievement of commitments, relevant laws 
+and regulations, and other system requirements. Such requirements are communicated in SimpleLegal’s system 
+policies and procedures, system design documentation, and contracts with customers. Information security 
+policies define an organization-wide approach to how systems and data are protected. These include policies 
+around system design, development, and operations, as well as management of internal business systems and 
+networks. In addition to these policies, standard operating procedures have been documented on how to carry out 
+specific manual and automated processes required in the development and operation of SimpleLegal’s system. 
+Components of the System 
+Infrastructure 
+Primary infrastructure used to provide SimpleLegal’s Legal Spend and Matter Management Software System 
+includes the following:  
+Hardware 
+Type 
+Purpose 
+AWS 
+Infrastructure as a 
+Service (IaaS) 
+SimpleLegal hosts its service within AWS cloud service platfor
+
+Entity to Evaluate:
+Name: AWS
+Description: Infrastructure as a Service (IaaS) provider that hosts SimpleLegal's service within the AWS cloud platform environment. Physical infrastructure components are provisioned and managed by AWS.
+
+RESPONSE:
+{
+    "keep": true,
+    "type": "company",
+    "reason": "AWS is a legitimate external service provider that falls under the category of Infrastructure as a Service (IaaS). It provides cloud hosting, which is a distinct external service critical to SimpleLegal's operations.",
+    "entry": {
+        "Name": "AWS",
+        "Description": "Infrastructure as a Service (IaaS) provider that hosts SimpleLegal's service within the AWS cloud platform environment. Physical infrastructure components are provisioned and managed by AWS."
+    }
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+ocedures include change request and 
+initiation processes, documentation requirements, development practices, quality assurance testing requirements, 
+and required approval procedures.  
+A ticketing system is utilized to document the change control procedures for changes in the application and 
+implementation of new changes. Quality assurance testing (QAT) and user acceptance testing (UAT) results are 
+documented and maintained with the associated change request. Development and testing are performed in an 
+environment that is logically separated from the production environment. Management approves changes prior to 
+migration to the production environment and documents those approvals within the ticketing system.  
+Version control software is utilized to maintain source code versions and migrate source code through the 
+development process to the production environment. The version control software maintains a history of code 
+changes to support rollback capabilities and tracks changes
+
+Entity to Evaluate:
+Name: SimpleLegal
+Description: Legal operations management software providing tools for spend management, matter management, and reporting.
+
+RESPONSE:
+{
+    "keep": true,
+    "type": "company",
+    "reason": "SimpleLegal is a distinct external service provider offering a legal operations management platform, which provides tools such as spend management, matter management, and reporting. This functionality qualifies it as a legitimate subservice organization.",
+    "entry": {
+        "name": "SimpleLegal",
+        "description": "Legal operations management software providing tools for spend management, matter management, and reporting."
+    }
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+ing 
+• 
+Policy and process updates 
+• 
+Departmental meetings summarizing events and changes 
+• 
+Use of e-mail systems 
+System Monitoring 
+SimpleLegal performs system monitoring activities to continuously assess the quality of internal control over time 
+and ensure that any corrective actions are completed in a timely manner. Examples of system monitoring 
+processes in place include: 
+• 
+Firewalls – Firewalls protecting the internal network from the public network are implemented, configured, 
+and managed by the SimpleLegal administration staff. Firewalls utilize access rules to grant or deny 
+access to internal resources.  
+• 
+Vulnerability Scanning – Scanning is performed by a third-party vendor on a monthly basis in accordance 
+with SimpleLegal policy. The third-party vendor uses industry standard scanning technologies and a 
+formal methodology specified by Open Web Application Security Project (OWASP). These technologies 
+are customized to test the organization's infrastructure and 
+
+Entity to Evaluate:
+Name: OWASP (Open Web Application Security Project)
+Description: A global organization providing frameworks, standards, and methodologies for improving the security of software systems. Mentioned in the context of vulnerability scanning methodology.
+
+RESPONSE:
+{
+    "keep": false,
+    "type": "framework",
+    "reason": "OWASP is a global organization providing standards, methodologies, and best practices for application security. It is not a distinct external service provider but rather a source of guidance and frameworks (e.g., OWASP Top Ten, OWASP Testing Guide) often used in security programs.",
+    "entry": "OWASP (Open Web Application Security Project)"
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+ing 
+• 
+Policy and process updates 
+• 
+Departmental meetings summarizing events and changes 
+• 
+Use of e-mail systems 
+System Monitoring 
+SimpleLegal performs system monitoring activities to continuously assess the quality of internal control over time 
+and ensure that any corrective actions are completed in a timely manner. Examples of system monitoring 
+processes in place include: 
+• 
+Firewalls – Firewalls protecting the internal network from the public network are implemented, configured, 
+and managed by the SimpleLegal administration staff. Firewalls utilize access rules to grant or deny 
+access to internal resources.  
+• 
+Vulnerability Scanning – Scanning is performed by a third-party vendor on a monthly basis in accordance 
+with SimpleLegal policy. The third-party vendor uses industry standard scanning technologies and a 
+formal methodology specified by Open Web Application Security Project (OWASP). These technologies 
+are customized to test the organization's infrastructure and 
+
+Entity to Evaluate:
+Name: Third-party security firms
+Description: External security organizations contracted for penetration testing using industry-standard methodologies.
+
+RESPONSE:
+{
+    "keep": false,
+    "type": "generic term",
+    "reason": "The entry 'Third-party security firms' does not represent a specific, named external service provider. It is a broad, generic term referring to unaffiliated security organizations rather than a distinct subservice organization, platform, or service.",
+    "entry": "Third-party security firms"
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+rted to the Security and Compliance teams through an internal ticketing application. 
+Issues are triaged and tracked using a ticketing system and monitored until resolved. 
+Data Backup and Recovery 
+Customer data is backed up daily and monitored by operations personnel for completion and exceptions. In the 
+event of an exception, operations personnel perform troubleshooting to identify the root cause and then re-run the 
+backup job immediately or as part of the next scheduled backup job depending on customer indicated 
+preferences within the documented work instructions.  
+Backup data is stored remotely where SimpleLegal personnel have no physical access. The backup infrastructure 
+resides on private networks logically segmented from other networks.  
+Incident Response 
+Incident response policies and procedures are in place to guide personnel in reporting and responding to 
+information technology incidents. Procedures exist to identify, report, and act upon system security breaches and
+
+Entity to Evaluate:
+Name: Amazon Web Services
+Description: Cloud hosting provider used for infrastructure capacity monitoring and service delivery.
+
+RESPONSE:
+{
+    "keep": true,
+    "type": "company",
+    "reason": "Amazon Web Services (AWS) is a legitimate external service provider offering cloud hosting and infrastructure services. It provides a distinct external service critical to system operations, such as infrastructure capacity monitoring and service delivery.",
+    "entry": {
+        "Name": "Amazon Web Services",
+        "Description": "Cloud hosting provider used for infrastructure capacity monitoring and service delivery."
+    }
+}
+---
+PROMPT:
+
+You are a SOC 2 domain expert verifying whether an extracted entity is a legitimate subservice organization.
+
+## Task
+Evaluate the following extracted entry and determine if it represents a **true external service provider** or something else.
+
+## Rules
+1. Keep only entities that provide a distinct external service or platform (e.g., AWS, Azure, Salesforce).
+2. Exclude entries that are:
+     - Frameworks, standards, operating systems, software, tools, or code libraries.
+     - Departments, job titles, internal teams, or descriptive terms.
+3. Identify the type of excluded entity precisely (e.g., OS, framework, internal team, generic term).
+4. Return reasoning that explains why the entity is or isn’t a valid subservice organization.
+
+## Output
+Return a single JSON object:
+{
+    "keep": <true or false>,
+    "type": "<company/framework/software/OS/component/etc.>",
+    "reason": "<brief justification>",
+    "entry": <original entry as provided>
+}
+
+Context from SOC 2 Report:
+mazon maintains the UPS units. 
+• 
+Amazon-owned data centers have generators to provide backup power in case of electrical failure. 
+• 
+Contracts are in place with third-party colocation service providers which include provisions to provide 
+fire suppression systems, air conditioning to maintain appropriate atmospheric conditions, UPS units 
+(unless maintained by Amazon), and redundant power supplies. Contracts also include provisions 
+requiring communication of incidents or events that impact Amazon assets and/or customers to AWS. 
+• 
+AWS performs periodic reviews of colocation service providers to validate adherence with AWS security 
+and operational standards. 
+• 
+Monitoring and alarming are configured by Service Owners to identify and notify operational and 
+management personnel of incidents when early warning thresholds are crossed on key operational 
+metrics. 
+• 
+Incidents are logged within a ticketing system, assigned a severity rating and tracked to resolution. 
+• 
+Critical AWS
+
+Entity to Evaluate:
+Name: Amazon Web Services (AWS)
+Description: Cloud hosting and infrastructure provider offering services such as data storage, computing, and networking.
+
+RESPONSE:
+{
+    "keep": true,
+    "type": "company",
+    "reason": "Amazon Web Services (AWS) is a legitimate external service provider offering cloud hosting and infrastructure services, which clearly aligns with the definition of a subservice organization. AWS provides distinct services such as data storage, computing, and networking, utilized to support the assessed entity's operations.",
+    "entry": "Amazon Web Services (AWS)"
+}
+---

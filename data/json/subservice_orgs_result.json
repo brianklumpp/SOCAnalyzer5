@@ -1,1 +1,309 @@
-{}
+{
+  "subservice_orgs": [
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Amazon Web Services",
+      "aliases": [
+        "AWS",
+        "Amazon Web Services (AWS)",
+        "Amazon Web Services"
+      ],
+      "third_party_page_ref": [
+        "Infrastructure",
+        "18",
+        "Complementary Subservice Organization Controls (CSOCs)",
+        "AWS is directly referenced in the description of infrastructure",
+        "backup systems",
+        "and colocation management.",
+        "Page 20",
+        "24"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Provisioning and management of physical infrastructure components."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.4",
+          "third_party_control_desc": "Recovery key materials used for disaster recovery processes by Key Management Service (KMS) are physically secured offline so that no single AWS employee can gain access to the key material."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC7.2",
+          "third_party_control_desc": "Access attempts to recovery key materials are reviewed by authorized operators on a cadence defined in team documentation."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "AWS performs periodic reviews of colocation service providers to validate adherence with AWS security and operational standards."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Backups of critical AWS system components are monitored for successful replication across multiple Availability Zones."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "SimpleLegal receives and reviews the AWS SOC 2 Type 2 report annually to assess AWS’s operational activities."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Monitors operations and controls to ensure suitability and effectiveness at AWS."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Communicates with AWS about compliance, planned changes, and potential issues."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Service delivery monitoring includes evaluation of CPU usage, disk storage, and network bandwidth on AWS infrastructure."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Amazon-owned data centers are protected by fire detection and suppression systems."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Amazon-owned data centers are air conditioned to maintain appropriate atmospheric conditions. Personnel and systems monitor and control air temperature and humidity at appropriate levels."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Uninterruptible Power Supply (UPS) units provide backup power in the event of an electrical failure in Amazon-owned data centers and third-party colocation sites where Amazon maintains the UPS units."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Amazon-owned data centers have generators to provide backup power in case of electrical failure."
+        }
+      ],
+      "dedup_reason": "The names represent the same cloud hosting and infrastructure provider, with abbreviations and slight variations in naming conventions.",
+      "third_party_confidence": 0.8,
+      "confidence_justification": [
+        "Aggregated from 3 variant rows; canonical_confidence = max(variant_confidences) = 0.8",
+        "Variants: AWS, Amazon Web Services (AWS), Amazon Web Services"
+      ],
+      "merged_from_count": 3,
+      "merged_from_variants": [
+        "AWS",
+        "Amazon Web Services (AWS)",
+        "Amazon Web Services"
+      ],
+      "merged_at": "2025-11-20T02:05:30Z"
+    },
+    {
+      "third_party_name": "Amazon Web Services",
+      "third_party_description": "Cloud hosting provider used for infrastructure capacity monitoring and service delivery.",
+      "third_party_page_ref": [
+        "Page 20",
+        "24"
+      ],
+      "third_party_confidence": 0.6,
+      "distance_from_so_keywords": 7,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Service delivery monitoring includes evaluation of CPU usage, disk storage, and network bandwidth on AWS infrastructure."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Amazon-owned data centers are protected by fire detection and suppression systems."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Amazon-owned data centers are air conditioned to maintain appropriate atmospheric conditions. Personnel and systems monitor and control air temperature and humidity at appropriate levels."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Uninterruptible Power Supply (UPS) units provide backup power in the event of an electrical failure in Amazon-owned data centers and third-party colocation sites where Amazon maintains the UPS units."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Amazon-owned data centers have generators to provide backup power in case of electrical failure."
+        }
+      ],
+      "source_context": "rted to the Security and Compliance teams through an internal ticketing application. \nIssues are triaged and tracked using a ticketing system and monitored until resolved. \nData Backup and Recovery \nCustomer data is backed up daily and monitored by operations personnel for completion and exceptions. In the \nevent of an exception, operations personnel perform troubleshooting to identify the root cause and then re-run the \nbackup job immediately or as part of the next scheduled backup job depending on customer indicated \npreferences within the documented work instructions.  \nBackup data is stored remotely where SimpleLegal personnel have no physical access. The backup infrastructure \nresides on private networks logically segmented from other networks.  \nIncident Response \nIncident response policies and procedures are in place to guide personnel in reporting and responding to \ninformation technology incidents. Procedures exist to identify, report, and act upon system security breaches and",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "Identified as canonical form of group; confidence preserved at 0.7",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Amazon Web Services (AWS)",
+      "third_party_description": "Cloud hosting and infrastructure provider offering services such as data storage, computing, and networking.",
+      "third_party_page_ref": [
+        "AWS is directly referenced in the description of infrastructure",
+        "backup systems",
+        "and colocation management."
+      ],
+      "third_party_confidence": 0.4,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "AWS performs periodic reviews of colocation service providers to validate adherence with AWS security and operational standards."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Backups of critical AWS system components are monitored for successful replication across multiple Availability Zones."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "SimpleLegal receives and reviews the AWS SOC 2 Type 2 report annually to assess AWS’s operational activities."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Monitors operations and controls to ensure suitability and effectiveness at AWS."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Communicates with AWS about compliance, planned changes, and potential issues."
+        }
+      ],
+      "source_context": "mazon maintains the UPS units. \n• \nAmazon-owned data centers have generators to provide backup power in case of electrical failure. \n• \nContracts are in place with third-party colocation service providers which include provisions to provide \nfire suppression systems, air conditioning to maintain appropriate atmospheric conditions, UPS units \n(unless maintained by Amazon), and redundant power supplies. Contracts also include provisions \nrequiring communication of incidents or events that impact Amazon assets and/or customers to AWS. \n• \nAWS performs periodic reviews of colocation service providers to validate adherence with AWS security \nand operational standards. \n• \nMonitoring and alarming are configured by Service Owners to identify and notify operational and \nmanagement personnel of incidents when early warning thresholds are crossed on key operational \nmetrics. \n• \nIncidents are logged within a ticketing system, assigned a severity rating and tracked to resolution. \n• \nCritical AWS",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "+0.1: distance_from_so_keywords is 3 (very close)",
+        "Marked as variant of Amazon Web Services; confidence reduced 0.8 -> 0.2",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "AWS",
+      "third_party_description": "Infrastructure as a Service (IaaS) provider that hosts SimpleLegal's service within the AWS cloud platform environment. Physical infrastructure components are provisioned and managed by AWS.",
+      "third_party_page_ref": [
+        "Infrastructure",
+        "18",
+        "Complementary Subservice Organization Controls (CSOCs)"
+      ],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Provisioning and management of physical infrastructure components."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": "CC6.4",
+          "third_party_control_desc": "Recovery key materials used for disaster recovery processes by Key Management Service (KMS) are physically secured offline so that no single AWS employee can gain access to the key material."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": "CC7.2",
+          "third_party_control_desc": "Access attempts to recovery key materials are reviewed by authorized operators on a cadence defined in team documentation."
+        }
+      ],
+      "source_context": " the achievement of commitments, relevant laws \nand regulations, and other system requirements. Such requirements are communicated in SimpleLegal’s system \npolicies and procedures, system design documentation, and contracts with customers. Information security \npolicies define an organization-wide approach to how systems and data are protected. These include policies \naround system design, development, and operations, as well as management of internal business systems and \nnetworks. In addition to these policies, standard operating procedures have been documented on how to carry out \nspecific manual and automated processes required in the development and operation of SimpleLegal’s system. \nComponents of the System \nInfrastructure \nPrimary infrastructure used to provide SimpleLegal’s Legal Spend and Matter Management Software System \nincludes the following:  \nHardware \nType \nPurpose \nAWS \nInfrastructure as a \nService (IaaS) \nSimpleLegal hosts its service within AWS cloud service platfor",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "+0.1: distance_from_so_keywords is 3 (very close)",
+        "Marked as variant of Amazon Web Services; confidence reduced 0.8 -> 0.2",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Third-party security firms",
+      "third_party_description": "External security organizations contracted for penetration testing using industry-standard methodologies.",
+      "third_party_page_ref": [
+        "System Monitoring Section"
+      ],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 6,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Perform penetration testing and vulnerability analysis of systems."
+        }
+      ],
+      "source_context": "ing \n• \nPolicy and process updates \n• \nDepartmental meetings summarizing events and changes \n• \nUse of e-mail systems \nSystem Monitoring \nSimpleLegal performs system monitoring activities to continuously assess the quality of internal control over time \nand ensure that any corrective actions are completed in a timely manner. Examples of system monitoring \nprocesses in place include: \n• \nFirewalls – Firewalls protecting the internal network from the public network are implemented, configured, \nand managed by the SimpleLegal administration staff. Firewalls utilize access rules to grant or deny \naccess to internal resources.  \n• \nVulnerability Scanning – Scanning is performed by a third-party vendor on a monthly basis in accordance \nwith SimpleLegal policy. The third-party vendor uses industry standard scanning technologies and a \nformal methodology specified by Open Web Application Security Project (OWASP). These technologies \nare customized to test the organization's infrastructure and ",
+      "confidence_justification": [
+        "Filtered by GPT: The entry 'Third-party security firms' does not represent a specific, named external service provider. It is a broad, generic term referring to unaffiliated security organizations rather than a distinct subservice organization, platform, or service.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "third-party security firms"
+    },
+    {
+      "third_party_name": "SimpleLegal",
+      "third_party_description": "Legal operations management software providing tools for spend management, matter management, and reporting.",
+      "third_party_page_ref": [
+        "Page 19"
+      ],
+      "third_party_confidence": 0.0,
+      "distance_from_so_keywords": 6,
+      "likely_so": "No",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": null
+        }
+      ],
+      "source_context": "ocedures include change request and \ninitiation processes, documentation requirements, development practices, quality assurance testing requirements, \nand required approval procedures.  \nA ticketing system is utilized to document the change control procedures for changes in the application and \nimplementation of new changes. Quality assurance testing (QAT) and user acceptance testing (UAT) results are \ndocumented and maintained with the associated change request. Development and testing are performed in an \nenvironment that is logically separated from the production environment. Management approves changes prior to \nmigration to the production environment and documents those approvals within the ticketing system.  \nVersion control software is utilized to maintain source code versions and migrate source code through the \ndevelopment process to the production environment. The version control software maintains a history of code \nchanges to support rollback capabilities and tracks changes",
+      "confidence_justification": [
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "-0.2: likely_so is No"
+      ],
+      "canonical_name": "simplelegal"
+    },
+    {
+      "third_party_name": "OWASP (Open Web Application Security Project)",
+      "third_party_description": "A global organization providing frameworks, standards, and methodologies for improving the security of software systems. Mentioned in the context of vulnerability scanning methodology.",
+      "third_party_page_ref": [
+        "System Monitoring Section"
+      ],
+      "third_party_confidence": 0.0,
+      "distance_from_so_keywords": 6,
+      "likely_so": "No",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "ing \n• \nPolicy and process updates \n• \nDepartmental meetings summarizing events and changes \n• \nUse of e-mail systems \nSystem Monitoring \nSimpleLegal performs system monitoring activities to continuously assess the quality of internal control over time \nand ensure that any corrective actions are completed in a timely manner. Examples of system monitoring \nprocesses in place include: \n• \nFirewalls – Firewalls protecting the internal network from the public network are implemented, configured, \nand managed by the SimpleLegal administration staff. Firewalls utilize access rules to grant or deny \naccess to internal resources.  \n• \nVulnerability Scanning – Scanning is performed by a third-party vendor on a monthly basis in accordance \nwith SimpleLegal policy. The third-party vendor uses industry standard scanning technologies and a \nformal methodology specified by Open Web Application Security Project (OWASP). These technologies \nare customized to test the organization's infrastructure and ",
+      "confidence_justification": [
+        "Filtered by GPT: OWASP is a global organization providing standards, methodologies, and best practices for application security. It is not a distinct external service provider but rather a source of guidance and frameworks (e.g., OWASP Top Ten, OWASP Testing Guide) often used in security programs.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "-0.2: likely_so is No"
+      ],
+      "canonical_name": "owasp"
+    }
+  ]
+}

@@ -632,11 +632,28 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         standardized_results.update(gpt_summary)
         logger.debug(f"Added GPT usage summary: {gpt_summary['total_calls']} calls, ${gpt_summary['gpt_cost']}")
         
+        # Add PDF filename and file bytes to results for database storage
+        try:
+            standardized_results["pdf_filename"] = os.path.basename(pdf_path)
+            logger.debug(f"Added PDF filename: {standardized_results['pdf_filename']}")
+            
+            # Read PDF file as binary and store as bytes
+            with open(pdf_path, 'rb') as pdf_file:
+                pdf_bytes = pdf_file.read()
+            standardized_results["pdf_file"] = pdf_bytes
+            logger.debug(f"Added PDF file ({len(pdf_bytes)} bytes)")
+        except Exception as e:
+            logger.error(f"Failed to read PDF file {pdf_path}: {e}")
+            standardized_results["pdf_filename"] = None
+            standardized_results["pdf_file"] = None
+        
         # --- Write combined extraction result to a file for troubleshooting ---
         try:
             combined_result_path = data_path('data/json/combined_result.json')
+            # Don't write pdf_file bytes to JSON (not JSON-serializable)
+            results_for_json = {k: v for k, v in standardized_results.items() if k != 'pdf_file'}
             with open(combined_result_path, 'w', encoding='utf-8') as f:
-                json.dump(standardized_results, f, indent=2, ensure_ascii=False)
+                json.dump(results_for_json, f, indent=2, ensure_ascii=False)
             logger.info(f"Combined extraction result written to {combined_result_path}")
         except Exception as e:
             logger.error(f"Failed to write combined_result.json: {e}\n{traceback.format_exc()}")
@@ -648,7 +665,6 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
 
 import argparse
 import json
-import os
 from .pdf_handler import extract_text_from_pdf, find_section_candidates
 from .config import SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE
 

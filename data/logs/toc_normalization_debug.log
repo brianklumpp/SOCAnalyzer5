@@ -1,8 +1,9 @@
 Normalized TOC Headings:
-  TOC: 'Section 1: Okta’s Management Assertion' => 'section1oktasmanagementassertion'
-  TOC: 'Section 2: Independent Service Auditor’s Assurance Report' => 'section2independentserviceauditorsassurancereport'
-  TOC: 'Section 3: Description of Okta’s Identity as a Service (“IDaaS”) System Relevant to Security, Availability, and Confidentiality' => 'section3descriptionofoktasidentityasaserviceidaassystemrelevanttosecurityavailabilityandconfidentiality'
-  TOC: 'Section 4: Okta’s Controls, Trust Service Criteria, Service Auditor’s Test of Controls, and Test Results' => 'section4oktascontrolstrustservicecriteriaserviceauditorstestofcontrolsandtestresults'
+  TOC: 'SECTION I. INDEPENDENT SERVICE AUDITOR’S REPORT' => 'sectioniindependentserviceauditorsreport'
+  TOC: 'SECTION II. MANAGEMENT’S ASSERTION' => 'sectioniimanagementsassertion'
+  TOC: 'SECTION III. DESCRIPTION OF THE LEGAL SPEND AND MATTER MANAGEMENT SOFTWARE SYSTEM' => 'sectioniiidescriptionofthelegalspendandmattermanagementsoftwaresystem'
+  TOC: 'SECTION IV. TESTING MATRICES' => 'sectionivtestingmatrices'
+  TOC: 'SECTION V. OTHER INFORMATION PROVIDED BY SIMPLELEGAL' => 'sectionvotherinformationprovidedbysimplelegal'
 
 Topic: Management_Assertion
   Priority Keywords (normalized):

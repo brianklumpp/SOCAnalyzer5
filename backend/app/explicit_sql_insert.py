@@ -73,7 +73,7 @@ def _parse_datetime(val):
         return val
     return None
 
-def insert_extracted_data(json_path: str):
+def insert_extracted_data(json_path: str, pdf_path: str = None):
     # Load environment variables from .env
     load_dotenv()
     DATABASE_URL = os.getenv("DATABASE_URL_SYNC")
@@ -86,9 +86,26 @@ def insert_extracted_data(json_path: str):
         format='%(asctime)s %(levelname)s: %(message)s',
         level=logging.INFO
     )
+    def deep_sanitize(obj):
+        """Recursively sanitize nested structures to handle bytes."""
+        if isinstance(obj, bytes):
+            return obj.decode('utf-8', errors='replace')
+        elif isinstance(obj, dict):
+            return {k: deep_sanitize(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [deep_sanitize(item) for item in obj]
+        elif isinstance(obj, bool):
+            return obj
+        elif obj is None:
+            return None
+        return obj
+    
     def sanitize_value(val):
+        if isinstance(val, bytes):
+            return val.decode('utf-8', errors='replace')
         if isinstance(val, (list, dict)):
-            return json.dumps(val, ensure_ascii=False)
+            sanitized = deep_sanitize(val)
+            return json.dumps(sanitized, ensure_ascii=False)
         if isinstance(val, bool):
             return str(val)
         if val is None:
@@ -111,36 +128,59 @@ def insert_extracted_data(json_path: str):
     summary = {"company": 0, "control": 0, "cuec": 0, "product": 0, "subservice_org": 0, "errors": []}
     try:
         # Insert a new scan row and get scan_id
+        # Handle both nested coverage_period dict and top-level start_date/end_date
         coverage_period = data.get("coverage_period")
         start_date = None
         end_date = None
         if isinstance(coverage_period, dict):
             start_date = _parse_datetime(coverage_period.get("start_date"))
             end_date = _parse_datetime(coverage_period.get("end_date"))
+        else:
+            # Try top-level fields
+            start_date = _parse_datetime(data.get("start_date"))
+            end_date = _parse_datetime(data.get("end_date"))
         # Report date normalization
         report_date_norm = _parse_datetime(data.get("report_date"))
         # Product and auditor names normalized to plain strings
         product_name = _extract_name(data.get("product"), keys=("name", "product"))
         auditor_name = _extract_name(data.get("auditor"), keys=("name", "auditor", "firm"))
+        
+        # Read PDF file if path provided
+        pdf_filename = data.get("pdf_filename")
+        pdf_bytes = None
+        if pdf_path and os.path.isfile(pdf_path):
+            try:
+                with open(pdf_path, 'rb') as f:
+                    pdf_bytes = f.read()
+                if not pdf_filename:
+                    pdf_filename = os.path.basename(pdf_path)
+                logging.info(f"Read PDF file: {pdf_filename} ({len(pdf_bytes)} bytes)")
+            except Exception as e:
+                logging.error(f"Failed to read PDF file {pdf_path}: {e}")
+        
         scan_fields = [
             "product", "report_date", "coverage_start", "coverage_end", "auditor", "result_json", "scan_date",
             "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id"
         ]
+        # Filter out pdf_file bytes from data before JSON serialization
+        data_for_json = {k: v for k, v in data.items() if k != 'pdf_file'}
+        # Deep sanitize to handle nested bytes objects
+        data_for_json = deep_sanitize(data_for_json)
         scan_values = [
             sanitize_value(product_name),
             report_date_norm,
             start_date,
             end_date,
             sanitize_value(auditor_name),
-            json.dumps(data, ensure_ascii=False),
+            json.dumps(data_for_json, ensure_ascii=False),
             datetime.utcnow(),
             sanitize_value(data.get("gpt_cost")),
             sanitize_value(data.get("gpt_model")),
             sanitize_value(data.get("estimated_time_seconds")),
             sanitize_value(data.get("gpt_usage_details")),
             sanitize_value(data.get("extracted_text")),
-            sanitize_value(data.get("pdf_filename")),
-            sanitize_value(data.get("pdf_file")),
+            pdf_filename,
+            pdf_bytes,  # Pass bytes directly, psycopg2 handles BYTEA
             sanitize_value(data.get("company_id")),
         ]
         scan_sql = f"INSERT INTO scan ({', '.join(scan_fields)}) VALUES ({', '.join(['%s']*len(scan_fields))}) RETURNING id"
@@ -186,6 +226,9 @@ def insert_extracted_data(json_path: str):
                         ctrl['has_deviation'] = False
                     if 'deviation_desc' not in ctrl:
                         ctrl['deviation_desc'] = None
+                    # Map control_gpt_conf_justification (JSON) → confidence_calc (database)
+                    if 'control_gpt_conf_justification' in ctrl and 'confidence_calc' not in ctrl:
+                        ctrl['confidence_calc'] = ctrl['control_gpt_conf_justification']
                     values = [sanitize_value(ctrl.get(f)) for f in config.TABLE_FIELD_MAP["control"][:-1]] + [scan_id]
                     fields = config.TABLE_FIELD_MAP["control"]
                     sql = f"INSERT INTO control ({', '.join(fields)}) VALUES ({', '.join(['%s']*len(fields))})"

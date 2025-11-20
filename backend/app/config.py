@@ -108,6 +108,24 @@ BATCH_MAPPING_DEFAULT_THROTTLE_MS = int(os.getenv("BATCH_MAPPING_DEFAULT_THROTTL
 BATCH_MAPPING_ENABLE_AUTO_THROTTLE = os.getenv("BATCH_MAPPING_ENABLE_AUTO_THROTTLE", "true").lower() == "true"
 BATCH_MAPPING_TARGET_CPU_PCT = int(os.getenv("BATCH_MAPPING_TARGET_CPU_PCT", "60"))
 
+# TSC Anomaly Detection Configuration
+# Base threshold for flagging TSC headings as anomalies (e.g., CC6.1 appearing 20+ times)
+TSC_ANOMALY_BASE_THRESHOLD = int(os.getenv("TSC_ANOMALY_BASE_THRESHOLD", "20"))
+# Enable adaptive threshold based on report size (10% of total controls)
+TSC_ANOMALY_ADAPTIVE_ENABLED = os.getenv("TSC_ANOMALY_ADAPTIVE_ENABLED", "true").lower() == "true"
+# Minimum threshold to prevent false positives in small reports
+TSC_ANOMALY_MIN_THRESHOLD = int(os.getenv("TSC_ANOMALY_MIN_THRESHOLD", "5"))
+
+# Control Merge Suggestions Configuration
+# Minimum confidence score (0.0-1.0) to suggest merging duplicate controls
+MERGE_SUGGESTION_MIN_CONFIDENCE = float(os.getenv("MERGE_SUGGESTION_MIN_CONFIDENCE", "0.50"))
+# Maximum number of merge suggestions to return per request
+MERGE_SUGGESTION_MAX_RESULTS = int(os.getenv("MERGE_SUGGESTION_MAX_RESULTS", "50"))
+
+# Framework Preview Rate Limiting
+# Maximum preview requests per scan per minute
+FRAMEWORK_PREVIEW_RATE_LIMIT = int(os.getenv("FRAMEWORK_PREVIEW_RATE_LIMIT", "10"))
+
 # Docker control (frontend UI) enable flag
 DOCKER_CONTROL_ENABLED = os.getenv("DOCKER_CONTROL_ENABLED", "false").lower() == "true"
 
@@ -151,6 +169,10 @@ JOB_WATCHDOG_IDLE_SECONDS = int(os.getenv("JOB_WATCHDOG_IDLE_SECONDS", "0"))
 # Control extractor progress watchdog (used by analyze.py)
 CONTROL_WATCHDOG_ENABLED = os.getenv("CONTROL_WATCHDOG_ENABLED", "true").lower() == "true"
 CONTROL_WATCHDOG_MAX_MINUTES = int(os.getenv("CONTROL_WATCHDOG_MAX_MINUTES", "25"))
+
+# --- Entity Extraction Configuration ---
+MAX_SEARCH_OCCURRENCES = 3  # Warn user if more than this many occurrences found
+ENTITY_EXTRACTION_TIMEOUT = 120  # Timeout in seconds for entity extraction endpoint
 
 # --- GPT Prompts for Section Detection and TOC Parsing ---
 
@@ -533,6 +555,73 @@ Return one JSON object:
 
 SOC 2 Report Text:
 {text}
+"""
+
+# Two-stage auditor extraction prompts
+AUDITOR_COMPANY_EXTRACTION_PROMPT = """
+You are an expert SOC 2 report analyst. Extract ALL company names, firm names, and organization names mentioned in this text.
+
+## Context
+- This text comes from a SOC 2 examination report (pages 1-3 and/or Service Auditor's Report section)
+- Look for companies near:
+  - "Independent Service Auditor's Report" headings
+  - Headers and footers on each page
+  - Auditor signatures and letterheads
+  - Opinion statements and examination language
+  - Company descriptions and service provider mentions
+
+## Task
+Extract EVERY company, firm, or organization name you find. Include:
+- Audit firms (CPA firms like Deloitte, KPMG, etc.)
+- The company being audited (service provider)
+- Parent companies
+- Subservice organizations
+- Any other companies mentioned
+
+## Output Format
+Return ONLY a JSON array of company names as strings:
+["Company Name 1", "Company Name 2", "Company Name 3", ...]
+
+If you find no company names, return: []
+
+## Important
+- Extract the full legal name as it appears (e.g., "BDO USA, P.C." not "BDO")
+- Include all variations you find (we will deduplicate later)
+- Do NOT filter or exclude any companies at this stage
+
+TEXT:
+{text}
+"""
+
+AUDITOR_IDENTIFICATION_PROMPT = """
+You are an expert SOC 2 auditor. Identify which company from the provided list is the independent auditing firm that performed the SOC 2 examination.
+
+## Context
+{company_line}
+
+## Companies Found in Report
+The following companies were extracted from the report text:
+{companies}
+
+## Task
+Identify which ONE company is the independent service auditor (CPA firm) that conducted the SOC 2 examination.
+
+## Reasoning Guidelines
+Consider:
+1. **Industry knowledge**: Which companies are known SOC 2 audit firms? (Big 4: Deloitte, PwC, KPMG, EY; Top regional: BDO, RSM, Grant Thornton, Schellman, etc.)
+2. **Context clues**: Which company appears near "Independent Service Auditor's Report", "examined", "performed by", opinion language?
+3. **Naming patterns**: CPA firms often include "LLP", "LLC", "P.C.", "& Company", "Assurance" in their legal names
+4. **Exclusions**: Do NOT select the company being audited, parent companies, or subservice organizations
+
+## Output Format
+Return ONLY a JSON object with this exact structure:
+{{
+    "auditor": "<full legal name of audit firm or null>",
+    "confidence": <float between 0.0 and 1.0>,
+    "reasoning": "<2-3 sentence explanation of how you identified the auditor based on context clues, industry knowledge, and naming patterns>"
+}}
+
+If you cannot confidently identify the auditor, set auditor=null and confidence=0.0.
 """
 
 # Prompt for extracting the company being audited and any parent company
@@ -1513,7 +1602,7 @@ CONTROL_TESTING_MAX_LINE = 2000  # Only process up to this line number when test
 
 # Hang prevention safeguards for control extraction
 CONTROL_HANG_PREVENTION_ENABLED = True  # Enable hang prevention safeguards
-CONTROL_MAX_PROCESSING_MINUTES = 30     # Maximum processing time before timeout
+CONTROL_MAX_PROCESSING_MINUTES = 60     # Maximum processing time before timeout
 CONTROL_MAX_CONSECUTIVE_FAILURES = 10   # Stop after this many consecutive failures
 CONTROL_DETECT_NON_CONTROL_CONTENT = False  # Detect and stop at mapping tables/non-control content (disabled due to false positives)
 
@@ -1648,7 +1737,7 @@ Analyze this text (first line is line {start_line}). Extract ALL control blocks 
 TABLE_FIELD_MAP = {
     "company": ["name", "parent_company", "confidence", "scan_id"],
     "control": [
-        "control_id", "control_desc", "control_test", "control_test_results", "has_deviation", "deviation_desc", "control_page_ref", "control_line_ref", "control_seq",
+        "control_id", "control_desc", "control_test", "control_test_results", "has_deviation", "deviation_desc", "control_page_refs", "control_line_ref", "control_seq",
         "control_tsc_id", "control_coso_id", "control_tsc_similarity", "control_coso_similarity", "control_tsc_confidence_pct",
         "control_coso_confidence_pct", "control_closest_framework", "control_tsc_section", "control_coso_section", "control_soc_domain",
         "control_status", "merged_to_control_id", "control_gpt_opinion", "control_gpt_reasoning", "control_confidence", "confidence_calc", "scan_id"
@@ -1965,3 +2054,57 @@ GPT_PROMPTS = {
     'cuec_consolidation': CUEC_CONSOLIDATION_PROMPT,
     'executive_summary': EXECUTIVE_SUMMARY_PROMPT,
 }
+
+# --- Entity Extraction from Context Prompt ---
+ENTITY_EXTRACTION_FROM_CONTEXT_PROMPT = """
+You are an expert SOC 2 report analyst. Extract structured information for a {entity_type} from the provided text context.
+
+## Search Term
+{search_text}
+
+## Text Context
+The following context contains {occurrence_count} occurrence(s) of the search term. Page boundaries are marked with === PAGE X ===.
+
+{text_context}
+
+## Task
+Extract the following fields based on the entity type:
+
+### For entity_type="control":
+- control_id: The control identifier (e.g., CC6.1, CC7.2)
+- description: Full description of the control
+- test_procedures: Testing procedures performed
+- test_results: Results of testing
+- deviation_description: Any deviations or exceptions noted
+- page_ref: Page number where the control appears (from === PAGE X === markers)
+
+### For entity_type="cuec":
+- description: Description of the complementary user entity control
+- tsc_id: TSC framework identifier
+- coso_id: COSO framework identifier
+- justification: Justification for the CUEC
+- page_ref: Page number (from === PAGE X === markers)
+
+### For entity_type="subservice_org":
+- name: Name of the subservice organization
+- description: Description of services provided
+- page_ref: Page number (from === PAGE X === markers)
+
+## Output Format
+Return a JSON object with:
+- The extracted fields for the entity type (use null for fields not found)
+- confidence: 0.0-1.0 indicating extraction confidence
+
+Example for control:
+{{
+  "control_id": "CC6.1",
+  "description": "The entity implements logical access security...",
+  "test_procedures": "We inspected system configurations...",
+  "test_results": "No exceptions noted",
+  "deviation_description": null,
+  "page_ref": 42,
+  "confidence": 0.95
+}}
+
+If the search term does not correspond to a valid {entity_type}, return confidence 0.0 and null for all fields except confidence.
+"""

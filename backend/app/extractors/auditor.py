@@ -60,6 +60,109 @@ def extract_title_page(txt_lines):
         title_page_lines.append(line)
     return ''.join(title_page_lines)
 
+def extract_pages_range(txt_lines: List[str], start_page: int, end_page: int) -> str:
+    """
+    Extract text from a range of pages.
+    
+    Args:
+        txt_lines: List of text lines from extracted PDF
+        start_page: Starting page number (1-indexed)
+        end_page: Ending page number (1-indexed, inclusive)
+        
+    Returns:
+        Extracted text from specified page range
+    """
+    result = []
+    current_page = 0
+    in_range = False
+    
+    for line in txt_lines:
+        if line.strip().startswith('=== PAGE '):
+            try:
+                current_page = int(line.strip().split()[2])
+                in_range = start_page <= current_page <= end_page
+            except Exception:
+                continue
+        
+        if in_range:
+            result.append(line)
+    
+    return ''.join(result)
+
+def detect_header_footer_auditor(txt_lines: List[str]) -> Tuple[Optional[str], float]:
+    """
+    Detect auditor firm from header/footer patterns across multiple pages.
+    
+    Looks for repeated text in the first/last 2 lines of pages 1-5 and matches
+    against known auditor firms.
+    
+    Args:
+        txt_lines: List of text lines from extracted PDF
+        
+    Returns:
+        Tuple of (auditor_name, confidence_boost)
+        confidence_boost is +0.20 if match found, 0 otherwise
+    """
+    firms = load_auditor_firms()
+    
+    # Extract first/last 2 lines from pages 1-5
+    page_boundaries = {}
+    current_page = 0
+    page_lines = []
+    
+    for line in txt_lines:
+        if line.strip().startswith('=== PAGE '):
+            # Save previous page if exists
+            if current_page > 0 and 1 <= current_page <= 5:
+                page_boundaries[current_page] = page_lines.copy()
+            
+            # Start new page
+            try:
+                current_page = int(line.strip().split()[2])
+                page_lines = []
+            except Exception:
+                continue
+        else:
+            page_lines.append(line.strip())
+    
+    # Save last page if in range
+    if current_page > 0 and 1 <= current_page <= 5:
+        page_boundaries[current_page] = page_lines
+    
+    # Extract headers and footers (first/last 2 non-empty lines)
+    headers = []
+    footers = []
+    
+    for page_num in sorted(page_boundaries.keys()):
+        lines = [l for l in page_boundaries[page_num] if l]  # Filter empty
+        if len(lines) >= 2:
+            headers.extend(lines[:2])
+            footers.extend(lines[-2:])
+    
+    # Find repeated patterns (appearing on >=3 pages)
+    all_header_footer = headers + footers
+    header_footer_lower = [h.lower() for h in all_header_footer]
+    
+    # Count occurrences
+    from collections import Counter
+    pattern_counts = Counter(header_footer_lower)
+    
+    # Find patterns that appear >= 3 times
+    repeated_patterns = [pattern for pattern, count in pattern_counts.items() if count >= 3]
+    
+    if not repeated_patterns:
+        return None, 0.0
+    
+    # Search for auditor firms in repeated patterns
+    for pattern in repeated_patterns:
+        for short, legal in firms:
+            short_lower = short.lower()
+            if short_lower in pattern or f"{short_lower}'s" in pattern or f"{short_lower}'s" in pattern:
+                logging.info(f"Header/footer detection found auditor: {legal} (pattern: '{pattern[:50]}...')")
+                return legal, 0.20
+    
+    return None, 0.0
+
 def verify_auditor_in_text(auditor_name: str, text: str) -> bool:
     """Check if the auditor name actually appears in the source text."""
     if not auditor_name:
@@ -67,67 +170,237 @@ def verify_auditor_in_text(auditor_name: str, text: str) -> bool:
     # Case-insensitive search for the auditor name in text
     return auditor_name.lower() in text.lower()
 
-def extract_auditor_with_validation(text: str, company_line: str, max_attempts: int = 5) -> Tuple[Optional[str], float, List[str], str]:
+def extract_auditor_with_validation(text: str, company_line: str) -> Tuple[Optional[str], float, List[str], str]:
     """
-    Extract auditor with text validation and retry logic.
+    Two-stage auditor extraction with single-pass approach:
+    Stage 1: Extract all company names from text (chunked)
+    Stage 2: Identify which is the audit firm (single GPT call)
+    
     Returns: (auditor_name, confidence, responses, validation_note)
     """
-    chunks = chunk_text(text)
+    # Initialize debug log file
+    debug_log_path = config.JSON_DIR.parent / 'logs' / 'auditor_extraction_debug.log'
+    debug_log_path.parent.mkdir(parents=True, exist_ok=True)
     
-    for attempt in range(max_attempts):
-        logging.info(f"Auditor extraction attempt {attempt + 1}/{max_attempts}")
-        responses = []
+    with open(debug_log_path, 'w', encoding='utf-8') as debug_log:
+        debug_log.write("=" * 80 + "\n")
+        debug_log.write("TWO-STAGE AUDITOR EXTRACTION\n")
+        debug_log.write("=" * 80 + "\n\n")
+        debug_log.write(f"Text preview (first 500 chars):\n{text[:500]}...\n\n")
+        debug_log.write(f"Company exclusion context: {company_line}\n\n")
         
-        # Use standard prompt for first attempt, retry prompt for subsequent attempts
-        if attempt == 0:
-            prompt_template = config.AUDITOR_EXTRACTION_PROMPT_EXCLUDE
-        else:
-            prompt_template = config.AUDITOR_EXTRACTION_PROMPT_RETRY
+        # ============================================================
+        # STAGE 1: Extract all company names from text (chunked)
+        # ============================================================
+        debug_log.write("=" * 80 + "\n")
+        debug_log.write("STAGE 1: COMPANY NAME EXTRACTION\n")
+        debug_log.write("=" * 80 + "\n")
+        
+        chunks = chunk_text(text)
+        logging.info(f"Stage 1: Processing {len(chunks)} text chunks to extract company names")
+        debug_log.write(f"Text split into {len(chunks)} chunks\n\n")
+        
+        all_companies = []
+        stage1_responses = []
         
         for idx, chunk in enumerate(chunks):
-            full_prompt = prompt_template.format(
-                text=chunk,
-                company_line=company_line
-            )
+            full_prompt = config.AUDITOR_COMPANY_EXTRACTION_PROMPT.format(text=chunk)
+            logging.debug(f'Stage 1, Chunk {idx + 1}/{len(chunks)}: Prompt length = {len(full_prompt)} chars')
             
-            logging.debug(f'Attempt {attempt + 1}, Prompt chunk {idx}: {full_prompt[:500]}...')
             response = gpt_extract(full_prompt, 'auditor_extractor')
-            logging.debug(f'Attempt {attempt + 1}, GPT response chunk {idx}: {response}')
-            responses.append(response)
-        
-        # Parse responses - take first non-empty auditor name
-        auditor = None
-        confidence = 0
-        for resp in responses:
+            stage1_responses.append(response)
+            
+            # Parse JSON array of company names
             try:
-                data = json.loads(resp)
-                if data.get('auditor'):
-                    auditor = data['auditor']
-                    confidence = data.get('confidence', 1)
-                    break
+                companies = json.loads(response)
+                if isinstance(companies, list):
+                    all_companies.extend(companies)
+                    debug_log.write(f"Chunk {idx + 1}: Found {len(companies)} companies\n")
+                    for company in companies:
+                        debug_log.write(f"  - {company}\n")
+                else:
+                    logging.warning(f"Stage 1, Chunk {idx + 1}: Response is not a list: {response}")
+                    debug_log.write(f"Chunk {idx + 1}: Invalid response (not a list)\n")
             except Exception as e:
-                logging.error(f'Failed to parse GPT response: {resp} | Error: {e}')
+                logging.error(f'Stage 1, Chunk {idx + 1}: Failed to parse GPT response: {response} | Error: {e}')
+                debug_log.write(f"Chunk {idx + 1}: Parse error - {e}\n")
         
-        # If no auditor found, break early
+        # Deduplicate companies (case-insensitive)
+        unique_companies = []
+        seen_lower = set()
+        for company in all_companies:
+            if company and company.lower() not in seen_lower:
+                unique_companies.append(company)
+                seen_lower.add(company.lower())
+        
+        logging.info(f"Stage 1: Processed {len(chunks)} chunks, found {len(unique_companies)} unique companies")
+        debug_log.write(f"\nStage 1 Result: {len(unique_companies)} unique companies\n")
+        debug_log.write("Unique companies found:\n")
+        for company in unique_companies:
+            debug_log.write(f"  - {company}\n")
+        
+        # If no companies found, try regex fallback immediately
+        if not unique_companies:
+            logging.warning("Stage 1: No companies extracted by GPT - trying regex fallback")
+            debug_log.write("\nNo companies found - attempting regex fallback...\n")
+            fallback_auditor = _regex_fallback_search(text)
+            if fallback_auditor:
+                debug_log.write(f"Regex fallback found: {fallback_auditor}\n")
+                debug_log.write(f"Final confidence: 0.65 (regex fallback)\n")
+                return fallback_auditor, 0.65, stage1_responses, "Regex fallback (Stage 1 found no companies)"
+            else:
+                debug_log.write("Regex fallback found nothing\n")
+                return None, 0, stage1_responses, "No companies found in Stage 1 or regex fallback"
+        
+        # ============================================================
+        # STAGE 2: Identify which company is the audit firm
+        # ============================================================
+        debug_log.write("\n" + "=" * 80 + "\n")
+        debug_log.write("STAGE 2: AUDITOR IDENTIFICATION\n")
+        debug_log.write("=" * 80 + "\n")
+        
+        companies_list = json.dumps(unique_companies, indent=2)
+        identification_prompt = config.AUDITOR_IDENTIFICATION_PROMPT.format(
+            company_line=company_line,
+            companies=companies_list
+        )
+        
+        logging.info(f"Stage 2: Identifying auditor from {len(unique_companies)} companies")
+        debug_log.write(f"Companies sent to Stage 2:\n{companies_list}\n\n")
+        
+        stage2_response = gpt_extract(identification_prompt, 'auditor_extractor')
+        
+        # Parse Stage 2 response
+        try:
+            data = json.loads(stage2_response)
+            auditor = data.get('auditor')
+            base_confidence = float(data.get('confidence', 0))
+            reasoning = data.get('reasoning', '')
+            
+            debug_log.write(f"Stage 2 Response:\n")
+            debug_log.write(f"  Auditor: {auditor}\n")
+            debug_log.write(f"  Base confidence: {base_confidence:.3f}\n")
+            debug_log.write(f"  Reasoning: {reasoning}\n\n")
+            
+            logging.info(f"Stage 2: GPT identified auditor = '{auditor}', confidence = {base_confidence:.3f}")
+            logging.info(f"Stage 2: GPT reasoning = {reasoning}")
+            
+        except Exception as e:
+            logging.error(f'Stage 2: Failed to parse GPT response: {stage2_response} | Error: {e}')
+            debug_log.write(f"Stage 2 Parse Error: {e}\n")
+            debug_log.write(f"Raw response: {stage2_response}\n")
+            # Try regex fallback
+            fallback_auditor = _regex_fallback_search(text)
+            if fallback_auditor:
+                debug_log.write(f"Regex fallback found: {fallback_auditor}\n")
+                return fallback_auditor, 0.65, [stage2_response], "Regex fallback (Stage 2 parse error)"
+            return None, 0, [stage2_response], f"Stage 2 parse error: {e}"
+        
+        # If no auditor identified, try regex fallback
         if not auditor:
-            logging.warning(f"Attempt {attempt + 1}: No auditor identified by GPT")
-            if attempt == max_attempts - 1:
-                return None, 0, responses, f"No auditor found after {max_attempts} attempts"
-            continue
+            logging.warning("Stage 2: GPT did not identify an auditor - trying regex fallback")
+            debug_log.write("\nNo auditor identified - attempting regex fallback...\n")
+            fallback_auditor = _regex_fallback_search(text)
+            if fallback_auditor:
+                debug_log.write(f"Regex fallback found: {fallback_auditor}\n")
+                debug_log.write(f"Final confidence: 0.65 (regex fallback)\n")
+                return fallback_auditor, 0.65, [stage2_response], "Regex fallback (Stage 2 found no auditor)"
+            else:
+                debug_log.write("Regex fallback found nothing\n")
+                return None, 0, [stage2_response], "Stage 2 identified no auditor, regex fallback unsuccessful"
         
-        # Validate that the auditor name exists in the text
-        if verify_auditor_in_text(auditor, text):
-            logging.info(f"Attempt {attempt + 1}: Auditor '{auditor}' validated in source text")
-            return auditor, confidence, responses, f"Validated on attempt {attempt + 1}"
+        # ============================================================
+        # CONFIDENCE ADJUSTMENTS
+        # ============================================================
+        debug_log.write("\n" + "=" * 80 + "\n")
+        debug_log.write("CONFIDENCE ADJUSTMENTS\n")
+        debug_log.write("=" * 80 + "\n")
+        debug_log.write(f"Base confidence from GPT: {base_confidence:.3f}\n")
+        
+        adjusted_confidence = base_confidence
+        adjustments = []
+        
+        # Adjustment 1: Text verification
+        text_verified = verify_auditor_in_text(auditor, text)
+        if text_verified:
+            logging.info(f"Text verification: PASSED - '{auditor}' found in source text")
+            debug_log.write(f"Text verification: PASSED (no penalty)\n")
         else:
-            logging.warning(f"Attempt {attempt + 1}: Auditor '{auditor}' NOT found in source text - retrying")
-            if attempt == max_attempts - 1:
-                # Final attempt failed validation
-                logging.error(f"All {max_attempts} attempts failed to find auditor text in document")
-                return "Unknown", 0, responses, f"Failed text validation after {max_attempts} attempts"
+            adjusted_confidence -= 0.15
+            adjustments.append("Text verification failed (-0.15)")
+            logging.warning(f"Text verification: FAILED - '{auditor}' NOT found in source text (penalty -0.15)")
+            debug_log.write(f"Text verification: FAILED (-0.15 penalty)\n")
+            debug_log.write(f"  Confidence after text verification: {adjusted_confidence:.3f}\n")
+        
+        all_responses = stage1_responses + [stage2_response]
+        validation_note = f"Two-stage extraction: {reasoning[:100]}..."
+        if adjustments:
+            validation_note += f" | Adjustments: {', '.join(adjustments)}"
+        
+        # Cap confidence at 1.0
+        final_confidence = min(1.0, max(0.0, adjusted_confidence))
+        
+        debug_log.write(f"\nFinal confidence: {final_confidence:.3f} (capped at [0.0, 1.0])\n")
+        debug_log.write(f"Validation note: {validation_note}\n")
+        
+        logging.info(f"Final result: auditor = '{auditor}', confidence = {final_confidence:.3f}")
+        
+        return auditor, final_confidence, all_responses, validation_note
+
+
+def _regex_fallback_search(text: str) -> Optional[str]:
+    """
+    Regex fallback: Search for known Big 4 + top regional audit firm patterns.
+    Uses word boundary matching for short abbreviations to avoid false positives (e.g., 'EY' in 'Journey').
+    Returns first match found or None.
+    """
+    import re
     
-    # Should not reach here, but safety fallback
-    return "Unknown", 0, [], f"Extraction failed after {max_attempts} attempts"
+    # Known audit firms (Big 4 + top regional firms)
+    # Order by specificity: check full legal names first, then abbreviations
+    known_firms = [
+        "BDO USA, P.C.",
+        "BDO USA",
+        "KPMG LLP",
+        "Deloitte & Touche LLP",
+        "PricewaterhouseCoopers",
+        "Ernst & Young LLP",
+        "Grant Thornton LLP",
+        "RSM US LLP",
+        "Crowe LLP",
+        "Moss Adams LLP",
+        "CliftonLarsonAllen LLP",
+        "Schellman & Company, LLC",
+        "KPMG",
+        "Deloitte",
+        "PwC",
+        "BDO",
+        "Grant Thornton",
+        "RSM",
+        "Crowe",
+        "Moss Adams",
+        "CliftonLarsonAllen",
+        "Schellman"
+    ]
+    
+    # For short abbreviations (2-3 letters), require word boundaries to avoid false positives
+    short_abbrevs = {"EY", "PwC", "RSM", "BDO"}
+    
+    for firm in known_firms:
+        if firm in short_abbrevs:
+            # Use word boundary regex for short abbreviations
+            pattern = r'\b' + re.escape(firm) + r'\b'
+            if re.search(pattern, text, re.IGNORECASE):
+                logging.info(f"Regex fallback found (word boundary): {firm}")
+                return firm
+        else:
+            # Case-insensitive substring search for longer names
+            if firm.lower() in text.lower():
+                logging.info(f"Regex fallback found: {firm}")
+                return firm
+    
+    logging.warning("Regex fallback: No known audit firms found in text")
+    return None
 
 def extract_auditor_from_report():
     # Reset output file at the start of extraction
@@ -149,32 +422,74 @@ def extract_auditor_from_report():
         logging.warning('No Service_Auditor_Report section found. Falling back to full-document scan.')
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
-    text_sections = [extract_title_page(txt_lines)]
+    
+    # Build line indices set for deduplication
+    line_indices = set()
+    
+    # ALWAYS include pages 1-5 (expanded search range to capture auditor letterhead/signatures)
+    # Many auditor firms place their letterhead on page 4 (e.g., BDO, Schellman)
+    pages_1_5_text = extract_pages_range(txt_lines, 1, 5)
+    # Track line indices from pages 1-5
+    current_page = 0
+    for idx, line in enumerate(txt_lines):
+        if line.strip().startswith('=== PAGE '):
+            try:
+                current_page = int(line.strip().split()[2])
+            except Exception:
+                pass
+        if 1 <= current_page <= 5:
+            line_indices.add(idx)
+    
+    text_sections = [pages_1_5_text]
+    
+    # Append Service_Auditor_Report section if found (deduplicate by line indices)
     if auditor_section:
         start_line = auditor_section.get('start_line')
         end_line = auditor_section.get('end_line')
         if start_line and end_line:
-            text_sections.append(extract_text_for_lines(txt_lines, start_line, end_line))
+            # Check for overlap
+            section_indices = set(range(start_line - 1, end_line))
+            new_indices = section_indices - line_indices
+            if new_indices:
+                text_sections.append(extract_text_for_lines(txt_lines, start_line, end_line))
+                line_indices.update(section_indices)
         elif auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
-            pages = set([1])
-            start = auditor_section['DOC_page_ref']
-            end = auditor_section['end_DOC_page_ref']
-            pages.update(range(start, end + 1))
-            pages = sorted(pages)
-            text_sections.append(extract_text_for_pages(txt_lines, pages))
+            start_page = auditor_section['DOC_page_ref']
+            end_page = auditor_section['end_DOC_page_ref']
+            # Add section pages (deduplicate)
+            section_text_indices = set()
+            current_page = 0
+            for idx, line in enumerate(txt_lines):
+                if line.strip().startswith('=== PAGE '):
+                    try:
+                        current_page = int(line.strip().split()[2])
+                    except Exception:
+                        pass
+                if start_page <= current_page <= end_page:
+                    section_text_indices.add(idx)
+            
+            new_indices = section_text_indices - line_indices
+            if new_indices:
+                text_sections.append(extract_text_for_pages(txt_lines, list(range(start_page, end_page + 1))))
+                line_indices.update(section_text_indices)
         else:
             logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section. Using full document text for context.')
             # Fallback to full document text
             with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
                 text_sections.append(f2.read())
     else:
-        # No section info: use entire document text
-        with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
-            text_sections.append(f2.read())
-    text = '\n'.join(text_sections)
+        # No section info detected: pages 1-5 already included, no additional text needed
+        logging.warning('No Service_Auditor_Report section found. Using pages 1-5 only.')
     
-    # Extract auditor with validation and retry logic
-    auditor, confidence, responses, validation_note = extract_auditor_with_validation(text, company_line, max_attempts=5)
+    text = '\n'.join(text_sections)
+    total_lines = sum(s.count('\n') for s in text_sections)
+    logging.info(f"Searching pages 1-5 + Service_Auditor_Report section ({total_lines} lines total)")
+    
+    # Extract auditor with two-stage approach (single attempt)
+    auditor, confidence, responses, validation_note = extract_auditor_with_validation(text, company_line)
+    
+    # Header/footer pattern detection for additional confidence boost
+    header_footer_auditor, header_footer_boost = detect_header_footer_auditor(txt_lines)
     
     result = {
         'auditor': auditor,
@@ -185,22 +500,27 @@ def extract_auditor_from_report():
         'validation_note': validation_note
     }
     
-    # Follow-up confirmation if an auditor was found and it's not "Unknown"
-    if auditor and auditor != "Unknown":
-        confirmed_auditor, confirm_confidence, confirm_explanation = confirm_auditor_with_followup(auditor, text)
-        if confirmed_auditor:
-            # If confirmation confidence is higher, average the two; if lower, use the minimum
-            if confirm_confidence > confidence:
-                result['confidence'] = round((confidence + confirm_confidence) / 2, 3)
-            else:
-                result['confidence'] = min(confidence, confirm_confidence)
-            result['confirmation_explanation'] = confirm_explanation
-            logging.info(f"Auditor confirmation succeeded. Adjusted confidence: {result['confidence']}. Explanation: {confirm_explanation}")
+    # Apply header/footer confidence boost if detected
+    if header_footer_auditor and auditor:
+        if header_footer_auditor.lower() == auditor.lower():
+            # Match found - boost confidence (capped at 1.0)
+            original_confidence = confidence
+            result['confidence'] = min(1.0, confidence + header_footer_boost)
+            result['header_footer_match'] = True
+            result['header_footer_boost'] = header_footer_boost
+            logging.info(f"Header/footer pattern matched GPT result. Confidence boosted from {original_confidence:.3f} to {result['confidence']:.3f}")
         else:
-            result['auditor'] = None
-            result['confidence'] = 0
-            result['confirmation_explanation'] = confirm_explanation
-            logging.info(f"Auditor confirmation failed. Explanation: {confirm_explanation}")
+            # Different auditor detected - log warning but keep GPT result
+            result['header_footer_mismatch'] = True
+            result['header_footer_auditor'] = header_footer_auditor
+            logging.warning(f"Header/footer detected different auditor: '{header_footer_auditor}' vs GPT: '{auditor}'. Keeping GPT result.")
+    elif header_footer_auditor and not auditor:
+        # No GPT result but header/footer found - use it with moderate confidence
+        result['auditor'] = header_footer_auditor
+        result['confidence'] = 0.70
+        result['validation_note'] = 'Detected from header/footer patterns (no GPT result)'
+        result['header_footer_only'] = True
+        logging.info(f"Using header/footer detected auditor: {header_footer_auditor} (no GPT result)")
     
     # GPT-only approach: if GPT didn't return an auditor, leave it as None
     save_json(result, AUDITOR_JSON_PATH)

@@ -45,7 +45,7 @@ class Control(Base):
     control_test_results = Column(Text)
     has_deviation = Column(Boolean)
     deviation_desc = Column(Text)
-    control_page_ref = Column(Integer)
+    control_page_refs = Column(JSON)  # [51, 52, 89] - pages where control appears
     control_line_ref = Column(Integer)
     control_seq = Column(Integer)
     control_tsc_id = Column(String(128))  # Legacy: highest confidence TSC match

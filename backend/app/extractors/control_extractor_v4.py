@@ -72,7 +72,8 @@ def create_aware_chunks(
     
     # Extract relevant section
     section_lines = text_lines[start_line-1:end_line]
-    full_text = '\n'.join(section_lines)
+    # Use ''.join() since readlines() preserves newlines - '\n'.join() would double them
+    full_text = ''.join(section_lines)
     
     chunks = []
     chunk_id = 1
@@ -399,6 +400,10 @@ def merge_two_controls(base: Dict[str, Any], addition: Dict[str, Any]) -> Dict[s
             if add_text and add_text not in base_text:
                 merged[field] = (base_text + " " + add_text).strip()
     
+    # Preserve has_deviation flag - set to True if either control has it
+    if merged.get("has_deviation") or addition.get("has_deviation"):
+        merged["has_deviation"] = True
+    
     # Merge list fields (deduplicate)
     for field in ["control_tests", "control_test_results", "additional_references"]:
         base_list = merged.get(field, [])
@@ -413,6 +418,18 @@ def merge_two_controls(base: Dict[str, Any], addition: Dict[str, Any]) -> Dict[s
         combined = base_list + [item for item in add_list if item not in base_list]
         if combined:
             merged[field] = combined
+    
+    # Merge page references arrays (deduplicate and sort)
+    base_pages = merged.get("control_page_refs", [])
+    add_pages = addition.get("control_page_refs", [])
+    if not isinstance(base_pages, list):
+        base_pages = [base_pages] if base_pages else []
+    if not isinstance(add_pages, list):
+        add_pages = [add_pages] if add_pages else []
+    # Combine, deduplicate, and sort page numbers
+    combined_pages = sorted(list(set(base_pages + add_pages)))
+    if combined_pages:
+        merged["control_page_refs"] = combined_pages
     
     # Update end_line to furthest (handle None values)
     if "end_line" in addition:
@@ -471,6 +488,145 @@ def filter_by_confidence(controls: List[Dict[str, Any]], min_confidence: float =
     return accepted, rejected
 
 # ============================================================================
+# CONTROL ID PATTERN ANALYSIS
+# ============================================================================
+
+def analyze_control_id_patterns(controls: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """
+    Analyze control ID patterns to detect anomalies and identify consensus format.
+    
+    Used to flag potential false positives where TSC reference headings are 
+    incorrectly extracted as control IDs.
+    
+    Args:
+        controls: List of control dictionaries with control_id fields
+        
+    Returns:
+        Dict mapping control_id to analysis results:
+        {
+            "control_id": {
+                "pattern_score": 0.0-1.0,  # Similarity to consensus pattern
+                "is_tsc_anomaly": bool,     # True if likely a TSC heading, not a control
+                "consensus_pattern": str,   # Most common ID pattern in report
+                "detected_pattern": str     # This control's ID pattern
+            }
+        }
+    """
+    import re
+    from collections import Counter
+    
+    # TSC reference heading pattern (e.g., "CC6.", "A1.", "P2.")
+    TSC_HEADING_PATTERN = re.compile(r'^(CC|A|C|PI|P)[-.]?\d+\.?$', re.IGNORECASE)
+    
+    if not controls:
+        return {}
+    
+    # Extract control IDs and generate pattern signatures
+    id_patterns = {}
+    for ctrl in controls:
+        control_id = ctrl.get("control_id") or ""
+        control_id = control_id.strip() if isinstance(control_id, str) else ""
+        if not control_id:
+            continue
+        
+        # Generate pattern signature
+        # Example: "CC6.1" -> "LL#.#", "CID-001" -> "LLL-###"
+        pattern = ""
+        for char in control_id:
+            if char.isalpha():
+                pattern += "L"
+            elif char.isdigit():
+                pattern += "#"
+            else:
+                pattern += char
+        
+        id_patterns[control_id] = {
+            "pattern": pattern,
+            "is_tsc_heading": bool(TSC_HEADING_PATTERN.match(control_id)),
+            "raw_id": control_id
+        }
+    
+    if not id_patterns:
+        return {}
+    
+    # Find consensus pattern (most common non-TSC-heading pattern)
+    non_tsc_patterns = [
+        info["pattern"] 
+        for info in id_patterns.values() 
+        if not info["is_tsc_heading"]
+    ]
+    
+    if non_tsc_patterns:
+        pattern_counts = Counter(non_tsc_patterns)
+        consensus_pattern = pattern_counts.most_common(1)[0][0]
+        consensus_count = pattern_counts[consensus_pattern]
+        total_non_tsc = len(non_tsc_patterns)
+    else:
+        # All IDs are TSC headings (unusual but possible)
+        consensus_pattern = None
+        consensus_count = 0
+        total_non_tsc = 0
+    
+    # Analyze each control
+    results = {}
+    for control_id, info in id_patterns.items():
+        detected_pattern = info["pattern"]
+        is_tsc_heading = info["is_tsc_heading"]
+        
+        # Calculate pattern score (similarity to consensus)
+        if consensus_pattern and detected_pattern == consensus_pattern:
+            pattern_score = 1.0
+        elif not consensus_pattern:
+            # No consensus found (all TSC headings)
+            pattern_score = 0.5
+        else:
+            # Different pattern - calculate similarity
+            # Simple Levenshtein-like score
+            max_len = max(len(detected_pattern), len(consensus_pattern))
+            matches = sum(
+                c1 == c2 
+                for c1, c2 in zip(detected_pattern, consensus_pattern)
+            )
+            pattern_score = matches / max_len if max_len > 0 else 0.0
+        
+        # Calculate adaptive threshold for TSC anomaly detection
+        from .. import config as cfg
+        
+        # Get total control count for adaptive threshold
+        total_controls = len(id_patterns)
+        
+        # Calculate threshold: max(MIN_THRESHOLD, max(BASE_THRESHOLD, 10% of controls))
+        if cfg.TSC_ANOMALY_ADAPTIVE_ENABLED:
+            adaptive_threshold = int(total_controls * 0.10)
+            threshold = max(
+                cfg.TSC_ANOMALY_MIN_THRESHOLD,
+                max(cfg.TSC_ANOMALY_BASE_THRESHOLD, adaptive_threshold)
+            )
+            logging.info(f"TSC anomaly threshold: {threshold} (adaptive=on, base={cfg.TSC_ANOMALY_BASE_THRESHOLD}, 10%={adaptive_threshold}, total_controls={total_controls})")
+        else:
+            threshold = cfg.TSC_ANOMALY_BASE_THRESHOLD
+            logging.info(f"TSC anomaly threshold: {threshold} (adaptive=off, base={cfg.TSC_ANOMALY_BASE_THRESHOLD})")
+        
+        # Flag as anomaly only if:
+        # 1. It's a TSC heading pattern, AND
+        # 2. Pattern score is low (<0.5), AND
+        # 3. Consensus count meets/exceeds threshold
+        is_tsc_anomaly = (
+            is_tsc_heading and
+            pattern_score < 0.5 and
+            consensus_count >= threshold
+        )
+        
+        results[control_id] = {
+            "pattern_score": round(pattern_score, 3),
+            "is_tsc_anomaly": is_tsc_anomaly,
+            "consensus_pattern": consensus_pattern,
+            "detected_pattern": detected_pattern
+        }
+    
+    return results
+
+# ============================================================================
 # 5-FACTOR CONFIDENCE CALCULATION
 # ============================================================================
 
@@ -478,23 +634,26 @@ def _calculate_multi_factor_confidence(
     control: Dict[str, Any],
     weights: Dict[str, float],
     gpt_confidence: float,
-    pattern_confidence: float
+    pattern_confidence: float,
+    id_format_score: float = 0.5
 ) -> Dict[str, Any]:
     """
-    Calculate confidence using 5-factor scoring system.
+    Calculate confidence using 6-factor scoring system.
     
     Factors:
-    1. GPT Confidence (default 25%): Base extraction quality
-    2. Pattern Confidence (default 20%): ID pattern recognition
-    3. Structure Score (default 20%): Completeness of fields
-    4. Framework Score (default 20%): Quality of TSC/COSO mappings
-    5. Deviation Score (default 15%): Deviation flag consistency
+    1. GPT Confidence (default 22.5%): Base extraction quality
+    2. Pattern Confidence (default 18%): ID pattern recognition from library
+    3. Structure Score (default 18%): Completeness of fields
+    4. Framework Score (default 18%): Quality of TSC/COSO mappings
+    5. Deviation Score (default 13.5%): Deviation flag consistency
+    6. ID Format Score (default 10%): Control ID format consistency (detects TSC heading anomalies)
     
     Args:
         control: Control dictionary
         weights: Weight configuration dict
         gpt_confidence: GPT extraction confidence
         pattern_confidence: Pattern library score
+        id_format_score: ID format pattern analysis score (0.0-1.0)
         
     Returns:
         Dictionary with all scores and final confidence
@@ -546,13 +705,14 @@ def _calculate_multi_factor_confidence(
     else:
         deviation_score = 0.3  # Inconsistent: flag doesn't match description
     
-    # Calculate weighted final confidence
+    # Calculate weighted final confidence (6-factor)
     final_confidence = (
         weights["gpt_weight"] * gpt_confidence +
         weights["pattern_weight"] * pattern_confidence +
         weights["structure_weight"] * structure_score +
         weights["framework_weight"] * framework_score +
-        weights["deviation_weight"] * deviation_score
+        weights["deviation_weight"] * deviation_score +
+        weights["id_format_weight"] * id_format_score
     )
     
     # Prepare detailed metadata
@@ -561,7 +721,8 @@ def _calculate_multi_factor_confidence(
         "pattern_confidence": round(pattern_confidence, 3),
         "structure_score": round(structure_score, 3),
         "framework_score": round(framework_score, 3),
-        "deviation_score": round(deviation_score, 3)
+        "deviation_score": round(deviation_score, 3),
+        "id_format_score": round(id_format_score, 3)
     }
     
     weighted_contributions = {
@@ -569,7 +730,8 @@ def _calculate_multi_factor_confidence(
         "pattern_contribution": round(weights["pattern_weight"] * pattern_confidence, 3),
         "structure_contribution": round(weights["structure_weight"] * structure_score, 3),
         "framework_contribution": round(weights["framework_weight"] * framework_score, 3),
-        "deviation_contribution": round(weights["deviation_weight"] * deviation_score, 3)
+        "deviation_contribution": round(weights["deviation_weight"] * deviation_score, 3),
+        "id_format_contribution": round(weights["id_format_weight"] * id_format_score, 3)
     }
     
     return {
@@ -578,7 +740,7 @@ def _calculate_multi_factor_confidence(
         "weights_used": weights.copy(),
         "final_confidence": round(final_confidence, 3),
         "calculated_at": datetime.utcnow().isoformat(),
-        "method": "5-factor"
+        "method": "6-factor"
     }
 
 # ============================================================================
@@ -609,6 +771,9 @@ def validate_controls(
         List of validated controls
     """
     validated = []
+    
+    # Analyze control ID patterns before validation loop
+    pattern_analysis_results = analyze_control_id_patterns(controls)
     
     # Required fields
     required_fields = ["control_desc"]
@@ -666,7 +831,8 @@ def validate_controls(
             # Extract page number from === PAGE X === markers if source_start_line is available
             if "source_start_line" in control and "text_lines" in control:
                 page_num = get_page_for_line(control["text_lines"], control["source_start_line"])
-                control["control_page_ref"] = page_num
+                # Store as array for multi-page support
+                control["control_page_refs"] = [page_num] if page_num else []
                 control["control_line_ref"] = control["source_start_line"]
             elif "source_start_line" in control:
                 control["control_line_ref"] = control["source_start_line"]
@@ -683,8 +849,15 @@ def validate_controls(
             control["control_confidence"] = 0.5
             control["control_gpt_conf_justification"] = "Default confidence (no GPT score provided)"
         
-        # Load confidence weights from database
-        weights = {"gpt_weight": 0.25, "pattern_weight": 0.20, "structure_weight": 0.20, "framework_weight": 0.20, "deviation_weight": 0.15}
+        # Load confidence weights from database (6-factor system)
+        weights = {
+            "gpt_weight": 0.225, 
+            "pattern_weight": 0.18, 
+            "structure_weight": 0.18, 
+            "framework_weight": 0.18, 
+            "deviation_weight": 0.135,
+            "id_format_weight": 0.10
+        }
         if db_session and organization:
             try:
                 from ..models import ConfidenceWeights
@@ -708,12 +881,13 @@ def validate_controls(
                         "pattern_weight": weight_config.pattern_weight,
                         "structure_weight": weight_config.structure_weight,
                         "framework_weight": weight_config.framework_weight,
-                        "deviation_weight": weight_config.deviation_weight
+                        "deviation_weight": weight_config.deviation_weight,
+                        "id_format_weight": getattr(weight_config, "id_format_weight", 0.10)
                     }
             except Exception as e:
                 logging.warning(f"Failed to load confidence weights: {e}. Using defaults.")
         
-        # Calculate 5-factor confidence score
+        # Calculate 6-factor confidence score
         gpt_conf = control.get("control_confidence", 0.5)
         pattern_score = 0.5  # Default
         
@@ -726,9 +900,23 @@ def validate_controls(
             except Exception as e:
                 logging.warning(f"Pattern scoring failed for control {i}: {e}")
         
+        # Get ID format score from pattern analysis
+        control_id = control.get("control_id", "")
+        id_format_analysis = pattern_analysis_results.get(control_id, {})
+        id_format_score = id_format_analysis.get("pattern_score", 0.5)
+        
+        # Apply TSC anomaly penalty if detected
+        is_tsc_anomaly = id_format_analysis.get("is_tsc_anomaly", False)
+        if is_tsc_anomaly:
+            # Severely penalize likely TSC headings
+            control["control_confidence"] = control.get("control_confidence", 0.5) * 0.05
+            justification = control.get("control_gpt_conf_justification", "")
+            control["control_gpt_conf_justification"] = f"{justification}; likely tsc heading".strip("; ")
+            logging.info(f"TSC anomaly detected for {control_id}, confidence reduced to {control['control_confidence']:.2f}")
+        
         # Calculate multi-factor confidence
         confidence_result = _calculate_multi_factor_confidence(
-            control, weights, gpt_conf, pattern_score
+            control, weights, gpt_conf, pattern_score, id_format_score
         )
         
         # Store results
@@ -736,7 +924,16 @@ def validate_controls(
         control["final_confidence"] = confidence_result["final_confidence"]
         control["verification_metadata"] = confidence_result
         
-        # Enhanced justification with all factor scores
+        # Penalize controls without control_id (set to 0.1 for low confidence)
+        control_id_val = control.get("control_id")
+        if not control_id_val or str(control_id_val).strip() == "":
+            original_final = control["final_confidence"]
+            control["final_confidence"] = 0.1
+            control["control_confidence"] = 0.1
+            no_id_penalty = f"Confidence set to 0.1 (was {original_final:.2f}) - Control has no control_id (invalid/incomplete extraction)"
+            control["control_gpt_conf_justification"] = f"{control.get('control_gpt_conf_justification', '')} | {no_id_penalty}"
+        
+        # Enhanced justification with all factor scores (6-factor system)
         original_just = control.get("control_gpt_conf_justification", "")
         factor_summary = " | ".join([
             f"GPT: {confidence_result['factor_scores']['gpt_confidence']:.2f}",
@@ -744,9 +941,14 @@ def validate_controls(
             f"Structure: {confidence_result['factor_scores']['structure_score']:.2f}",
             f"Framework: {confidence_result['factor_scores']['framework_score']:.2f}",
             f"Deviation: {confidence_result['factor_scores']['deviation_score']:.2f}",
+            f"ID-Format: {confidence_result['factor_scores']['id_format_score']:.2f}",
             f"Final: {confidence_result['final_confidence']:.2f}"
         ])
         control["control_gpt_conf_justification"] = f"{original_just} | {factor_summary}"
+        
+        # Store pattern analysis results in control
+        if id_format_analysis:
+            control["id_format_analysis"] = id_format_analysis
         
         # Ensure closest framework fields
         if "control_closest_framework" not in control:
@@ -828,7 +1030,10 @@ def validate_controls(
             logging.warning(f"Overlapping line ranges: Control {i+1} ends at {curr_end}, Control {i+2} starts at {next_start}")
     
     logging.info(f"Validated {len(validated)} controls")
-    return validated
+    
+    # Return both validated controls and pattern analysis results
+    # Pattern analysis results can be stored in scan metadata for debugging/auditing
+    return validated, pattern_analysis_results
 
 # ============================================================================
 # MULTI-MATCH FRAMEWORK MAPPING - Adaptive Token Management
@@ -1150,8 +1355,8 @@ def extract_controls_v4(
     for control in accepted_controls:
         control["text_lines"] = text_lines
     
-    # Step 5: Validate with 5-factor confidence scoring
-    validated_controls = validate_controls(
+    # Step 5: Validate with 6-factor confidence scoring
+    validated_controls, pattern_analysis = validate_controls(
         accepted_controls,
         organization=organization,
         pattern_library=pattern_library,
@@ -1192,7 +1397,8 @@ def extract_controls_v4(
     output = {
         "controls": validated_controls,
         "diagnostics": diagnostics,
-        "rejected_controls": rejected_controls if getattr(config, 'CONTROL_V4_SAVE_REJECTED', False) else []
+        "rejected_controls": rejected_controls if getattr(config, 'CONTROL_V4_SAVE_REJECTED', False) else [],
+        "control_id_pattern_analysis": pattern_analysis  # Store pattern analysis for debugging
     }
     
     try:

@@ -1,8 +1,8 @@
 {
-  "company": "Okta, Inc.",
-  "parent_company": null,
+  "company": "SimpleLegal, Inc.",
+  "parent_company": "Onit, Inc.",
   "confidence": 1.0,
   "raw_gpt_responses": [
-    "{\n    \"company\": \"Okta, Inc.\",\n    \"parent_company\": null,\n    \"confidence\": 1.0,\n    \"explanation\": \"The report explicitly identifies 'Okta, Inc.' as the service organization being audited multiple times, but no parent or owner company is mentioned in the text.\"\n}"
+    "{\n    \"company\": \"SimpleLegal, Inc.\",\n    \"parent_company\": \"Onit, Inc.\",\n    \"confidence\": 1.0,\n    \"explanation\": \"The company being audited is explicitly mentioned as 'SimpleLegal, Inc.' in multiple sections (e.g., Management's Assertion, Auditor's Report), and 'Onit, Inc.' is clearly identified as its parent company in the signature of the VP of Security and Compliance.\"\n}"
   ]
 }

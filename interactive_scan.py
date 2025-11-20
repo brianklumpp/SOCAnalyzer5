@@ -407,7 +407,7 @@ def display_results_summary(results: Dict[str, Any]):
     print()
 
 
-def upload_to_database(results: Dict[str, Any]) -> bool:
+def upload_to_database(results: Dict[str, Any], pdf_path: Optional[Path] = None) -> bool:
     """Upload results to database"""
     print_section("Database Upload")
     
@@ -416,8 +416,28 @@ def upload_to_database(results: Dict[str, Any]) -> bool:
     combined_path.parent.mkdir(parents=True, exist_ok=True)
     
     try:
+        # Deep sanitize to remove bytes objects before JSON serialization
+        def sanitize_for_json(obj):
+            """Recursively remove or convert non-JSON-serializable objects."""
+            if isinstance(obj, bytes):
+                # Skip bytes data (like PDF files) - they'll be loaded from pdf_path instead
+                return None
+            elif isinstance(obj, dict):
+                sanitized = {}
+                for k, v in obj.items():
+                    sanitized_v = sanitize_for_json(v)
+                    # Always keep the key, even if value is None (from bytes)
+                    sanitized[k] = sanitized_v
+                return sanitized
+            elif isinstance(obj, list):
+                return [sanitize_for_json(item) for item in obj]
+            else:
+                return obj
+        
+        sanitized_results = sanitize_for_json(results)
+        
         with open(combined_path, 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+            json.dump(sanitized_results, f, indent=2, ensure_ascii=False)
         
         print_info(f"Saved combined results to: {combined_path.name}")
         
@@ -425,7 +445,8 @@ def upload_to_database(results: Dict[str, Any]) -> bool:
         from app.explicit_sql_insert import insert_extracted_data
         
         print_info("Inserting data into database...")
-        summary = insert_extracted_data(str(combined_path))
+        pdf_path_str = str(pdf_path) if pdf_path else None
+        summary = insert_extracted_data(str(combined_path), pdf_path=pdf_path_str)
         
         print_success("Database upload completed!")
         print_info(f"Summary: {summary}")
@@ -740,7 +761,7 @@ def analysis_workflow():
     print_header("Database Upload")
     
     if prompt_yes_no("Upload results to database?", default='y'):
-        success = upload_to_database(results)
+        success = upload_to_database(results, pdf_path=pdf_path)
         
         if success:
             # Step 6: Open browser

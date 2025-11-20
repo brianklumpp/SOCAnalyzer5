@@ -177,6 +177,51 @@ def get_section_logger(section_name):
     logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
     return logger
 
+# Helper function to parse page references
+def _parse_page_refs(value):
+    """
+    Parse page references from various input formats to JSON array.
+    
+    Accepts:
+    - Array: [51, 52, 89]
+    - Comma-separated string: "51, 52, 89"
+    - Single integer: 51
+    - None/empty: returns []
+    
+    Returns: Sorted list of unique integers
+    """
+    if value is None:
+        return []
+    
+    # Already an array
+    if isinstance(value, list):
+        # Filter and convert to integers
+        result = []
+        for item in value:
+            try:
+                result.append(int(item))
+            except (ValueError, TypeError):
+                continue
+        return sorted(list(set(result)))
+    
+    # Single integer
+    if isinstance(value, (int, float)):
+        return [int(value)]
+    
+    # Comma-separated string
+    if isinstance(value, str):
+        result = []
+        for part in value.split(','):
+            part = part.strip()
+            if part:
+                try:
+                    result.append(int(part))
+                except ValueError:
+                    continue
+        return sorted(list(set(result)))
+    
+    return []
+
 # Example usage
 management_assertion_logger = get_section_logger('Management_Assertion')
 if management_assertion_logger and logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -308,6 +353,7 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
 
         # Fetch selected related entities (now that schema is aligned)
         company = (await db.execute(select(Company).where(Company.scan_id == scan_id))).scalars().first()
+        # Return all controls including merged ones (merged controls have confidence=0 and will appear in low confidence table)
         controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
         cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
         suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
@@ -353,8 +399,8 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
             "parent_company": company.parent_company if company else None,
             "auditor": getattr(scan_row, "auditor", None) or auditor,
             "coverage_period": coverage_period,
-            "coverage_start": (getattr(scan_row, "coverage_start", None).isoformat() if getattr(scan_row, "coverage_start", None) else None),
-            "coverage_end": (getattr(scan_row, "coverage_end", None).isoformat() if getattr(scan_row, "coverage_end", None) else None),
+            "coverage_start": (getattr(scan_row, "coverage_start", None).date().isoformat() if getattr(scan_row, "coverage_start", None) else None),
+            "coverage_end": (getattr(scan_row, "coverage_end", None).date().isoformat() if getattr(scan_row, "coverage_end", None) else None),
             "report_date": report_date,
             "product": product.name if product else None,
             "gpt_cost": getattr(scan_row, "gpt_cost", None),
@@ -421,7 +467,7 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                     "control_test_results",
                     "has_deviation",
                     "deviation_desc",
-                    "control_page_ref",
+                    "control_page_refs",
                     "control_line_ref",
                     "control_seq",
                     "control_tsc_id",
@@ -430,6 +476,8 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                     "control_coso_similarity",
                     "control_tsc_confidence_pct",
                     "control_coso_confidence_pct",
+                    "control_tsc_mappings",
+                    "control_coso_mappings",
                     "control_closest_framework",
                     "control_tsc_section",
                     "control_coso_section",
@@ -440,6 +488,10 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                     "control_gpt_reasoning",
                     "control_confidence",
                     "confidence_calc",
+                    "verification_status",
+                    "verification_metadata",
+                    "pattern_confidence",
+                    "final_confidence",
                     "annotation"
                 ]}) for ctrl in controls
             ],
@@ -469,6 +521,42 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
     except Exception as e:
         logging.error(f"[REPORT] /report/{scan_id} error: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Report retrieval failed: {e}")
+
+
+@app.get("/report/{scan_id}/pdf")
+async def get_report_pdf(scan_id: int, db = Depends(get_db)):
+    """
+    Serve the original PDF file for the specified scan.
+    Returns the PDF with Content-Disposition: inline to open in browser.
+    TODO: Add authentication/authorization check when auth system is implemented.
+    """
+    try:
+        result = await db.execute(select(Scan).filter(Scan.id == scan_id))
+        scan_row = result.scalars().first()
+        
+        if not scan_row:
+            raise HTTPException(status_code=404, detail=f"Scan {scan_id} not found")
+        
+        if not scan_row.pdf_file:
+            raise HTTPException(status_code=404, detail=f"PDF file not available for scan {scan_id}")
+        
+        from starlette.responses import Response
+        
+        # Generate a safe filename from the pdf_filename field
+        filename = scan_row.pdf_filename or f"report_{scan_id}.pdf"
+        
+        return Response(
+            content=scan_row.pdf_file,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{filename}"'
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"get_report_pdf error for scan_id={scan_id}: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve PDF: {e}")
 
 
 # ------------------------------
@@ -1434,6 +1522,16 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
                     
                     if latest_scan:
                         scan_id_for_learning = latest_scan.id
+                        
+                        # Run automated cleanup first
+                        try:
+                            cleanup_stats = await automated_cleanup(scan_id_for_learning, db)
+                            if cleanup_stats:
+                                logging.info(f"[/analyze/finalize] Automated cleanup complete: {cleanup_stats}")
+                        except Exception as cleanup_err:
+                            logging.warning(f"[/analyze/finalize] Automated cleanup failed: {cleanup_err}")
+                        
+                        # Then run pattern learning
                         from .services.verification_service import ControlVerificationService
                         
                         service = ControlVerificationService()
@@ -1915,24 +2013,32 @@ async def docker_start(container: str):
 # History endpoints
 @app.get("/history")
 async def get_history(db=Depends(get_db)):
-    result = await db.execute(select(Scan).order_by(Scan.scan_date.desc()).limit(20))
+    # Get all scans
+    result = await db.execute(
+        select(Scan)
+        .order_by(Scan.scan_date.desc())
+        .limit(20)
+    )
     scan_rows = result.scalars().all()
     
     history = []
     for row in scan_rows:
-        # Get company name from Company table
-        company_name = None
-        if row.company_id:
-            company_result = await db.execute(select(Company).where(Company.id == row.company_id))
-            company = company_result.scalar_one_or_none()
-            if company:
-                company_name = company.name
+        # Get company name for this scan
+        company_result = await db.execute(
+            select(Company).where(Company.scan_id == row.id)
+        )
+        company_row = company_result.scalar_one_or_none()
+        company_name = company_row.name if company_row else None
         
         history.append({
             "id": row.id,
             "timestamp": row.scan_date.isoformat() if row.scan_date else None,
             "filename": row.pdf_filename,
+            "product": row.product,
             "company": company_name,
+            "coverage_start": row.coverage_start.date().isoformat() if row.coverage_start else None,
+            "coverage_end": row.coverage_end.date().isoformat() if row.coverage_end else None,
+            "report_date": row.report_date.isoformat() if row.report_date else None,
             "results": row.result_json
         })
     
@@ -1945,6 +2051,42 @@ async def report_diag(scan_id: int):
         return {"ok": True, "scan_id": scan_id}
     except Exception as e:
         logging.error(f"[REPORT_DIAG] error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/report/{scan_id}")
+async def delete_scan(scan_id: int, db=Depends(get_db)):
+    """
+    Delete a scan and all associated data (controls, cuecs, subservice_orgs, etc.)
+    Useful for testing/cleanup.
+    """
+    from sqlalchemy import delete
+    try:
+        # Delete in order to respect foreign key constraints
+        # Controls, CUECs, SubserviceOrgs reference scan_id
+        await db.execute(delete(Control).where(Control.scan_id == scan_id))
+        await db.execute(delete(CUEC).where(CUEC.scan_id == scan_id))
+        await db.execute(delete(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))
+        
+        # Company, Product reference scan_id
+        await db.execute(delete(Company).where(Company.scan_id == scan_id))
+        await db.execute(delete(Product).where(Product.scan_id == scan_id))
+        
+        # Finally delete the scan itself
+        scan_result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan_row = scan_result.scalar_one_or_none()
+        if not scan_row:
+            raise HTTPException(status_code=404, detail=f"Scan {scan_id} not found")
+        
+        await db.delete(scan_row)
+        await db.commit()
+        
+        logging.info(f"[DELETE_SCAN] Successfully deleted scan {scan_id} and all associated data")
+        return {"status": "deleted", "scan_id": scan_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error deleting scan {scan_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
@@ -2373,6 +2515,54 @@ async def patch_executive_summary(scan_id: int, data: dict, db=Depends(get_db)):
     await db.commit()
     return {"status": "ok"}
 
+@app.post("/report/{scan_id}/reload_extracted_text")
+async def reload_extracted_text(scan_id: int, db=Depends(get_db)):
+    """
+    Reload extracted text from output.txt into the database for a specific scan.
+    Useful when the text was extracted but not saved to the database.
+    """
+    try:
+        # Check if scan exists
+        scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan_row = scan_row.scalar_one_or_none()
+        if not scan_row:
+            return JSONResponse({"error": "Scan not found"}, status_code=404)
+        
+        # Try to load from output.txt
+        PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+        output_path = PROJECT_ROOT / 'data' / 'output' / 'output.txt'
+        
+        if not output_path.exists():
+            return JSONResponse({
+                "error": "output.txt not found",
+                "message": "The extracted text file does not exist. Run text extraction first."
+            }, status_code=404)
+        
+        with open(output_path, 'r', encoding='utf-8') as f:
+            extracted_text = f.read()
+        
+        if not extracted_text:
+            return JSONResponse({
+                "error": "output.txt is empty",
+                "message": "The extracted text file exists but is empty."
+            }, status_code=400)
+        
+        # Update the scan with extracted text
+        scan_row.extracted_text = extracted_text
+        db.add(scan_row)
+        await db.commit()
+        
+        return {
+            "status": "ok",
+            "scan_id": scan_id,
+            "text_length": len(extracted_text),
+            "message": "Extracted text loaded successfully"
+        }
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Failed to reload extracted text for scan {scan_id}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.patch("/report/{scan_id}/overview")
 async def patch_report_overview(scan_id: int, data: dict, db=Depends(get_db)):
     logging.debug(f"/report/{scan_id}/overview payload: {data}")
@@ -2492,8 +2682,8 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             ctrl.control_test = data["control_test"]
         if "control_test_results" in data:
             ctrl.control_test_results = data["control_test_results"]
-        if "control_page_ref" in data:
-            ctrl.control_page_ref = data["control_page_ref"]
+        if "control_page_refs" in data or "control_page_ref" in data:
+            ctrl.control_page_refs = _parse_page_refs(data.get("control_page_refs") or data.get("control_page_ref"))
         # New: allow editing deviation fields via API
         if "has_deviation" in data:
             ctrl.has_deviation = data["has_deviation"]
@@ -2558,8 +2748,8 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, 
             ctrl.control_test = data["control_test"]
         if "control_test_results" in data:
             ctrl.control_test_results = data["control_test_results"]
-        if "control_page_ref" in data:
-            ctrl.control_page_ref = data["control_page_ref"]
+        if "control_page_refs" in data or "control_page_ref" in data:
+            ctrl.control_page_refs = _parse_page_refs(data.get("control_page_refs") or data.get("control_page_ref"))
         # New: allow editing deviation fields via API
         if "has_deviation" in data:
             ctrl.has_deviation = data["has_deviation"]
@@ -2582,6 +2772,601 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, 
         return JSONResponse({"error": str(e)}, status_code=500)
 
     # NOTE: Keep normalization inline in handlers to avoid import scope issues
+
+async def automated_cleanup(scan_id: int, db):
+    """
+    Automated cleanup tasks that run after scan completion:
+    1. Flag extraction errors (blank control_ids, duplicate control_ids with low similarity)
+    2. Auto-merge high-confidence duplicate controls (score >= 0.85)
+    3. Flag low-confidence CUECs and subservice orgs
+    """
+    try:
+        logging.error(f"[CLEANUP] Starting automated cleanup for scan {scan_id}")
+        cleanup_stats = {
+            "extraction_errors_flagged": 0,
+            "controls_auto_merged": 0,
+            "low_confidence_cuecs": 0,
+            "low_confidence_subservice_orgs": 0
+        }
+        
+        # 1. Get all controls for analysis
+        result = await db.execute(
+            select(Control).where(
+                Control.scan_id == scan_id,
+                Control.merged_to_control_id == None
+            ).order_by(Control.control_seq)
+        )
+        controls = result.scalars().all()
+        
+        # 2. Flag blank control_ids as extraction errors
+        blank_controls = [c for c in controls if not c.control_id or str(c.control_id).strip() == ""]
+        for ctrl in blank_controls:
+            if ctrl.control_confidence > 0.1:
+                ctrl.control_confidence = 0.1
+                note = "\nAutomated cleanup: Extraction error - no valid control_id extracted"
+                ctrl.confidence_calc = (ctrl.confidence_calc or "") + note
+                db.add(ctrl)
+                cleanup_stats["extraction_errors_flagged"] += 1
+        
+        # 3. Group by control_id and process duplicates
+        control_groups = {}
+        for ctrl in controls:
+            if not ctrl.control_id or str(ctrl.control_id).strip() == "":
+                continue
+            ctrl_id = str(ctrl.control_id).strip()
+            if ctrl_id not in control_groups:
+                control_groups[ctrl_id] = []
+            control_groups[ctrl_id].append(ctrl)
+        
+        from .gpt_client import gpt_extract
+        
+        # 4. Process each duplicate group
+        for ctrl_id, group in control_groups.items():
+            if len(group) < 2:
+                continue
+            
+            # Sort by confidence to pick primary
+            group.sort(key=lambda c: c.control_confidence or 0, reverse=True)
+            primary = group[0]
+            candidates = group[1:]
+            
+            # Evaluate each candidate for merging or flagging
+            for candidate in candidates:
+                confidence_score = 0.0
+                
+                # Calculate similarity (same logic as suggest-merges)
+                desc1 = (primary.control_desc or "").strip()
+                desc2 = (candidate.control_desc or "").strip()
+                
+                if desc1 and desc2:
+                    try:
+                        similarity_prompt = f"""Rate the semantic similarity between these two control descriptions on a scale of 0.0 to 1.0.
+Return ONLY a number between 0.0 and 1.0, nothing else.
+
+Description 1: {desc1[:500]}
+Description 2: {desc2[:500]}"""
+                        
+                        sim_response = gpt_extract(similarity_prompt, "automated_cleanup")
+                        desc_similarity = float(sim_response.strip())
+                        desc_similarity = max(0.0, min(1.0, desc_similarity))
+                        confidence_score += desc_similarity * 0.70
+                    except Exception:
+                        if desc1.lower() == desc2.lower():
+                            confidence_score += 0.70
+                        else:
+                            confidence_score += 0.42
+                
+                # TSC/COSO mapping match
+                if primary.control_tsc_id and candidate.control_tsc_id:
+                    if primary.control_tsc_id == candidate.control_tsc_id:
+                        confidence_score += 0.15
+                
+                if primary.control_coso_id and candidate.control_coso_id:
+                    if primary.control_coso_id == candidate.control_coso_id:
+                        if not (primary.control_tsc_id and candidate.control_tsc_id and primary.control_tsc_id == candidate.control_tsc_id):
+                            confidence_score += 0.15
+                
+                # Test procedure similarity
+                test1 = (primary.control_test or "").strip()
+                test2 = (candidate.control_test or "").strip()
+                if test1 and test2:
+                    if test1.lower() == test2.lower():
+                        confidence_score += 0.10
+                    elif len(test1) > 20 and len(test2) > 20 and test1[:50].lower() == test2[:50].lower():
+                        confidence_score += 0.07
+                
+                # Deviation flag agreement
+                if primary.has_deviation == candidate.has_deviation:
+                    confidence_score += 0.05
+                
+                # Decision: merge if high confidence, flag if low confidence
+                if confidence_score >= 0.85:
+                    # Auto-merge high-confidence duplicates
+                    candidate.merged_to_control_id = str(primary.id)
+                    original_conf = candidate.control_confidence
+                    candidate.control_confidence = 0.0
+                    note = f"\nAutomated cleanup: Merged to control {primary.id} on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Original confidence: {original_conf:.2f} | Merge confidence: {confidence_score:.2f} | New confidence: 0.0 (merged duplicate)"
+                    candidate.confidence_calc = (candidate.confidence_calc or "") + note
+                    
+                    # Consolidate page refs to primary
+                    primary_pages = set(primary.control_page_refs or [])
+                    candidate_pages = set(candidate.control_page_refs or [])
+                    merged_pages = sorted(primary_pages | candidate_pages)
+                    primary.control_page_refs = merged_pages
+                    
+                    # Update primary annotation
+                    merge_note = f"Consolidated from automated cleanup on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    primary.annotation = merge_note
+                    
+                    db.add(candidate)
+                    db.add(primary)
+                    cleanup_stats["controls_auto_merged"] += 1
+                    logging.error(f"[CLEANUP] Auto-merged control {candidate.id} to {primary.id} (score: {confidence_score:.2f})")
+                    
+                elif confidence_score < 0.60:
+                    # Flag as extraction error if similarity is low
+                    if candidate.control_confidence > 0.3:
+                        candidate.control_confidence = 0.3
+                        note = f"\nAutomated cleanup: Likely extraction error - duplicate control_id with dissimilar description (similarity score: {confidence_score:.2f})"
+                        candidate.confidence_calc = (candidate.confidence_calc or "") + note
+                        db.add(candidate)
+                        cleanup_stats["extraction_errors_flagged"] += 1
+        
+        # 5. Flag low-confidence CUECs
+        cuec_result = await db.execute(
+            select(CUEC).where(CUEC.scan_id == scan_id)
+        )
+        cuecs = cuec_result.scalars().all()
+        for cuec in cuecs:
+            if cuec.cuec_confidence and cuec.cuec_confidence < 0.5:
+                if not cuec.cuec_justification or "low confidence" not in cuec.cuec_justification.lower():
+                    note = f"\nAutomated cleanup: Low confidence CUEC (confidence: {cuec.cuec_confidence:.2f})"
+                    cuec.cuec_justification = (cuec.cuec_justification or "") + note
+                    db.add(cuec)
+                    cleanup_stats["low_confidence_cuecs"] += 1
+        
+        # 6. Flag low-confidence subservice orgs
+        so_result = await db.execute(
+            select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id)
+        )
+        subservice_orgs = so_result.scalars().all()
+        for so in subservice_orgs:
+            if so.confidence and so.confidence < 0.5:
+                if not so.confidence_justification or "low confidence" not in so.confidence_justification.lower():
+                    note = f"\nAutomated cleanup: Low confidence subservice org (confidence: {so.confidence:.2f})"
+                    so.confidence_justification = (so.confidence_justification or "") + note
+                    db.add(so)
+                    cleanup_stats["low_confidence_subservice_orgs"] += 1
+        
+        # Commit all changes
+        await db.commit()
+        
+        logging.error(f"[CLEANUP] Completed for scan {scan_id}: {cleanup_stats}")
+        return cleanup_stats
+        
+    except Exception as e:
+        logging.error(f"[CLEANUP] Error in automated cleanup for scan {scan_id}: {e}", exc_info=True)
+        await db.rollback()
+        return None
+
+@app.post("/report/{scan_id}/cleanup")
+async def trigger_cleanup(scan_id: int, db=Depends(get_db)):
+    """Manually trigger automated cleanup for a scan (for testing)"""
+    try:
+        cleanup_stats = await automated_cleanup(scan_id, db)
+        if cleanup_stats:
+            return {"status": "success", "stats": cleanup_stats}
+        else:
+            return {"status": "error", "message": "Cleanup failed"}
+    except Exception as e:
+        logging.error(f"Error triggering cleanup: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/report/{scan_id}/controls/suggest-merges")
+async def suggest_control_merges(scan_id: int, db=Depends(get_db)):
+    """
+    Analyze controls and suggest merges for identical control_ids.
+    
+    Returns merge suggestions with confidence scores based on:
+    - Description similarity (GPT-based, 70% weight)
+    - TSC/COSO mapping matches (15% weight)
+    - Test procedure similarity (10% weight)
+    - Deviation flag agreement (5% weight)
+    
+    Only returns suggestions with confidence >= MERGE_SUGGESTION_MIN_CONFIDENCE (default 0.85)
+    """
+    try:
+        from . import config as cfg
+        from .gpt_client import gpt_extract
+        
+        # Get all controls for this scan that haven't been merged away
+        # (merged_to_control_id is NULL for primary controls and controls not yet merged)
+        result = await db.execute(
+            select(Control).where(
+                Control.scan_id == scan_id,
+                Control.merged_to_control_id == None
+            ).order_by(Control.control_seq)
+        )
+        controls = result.scalars().all()
+        
+        # Group by control_id
+        control_groups = {}
+        for ctrl in controls:
+            if not ctrl.control_id:
+                continue
+            ctrl_id = str(ctrl.control_id).strip()
+            if ctrl_id not in control_groups:
+                control_groups[ctrl_id] = []
+            control_groups[ctrl_id].append(ctrl)
+        
+        # Find groups with 2+ controls (potential duplicates)
+        suggestions = []
+        
+        logging.error(f"[SUGGEST-MERGES] Found {len(control_groups)} control_id groups total")
+        
+        for ctrl_id, group in control_groups.items():
+            if len(group) < 2:
+                continue
+            
+            logging.error(f"[SUGGEST-MERGES] Processing group {ctrl_id}: {len(group)} controls")
+            
+            # Sort by confidence (descending) to pick primary
+            group.sort(key=lambda c: c.control_confidence or 0, reverse=True)
+            primary = group[0]
+            candidates = group[1:]
+            
+            logging.error(f"[SUGGEST-MERGES] Primary selected: DB ID {primary.id}, confidence={primary.control_confidence}")
+            
+            for idx, candidate in enumerate(candidates):
+                logging.error(f"[SUGGEST-MERGES] Processing candidate {idx+1}/{len(candidates)}: DB ID {candidate.id}")
+                # Calculate merge confidence
+                confidence_score = 0.0
+                confidence_breakdown = []
+                
+                # 1. Description similarity (70% weight) - use GPT
+                desc1 = (primary.control_desc or "").strip()
+                desc2 = (candidate.control_desc or "").strip()
+                
+                if desc1 and desc2:
+                    try:
+                        similarity_prompt = f"""Rate the semantic similarity between these two control descriptions on a scale of 0.0 to 1.0.
+Return ONLY a number between 0.0 and 1.0, nothing else.
+
+Description 1: {desc1[:500]}
+Description 2: {desc2[:500]}"""
+                        
+                        sim_response = gpt_extract(similarity_prompt, "merge_suggestions")
+                        desc_similarity = float(sim_response.strip())
+                        desc_similarity = max(0.0, min(1.0, desc_similarity))  # Clamp to [0, 1]
+                        confidence_score += desc_similarity * 0.70
+                        confidence_breakdown.append(f"Description similarity: {desc_similarity:.2f} (weight: 0.70)")
+                    except Exception as e:
+                        logging.warning(f"Description similarity failed for {ctrl_id}: {e}")
+                        # Fallback: exact match = 1.0, different = 0.6
+                        if desc1.lower() == desc2.lower():
+                            confidence_score += 0.70
+                            confidence_breakdown.append("Description exact match (weight: 0.70)")
+                        else:
+                            confidence_score += 0.42  # 0.6 * 0.70
+                            confidence_breakdown.append("Description different (weight: 0.70, score: 0.60)")
+                
+                # 2. TSC/COSO mapping match (15% weight)
+                if primary.control_tsc_id and candidate.control_tsc_id:
+                    if primary.control_tsc_id == candidate.control_tsc_id:
+                        confidence_score += 0.15
+                        confidence_breakdown.append("TSC ID match (weight: 0.15)")
+                    
+                if primary.control_coso_id and candidate.control_coso_id:
+                    if primary.control_coso_id == candidate.control_coso_id:
+                        # Don't double-count if already matched on TSC
+                        if not (primary.control_tsc_id and candidate.control_tsc_id and primary.control_tsc_id == candidate.control_tsc_id):
+                            confidence_score += 0.15
+                            confidence_breakdown.append("COSO ID match (weight: 0.15)")
+                
+                # 3. Test procedure similarity (10% weight)
+                test1 = (primary.control_test or "").strip()
+                test2 = (candidate.control_test or "").strip()
+                if test1 and test2:
+                    # Simple Levenshtein-like comparison
+                    if test1.lower() == test2.lower():
+                        confidence_score += 0.10
+                        confidence_breakdown.append("Test procedures identical (weight: 0.10)")
+                    elif len(test1) > 20 and len(test2) > 20 and test1[:50].lower() == test2[:50].lower():
+                        confidence_score += 0.07
+                        confidence_breakdown.append("Test procedures similar (weight: 0.10, score: 0.70)")
+                
+                # 4. Deviation flag agreement (5% weight)
+                if primary.has_deviation == candidate.has_deviation:
+                    confidence_score += 0.05
+                    confidence_breakdown.append("Deviation flags match (weight: 0.05)")
+                
+                logging.error(f"[SUGGEST-MERGES] Final score: {confidence_score:.3f}, threshold: {cfg.MERGE_SUGGESTION_MIN_CONFIDENCE}, breakdown: {confidence_breakdown}")
+                
+                # Only suggest if confidence meets threshold
+                if confidence_score >= cfg.MERGE_SUGGESTION_MIN_CONFIDENCE:
+                    logging.error(f"[SUGGEST-MERGES] Adding suggestion: {ctrl_id} (primary {primary.id}, candidate {candidate.id})")
+                    suggestions.append({
+                        "control_id": ctrl_id,
+                        "primary_db_id": primary.id,
+                        "candidate_db_id": candidate.id,
+                        "primary_pages": primary.control_page_refs or [],
+                        "candidate_pages": candidate.control_page_refs or [],
+                        "merge_confidence": round(confidence_score, 3),
+                        "confidence_breakdown": confidence_breakdown,
+                        "primary_desc": desc1[:100] + "..." if len(desc1) > 100 else desc1,
+                        "candidate_desc": desc2[:100] + "..." if len(desc2) > 100 else desc2
+                    })
+                else:
+                    logging.error(f"[SUGGEST-MERGES] Score {confidence_score:.3f} below threshold {cfg.MERGE_SUGGESTION_MIN_CONFIDENCE}, skipping")
+                    
+                    # Flag as extraction error if score is very low (<0.60) - likely duplicate control_id with different descriptions
+                    if confidence_score < 0.60 and candidate.control_confidence > 0.3:
+                        candidate.control_confidence = 0.3
+                        note = "\nConfidence reduced to 0.3: Likely extraction error - duplicate control_id with dissimilar description (similarity score < 0.60)"
+                        candidate.confidence_calc = (candidate.confidence_calc or "") + note
+                        db.add(candidate)
+                        logging.error(f"[SUGGEST-MERGES] Flagged control {candidate.id} as extraction error (score {confidence_score:.3f})")
+        
+        # Flag controls with blank/null control_id as extraction errors
+        blank_controls = [c for c in controls if not c.control_id or str(c.control_id).strip() == ""]
+        for ctrl in blank_controls:
+            if ctrl.control_confidence > 0.1:
+                ctrl.control_confidence = 0.1
+                note = "\nConfidence reduced to 0.1: Extraction error - no valid control_id extracted"
+                ctrl.confidence_calc = (ctrl.confidence_calc or "") + note
+                db.add(ctrl)
+        
+        if blank_controls:
+            logging.error(f"[SUGGEST-MERGES] Flagged {len(blank_controls)} controls with blank control_id as extraction errors")
+        
+        # Commit any confidence updates for extraction errors
+        await db.commit()
+        
+        # Limit results
+        suggestions.sort(key=lambda s: s["merge_confidence"], reverse=True)
+        suggestions = suggestions[:cfg.MERGE_SUGGESTION_MAX_RESULTS]
+        
+        logging.error(f"[SUGGEST-MERGES] Returning {len(suggestions)} suggestions (threshold: {cfg.MERGE_SUGGESTION_MIN_CONFIDENCE})")
+        
+        return {
+            "suggestions": suggestions,
+            "total_suggested": len(suggestions),
+            "threshold": cfg.MERGE_SUGGESTION_MIN_CONFIDENCE
+        }
+        
+    except Exception as e:
+        logging.error(f"Error suggesting merges for scan {scan_id}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/controls/merge")
+async def merge_controls(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+    """
+    Merge duplicate controls into a primary control with intelligent selection and data consolidation.
+    
+    Request body:
+    {
+        "primary_control_id": 123,  // Database ID of suggested primary (optional - will auto-select if omitted)
+        "merge_control_ids": [456, 789]  // Database IDs of controls to merge
+    }
+    
+    Actions:
+    - Intelligently selects primary (longest description, highest confidence, lowest ID)
+    - Consolidates all data fields into primary (longest non-null values)
+    - Merges page_refs arrays
+    - Sets merged_to_control_id and confidence=0 on secondary controls
+    - Ensures primary has merged_to_control_id=NULL
+    """
+    import json
+    try:
+        suggested_primary_id = data.get("primary_control_id")
+        merge_ids = data.get("merge_control_ids", [])
+        
+        if not merge_ids:
+            raise HTTPException(status_code=400, detail="merge_control_ids required")
+        
+        # Get all controls involved (suggested primary + merge candidates)
+        all_ids = [suggested_primary_id] + merge_ids if suggested_primary_id else merge_ids
+        result = await db.execute(
+            select(Control).where(Control.scan_id == scan_id, Control.id.in_(all_ids))
+        )
+        all_controls = result.scalars().all()
+        
+        if len(all_controls) < 2:
+            raise HTTPException(status_code=404, detail="Need at least 2 controls to merge")
+        
+        # Intelligently select primary control:
+        # 1. Longest description (most complete)
+        # 2. If tied, highest confidence
+        # 3. If tied, lowest ID (first extracted)
+        def control_score(ctrl):
+            desc_len = len(ctrl.control_desc or "")
+            conf = ctrl.control_confidence or 0
+            return (desc_len, conf, -ctrl.id)  # Negative ID so min() picks lowest
+        
+        primary = max(all_controls, key=control_score)
+        secondaries = [c for c in all_controls if c.id != primary.id]
+        
+        logging.error(f"[MERGE] Control IDs involved: {[c.id for c in all_controls]}, control_id: {primary.control_id}")
+        logging.error(f"[MERGE] Selected primary control {primary.id} (desc_len={len(primary.control_desc or '')}, conf={primary.control_confidence})")
+        logging.error(f"[MERGE] Secondaries to merge: {[c.id for c in secondaries]}")
+        
+        # Helper function to get longest non-null value
+        def get_longest(field_name):
+            values = [getattr(c, field_name) for c in all_controls if getattr(c, field_name, None)]
+            return max(values, key=len) if values else None
+        
+        # Helper function to get highest value
+        def get_max(field_name):
+            values = [getattr(c, field_name) for c in all_controls if getattr(c, field_name, None) is not None]
+            return max(values) if values else None
+        
+        # Consolidate data into primary from all controls
+        primary.control_desc = get_longest('control_desc') or primary.control_desc
+        primary.control_test = get_longest('control_test') or primary.control_test
+        primary.control_test_results = get_longest('control_test_results') or primary.control_test_results
+        primary.deviation_desc = get_longest('deviation_desc') or primary.deviation_desc
+        
+        # Preserve has_deviation flag - set to True if ANY control has a deviation
+        has_any_deviation = any(getattr(c, 'has_deviation', False) for c in all_controls)
+        if has_any_deviation:
+            primary.has_deviation = True
+            if not primary.deviation_desc:
+                # If primary doesn't have deviation_desc, take it from any control that has it
+                primary.deviation_desc = get_longest('deviation_desc')
+        
+        # Use highest confidence
+        max_confidence = get_max('control_confidence')
+        if max_confidence and max_confidence > (primary.control_confidence or 0):
+            old_conf = primary.control_confidence
+            primary.control_confidence = max_confidence
+            conf_note = f"Confidence increased from {old_conf:.2f} to {max_confidence:.2f} during merge (took highest from duplicates)"
+            primary.confidence_calc = f"{primary.confidence_calc}\n{conf_note}" if primary.confidence_calc else conf_note
+        
+        # Merge page references from all controls
+        all_pages = []
+        for ctrl in all_controls:
+            if ctrl.control_page_refs:
+                all_pages.extend(ctrl.control_page_refs)
+        primary.control_page_refs = sorted(list(set(all_pages)))
+        
+        # Ensure primary is NOT marked as merged
+        primary.merged_to_control_id = None
+        
+        # Process secondary controls
+        merged_ids_list = []
+        for ctrl in secondaries:
+            original_conf = ctrl.control_confidence or 0
+            
+            # Mark as merged to primary
+            ctrl.merged_to_control_id = str(primary.id)
+            ctrl.control_confidence = 0.0
+            
+            # Document the merge in confidence_calc
+            merge_calc_note = f"Merged to control {primary.id} on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Original confidence: {original_conf:.2f} | New confidence: 0.0 (merged duplicate)"
+            ctrl.confidence_calc = f"{ctrl.confidence_calc}\n{merge_calc_note}" if ctrl.confidence_calc else merge_calc_note
+            
+            # Store original data in annotation for undo
+            annotation_data = {
+                "merged_at": str(datetime.datetime.now()),
+                "original_confidence": original_conf,
+                "merged_to": primary.id,
+                "original_desc_length": len(ctrl.control_desc or ""),
+                "original_pages": ctrl.control_page_refs
+            }
+            ctrl.annotation = json.dumps(annotation_data) if not ctrl.annotation else f"{ctrl.annotation}\n{json.dumps(annotation_data)}"
+            
+            merged_ids_list.append(ctrl.id)
+            db.add(ctrl)
+        
+        # Update primary annotation
+        merge_note = f"Consolidated from {len(secondaries)} duplicate(s) (IDs: {', '.join(map(str, merged_ids_list))}) on {datetime.datetime.now()}"
+        primary.annotation = f"{primary.annotation}\n{merge_note}" if primary.annotation else merge_note
+        
+        db.add(primary)
+        
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        
+        await db.commit()
+        
+        logging.error(f"[MERGE] Commit successful. Primary {primary.id}, Secondaries {merged_ids_list} now have merged_to_control_id={primary.id}, confidence=0")
+        
+        return {
+            "status": "ok",
+            "primary_id": primary.id,
+            "merged_count": len(secondaries),
+            "merged_ids": merged_ids_list,
+            "consolidated_pages": primary.control_page_refs,
+            "primary_confidence": primary.control_confidence,
+            "consolidation_details": {
+                "selected_primary": f"ID {primary.id} (desc_len={len(primary.control_desc or '')}, conf={primary.control_confidence})",
+                "consolidated_fields": ["control_desc", "control_test", "control_test_results", "deviation_desc", "has_deviation", "control_page_refs", "control_confidence"]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error merging controls for scan {scan_id}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/controls/{control_db_id}/split")
+async def split_control(scan_id: int, control_db_id: int, db=Depends(get_db)):
+    """
+    Undo a control merge by restoring merged controls.
+    
+    If this control has been merged INTO another control:
+    - Clears merged_to_control_id
+    - Restores original confidence from annotation backup
+    
+    If this control HAS other controls merged into it:
+    - Returns error (use split on the merged controls instead)
+    """
+    import json
+    try:
+        # Get the control
+        ctrl = (await db.execute(
+            select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id)
+        )).scalar_one_or_none()
+        
+        if not ctrl:
+            raise HTTPException(status_code=404, detail="Control not found")
+        
+        # Check if this control was merged into another
+        if not ctrl.merged_to_control_id:
+            return JSONResponse({"error": "This control is not merged, nothing to split"}, status_code=400)
+        
+        # Restore from annotation backup
+        original_confidence = 0.5  # Default fallback
+        
+        if ctrl.annotation:
+            try:
+                # Try to parse JSON backup
+                lines = ctrl.annotation.split("\n")
+                for line in lines:
+                    if line.strip().startswith("{"):
+                        annotation_data = json.loads(line)
+                        if "original_confidence" in annotation_data:
+                            original_confidence = annotation_data["original_confidence"]
+                            break
+            except Exception as e:
+                logging.warning(f"Could not parse annotation backup for control {control_db_id}: {e}")
+        
+        # Restore control
+        ctrl.merged_to_control_id = None
+        ctrl.control_confidence = original_confidence
+        
+        # Add split note to annotation
+        split_note = f"Split/unmerged on {datetime.datetime.now()}, confidence restored to {original_confidence}"
+        ctrl.annotation = f"{ctrl.annotation}\n{split_note}" if ctrl.annotation else split_note
+        
+        db.add(ctrl)
+        
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        
+        await db.commit()
+        
+        return {
+            "status": "ok",
+            "control_id": ctrl.id,
+            "restored_confidence": original_confidence,
+            "message": "Control successfully split/unmerged"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error splitting control {control_db_id}: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.patch("/report/{scan_id}/cuecs/{cuec_id}/annotation")
 async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
@@ -2736,7 +3521,7 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
     Note: For CUECs, we reuse the same map_control_to_frameworks_multi function since the logic is identical.
     CUECs typically don't have deviations, but the function handles this gracefully.
     """
-    from ..extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    from .extractors.control_extractor_v4 import map_control_to_frameworks_multi
     
     try:
         cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.id == cuec_id))).scalar_one_or_none()
@@ -2748,7 +3533,7 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
             return JSONResponse({"error": "CUEC description is empty; cannot compute mapping"}, status_code=400)
         
         # Call multi-match mapping if enabled, otherwise use legacy single-match
-        if config.ENABLE_MULTI_MATCH_MAPPING:
+        if cfg.ENABLE_MULTI_MATCH_MAPPING:
             try:
                 tsc_matches, coso_matches = map_control_to_frameworks_multi(
                     control_desc=desc,
@@ -2883,7 +3668,7 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
         }
         
         # Include multi-match arrays if enabled
-        if config.ENABLE_MULTI_MATCH_MAPPING:
+        if cfg.ENABLE_MULTI_MATCH_MAPPING:
             response["cuec"]["cuec_tsc_mappings"] = cuec.cuec_tsc_mappings
             response["cuec"]["cuec_coso_mappings"] = cuec.cuec_coso_mappings
         
@@ -2901,23 +3686,42 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
     plus legacy columns: control_tsc_id, control_coso_id, control_tsc_similarity, control_coso_similarity,
     control_tsc_confidence_pct, control_coso_confidence_pct, control_closest_framework.
     """
-    from ..extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    from .extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    
+    logging.info(f"[RECOMPUTE] Starting framework recompute for scan_id={scan_id}, control_db_id={control_db_id}")
     
     try:
         ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id))).scalar_one_or_none()
         if not ctrl:
+            logging.error(f"[RECOMPUTE] Control not found: scan_id={scan_id}, control_db_id={control_db_id}")
             return JSONResponse({"error": "Control not found"}, status_code=404)
+        
+        logging.info(f"[RECOMPUTE] Found control: control_id={ctrl.control_id}, has_deviation={ctrl.has_deviation}")
         
         # Prefer control_desc; fallback to control_test
         desc = (getattr(ctrl, "control_desc", None) or "").strip()
         if not desc:
             desc = (getattr(ctrl, "control_test", None) or "").strip()
         if not desc:
+            logging.error(f"[RECOMPUTE] No suitable text for control_db_id={control_db_id}")
             return JSONResponse({"error": "No suitable text (desc/test) to compute mapping"}, status_code=400)
         
+        logging.info(f"[RECOMPUTE] Using description of length {len(desc)}")
+        
+        # Validate TSC/COSO criteria are loaded
+        if not TSC_CRITERIA:
+            logging.error("[RECOMPUTE] TSC_CRITERIA not loaded!")
+            return JSONResponse({"error": "TSC criteria not available"}, status_code=500)
+        if not COSO_2013_CRITERIA:
+            logging.error("[RECOMPUTE] COSO_2013_CRITERIA not loaded!")
+            return JSONResponse({"error": "COSO criteria not available"}, status_code=500)
+        
+        logging.info(f"[RECOMPUTE] TSC criteria count: {len(TSC_CRITERIA)}, COSO criteria count: {len(COSO_2013_CRITERIA)}")
+        
         # Call multi-match mapping if enabled, otherwise use legacy single-match
-        if config.ENABLE_MULTI_MATCH_MAPPING:
+        if cfg.ENABLE_MULTI_MATCH_MAPPING:
             try:
+                logging.info(f"[RECOMPUTE] Calling map_control_to_frameworks_multi...")
                 tsc_matches, coso_matches = map_control_to_frameworks_multi(
                     control_desc=desc,
                     control_id=ctrl.control_id or f"Control_{ctrl.id}",
@@ -2927,8 +3731,20 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
                     coso_criteria=COSO_2013_CRITERIA,
                     top_k=3
                 )
+                logging.info(f"[RECOMPUTE] Mapping complete: {len(tsc_matches)} TSC matches, {len(coso_matches)} COSO matches")
                 
-                # Store arrays
+                # Store arrays with validation
+                logging.info(f"[RECOMPUTE] Storing TSC mappings: {tsc_matches}")
+                logging.info(f"[RECOMPUTE] Storing COSO mappings: {coso_matches}")
+                
+                # Ensure arrays are valid JSON
+                if not isinstance(tsc_matches, list):
+                    logging.error(f"[RECOMPUTE] TSC matches not a list: {type(tsc_matches)}")
+                    tsc_matches = []
+                if not isinstance(coso_matches, list):
+                    logging.error(f"[RECOMPUTE] COSO matches not a list: {type(coso_matches)}")
+                    coso_matches = []
+                
                 ctrl.control_tsc_mappings = tsc_matches
                 ctrl.control_coso_mappings = coso_matches
                 
@@ -2959,9 +3775,12 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
                     ctrl.control_closest_framework = "COSO"
                 else:
                     ctrl.control_closest_framework = "Undetermined"
+                
+                logging.info(f"[RECOMPUTE] Framework determination complete: {ctrl.control_closest_framework}")
                     
             except Exception as e:
-                return JSONResponse({"error": f"Multi-match mapping failed: {e}"}, status_code=503)
+                logging.error(f"[RECOMPUTE] Multi-match mapping failed: {e}", exc_info=True)
+                return JSONResponse({"error": f"Multi-match mapping failed: {str(e)}"}, status_code=503)
         else:
             # Legacy single-match fallback
             try:
@@ -3010,15 +3829,131 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
         }
         
         # Include multi-match arrays if enabled
-        if config.ENABLE_MULTI_MATCH_MAPPING:
+        if cfg.ENABLE_MULTI_MATCH_MAPPING:
             response["control"]["control_tsc_mappings"] = ctrl.control_tsc_mappings
             response["control"]["control_coso_mappings"] = ctrl.control_coso_mappings
         
+        logging.info(f"[RECOMPUTE] Success! Returning response")
         return response
         
     except Exception as e:
         await db.rollback()
-        logging.error(f"/report/{scan_id}/controls/id/{control_db_id}/recompute_frameworks error: {e}")
+        logging.error(f"[RECOMPUTE] Unexpected error in /report/{scan_id}/controls/id/{control_db_id}/recompute_frameworks: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/preview-frameworks")
+async def preview_framework_mappings(
+    scan_id: int,
+    data: Dict[str, Any] = Body(...),
+    db=Depends(get_db)
+):
+    """
+    Preview TSC/COSO framework mappings WITHOUT saving to database.
+    
+    Rate limited to prevent abuse: max FRAMEWORK_PREVIEW_RATE_LIMIT (default 10) calls per minute per scan.
+    
+    Request body:
+    {
+        "control_desc": "Management reviews user access quarterly...",
+        "control_id": "CC6.1",  // Optional
+        "has_deviation": false  // Optional
+    }
+    
+    Returns:
+    {
+        "tsc_matches": [{"tsc_id": "CC7.2", "score": 95}, ...],
+        "coso_matches": [{"principle": 10, "score": 92}, ...],
+        "cached": false,
+        "rate_limit_remaining": 8
+    }
+    """
+    try:
+        from . import config as cfg
+        from .extractors.control_extractor_v4 import map_control_to_frameworks_multi
+        import redis
+        
+        # Rate limiting using Redis
+        try:
+            redis_client = redis.Redis(host='localhost', port=6379, db=0, socket_connect_timeout=2)
+            rate_limit_key = f"preview_frameworks:{scan_id}"
+            
+            # Increment counter
+            current_count = redis_client.incr(rate_limit_key)
+            
+            # Set TTL on first request
+            if current_count == 1:
+                redis_client.expire(rate_limit_key, 60)  # 60 second window
+            
+            # Check limit
+            if current_count > cfg.FRAMEWORK_PREVIEW_RATE_LIMIT:
+                ttl = redis_client.ttl(rate_limit_key)
+                return JSONResponse(
+                    {
+                        "error": f"Rate limit exceeded. Try again in {ttl} seconds.",
+                        "rate_limit_remaining": 0
+                    },
+                    status_code=429
+                )
+            
+            rate_limit_remaining = cfg.FRAMEWORK_PREVIEW_RATE_LIMIT - current_count
+            
+        except Exception as redis_err:
+            logging.warning(f"Redis rate limiting unavailable for preview: {redis_err}")
+            rate_limit_remaining = None  # No rate limiting
+        
+        # Extract parameters
+        control_desc = data.get("control_desc", "").strip()
+        control_id = data.get("control_id", "").strip()
+        has_deviation = data.get("has_deviation", False)
+        
+        if not control_desc:
+            raise HTTPException(status_code=400, detail="control_desc is required")
+        
+        # Verify scan exists
+        scan_result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan = scan_result.scalar_one_or_none()
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        # Call mapping function (same as used during extraction)
+        logging.info(f"[PREVIEW] Computing frameworks for control_id={control_id}, desc_len={len(control_desc)}")
+        
+        tsc_matches, coso_matches = map_control_to_frameworks_multi(
+            control_desc=control_desc,
+            control_id=control_id,
+            has_deviation=has_deviation
+        )
+        
+        # Format response
+        tsc_formatted = []
+        for match in tsc_matches:
+            tsc_formatted.append({
+                "tsc_id": match.get("tsc_id"),
+                "score": match.get("score"),
+                "rationale": match.get("rationale", "")[:200]  # Truncate rationale
+            })
+        
+        coso_formatted = []
+        for match in coso_matches:
+            coso_formatted.append({
+                "principle": match.get("principle"),
+                "score": match.get("score"),
+                "rationale": match.get("rationale", "")[:200]
+            })
+        
+        logging.info(f"[PREVIEW] Found {len(tsc_formatted)} TSC matches, {len(coso_formatted)} COSO matches")
+        
+        return {
+            "tsc_matches": tsc_formatted,
+            "coso_matches": coso_formatted,
+            "rate_limit_remaining": rate_limit_remaining,
+            "note": "These mappings are NOT saved. Use 'Save' to commit to database."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error previewing frameworks for scan {scan_id}: {e}", exc_info=True)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.post("/report/{scan_id}/controls/batch_recompute_frameworks")
@@ -3050,17 +3985,17 @@ async def batch_recompute_control_frameworks(
     """
     import asyncio
     import time as time_module
-    from ..extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    from .extractors.control_extractor_v4 import map_control_to_frameworks_multi
     
     try:
         start_time = time_module.time()
         
         # Get configuration
-        batch_size = config.BATCH_MAPPING_BATCH_SIZE
-        max_concurrent = config.MAX_BATCH_MAPPING_CONCURRENT
-        default_throttle = config.BATCH_MAPPING_DEFAULT_THROTTLE_MS
-        enable_auto_throttle = config.BATCH_MAPPING_ENABLE_AUTO_THROTTLE
-        target_cpu_pct = config.BATCH_MAPPING_TARGET_CPU_PCT
+        batch_size = cfg.BATCH_MAPPING_BATCH_SIZE
+        max_concurrent = cfg.MAX_BATCH_MAPPING_CONCURRENT
+        default_throttle = cfg.BATCH_MAPPING_DEFAULT_THROTTLE_MS
+        enable_auto_throttle = cfg.BATCH_MAPPING_ENABLE_AUTO_THROTTLE
+        target_cpu_pct = cfg.BATCH_MAPPING_TARGET_CPU_PCT
         
         # Determine throttle setting
         if throttle_ms is None:
@@ -4227,10 +5162,14 @@ async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
             scan_id=scan_id,
             control_id=(str(data.get("control_id") or "").strip() or None),
             control_desc=(desc or None),
+            control_test=(str(data.get("control_test") or "").strip() or None),
+            control_test_results=(str(data.get("control_test_results") or "").strip() or None),
+            has_deviation=data.get("has_deviation"),
+            deviation_desc=(str(data.get("deviation_desc") or "").strip() or None),
             control_tsc_id=(str(data.get("control_tsc_id") or "").strip() or None),
             control_coso_id=(str(data.get("control_coso_id") or "").strip() or None),
             control_confidence=conf,
-            control_page_ref=_as_float_or_none(data.get("control_page_ref")),
+            control_page_refs=_parse_page_refs(data.get("control_page_refs") or data.get("control_page_ref")),
             control_line_ref=_as_float_or_none(data.get("control_line_ref")),
             control_seq=_as_float_or_none(data.get("control_seq")),
             annotation=data.get("annotation"),
@@ -4246,10 +5185,14 @@ async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
             "id": ctrl.id,
             "control_id": ctrl.control_id,
             "control_desc": ctrl.control_desc,
+            "control_test": ctrl.control_test,
+            "control_test_results": ctrl.control_test_results,
+            "has_deviation": ctrl.has_deviation,
+            "deviation_desc": ctrl.deviation_desc,
             "control_tsc_id": ctrl.control_tsc_id,
             "control_coso_id": ctrl.control_coso_id,
             "control_confidence": ctrl.control_confidence,
-            "control_page_ref": ctrl.control_page_ref,
+            "control_page_refs": ctrl.control_page_refs,
             "control_line_ref": ctrl.control_line_ref,
             "control_seq": ctrl.control_seq,
             "annotation": ctrl.annotation,
@@ -4260,3 +5203,206 @@ async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
         await db.rollback()
         logging.error(f"create_control error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/report/{scan_id}/extract-entity")
+async def extract_entity(
+    scan_id: int, 
+    data: dict, 
+    db=Depends(get_db)
+):
+    """
+    Extract entity information from the report text using GPT.
+    Searches for the specified text and extracts structured data from surrounding context.
+    """
+    import asyncio
+    import json as json_lib
+    from .gpt_client import gpt_extract
+    from .config import ENTITY_EXTRACTION_FROM_CONTEXT_PROMPT, MAX_SEARCH_OCCURRENCES, ENTITY_EXTRACTION_TIMEOUT
+    
+    try:
+        entity_type = data.get("entity_type", "").lower()
+        search_text = (data.get("search_text") or "").strip()
+        force_multi_extract = data.get("force_multi_extract", False)
+        
+        # Validate inputs
+        if not search_text:
+            raise HTTPException(status_code=400, detail="search_text is required")
+        
+        if entity_type not in ["control", "cuec", "subservice_org"]:
+            raise HTTPException(status_code=400, detail="entity_type must be 'control', 'cuec', or 'subservice_org'")
+        
+        # Load the scan's extracted_text
+        result = await db.execute(select(Scan).filter(Scan.id == scan_id))
+        scan_row = result.scalars().first()
+        
+        if not scan_row:
+            raise HTTPException(status_code=404, detail=f"Scan {scan_id} not found")
+        
+        if not scan_row.extracted_text:
+            raise HTTPException(status_code=404, detail=f"Extracted text not available for scan {scan_id}")
+        
+        full_text = scan_row.extracted_text
+        
+        # Find all occurrences (case-insensitive)
+        occurrences = []
+        start_idx = 0
+        search_lower = search_text.lower()
+        text_lower = full_text.lower()
+        
+        while True:
+            idx = text_lower.find(search_lower, start_idx)
+            if idx == -1:
+                break
+            occurrences.append(idx)
+            start_idx = idx + 1
+        
+        if not occurrences:
+            return {
+                "error": f"Search term '{search_text}' not found in report",
+                "occurrence_count": 0
+            }
+        
+        # Check occurrence count and warn if needed
+        if len(occurrences) > MAX_SEARCH_OCCURRENCES and not force_multi_extract:
+            return {
+                "warning": f"Found {len(occurrences)} occurrences. Consider refining your search term or enable 'force_multi_extract'.",
+                "occurrence_count": len(occurrences),
+                "requires_force": True
+            }
+        
+        # Extract context windows (±2000 chars) for each occurrence
+        CONTEXT_WINDOW = 2000
+        contexts = []
+        
+        for occ_idx in occurrences[:MAX_SEARCH_OCCURRENCES if not force_multi_extract else None]:
+            start = max(0, occ_idx - CONTEXT_WINDOW)
+            end = min(len(full_text), occ_idx + len(search_text) + CONTEXT_WINDOW)
+            context = full_text[start:end]
+            contexts.append(context)
+        
+        # Concatenate contexts with separators
+        combined_context = "\n\n=== OCCURRENCE SEPARATOR ===\n\n".join(contexts)
+        
+        # Build prompt
+        prompt = ENTITY_EXTRACTION_FROM_CONTEXT_PROMPT.format(
+            entity_type=entity_type,
+            search_text=search_text,
+            occurrence_count=len(contexts),
+            text_context=combined_context
+        )
+        
+        # Call GPT synchronously in thread pool (gpt_extract is synchronous)
+        def call_gpt_sync():
+            return gpt_extract(prompt, f"entity_extraction_{entity_type}")
+        
+        loop = asyncio.get_event_loop()
+        try:
+            result_text = await asyncio.wait_for(
+                loop.run_in_executor(None, call_gpt_sync),
+                timeout=ENTITY_EXTRACTION_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail=f"Entity extraction timed out after {ENTITY_EXTRACTION_TIMEOUT}s")
+        
+        # Extract JSON from markdown code blocks if present
+        import re
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', result_text, re.DOTALL)
+        if json_match:
+            json_text = json_match.group(1)
+        else:
+            # Try to find raw JSON object
+            json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+            json_text = json_match.group(0) if json_match else result_text
+        
+        # Parse JSON response
+        result_data = json_lib.loads(json_text)
+        
+        return {
+            "entity_type": entity_type,
+            "search_text": search_text,
+            "occurrence_count": len(contexts),
+            "extracted_data": result_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"extract_entity error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Entity extraction failed: {e}")
+
+@app.get("/test/gpt-models")
+async def test_gpt_models():
+    """
+    Test which GPT models are available in the Dataiku environment.
+    Attempts to call GPT-4o, GPT-5 (if available), and reports results.
+    """
+    results = {}
+    test_prompt = "What is 2+2? Answer with just the number."
+    
+    # Test GPT-4o (known working)
+    try:
+        from .gpt_client import _chat_completion
+        start_time = time.time()
+        response_4o = _chat_completion(test_prompt, "test_extractor", override_model="gpt-4o")
+        duration_4o = time.time() - start_time
+        results["gpt-4o"] = {
+            "available": True,
+            "response": response_4o[:200],  # Truncate for safety
+            "duration_seconds": round(duration_4o, 2),
+            "error": None
+        }
+    except Exception as e:
+        results["gpt-4o"] = {
+            "available": False,
+            "response": None,
+            "duration_seconds": None,
+            "error": str(e)
+        }
+    
+    # Test GPT-5
+    try:
+        from .gpt_client import _chat_completion
+        start_time = time.time()
+        response_5 = _chat_completion(test_prompt, "test_extractor", override_model="gpt-5")
+        duration_5 = time.time() - start_time
+        results["gpt-5"] = {
+            "available": True,
+            "response": response_5[:200],  # Truncate for safety
+            "duration_seconds": round(duration_5, 2),
+            "error": None
+        }
+    except Exception as e:
+        results["gpt-5"] = {
+            "available": False,
+            "response": None,
+            "duration_seconds": None,
+            "error": str(e)
+        }
+    
+    # Test o1 (reasoning model)
+    try:
+        from .gpt_client import _chat_completion
+        start_time = time.time()
+        response_o1 = _chat_completion(test_prompt, "test_extractor", override_model="o1")
+        duration_o1 = time.time() - start_time
+        results["o1"] = {
+            "available": True,
+            "response": response_o1[:200],
+            "duration_seconds": round(duration_o1, 2),
+            "error": None
+        }
+    except Exception as e:
+        results["o1"] = {
+            "available": False,
+            "response": None,
+            "duration_seconds": None,
+            "error": str(e)
+        }
+    
+    return {
+        "test_time": datetime.datetime.utcnow().isoformat(),
+        "provider": cfg.LLM_PROVIDER,
+        "dataiku_host": cfg.DATAIKU_DSS_HOST,
+        "results": results
+    }

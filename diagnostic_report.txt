@@ -1,0 +1,100 @@
+﻿========================================
+SOC ANALYZER - DIAGNOSTIC SUMMARY
+========================================
+
+DATE: 2025-11-19 06:44:04
+
+ISSUES REPORTED:
+1. Scan dropdown showing blank
+2. Confidence Calc showing nothing  
+3. Page Refs showing blank
+4. Duplicates still showing
+
+========================================
+FINDINGS:
+========================================
+
+ ISSUE 1: SCAN DROPDOWN - NO PROBLEM
+   Status: WORKING CORRECTLY
+   Data: 20 scans found in /history endpoint
+   Scan #26 exists with Adobe Incorporated data
+   
+ ISSUE 2: CONFIDENCE CALC - NO PROBLEM
+   Status: WORKING CORRECTLY
+   Data: 129/129 controls have confidence values
+   Example: First control has confidence = 0.95
+   
+ ISSUE 3: PAGE REFS - FIXED
+   Status: **WAS BROKEN, NOW FIXED**
+   Root Cause: Backend API was using 'control_page_ref' (singular) 
+               but database column is 'control_page_refs' (plural)
+   Fix Applied: Changed line 468 in main.py from control_page_ref to control_page_refs
+   Also Added: control_tsc_mappings, control_coso_mappings, verification fields
+   Result: 129/129 controls now have page_refs data
+   
+  ISSUE 4: DUPLICATES - BY DESIGN
+   Status: WORKING AS INTENDED
+   Explanation: Orange highlighting shows duplicates that NEED merging
+   Data: 9 duplicate control IDs found (33 merge suggestions)
+   Filter Working: 163 total controls in DB, only 129 returned (34 already merged)
+   
+========================================
+DUPLICATE DETAILS:
+========================================
+
+Found 9 control IDs with duplicates:
+   (blank) - 14 controls without IDs
+   EM-06-01 - 3 instances
+   SM-03-01 - 3 instances  
+   IAM-01-02 - 2 instances
+   IAM-01-03 - 2 instances
+   CC6.5 - 2 instances
+   DM-01-01 - 3 instances
+   SM-02-02 - 2 instances
+   TPM-02-02 - 2 instances
+
+Merge Suggestions: 33 pairs ready to merge (confidence  0.85)
+Most with 1.0 (100%) confidence - exact duplicates
+
+========================================
+ACTIONS REQUIRED:
+========================================
+
+1.  COMPLETED: Fixed page_refs serialization bug
+2.  COMPLETED: Rebuilt and restarted backend  
+3.   USER ACTION NEEDED: Use Merge Suggestions UI to merge duplicates
+4.   USER ACTION NEEDED: Handle 14 controls with blank control_id
+
+========================================
+MERGE SUGGESTIONS WORKING:
+========================================
+
+Endpoint: GET /report/26/controls/suggest-merges
+Status:  OPERATIONAL
+Examples:
+   SG-02-01: 2 instances on pages [52,62] and [52] - 100% match
+   TPM-04-01: 2 instances on pages [53,110] and [110] - 100% match  
+   BM-01-02: 5 instances across pages - all 100% matches
+
+To merge duplicates:
+1. Open http://localhost:3000
+2. Load scan #26 (Adobe)
+3. Click 'Merge Suggestions' badge in Controls table
+4. Review suggestions
+5. Click 'Merge' for each pair
+6. Duplicates will be hidden after merge
+
+========================================
+NEXT STEPS:
+========================================
+
+Frontend should now display:
+   Scan dropdown with 20 scans
+   Confidence values (0-1.0 scale)
+   Page refs as arrays [50, 52, etc]
+    Orange-highlighted duplicates (use merge feature)
+
+Hard refresh browser: Ctrl+Shift+R
+Clear cache if issues persist
+
+========================================

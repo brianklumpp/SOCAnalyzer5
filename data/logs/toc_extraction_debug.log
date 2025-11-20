@@ -1,14 +1,22 @@
 Raw TOC text from extract_toc_with_gpt:
-TABLE OF CONTENTS  
-Section 1: Okta’s Management Assertion .............................................................. 1  
-Section 2: Independent Service Auditor’s Assurance Report .................................. 3  
-Section 3: Description of Okta’s Identity as a Service (“IDaaS”) System Relevant to  
-Security, Availability, and Confidentiality .............................................................. 9  
-Section 4: Okta’s Controls, Trust Service Criteria, Service Auditor’s Test of  
-Controls, and Test Results ................................................................................. 43
+TABLE OF  
+CONTENTS  
+SECTION I.  
+INDEPENDENT SERVICE AUDITOR’S REPORT  
+3  
+SECTION II. MANAGEMENT’S ASSERTION  
+7  
+SECTION III. DESCRIPTION OF THE LEGAL SPEND AND MATTER  
+MANAGEMENT SOFTWARE SYSTEM  
+9  
+SECTION IV. TESTING MATRICES  
+25  
+SECTION V. OTHER INFORMATION PROVIDED BY SIMPLELEGAL  
+55
 
 Parsed TOC headings from extract_toc_headings_and_pages_with_gpt:
-  Heading: 'Section 1: Okta’s Management Assertion' | Page: 1 | Raw: 'Section 1: Okta’s Management Assertion'
-  Heading: 'Section 2: Independent Service Auditor’s Assurance Report' | Page: 3 | Raw: 'Section 2: Independent Service Auditor’s Assurance Report'
-  Heading: 'Section 3: Description of Okta’s Identity as a Service (“IDaaS”) System Relevant to Security, Availability, and Confidentiality' | Page: 9 | Raw: 'Section 3: Description of Okta’s Identity as a Service (“IDaaS”) System Relevant to Security, Availability, and Confidentiality'
-  Heading: 'Section 4: Okta’s Controls, Trust Service Criteria, Service Auditor’s Test of Controls, and Test Results' | Page: 43 | Raw: 'Section 4: Okta’s Controls, Trust Service Criteria, Service Auditor’s Test of Controls, and Test Results'
+  Heading: 'SECTION I. INDEPENDENT SERVICE AUDITOR’S REPORT' | Page: 3 | Raw: 'SECTION I. INDEPENDENT SERVICE AUDITOR’S REPORT'
+  Heading: 'SECTION II. MANAGEMENT’S ASSERTION' | Page: 7 | Raw: 'SECTION II. MANAGEMENT’S ASSERTION'
+  Heading: 'SECTION III. DESCRIPTION OF THE LEGAL SPEND AND MATTER MANAGEMENT SOFTWARE SYSTEM' | Page: 9 | Raw: 'SECTION III. DESCRIPTION OF THE LEGAL SPEND AND MATTER MANAGEMENT SOFTWARE SYSTEM'
+  Heading: 'SECTION IV. TESTING MATRICES' | Page: 25 | Raw: 'SECTION IV. TESTING MATRICES'
+  Heading: 'SECTION V. OTHER INFORMATION PROVIDED BY SIMPLELEGAL' | Page: 55 | Raw: 'SECTION V. OTHER INFORMATION PROVIDED BY SIMPLELEGAL'
