@@ -1135,6 +1135,26 @@ CUEC_KEYWORDS = [
     # 'customer' and 'user' removed as requested
 ]
 
+# SOC 1 CUEC Keywords - Focus on user entity financial reporting controls
+CUEC_KEYWORDS_SOC1 = [
+    "user entity control",
+    "complementary user entity",
+    "user organization control",
+    "user entity responsibilities",
+    "user entity is responsible",
+    "customer is responsible",
+    "user must ensure",
+    "user should",
+    "user entity should",
+    "require user entity",
+    "users are responsible",
+    "financial statement preparation",
+    "user entity financial",
+    "user reconciliation",
+    "user approval",
+    "user authorization"
+]
+
 CUEC_CONSOLIDATION_PROMPT = """
 You are a SOC 2 auditor consolidating extracted CUECs into a single, clean list.
 
