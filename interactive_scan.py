@@ -17,6 +17,7 @@ import os
 import sys
 import json
 import time
+import asyncio
 import webbrowser
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -28,6 +29,31 @@ if sys.platform == 'win32':
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
     # Enable ANSI escape sequences on Windows
     os.system('')
+
+
+def run_async(coroutine):
+    """
+    Properly run async coroutine with event loop management.
+    
+    This wrapper fixes asyncio.run() issues on Windows Python 3.13 where
+    the ProactorEventLoop is not properly cleaned up between calls,
+    causing RuntimeError: Event loop is closed.
+    
+    Args:
+        coroutine: The async coroutine to execute
+        
+    Returns:
+        The result of the coroutine execution
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coroutine)
+    finally:
+        try:
+            loop.close()
+        except Exception:
+            pass  # Ignore cleanup errors
 
 # Add backend directory to Python path
 SCRIPT_DIR = Path(__file__).parent
@@ -460,7 +486,6 @@ def upload_to_database(results: Dict[str, Any], pdf_path: Optional[Path] = None)
 
 def view_reports():
     """View available reports and select one to open"""
-    import asyncio
     from app.database import get_db
     from app.models import Scan
     from sqlalchemy.future import select
@@ -477,7 +502,7 @@ def view_reports():
     
     try:
         print_info("Loading reports from database...")
-        scans = asyncio.run(get_scans())
+        scans = run_async(get_scans())
         
         if not scans:
             print_warning("No reports found in database")
@@ -560,7 +585,6 @@ def open_report_in_browser(scan_id: Optional[int] = None):
             return False
     
     # No scan_id provided - show selection menu
-    import asyncio
     from app.database import get_db
     from app.models import Scan, Company
     from sqlalchemy.future import select
@@ -591,7 +615,7 @@ def open_report_in_browser(scan_id: Optional[int] = None):
     
     try:
         print_info("Loading recent reports...")
-        scan_data = asyncio.run(get_recent_scans())
+        scan_data = run_async(get_recent_scans())
         
         if not scan_data:
             print_warning("No reports found in database")
