@@ -34,6 +34,20 @@ except ImportError as e:
     logging.warning(f"Control extractor v4 not available: {e}")
     V4_AVAILABLE = False
 
+try:
+    from .control_extractor_v4_soc1 import extract_controls_v4 as extract_controls_v4_soc1
+    V4_SOC1_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Control extractor v4_soc1 not available: {e}")
+    V4_SOC1_AVAILABLE = False
+
+try:
+    from .control_extractor_combined import extract_controls_v4 as extract_controls_combined
+    COMBINED_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Control extractor combined not available: {e}")
+    COMBINED_AVAILABLE = False
+
 # Default version
 DEFAULT_VERSION = "v4"
 
@@ -75,14 +89,34 @@ def extract_controls(
         if not V4_AVAILABLE:
             raise ValueError("Control extractor v4 is not available")
         
-        logging.info("Using control extractor v4 (AWARE-CHUNK + Chain-of-Thought)")
+        logging.info("Using control extractor v4 (SOC 2 - AWARE-CHUNK + Chain-of-Thought)")
         extract_controls_v4(
             start_at_control=start_at_control,
             start_at_line=start_at_line
         )
     
+    elif version == "v4_soc1":
+        if not V4_SOC1_AVAILABLE:
+            raise ValueError("Control extractor v4_soc1 is not available")
+        
+        logging.info("Using control extractor v4_soc1 (SOC 1 - Financial Assertions)")
+        extract_controls_v4_soc1(
+            start_at_control=start_at_control,
+            start_at_line=start_at_line
+        )
+    
+    elif version == "combined":
+        if not COMBINED_AVAILABLE:
+            raise ValueError("Control extractor combined is not available")
+        
+        logging.info("Using control extractor combined (Dual Framework Mapping)")
+        extract_controls_combined(
+            start_at_control=start_at_control,
+            start_at_line=start_at_line
+        )
+    
     else:
-        raise ValueError(f"Unknown extractor version: {version}. Must be 'v2' or 'v4'")
+        raise ValueError(f"Unknown extractor version: {version}. Must be 'v2', 'v4', 'v4_soc1', or 'combined'")
 
 def get_available_versions() -> list:
     """

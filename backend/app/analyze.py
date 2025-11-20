@@ -9,7 +9,8 @@ import time  # Added missing import for watchdog timing and progress tracking
 from .extractors.auditor import extract_auditor_from_report
 from .extractors.company import extract_company_from_report
 from .extractors.control_integration import extract_controls  # V2/V4 unified interface
-from .extractors.cuec_extractor import extract_cuecs
+# CUEC extractor routing (SOC1, SOC2, Combined)
+# Import will be done dynamically based on report_type
 from .extractors.subservice_orgs import extract_subservice_orgs, filter_third_parties_with_gpt
 from .extractors.product import extract_product_from_report
 from .extractors.report_date import extract_report_date
@@ -291,16 +292,49 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 pass
             return res
         
-        # Wrapper for control extraction to use configured version (v2 or v4)
+        # Wrapper for control extraction - routes based on report_type
         def _run_control_extraction():
-            """Run control extraction using configured version from config.CONTROL_EXTRACTOR_VERSION"""
-            version = getattr(config, 'CONTROL_EXTRACTOR_VERSION', 'v4')
-            logger.info(f"Running control extraction with version: {version}")
+            """
+            Run control extraction using report_type routing:
+            - SOC1 → control_extractor_v4_soc1.py
+            - SOC2 → control_extractor_v4.py (default)
+            - COMBINED → control_extractor_combined.py
+            """
+            # Determine extractor version based on report_type
+            if report_type == 'SOC1':
+                version = 'v4_soc1'
+                logger.info(f"Routing to SOC 1 control extractor (report_type={report_type})")
+            elif report_type == 'COMBINED':
+                version = 'combined'
+                logger.info(f"Routing to Combined control extractor (report_type={report_type})")
+            else:
+                # Default: SOC 2
+                version = getattr(config, 'CONTROL_EXTRACTOR_VERSION', 'v4')
+                logger.info(f"Routing to SOC 2 control extractor (version={version}, report_type={report_type})")
+            
             extract_controls(version=version)
-            # Both v2 and v4 write to config.CONTROL_JSON_PATH, so read the results back
+            # All extractors write to config.CONTROL_JSON_PATH
             with open(config.CONTROL_JSON_PATH, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 return data.get("controls", [])
+        
+        # Wrapper for CUEC extraction - routes based on report_type
+        def _run_cuec_extraction():
+            """
+            Run CUEC extraction using report_type routing:
+            - SOC1 → cuec_extractor_soc1.py (financial reporting keywords)
+            - SOC2 → cuec_extractor.py (default)
+            - COMBINED → cuec_extractor.py (default to SOC 2 logic)
+            """
+            if report_type == 'SOC1':
+                from .extractors.cuec_extractor_soc1 import extract_cuecs as extract_cuecs_soc1
+                logger.info(f"Routing to SOC 1 CUEC extractor (report_type={report_type})")
+                return extract_cuecs_soc1()
+            else:
+                # Default: SOC 2 CUEC extractor
+                from .extractors.cuec_extractor import extract_cuecs
+                logger.info(f"Routing to SOC 2 CUEC extractor (report_type={report_type})")
+                return extract_cuecs()
         
         prereq_steps = [
             (3, "company_extraction", extract_company_from_report, "Running company extractor...", 30),
@@ -308,7 +342,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         ]
         parallel_steps = [
             (5, "control_extraction", _run_control_extraction, "Running controls extractor...", 50),
-            (6, "cuec_extraction", extract_cuecs, "Running CUECs extractor...", 60),
+            (6, "cuec_extraction", _run_cuec_extraction, "Running CUECs extractor...", 60),
             (7, "subservice_orgs_extraction", _run_subservice_orgs_extraction, "Running subservice orgs extractor...", 70),
             (8, "product_extraction", extract_product_from_report, "Running product extractor...", 80),
             (9, "report_date_extraction", extract_report_date, "Running report date extractor...", 90),
