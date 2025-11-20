@@ -1,18 +1,23 @@
-# control_extractor_v4.py
+# control_extractor_v4_soc1.py
 
 """
-AWARE-CHUNK + CHAIN-OF-THOUGHT (CoT) Control Extractor
-========================================================
+SOC 1 Type 2 Control Extractor - Financial Assertion Mapping
+============================================================
 
 Architecture:
 1. AWARE CHUNKING - Intelligent text segmentation with overlap and metadata
 2. CHAIN-OF-THOUGHT - Multi-step reasoning embedded in prompt
 3. CONTINUATION HANDLING - Merge controls split across chunks
-4. CONFIDENCE FILTERING - Discard low-confidence extractions
-5. POST-MERGE VALIDATION - Schema and overlap validation
+4. FINANCIAL ASSERTION MAPPING - Auto-map controls to ICFR assertions
+5. CONFIDENCE FILTERING - Discard low-confidence extractions
+6. POST-MERGE VALIDATION - Schema and overlap validation
 
-This replaces the "fire-and-forget" overlapping chunk logic with a hybrid
-approach that maintains context awareness and applies reasoning steps.
+Key Differences from SOC 2 Extractor:
+- Removes Trust Services Criteria (TSC) detection logic
+- Adds financial assertion mapping with individual confidence scores
+- Maps to transaction-level, account balance, and disclosure assertions
+- Stores reasoning text (200 char limit) for each assertion
+- Flags PARTIAL_EXTRACTION for controls with incomplete mappings
 """
 
 import os
@@ -26,22 +31,22 @@ from ..gpt_client import gpt_extract
 try:
     from .. import config
 except Exception as import_err:
-    print(f"[CONTROL_EXTRACTOR_V4] Import error: {import_err}")
+    print(f"[CONTROL_EXTRACTOR_V4_SOC1] Import error: {import_err}")
     raise
 
 # Configure logging
-log_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'logs', 'control_extractor_v4.log')
+log_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'logs', 'control_extractor_v4_soc1.log')
 logging.basicConfig(
     filename=log_path,
     filemode='w',
     level=logging.INFO,
-    format='%(asctime)s [CONTROL_EXTRACTOR_V4] %(message)s',
+    format='%(asctime)s [CONTROL_EXTRACTOR_V4_SOC1] %(message)s',
 )
 
 # ============================================================================
-# NEW PROMPT (v4) - Imported from config.py
+# SOC 1 PROMPT - Imported from config.py
 # ============================================================================
-# The CONTROL_EXTRACTION_PROMPT_V4 is now defined in config.py
+# The CONTROL_EXTRACTION_PROMPT_V4_SOC1 is now defined in config.py
 
 # ============================================================================
 # AWARE CHUNKING - Text Segmentation with Metadata
@@ -515,8 +520,8 @@ def analyze_control_id_patterns(controls: List[Dict[str, Any]]) -> Dict[str, Dic
     import re
     from collections import Counter
     
-    # TSC reference heading pattern (e.g., "CC6.", "A1.", "P2.")
-    TSC_HEADING_PATTERN = re.compile(r'^(CC|A|C|PI|P)[-.]?\d+\.?$', re.IGNORECASE)
+    # SOC 1 reports typically use custom control IDs (not TSC patterns)
+    # Pattern analysis focuses on organizational naming conventions
     
     if not controls:
         return {}
@@ -530,7 +535,7 @@ def analyze_control_id_patterns(controls: List[Dict[str, Any]]) -> Dict[str, Dic
             continue
         
         # Generate pattern signature
-        # Example: "CC6.1" -> "LL#.#", "CID-001" -> "LLL-###"
+        # Example: "FR-001" -> "LL-###", "REV.01" -> "LLL.##"
         pattern = ""
         for char in control_id:
             if char.isalpha():
@@ -542,42 +547,35 @@ def analyze_control_id_patterns(controls: List[Dict[str, Any]]) -> Dict[str, Dic
         
         id_patterns[control_id] = {
             "pattern": pattern,
-            "is_tsc_heading": bool(TSC_HEADING_PATTERN.match(control_id)),
             "raw_id": control_id
         }
     
     if not id_patterns:
         return {}
     
-    # Find consensus pattern (most common non-TSC-heading pattern)
-    non_tsc_patterns = [
-        info["pattern"] 
-        for info in id_patterns.values() 
-        if not info["is_tsc_heading"]
-    ]
+    # Find consensus pattern (most common pattern)
+    all_patterns = [info["pattern"] for info in id_patterns.values()]
     
-    if non_tsc_patterns:
-        pattern_counts = Counter(non_tsc_patterns)
+    if all_patterns:
+        pattern_counts = Counter(all_patterns)
         consensus_pattern = pattern_counts.most_common(1)[0][0]
         consensus_count = pattern_counts[consensus_pattern]
-        total_non_tsc = len(non_tsc_patterns)
+        total_patterns = len(all_patterns)
     else:
-        # All IDs are TSC headings (unusual but possible)
         consensus_pattern = None
         consensus_count = 0
-        total_non_tsc = 0
+        total_patterns = 0
     
     # Analyze each control
     results = {}
     for control_id, info in id_patterns.items():
         detected_pattern = info["pattern"]
-        is_tsc_heading = info["is_tsc_heading"]
         
         # Calculate pattern score (similarity to consensus)
         if consensus_pattern and detected_pattern == consensus_pattern:
             pattern_score = 1.0
         elif not consensus_pattern:
-            # No consensus found (all TSC headings)
+            # No consensus found
             pattern_score = 0.5
         else:
             # Different pattern - calculate similarity
@@ -589,37 +587,11 @@ def analyze_control_id_patterns(controls: List[Dict[str, Any]]) -> Dict[str, Dic
             )
             pattern_score = matches / max_len if max_len > 0 else 0.0
         
-        # Calculate adaptive threshold for TSC anomaly detection
-        from .. import config as cfg
-        
-        # Get total control count for adaptive threshold
-        total_controls = len(id_patterns)
-        
-        # Calculate threshold: max(MIN_THRESHOLD, max(BASE_THRESHOLD, 10% of controls))
-        if cfg.TSC_ANOMALY_ADAPTIVE_ENABLED:
-            adaptive_threshold = int(total_controls * 0.10)
-            threshold = max(
-                cfg.TSC_ANOMALY_MIN_THRESHOLD,
-                max(cfg.TSC_ANOMALY_BASE_THRESHOLD, adaptive_threshold)
-            )
-            logging.info(f"TSC anomaly threshold: {threshold} (adaptive=on, base={cfg.TSC_ANOMALY_BASE_THRESHOLD}, 10%={adaptive_threshold}, total_controls={total_controls})")
-        else:
-            threshold = cfg.TSC_ANOMALY_BASE_THRESHOLD
-            logging.info(f"TSC anomaly threshold: {threshold} (adaptive=off, base={cfg.TSC_ANOMALY_BASE_THRESHOLD})")
-        
-        # Flag as anomaly only if:
-        # 1. It's a TSC heading pattern, AND
-        # 2. Pattern score is low (<0.5), AND
-        # 3. Consensus count meets/exceeds threshold
-        is_tsc_anomaly = (
-            is_tsc_heading and
-            pattern_score < 0.5 and
-            consensus_count >= threshold
-        )
+        # SOC 1 reports use organizational control IDs (no TSC anomaly detection needed)
+        # Pattern consistency is still tracked for quality scoring
         
         results[control_id] = {
             "pattern_score": round(pattern_score, 3),
-            "is_tsc_anomaly": is_tsc_anomaly,
             "consensus_pattern": consensus_pattern,
             "detected_pattern": detected_pattern
         }
