@@ -177,7 +177,7 @@ ENTITY_EXTRACTION_TIMEOUT = 120  # Timeout in seconds for entity extraction endp
 # --- GPT Prompts for Section Detection and TOC Parsing ---
 
 SECTION_DETECTION_PROMPT = """
-You are an expert SOC 2 document analyst. Identify the most probable start position for each requested section topic in the provided report text.
+You are an expert SOC document analyst. Identify the most probable start position for each requested section topic in the provided report text.
 
 ## Objective
 For every topic in {section_keys}, return a single best-guess section start using character offsets in the exact input string {text}. Output a JSON array of objects with:
@@ -212,7 +212,7 @@ SOC Report Text:
 """
 
 EXTRACT_TOC_PROMPT = """
-You are an expert SOC 2 report analyst. Your goal is to extract only the Table of Contents (TOC) from the beginning portion of the provided report text.
+You are an expert SOC report analyst. Your goal is to extract only the Table of Contents (TOC) from the beginning portion of the provided report text.
 
 ## Rules
 1. The TOC usually appears within the first few pages, often between "Contents" and the first major section heading.
@@ -229,7 +229,7 @@ Report Text:
 """
 
 SECTION_HEADING_VALIDATION_PROMPT = """
-You are validating whether a given line in a SOC 2 report looks like a section heading.
+You are validating whether a given line in a SOC report looks like a section heading.
 
 ## Rules
 1. Consider capitalization, formatting cues (numbered or roman numerals), indentation, and standalone line structure.
@@ -248,7 +248,7 @@ Context:
 """
 
 EXTRACT_TOC_HEADINGS_AND_PAGES_PROMPT = """
-You are parsing a Table of Contents extracted from a SOC 2 report.
+You are parsing a Table of Contents extracted from a SOC report.
 
 ## Task
 Extract only MAIN section headings (not subsections or nested entries) and their corresponding page numbers.
@@ -275,7 +275,7 @@ TOC:
 
 # CUEC Extraction Prompt
 CUEC_EXTRACTION_PROMPT = """
-You are an expert SOC 2 auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
 
 ## Rules
 1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
@@ -318,13 +318,13 @@ You are an expert SOC 2 auditor. Your task is to extract only **Complementary Us
     ]
 }}
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
 # CUEC Consolidation Prompt  
 CUEC_CONSOLIDATION_PROMPT = """
-You are an expert SOC 2 report analyst. Consolidate and deduplicate previously extracted CUECs.
+You are an expert SOC report analyst. Consolidate and deduplicate previously extracted CUECs.
 
 ## Objective
 Merge similar or duplicate CUECs based on semantic similarity, description overlap, or identical TSC IDs.
@@ -360,11 +360,11 @@ Extracted CUECs:
 
 # Executive Summary Prompt
 EXECUTIVE_SUMMARY_PROMPT = """
-You are a senior risk analyst preparing a concise executive-level summary from SOC 2 report results.  
+You are a senior risk analyst preparing a concise executive-level summary from SOC report results.  
 Generate an accurate, structured JSON summary covering the organization, findings, and recommendations.
 
 ## Scope
-Inputs include SOC 2 coverage statistics, CUECs, COSO and TSC mapping tables, detected deviations, and SOX vendor status.
+Inputs include SOC coverage statistics, CUECs, COSO and TSC mapping tables, detected deviations, and SOX vendor status.
 
 ## Context
 - **SOX Vendor Status**: {is_sox_vendor}
@@ -458,7 +458,7 @@ CUEC Control Strength Assessments:
 
 # Prompt for extracting the auditor firm from the auditor section
 AUDITOR_EXTRACTION_PROMPT = """
-You are an expert SOC 2 report analyst. Your task is to identify the *independent auditing firm* that conducted the SOC 2 examination.
+You are an expert SOC report analyst. Your task is to identify the *independent auditing firm* that conducted the SOC examination.
 
 ## Rules
 1. Analyze only the provided text, which comes from the Service Auditor’s Report section (and possibly the first page of the report).
@@ -487,7 +487,7 @@ Text:
 
 # Enhanced prompt for auditor extraction, excluding company and parent company
 AUDITOR_EXTRACTION_PROMPT_EXCLUDE = """
-You are an expert SOC 2 auditor. Identify the independent **auditing firm** that performed the SOC 2 examination.
+You are an expert SOC auditor. Identify the independent **auditing firm** that performed the SOC examination.
 
 ## Context
 - The text comes from the Service Auditor’s Report section or report front matter.
@@ -502,7 +502,7 @@ You are an expert SOC 2 auditor. Identify the independent **auditing firm** that
      - Any parent/owner company.
      - References to subservice organizations or software vendors.
 3. Look near headings such as “Independent Service Auditor’s Report,” auditor signatures, or opinion language.
-4. If multiple firms are mentioned, choose the one explicitly responsible for the SOC 2 examination.
+4. If multiple firms are mentioned, choose the one explicitly responsible for the SOC examination.
 5. If not found, set auditor = null and confidence = 0. DO NOT guess.
 6. Provide a one-sentence explanation of how you determined or ruled out the auditor.
 
@@ -514,13 +514,13 @@ Return one JSON object:
     "explanation": "<string>"
 }}
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
 # Retry prompt for auditor extraction with enhanced validation instructions
 AUDITOR_EXTRACTION_PROMPT_RETRY = """
-You are an expert SOC 2 auditor. Identify the independent **auditing firm** that performed the SOC 2 examination.
+You are an expert SOC auditor. Identify the independent **auditing firm** that performed the SOC examination.
 
 ## Context
 - The text comes from the Service Auditor's Report section or report front matter.
@@ -535,7 +535,7 @@ You are an expert SOC 2 auditor. Identify the independent **auditing firm** that
      - Any parent/owner company.
      - References to subservice organizations or software vendors.
 3. Look near headings such as "Independent Service Auditor's Report," auditor signatures, or opinion language.
-4. If multiple firms are mentioned, choose the one explicitly responsible for the SOC 2 examination.
+4. If multiple firms are mentioned, choose the one explicitly responsible for the SOC examination.
 5. If not found, set auditor = null and confidence = 0. DO NOT guess.
 6. Provide a one-sentence explanation of how you determined or ruled out the auditor.
 
@@ -553,16 +553,16 @@ Return one JSON object:
     "explanation": "<string>"
 }}
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
 # Two-stage auditor extraction prompts
 AUDITOR_COMPANY_EXTRACTION_PROMPT = """
-You are an expert SOC 2 report analyst. Extract ALL company names, firm names, and organization names mentioned in this text.
+You are an expert SOC report analyst. Extract ALL company names, firm names, and organization names mentioned in this text.
 
 ## Context
-- This text comes from a SOC 2 examination report (pages 1-3 and/or Service Auditor's Report section)
+- This text comes from a SOC examination report (pages 1-3 and/or Service Auditor's Report section)
 - Look for companies near:
   - "Independent Service Auditor's Report" headings
   - Headers and footers on each page
@@ -594,7 +594,7 @@ TEXT:
 """
 
 AUDITOR_IDENTIFICATION_PROMPT = """
-You are an expert SOC 2 auditor. Identify which company from the provided list is the independent auditing firm that performed the SOC 2 examination.
+You are an expert SOC auditor. Identify which company from the provided list is the independent auditing firm that performed the SOC examination.
 
 ## Context
 {company_line}
@@ -604,7 +604,7 @@ The following companies were extracted from the report text:
 {companies}
 
 ## Task
-Identify which ONE company is the independent service auditor (CPA firm) that conducted the SOC 2 examination.
+Identify which ONE company is the independent service auditor (CPA firm) that conducted the SOC examination.
 
 ## Reasoning Guidelines
 Consider:
@@ -626,7 +626,7 @@ If you cannot confidently identify the auditor, set auditor=null and confidence=
 
 # Prompt for extracting the company being audited and any parent company
 COMPANY_EXTRACTION_PROMPT = """
-You are an expert SOC 2 report analyst. Extract the company (legal entity) being audited, and any parent or owner company mentioned.
+You are an expert SOC report analyst. Extract the company (legal entity) being audited, and any parent or owner company mentioned.
 
 ## Rules
 1. Look for explicit entity names in the management assertion, title page, or system description (e.g., “XYZ Corp. (an ABC Company)”).
@@ -644,13 +644,13 @@ Return one JSON object:
     "explanation": "<string, concise reasoning>"
 }}
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
 # Prompt for extracting the product/service/system being audited
 PRODUCT_EXTRACTION_PROMPT = """
-You are an expert SOC 2 systems auditor. Extract the **product, service, or system** that is in scope for the SOC 2 examination.
+You are an expert SOC systems auditor. Extract the **product, service, or system** that is in scope for the SOC examination.
 
 ## Rules
 1. Identify the specific platform, service, or product name being audited (e.g., “Okta Identity as a Service”, “Experience Cloud”).
@@ -667,13 +667,13 @@ Return one JSON object:
     "explanation": "<string>"
 }}
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
 # Prompt for extracting the report date
 REPORT_DATE_EXTRACTION_PROMPT = """
-You are an expert SOC 2 auditor. Extract the **report signing date** (the date the auditor signed the opinion).
+You are an expert SOC auditor. Extract the **report signing date** (the date the auditor signed the opinion).
 
 ## Rules
 1. Focus on the end of the Service Auditor’s Report section, near the signature block.
@@ -688,13 +688,13 @@ You are an expert SOC 2 auditor. Extract the **report signing date** (the date t
     "explanation": "<string>"
 }}
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
 # Prompt for extracting the coverage period
 COVERAGE_PERIOD_EXTRACTION_PROMPT = """
-You are an expert SOC 2 auditor. Determine the **coverage period** and report type (Type 1 or Type 2) from the given text.
+You are an expert SOC auditor. Determine the **coverage period** and report type (Type 1 or Type 2) from the given text.
 
 ## Rules
 1. A Type 2 report includes both start and end dates (period of review).
@@ -894,14 +894,14 @@ HEURISTIC_EXCLUDE_KEYWORDS = [
     'framework', 'operating system', 'standard', 'library', 'project', 'distribution', 'kernel', 'open source',
     'node', 'container', 'image', 'instance', 'os', 'component', 'platform', 'software', 'tool', 'plugin', 'module',
     'American Institute of Certified Public Accountants', 'American Institute of Certified Public Accountants (AICPA)',
-    'AICPA', 'AICPA SOC 2', 'AICPA SOC 2 Report', 'AICPA SOC 2 Report on a SOC Examination', 'AICPA SOC 2 Report on a SOC Examination on a SOC Examination',
+    'AICPA', 'AICPA SOC 2', 'AICPA SOC report', 'AICPA SOC report on a SOC Examination', 'AICPA SOC report on a SOC Examination on a SOC Examination',
     'trusted certificate authority (CA)', 'trusted certificate authority', 'certificate authority (CA)', 'certificate authority',
     'independent auditor', 'independent auditor report', 'independent auditor report on a SOC examination', 'independent auditor report on a SOC examination on a SOC examination',
     'independent service auditor', 'independent service auditor report', 'independent service auditor report on a SOC examination', 'independent service auditor report on a SOC examination on a SOC examination',
-    'Institute of Internal Auditors', 'Institute of Internal Auditors (IIA)', 'IIA', 'IIA SOC 2', 'IIA SOC 2 Report', 'IIA SOC 2 Report on a SOC Examination', 'IIA SOC 2 Report on a SOC Examination on a SOC Examination',
-    'International Organization for Standardization', 'International Organization for Standardization (ISO)', 'ISO', 'ISO SOC 2', 'ISO SOC 2 Report', 'ISO SOC 2 Report on a SOC Examination', 'ISO SOC 2 Report on a SOC Examination on a SOC Examination',
-    'International Organization for Standardization (ISO)', 'ISO', 'ISO SOC 2', 'ISO SOC 2 Report', 'ISO SOC 2 Report on a SOC Examination', 'ISO SOC 2 Report on a SOC Examination on a SOC Examination',
-    'International Organization for Standardization (ISO)', 'ISO', 'ISO SOC 2', 'ISO SOC 2 Report', 'ISO SOC 2 Report on a SOC Examination', 'ISO SOC 2 Report on a SOC Examination on a SOC Examination',
+    'Institute of Internal Auditors', 'Institute of Internal Auditors (IIA)', 'IIA', 'IIA SOC 2', 'IIA SOC report', 'IIA SOC report on a SOC Examination', 'IIA SOC report on a SOC Examination on a SOC Examination',
+    'International Organization for Standardization', 'International Organization for Standardization (ISO)', 'ISO', 'ISO SOC 2', 'ISO SOC report', 'ISO SOC report on a SOC Examination', 'ISO SOC report on a SOC Examination on a SOC Examination',
+    'International Organization for Standardization (ISO)', 'ISO', 'ISO SOC 2', 'ISO SOC report', 'ISO SOC report on a SOC Examination', 'ISO SOC report on a SOC Examination on a SOC Examination',
+    'International Organization for Standardization (ISO)', 'ISO', 'ISO SOC 2', 'ISO SOC report', 'ISO SOC report on a SOC Examination', 'ISO SOC report on a SOC Examination on a SOC Examination',
     # Expanded generic/genericized terms
     'third-party specialist', 'third party specialist', 'specialist', 'consultant', 'contractor', 'team', 'group',
     'staff', 'employee', 'personnel', 'resource', 'service', 'support', 'department', 'division', 'unit', 'office',
@@ -982,7 +982,7 @@ THIRD_PARTY_ALIAS_MAP = {
 SO_KEYWORDS = ["subservice", "subservice organization"]
 
 SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT = """
-You are a SOC 2 report analysis expert. Your goal is to extract all third-party service providers (subservice organizations) mentioned in the provided text.
+You are a SOC report analysis expert. Your goal is to extract all third-party service providers (subservice organizations) mentioned in the provided text.
 
 ## Objective
 Identify each third party referenced in the “Description of System” or similar section.  
@@ -1011,7 +1011,7 @@ For each, provide clear context about what they do and how they relate to the sy
 5. If no valid subservice organizations are found, return an empty JSON array.
 6. Output only a valid JSON array (no commentary, markdown, or text).
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
@@ -1038,7 +1038,7 @@ Return a single JSON object:
     "entry": <original entry as provided>
 }}
 
-Context from SOC 2 Report:
+Context from SOC report:
 {context}
 
 Entity to Evaluate:
@@ -1047,7 +1047,7 @@ Description: {desc}
 """
 
 SUBSERVICE_ORG_GPT_VERIFY_PROMPT = """
-You are a SOC 2 compliance specialist. Determine whether the provided entity is a likely **subservice organization** referenced in a SOC 2 report.
+You are a SOC 2 compliance specialist. Determine whether the provided entity is a likely **subservice organization** referenced in a SOC report.
 
 ## Rules
 1. A subservice organization is an **external company** that performs part of the in-scope services or supports system operations (e.g., hosting, infrastructure, authentication).
@@ -1071,7 +1071,7 @@ Description: {desc}
 
 # GPT prompt to classify whether an entity is a known service provider
 SUBSERVICE_ORG_SERVICE_PROVIDER_RESEARCH_PROMPT = """
-You are a SOC 2 compliance and IT infrastructure expert. Determine whether the provided entity is a known infrastructure, cloud, colocation, or managed service provider that would typically be referenced as a subservice organization in a SOC 2 report.
+You are a SOC 2 compliance and IT infrastructure expert. Determine whether the provided entity is a known infrastructure, cloud, colocation, or managed service provider that would typically be referenced as a subservice organization in a SOC report.
 
 ## Service Provider Categories to Identify:
 1. **Cloud/IaaS Providers**: AWS, Azure, GCP, Oracle Cloud, IBM Cloud, Alibaba Cloud, etc.
@@ -1142,7 +1142,7 @@ Example output:
 # hosting/operational services. Expects {json_data} as input and returns a JSON object
 # with an "adjustments" array of entries {"name":..., "adjust_to": <0-1>, "reason":...}
 SAAS_CLASSIFICATION_PROMPT = """
-You are an expert SOC 2 analyst. Given a JSON array of candidate subservice organizations
+You are an expert SOC analyst. Given a JSON array of candidate subservice organizations
 with name, description, and current confidence, identify entries that are SaaS tools
 (monitoring, logging, HR, ticketing, analytics, CI/CD, etc.) which should have their
 confidence reduced because they are not core subservice organizations.
@@ -1201,7 +1201,7 @@ CUEC_KEYWORDS_SOC1 = [
 ]
 
 CUEC_CONSOLIDATION_PROMPT = """
-You are a SOC 2 auditor consolidating extracted CUECs into a single, clean list.
+You are a SOC auditor consolidating extracted CUECs into a single, clean list.
 
 ## Objective
 Merge duplicate or significant overlapping Complementary User Entity Controls (CUECs) while retaining the most complete version of each unique responsibility.
@@ -1521,7 +1521,7 @@ control_soc_domains = {
 
 # Prompt for extracting tested controls from the Control_Descriptions section
 CONTROL_EXTRACTION_PROMPT = """
-You are an expert SOC 2 control analyst. Your task is to extract a single control (and its related fields) from the provided text.
+You are an expert SOC control analyst. Your task is to extract a single control (and its related fields) from the provided text.
 
 ## Objective
 Analyze the text chunk (beginning at line {start_line}) and return one control record in structured JSON format.  
@@ -1572,7 +1572,7 @@ Text to analyze (starting at line {start_line}):
 
 # Prompt for consolidating and deduplicating extracted controls
 CONTROL_CONSOLIDATION_PROMPT = """
-You are an expert SOC 2 control auditor. Your task is to merge and deduplicate extracted controls.
+You are an expert SOC control auditor. Your task is to merge and deduplicate extracted controls.
 
 ## Objective
 Combine controls that were likely split during chunking operations.
@@ -1623,13 +1623,13 @@ Examine the given text and return a list of character offsets that mark likely b
 ## Output
 Return only a JSON array of integers representing character offsets.
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
 # Optimized GPT-5: Segment classification for SOC 2 controls
 SEGMENT_CLASSIFICATION_PROMPT = """
-You are an expert SOC 2 document classifier. Categorize each segment of the provided text into its appropriate role.
+You are an expert SOC document classifier. Categorize each segment of the provided text into its appropriate role.
 
 ## Objective
 Identify which part of the SOC 2 control lifecycle each segment belongs to.
@@ -1658,13 +1658,13 @@ Return a JSON array of objects:
     ...
 ]
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
 # Optimized GPT-5: Dynamic chunk header detection
 DYNAMIC_CHUNKING_PROMPT = """
-You are segmenting a SOC 2 report into logical control chunks.
+You are segmenting a SOC report into logical control chunks.
 
 ## Objective
 Identify the exact numeric character position (0-based index) in the text where each control section header starts.
@@ -1678,13 +1678,13 @@ Identify the exact numeric character position (0-based index) in the text where 
 ## Output
 Return only a JSON array of integers (character positions).
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
 # Optimized GPT-5: Section heading validation as a dedicated constant
 SECTION_HEADING_VALIDATION_PROMPT = """
-You are verifying whether the marked line represents a valid section heading in a SOC 2 report.
+You are verifying whether the marked line represents a valid section heading in a SOC report.
 
 ## Rules
 1. Headings typically appear in title case, may include roman numerals or numbering, and stand alone on their line.
@@ -1703,7 +1703,7 @@ Context:
 
 # Optimized GPT-5: Refined chunk analysis offsets
 CHUNK_ANALYSIS_PROMPT_REFINED = """
-You are analyzing a SOC 2 report section to detect potential control boundaries.
+You are analyzing a SOC report section to detect potential control boundaries.
 
 ## Objective
 List the precise character offsets where each control or subsection likely begins.
@@ -1713,7 +1713,7 @@ List the precise character offsets where each control or subsection likely begin
 - Avoid splitting text within continuous paragraphs or mid-sentences.
 - Return only a JSON array of integer offsets (no explanations or markup).
 
-SOC 2 Report Text:
+SOC report Text:
 {text}
 """
 
@@ -1721,7 +1721,7 @@ SOC 2 Report Text:
 
 # Minimal prompt to evaluate deviation strictly from control_test_results
 DEVIATION_EVAL_PROMPT = """
-You are a SOC 2 auditor. Determine if the provided control_test_results text contains an explicit deviation, exception, or finding.
+You are a SOC auditor. Determine if the provided control_test_results text contains an explicit deviation, exception, or finding.
 
 ## Rules
 1. Base your decision ONLY on the provided control_test_results — do not infer.
@@ -2021,7 +2021,7 @@ SUBSERVICE_ORGS_TXT_PATH = str(PROJECT_ROOT / 'backend' / 'app' / 'extractors' /
 # === Multi-Match Framework Mapping Prompts (Adaptive Token Management) ===
 
 FRAMEWORK_CATEGORY_SELECTION_PROMPT = """
-You are an expert SOC 2 auditor analyzing controls for AICPA TSC framework alignment.
+You are an expert SOC auditor analyzing controls for AICPA TSC framework alignment.
 
 Control Description:
 {control_desc}
@@ -2052,7 +2052,7 @@ If control is technical/operational, emphasize specific domain categories.
 """
 
 FRAMEWORK_MULTI_MATCH_PROMPT_TSC = """
-You are an expert SOC 2 auditor. Select the top 3-5 most relevant AICPA TSC criteria for this control.
+You are an expert SOC auditor. Select the top 3-5 most relevant AICPA TSC criteria for this control.
 
 Control Description:
 {control_desc}
@@ -2135,7 +2135,7 @@ If no good matches exist, return {{"matches": []}}.
 """
 
 FRAMEWORK_MULTI_MATCH_PROMPT_COSO = """
-You are an expert SOC 2 auditor. Select the top 3-5 most relevant COSO 2013 principles for this control.
+You are an expert SOC auditor. Select the top 3-5 most relevant COSO 2013 principles for this control.
 
 Control Description:
 {control_desc}
@@ -2249,7 +2249,7 @@ If no good matches exist, return {{"matches": []}}.
 """
 
 FRAMEWORK_CROSS_VALIDATION_PROMPT = """
-You are an expert SOC 2 auditor validating framework alignment consistency.
+You are an expert SOC auditor validating framework alignment consistency.
 
 Control Description:
 {control_desc}
@@ -2319,7 +2319,7 @@ GPT_PROMPTS = {
 
 # --- Entity Extraction from Context Prompt ---
 ENTITY_EXTRACTION_FROM_CONTEXT_PROMPT = """
-You are an expert SOC 2 report analyst. Extract structured information for a {entity_type} from the provided text context.
+You are an expert SOC report analyst. Extract structured information for a {entity_type} from the provided text context.
 
 ## Search Term
 {search_text}
@@ -2370,3 +2370,4 @@ Example for control:
 
 If the search term does not correspond to a valid {entity_type}, return confidence 0.0 and null for all fields except confidence.
 """
+
