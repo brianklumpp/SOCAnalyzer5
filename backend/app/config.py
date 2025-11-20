@@ -816,6 +816,50 @@ SECTION_TOPICS = {
     ]
 }
 
+# SOC 1 Section Patterns (ICFR focus)
+SECTION_TOPICS_SOC1 = {
+    "Management_Assertion": [
+        "Assertion of Management", "Management Assertion", "Management's Assertion", "Management's Description and Assertion",
+        "Management's Report", "Management Representation"
+    ],
+    "Service_Auditor_Report": [
+        "Independent Service Auditor's Report", "Independent Accountant's Report", "Report of Independent Auditors",
+        "Service Auditor's Report", "Auditor's Report on Controls", "Report on Controls at a Service Organization"
+    ],
+    "Description_of_Controls": [
+        "Description of Controls", "Description of the Service Organization's System", "Service Organization's Description",
+        "Description of [COMPANY] Controls", "System Description"
+    ],
+    "Control_Descriptions": [
+        "Control Objectives and Related Controls", "Tests of Controls", "Control Testing", "Test of Operating Effectiveness",
+        "Control Objectives", "Description of Tests", "Testing Results", "Service Organization's Controls"
+    ],
+    "CUEC_Section": [
+        "Complementary User Entity Controls", "User Entity Controls", "Complementary Controls", "User Control Considerations",
+        "Responsibilities of User Entities", "User Organization Controls"
+    ]
+}
+
+# Combined Report Section Patterns (SOC 1 + SOC 2)
+SECTION_TOPICS_COMBINED = {
+    "Management_Assertion": [
+        "Assertion of Management", "Management Assertion", "Management's Assertion", "Management's Description and Assertion"
+    ],
+    "Service_Auditor_Report": [
+        "Independent Service Auditor's Report", "Independent Accountant's Report", "Service Auditor's Report"
+    ],
+    "Description_of_System": [
+        "Description of the System", "Description of Controls", "Service Organization's Description", "System Description"
+    ],
+    "Control_Descriptions": [
+        "Trust Services Criteria Related Controls", "Control Objectives and Related Controls", "Tests of Controls",
+        "Testing Matrices", "Test Results", "Control Testing"
+    ],
+    "CUEC_Section": [
+        "Complementary User Entity Controls", "User Entity Controls", "User Control Considerations"
+    ]
+}
+
 # Priority keywords for section topic mapping
 PRIORITY_KEYWORDS_MANAGEMENT_ASSERTION = [
     "assertion", "management assertion", "assertion of management", "assertion of [company] management"
