@@ -1,8 +1,16 @@
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, LargeBinary, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, LargeBinary, Boolean, Enum
 import datetime
+import enum
 
 Base = declarative_base()
+
+
+class ReportType(enum.Enum):
+    """Enumeration for SOC report types"""
+    SOC1 = "SOC1"
+    SOC2 = "SOC2"
+    COMBINED = "COMBINED"
 
 # --- Scan table for structured scan metadata ---
 class Scan(Base):
@@ -26,6 +34,12 @@ class Scan(Base):
     executive_summary = Column(JSON)
     executive_summary_stale = Column(Boolean, default=False)  # Flag when summary needs regeneration
     is_sox_vendor = Column(Boolean, default=False)  # Flag if vendor is subject to SOX compliance
+    
+    # SOC 1 Type 2 Support
+    report_type = Column(Enum(ReportType), default=ReportType.SOC2, nullable=False)  # SOC1, SOC2, or COMBINED
+    as_of_date = Column(DateTime)  # Point-in-time date for SOC 1 reports
+    progress_status = Column(String(128))  # Current extraction step for real-time progress tracking
+    elapsed_seconds = Column(Float)  # Actual processing time for dynamic estimation
 
 # --- Entity tables for extracted data ---
 class Company(Base):
@@ -58,6 +72,11 @@ class Control(Base):
     control_tsc_section = Column(String(128))
     control_coso_section = Column(String(128))
     control_soc_domain = Column(String(128))
+    
+    # SOC 1 Type 2 Support - Financial Assertions
+    # Schema: [{"id": "EO1", "name": "Existence/Occurrence", "confidence": 0.92, "reasoning": "Control validates transactions occurred"}]
+    financial_assertions = Column(JSON)  # Financial assertion mappings for SOC 1 controls
+    framework_category = Column(String(32))  # "SOC1", "SOC2", "BOTH", "AMBIGUOUS" - for combined reports
     
     # Multi-match framework mappings (JSON arrays)
     # Expected schema for both TSC and COSO mappings:
