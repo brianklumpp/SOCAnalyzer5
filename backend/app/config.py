@@ -1332,6 +1332,92 @@ COSO_2013_CRITERIA = [
     },
 ]
 
+# --- SOC 1 Financial Assertions (ICFR Framework) ---
+# Management assertions about financial statement controls per PCAOB AS 2201 and COSO
+FINANCIAL_ASSERTIONS = [
+    # Transaction-Level Assertions
+    {"id": "EO", "name": "Existence/Occurrence", "category": "Transaction", 
+     "description": "Transactions and events that have been recorded have occurred and pertain to the entity."},
+    {"id": "C", "name": "Completeness", "category": "Transaction",
+     "description": "All transactions and events that should have been recorded have been recorded."},
+    {"id": "A", "name": "Accuracy", "category": "Transaction",
+     "description": "Amounts and other data relating to recorded transactions and events have been recorded appropriately."},
+    {"id": "CO", "name": "Cutoff", "category": "Transaction",
+     "description": "Transactions and events have been recorded in the correct accounting period."},
+    {"id": "CL", "name": "Classification", "category": "Transaction",
+     "description": "Transactions and events have been recorded in the proper accounts."},
+    
+    # Account Balance Assertions
+    {"id": "E", "name": "Existence", "category": "Account Balance",
+     "description": "Assets, liabilities, and equity interests exist."},
+    {"id": "R", "name": "Rights and Obligations", "category": "Account Balance",
+     "description": "The entity holds or controls the rights to assets, and liabilities are the obligations of the entity."},
+    {"id": "CV", "name": "Completeness and Valuation", "category": "Account Balance",
+     "description": "All account balances that should be recorded have been recorded at appropriate amounts."},
+    
+    # Presentation and Disclosure Assertions
+    {"id": "OC", "name": "Occurrence and Rights", "category": "Presentation",
+     "description": "Disclosed events, transactions, and other matters have occurred and pertain to the entity."},
+    {"id": "CD", "name": "Completeness (Disclosure)", "category": "Presentation",
+     "description": "All disclosures that should have been included in the financial statements have been included."},
+    {"id": "CU", "name": "Classification and Understandability", "category": "Presentation",
+     "description": "Financial information is appropriately presented and described, and disclosures are clearly expressed."},
+    {"id": "AV", "name": "Accuracy and Valuation", "category": "Presentation",
+     "description": "Financial and other information are disclosed fairly and at appropriate amounts."},
+    
+    # Common Financial Reporting Control Objectives
+    {"id": "REV", "name": "Revenue Recognition", "category": "Control Objective",
+     "description": "Controls over revenue recognition, including timing and measurement."},
+    {"id": "AP", "name": "Accounts Payable", "category": "Control Objective",
+     "description": "Controls over vendor invoices, payment processing, and accounts payable balances."},
+    {"id": "AR", "name": "Accounts Receivable", "category": "Control Objective",
+     "description": "Controls over customer invoicing, collections, and accounts receivable balances."},
+    {"id": "INV", "name": "Inventory", "category": "Control Objective",
+     "description": "Controls over inventory counts, valuation, and cost of goods sold."},
+    {"id": "PPE", "name": "Property, Plant & Equipment", "category": "Control Objective",
+     "description": "Controls over fixed asset acquisitions, depreciation, and disposals."},
+    {"id": "PAY", "name": "Payroll", "category": "Control Objective",
+     "description": "Controls over payroll processing, employee data, and compensation."},
+    {"id": "CASH", "name": "Cash Management", "category": "Control Objective",
+     "description": "Controls over cash receipts, disbursements, and bank reconciliations."},
+    {"id": "JE", "name": "Journal Entries", "category": "Control Objective",
+     "description": "Controls over manual and automated journal entries."},
+    {"id": "FR", "name": "Financial Reporting", "category": "Control Objective",
+     "description": "Controls over period-end close, consolidation, and financial statement preparation."},
+    {"id": "TAX", "name": "Tax Compliance", "category": "Control Objective",
+     "description": "Controls over tax calculations, filings, and compliance."},
+]
+
+# Keywords for auto-mapping controls to financial assertions
+FINANCIAL_ASSERTION_KEYWORDS = {
+    "EO": ["occurrence", "occurred", "validity", "valid transaction", "authorization", "approve"],
+    "C": ["completeness", "complete", "all transactions", "missing", "omission"],
+    "A": ["accuracy", "accurate", "calculation", "compute", "mathematical", "precision"],
+    "CO": ["cutoff", "period end", "period-end", "accrual", "timing", "correct period"],
+    "CL": ["classification", "classify", "proper account", "account coding", "chart of accounts"],
+    "E": ["existence", "physical", "confirm", "verification", "inventory count", "asset verification"],
+    "R": ["rights", "obligations", "ownership", "legal", "contract", "agreement"],
+    "CV": ["valuation", "fair value", "impairment", "carrying amount", "measurement"],
+    "OC": ["disclosure", "note", "footnote", "presentation"],
+    "CD": ["disclosure completeness", "all disclosures", "required disclosure"],
+    "CU": ["understandability", "clarity", "presentation", "format"],
+    "AV": ["disclosure accuracy", "fair presentation"],
+    "REV": ["revenue", "sales", "income", "billing", "invoice customer"],
+    "AP": ["accounts payable", "vendor", "supplier", "purchase", "payable"],
+    "AR": ["accounts receivable", "customer", "collections", "receivable", "credit"],
+    "INV": ["inventory", "stock", "goods", "cost of sales", "COGS"],
+    "PPE": ["fixed asset", "property", "equipment", "depreciation", "capital"],
+    "PAY": ["payroll", "compensation", "salary", "wage", "employee"],
+    "CASH": ["cash", "bank", "reconciliation", "payment", "receipt"],
+    "JE": ["journal entry", "manual entry", "adjustment", "posting"],
+    "FR": ["financial reporting", "close", "consolidation", "financial statement"],
+    "TAX": ["tax", "income tax", "sales tax", "VAT", "withholding"],
+}
+
+# Confidence threshold for financial assertion mappings
+FINANCIAL_ASSERTION_CONFIDENCE_THRESHOLD = 0.60  # 60% minimum confidence to include
+FINANCIAL_ASSERTION_MAX_REASONING_CHARS = 200  # Character limit for reasoning text
+
 # --- Control Section Mappings for Extractors ---
 # TSC Section mapping (provided)
 control_tsc_sections = {
