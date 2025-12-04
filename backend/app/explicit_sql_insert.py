@@ -9,6 +9,9 @@ from datetime import datetime
 from dotenv import load_dotenv
 import logging
 from . import config
+from .logo_service import fetch_and_cache_logo, fetch_logo_with_gpt
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 # --- Helpers for safe DB coercion ---
 def _extract_name(val, keys=("name", "product", "auditor", "company")):
@@ -58,14 +61,23 @@ def _parse_datetime(val):
         ]
         for fmt in fmts:
             try:
-                return datetime.strptime(s, fmt)
+                dt = datetime.strptime(s, fmt)
+                # If parsing a date-only string (no time component), set time to noon UTC
+                # to avoid timezone conversion issues that can shift dates by +/- 1 day
+                if fmt in ["%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y", "%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y"]:
+                    dt = dt.replace(hour=12, minute=0, second=0, microsecond=0)
+                return dt
             except Exception:
                 pass
         # Last resort: ISO-ish variations (allow seconds, Z suffix)
         try:
             # Handles strings like 2023-10-31T00:00:00 or 2023-10-31 00:00:00
             s_iso = s.replace("T", " ").rstrip("Z")
-            return datetime.fromisoformat(s_iso)
+            dt = datetime.fromisoformat(s_iso)
+            # If no time component was specified (ends at 00:00:00), set to noon
+            if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+                dt = dt.replace(hour=12)
+            return dt
         except Exception:
             return None
     # Already a datetime?
@@ -160,12 +172,17 @@ def insert_extracted_data(json_path: str, pdf_path: str = None):
         
         scan_fields = [
             "product", "report_date", "coverage_start", "coverage_end", "auditor", "result_json", "scan_date",
-            "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id"
+            "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id", "report_type"
         ]
         # Filter out pdf_file bytes from data before JSON serialization
         data_for_json = {k: v for k, v in data.items() if k != 'pdf_file'}
         # Deep sanitize to handle nested bytes objects
         data_for_json = deep_sanitize(data_for_json)
+        
+        # Get report_type from data (detected during analysis), default to SOC2 if not present
+        report_type = sanitize_value(data.get("report_type", "SOC2"))
+        logging.info(f"Inserting scan with report_type: {report_type}")
+        
         scan_values = [
             sanitize_value(product_name),
             report_date_norm,
@@ -182,12 +199,14 @@ def insert_extracted_data(json_path: str, pdf_path: str = None):
             pdf_filename,
             pdf_bytes,  # Pass bytes directly, psycopg2 handles BYTEA
             sanitize_value(data.get("company_id")),
+            report_type,
         ]
         scan_sql = f"INSERT INTO scan ({', '.join(scan_fields)}) VALUES ({', '.join(['%s']*len(scan_fields))}) RETURNING id"
         logging.info(f"SQL: {scan_sql} | Values: {scan_values}")
         cur.execute(scan_sql, scan_values)
         scan_id = cur.fetchone()[0]
         logging.info(f"Inserted new scan row with scan_id: {scan_id}")
+        summary["scan_id"] = scan_id
         # Insert company and update scan with company_id
         company = data.get("company")
         company_id = None
@@ -197,7 +216,11 @@ def insert_extracted_data(json_path: str, pdf_path: str = None):
                 name = company if isinstance(company, str) else company.get("company") or company.get("name")
                 parent_company = company.get("parent_company") if isinstance(company, dict) else None
                 confidence = company.get("confidence") if isinstance(company, dict) else None
-                values = [sanitize_value(name), sanitize_value(parent_company), sanitize_value(confidence), scan_id]
+                company_domain = company.get("company_domain") if isinstance(company, dict) else None
+                # Don't fetch logo here - will be fetched at the very end after all extractions complete
+                logo_url = None
+                
+                values = [sanitize_value(name), sanitize_value(parent_company), sanitize_value(confidence), scan_id, sanitize_value(company_domain), sanitize_value(logo_url)]
                 fields = config.TABLE_FIELD_MAP["company"]
                 sql = f"INSERT INTO company ({', '.join(fields)}) VALUES ({', '.join(['%s']*len(fields))}) ON CONFLICT DO NOTHING RETURNING id"
                 logging.info(f"SQL: {sql} | Values: {values}")
@@ -335,6 +358,51 @@ def insert_extracted_data(json_path: str, pdf_path: str = None):
             conn.commit()
             print("DEBUG: Transaction committed successfully!")
             logging.info("Transaction committed successfully!")
+            
+            # Fetch logos for companies after successful commit
+            try:
+                logging.info(f"[LOGO_SERVICE] Starting logo fetching for scan_id={scan_id}")
+                # Convert async DATABASE_URL to sync by replacing postgresql+asyncpg with postgresql
+                sync_db_url = config.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+                logging.info(f"[LOGO_SERVICE] Creating sync engine with URL: {sync_db_url[:50]}...")
+                sync_engine = create_engine(sync_db_url, echo=False)
+                SessionLocal = sessionmaker(bind=sync_engine)
+                
+                with SessionLocal() as db_session:
+                    # Query companies from this scan that have domains but no logos yet
+                    query = "SELECT id, company_domain FROM company WHERE scan_id = %s AND company_domain IS NOT NULL AND (logo_url IS NULL OR logo_url = '')"
+                    logging.info(f"[LOGO_SERVICE] Executing query: {query} with scan_id={scan_id}")
+                    cur.execute(query, (scan_id,))
+                    companies_needing_logos = cur.fetchall()
+                    logging.info(f"[LOGO_SERVICE] Query returned {len(companies_needing_logos) if companies_needing_logos else 0} companies")
+                    
+                    if companies_needing_logos:
+                        logging.info(f"[LOGO_SERVICE] Found {len(companies_needing_logos)} companies needing logos")
+                        for company_id, domain in companies_needing_logos:
+                            try:
+                                # Get company name for GPT prompt
+                                cur.execute("SELECT name FROM company WHERE id = %s", (company_id,))
+                                company_name_row = cur.fetchone()
+                                company_name = company_name_row[0] if company_name_row else "Unknown"
+                                
+                                # Try GPT-based logo fetching
+                                success, logo_url = fetch_logo_with_gpt(company_id, company_name, domain, db_session)
+                                if success:
+                                    logging.info(f"[LOGO_SERVICE] ✓ Cached logo (GPT): {company_name} ({domain}): {logo_url}")
+                                    summary["logos_fetched"] = summary.get("logos_fetched", 0) + 1
+                                else:
+                                    logging.warning(f"[LOGO_SERVICE] ✗ No logo (GPT): {company_name} ({domain})")
+                            except Exception as logo_error:
+                                logging.error(f"[LOGO_SERVICE] Error for company {company_id}: {logo_error}")
+                    else:
+                        logging.info(f"[LOGO_SERVICE] No companies needing logos for scan {scan_id}")
+                    
+                    db_session.commit()
+                sync_engine.dispose()
+            except Exception as logo_fetch_error:
+                logging.error(f"[LOGO_SERVICE] Logo fetching failed (non-fatal): {logo_fetch_error}")
+                # Don't raise - logo fetching is non-critical
+                
         except Exception as commit_error:
             print(f"DEBUG: COMMIT FAILED: {commit_error}")
             logging.error(f"COMMIT FAILED: {commit_error}")

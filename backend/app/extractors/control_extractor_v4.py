@@ -1290,6 +1290,7 @@ def extract_controls_v4(
     Returns:
         Dict with extraction results and diagnostics
     """
+    logging.warning("DEPRECATED: control_extractor_v4.py is deprecated. Use control_extractor_unified.py for all report types.")
     start_time = time.time()
     logging.info("=" * 80)
     logging.info("CONTROL EXTRACTION V4 - AWARE-CHUNK + CoT")

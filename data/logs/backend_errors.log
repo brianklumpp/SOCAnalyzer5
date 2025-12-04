@@ -1,11 +1,3 @@
 
-[STANDARDIZED RESULT VALIDATION]
-controls: list, len=145
-cuecs: list, len=22
-subservice_orgs: list, len=7
-product: type=<class 'str'>
-Missing key: auditor
-company: type=<class 'str'>
-report_date: type=<class 'str'>
-coverage_period: dict, keys=['type', 'start_date', 'end_date', 'explanation', 'raw_gpt_response']
-Full standardized results keys: ['controls', 'cuecs', 'subservice_orgs', 'product', 'auditor', 'company', 'report_date', 'coverage_period', 'cuecs_meta', 'sections']
+2025-12-04 18:39:41,072 | INFO | gpt_client | {"ts": 1764873581.0723057, "phase": "startup_check", "message": "backend startup", "service": "backend"}
+--------------------------------------------------------------------------------

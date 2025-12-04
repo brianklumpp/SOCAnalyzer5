@@ -1360,23 +1360,34 @@ def extract_controls_v4(
     Returns:
         Dict with extraction results and diagnostics
     """
+    logging.warning("DEPRECATED: control_extractor_v4_soc1.py is deprecated. Use control_extractor_unified.py for all report types.")
+    print("[DEBUG SOC1 EXTRACTOR] extract_controls_v4_soc1 called!")
     start_time = time.time()
     logging.info("=" * 80)
-    logging.info("CONTROL EXTRACTION V4 - AWARE-CHUNK + CoT")
+    logging.info("CONTROL EXTRACTION V4 SOC1 - AWARE-CHUNK + CoT + Financial Assertions")
     logging.info("=" * 80)
     
     # Load section boundaries
     with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as f:
         sections = json.load(f)
     
-    control_section = next((s for s in sections if s["topic"] == "Control_Descriptions"), None)
+    # For SOC 1 reports, controls are in Section IV "Description_of_System"
+    # which contains the control objectives and related controls table
+    control_section = next((s for s in sections if s["topic"] == "Description_of_System"), None)
     
+    # Fallback to Control_Descriptions if Description_of_System not found (shouldn't happen for SOC 1)
     if not control_section:
-        logging.error("Control_Descriptions section not found")
-        return {"error": "Control_Descriptions section not found"}
+        control_section = next((s for s in sections if s["topic"] == "Control_Descriptions"), None)
+    
+    print(f"[DEBUG SOC1] Control section found: {control_section is not None}")
+    if not control_section:
+        logging.error("Description_of_System or Control_Descriptions section not found")
+        print("[DEBUG SOC1] ERROR: Control section NOT FOUND in sections")
+        return {"error": "Control section not found"}
     
     section_start = control_section["start_line"]
     section_end = control_section["end_line"]
+    print(f"[DEBUG SOC1] Section range: lines {section_start} to {section_end}")
     
     # Handle resume logic
     if start_at_line:
@@ -1397,6 +1408,7 @@ def extract_controls_v4(
         tokens_per_chunk=getattr(config, 'CONTROL_V4_TOKENS_PER_CHUNK', 1000),
         overlap_tokens=getattr(config, 'CONTROL_V4_OVERLAP_TOKENS', 200)
     )
+    print(f"[DEBUG SOC1] Created {len(chunks)} chunks")
     
     # Step 2: Extract controls with CoT (may return multiple controls per chunk)
     raw_controls = []
@@ -1412,6 +1424,7 @@ def extract_controls_v4(
             logging.error(f"[CHUNK {chunk['chunk_id']}] Exception during extraction: {e}", exc_info=True)
             continue
     
+    print(f"[DEBUG SOC1] Extracted {len(raw_controls)} raw controls from {len(chunks)} chunks")
     logging.info(f"Extracted {len(raw_controls)} raw controls from {len(chunks)} chunks")
     
     # Step 3: Merge continuations
@@ -1459,7 +1472,7 @@ def extract_controls_v4(
     deviations = sum(1 for c in validated_controls if c.get("has_deviation", False))
     
     diagnostics = {
-        "extractor_version": "v4",
+        "extractor_version": "v4_soc1",
         "total_chunks": len(chunks),
         "raw_controls_extracted": len(raw_controls),
         "controls_merged": len(raw_controls) - len(merged_controls),

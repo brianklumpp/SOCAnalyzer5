@@ -41,6 +41,27 @@ LOG_GPT_HEADER_WHITELIST = [h.strip() for h in os.getenv(
 # Keep extractors GPT-driven. If a fallback is ever needed for debugging, flip this flag to true temporarily.
 ALLOW_REGEX_FALLBACKS = os.getenv("ALLOW_REGEX_FALLBACKS", "false").lower() == "true"
 
+# --- Report Type Auto-Detection Settings ---
+# Enable automatic detection of SOC report type (SOC1/SOC2, Type1/Type2) using GPT
+REPORT_TYPE_AUTO_DETECT = os.getenv("REPORT_TYPE_AUTO_DETECT", "true").lower() == "true"
+# Minimum confidence threshold (0.0-1.0) to accept detection without user confirmation
+REPORT_TYPE_CONFIDENCE_THRESHOLD = float(os.getenv("REPORT_TYPE_CONFIDENCE_THRESHOLD", "0.85"))
+# Number of pages to analyze in quick scan stage
+REPORT_TYPE_QUICK_SCAN_PAGES = int(os.getenv("REPORT_TYPE_QUICK_SCAN_PAGES", "10"))
+
+# --- Progress Estimation Settings ---
+# Minimum number of historical scans needed to use averaged elapsed times for progress estimation
+PROGRESS_HISTORY_MIN_SAMPLES = int(os.getenv("PROGRESS_HISTORY_MIN_SAMPLES", "5"))
+# Base time estimates (seconds) when insufficient historical data available
+PROGRESS_BASE_ESTIMATE_SOC1 = int(os.getenv("PROGRESS_BASE_ESTIMATE_SOC1", "1200"))  # 20 minutes
+PROGRESS_BASE_ESTIMATE_SOC2 = int(os.getenv("PROGRESS_BASE_ESTIMATE_SOC2", "2100"))  # 35 minutes
+# Number of pages to analyze in deep scan stage (if quick scan confidence is low)
+REPORT_TYPE_DEEP_SCAN_PAGES = int(os.getenv("REPORT_TYPE_DEEP_SCAN_PAGES", "25"))
+# Enable caching of detection results by PDF hash
+REPORT_TYPE_CACHE_ENABLED = os.getenv("REPORT_TYPE_CACHE_ENABLED", "true").lower() == "true"
+# Days to cache detection results before re-analyzing same PDF
+REPORT_TYPE_CACHE_TTL_DAYS = int(os.getenv("REPORT_TYPE_CACHE_TTL_DAYS", "90"))
+
 # --- LLM Provider Selection ---
 # Provider options: 'openai' | 'azure' | 'dataiku_apinode' | 'dataiku_dss'
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "dataiku_dss")
@@ -121,6 +142,21 @@ TSC_ANOMALY_MIN_THRESHOLD = int(os.getenv("TSC_ANOMALY_MIN_THRESHOLD", "5"))
 MERGE_SUGGESTION_MIN_CONFIDENCE = float(os.getenv("MERGE_SUGGESTION_MIN_CONFIDENCE", "0.50"))
 # Maximum number of merge suggestions to return per request
 MERGE_SUGGESTION_MAX_RESULTS = int(os.getenv("MERGE_SUGGESTION_MAX_RESULTS", "50"))
+# Auto-merge threshold - controls with similarity >= this are automatically merged
+AUTO_MERGE_MIN_CONFIDENCE = float(os.getenv("AUTO_MERGE_MIN_CONFIDENCE", "0.70"))
+# Chunk boundary detection - characters near chunk boundary to flag
+CHUNK_BOUNDARY_BUFFER = int(os.getenv("CHUNK_BOUNDARY_BUFFER", "100"))
+# Page proximity scoring weight (0.05 = 5% bonus for adjacent pages)
+PAGE_PROXIMITY_WEIGHT = float(os.getenv("PAGE_PROXIMITY_WEIGHT", "0.05"))
+# Control completeness penalty - reduce confidence by this amount if missing required fields
+CONTROL_INCOMPLETE_PENALTY = float(os.getenv("CONTROL_INCOMPLETE_PENALTY", "0.20"))
+
+# High Confidence Threshold - PRIMARY threshold used across the application
+# - Frontend: Filters default view to show only >= 75% confidence items
+# - Backend: Deviations endpoint, reports, and data filtering
+# - UI Labels: "High confidence (≥ 75%)" messaging
+# This is the single source of truth for "high confidence" definition system-wide
+HIGH_CONFIDENCE_THRESHOLD = float(os.getenv("HIGH_CONFIDENCE_THRESHOLD", "0.75"))
 
 # Framework Preview Rate Limiting
 # Maximum preview requests per scan per minute
@@ -271,11 +307,84 @@ TOC:
 {toc_text}
 """
 
+SECTION_IDENTIFICATION_PROMPT = """
+You are an expert SOC report analyst. Your task is to identify the major sections in a SOC 1 or SOC 2 report.
+
+## Common SOC Report Sections
+SOC reports typically contain these major sections (names may vary):
+1. **Independent Service Auditor's Report** - The auditor's opinion and scope
+2. **Management's Assertion** - Management's statement about controls
+3. **System Description** / **Description of System** - Overview of the system and services
+4. **Control Activities and Tests of Controls** / **Control Descriptions** - Detailed control objectives and tests
+
+## Task
+Analyze the provided text (from the first pages of a SOC report) and identify:
+1. The major section names as they appear in the report
+2. BOTH the TOC page number (from Table of Contents) AND the DOC page number (from === PAGE N === markers)
+3. Your confidence (0-100) that you've correctly identified each section
+
+## Rules
+1. Focus on identifying the 4 major sections listed above (names may differ)
+2. Use the Table of Contents if present (usually in first few pages)
+3. Look for clear section headings, which may use:
+   - Roman numerals (I, II, III, IV, V)
+   - Arabic numbers (1, 2, 3, 4, 5)
+   - Section labels ("Section I", "Section 1")
+   - Descriptive titles without numbers
+4. **CRITICAL - Dual Page Number Tracking:**
+   - `toc_page`: The page number shown in the Table of Contents for this section
+   - `doc_page`: The actual page number from the === PAGE N === marker where the section heading/content appears
+   - Example: If TOC shows "Section II.....5" but the section heading appears after "=== PAGE 7 ===", then toc_page=5, doc_page=7
+   - These numbers may differ due to cover pages, TOC pages, or other front matter
+5. Confidence scoring:
+   - 90-100: Found in TOC AND confirmed heading in document
+   - 70-89: Found clear heading in document, no TOC confirmation
+   - 50-69: Probable section based on content keywords
+   - Below 50: Uncertain, multiple candidates
+6. If you cannot reliably identify a section, omit it from results
+7. Return your average confidence across all identified sections
+
+## Output Format
+Respond with ONLY valid JSON (no markdown, no commentary):
+{{
+  "sections": [
+    {{
+      "name": "<section name as it appears in report>",
+      "toc_page": <integer page number from TOC>,
+      "doc_page": <integer page number from === PAGE N === marker>,
+      "confidence": <integer 0-100>
+    }}
+  ],
+  "controls_section_name": "<exact name of the controls/control activities section>",
+  "system_description_section_name": "<exact name of the system description section>",
+  "overall_confidence": <average of all section confidences, integer 0-100>
+}}
+
+## Important
+- For controls_section_name: Identify which section contains the detailed control objectives and descriptions
+- For system_description_section_name: Identify which section describes the system, services, and business
+- overall_confidence: Calculate as the arithmetic mean of all individual section confidences
+
+Report Text:
+{text}
+"""
+
 # --- GPT Prompts for Extractors ---
 
 # CUEC Extraction Prompt
 CUEC_EXTRACTION_PROMPT = """
 You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
 
 ## Rules
 1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
@@ -631,18 +740,28 @@ You are an expert SOC report analyst. Extract the company (legal entity) being a
 ## Rules
 1. Look for explicit entity names in the management assertion, title page, or system description (e.g., “XYZ Corp. (an ABC Company)”).
 2. Always extract the company being audited. Parent/owner is optional if clearly stated.
-3. Ignore auditor names, subservice orgs, and references to unrelated parties.
-4. If the company or parent cannot be determined, set those fields to null.
-5. Provide a confidence score (0–1) and a one-sentence explanation.
+3. Extract the company website domain (e.g., "okta.com", "salesforce.com") if mentioned in the report. This is typically found in:
+   - Company descriptions or "About Us" sections
+   - Contact information or footer sections
+   - URLs referenced in the report text
+4. Ignore auditor names, subservice orgs, and references to unrelated parties.
+5. If the company or parent cannot be determined, set those fields to null.
+6. Provide a confidence score (0–1) and a one-sentence explanation.
 
 ## Output
 Return one JSON object:
 {{
     "company": "<string | null>",
     "parent_company": "<string | null>",
+    "company_domain": "<string | null>",
     "confidence": <float 0–1>,
     "explanation": "<string, concise reasoning>"
 }}
+
+## Examples
+- If you see "okta.com" or "www.okta.com" → extract as "okta.com"
+- If you see "https://www.salesforce.com" → extract as "salesforce.com"
+- Do not include "www." prefix or protocol (http://, https://)
 
 SOC report Text:
 {text}
@@ -696,12 +815,22 @@ SOC report Text:
 COVERAGE_PERIOD_EXTRACTION_PROMPT = """
 You are an expert SOC auditor. Determine the **coverage period** and report type (Type 1 or Type 2) from the given text.
 
+## Common Date Patterns to Look For
+- "from [date] to [date]"
+- "[date] through [date]"
+- "period from [date] to [date]"
+- "as of [date]" (Type 1 only)
+- "beginning [date] and ending [date]"
+- Look in the first few paragraphs of the auditor's report or management assertion
+- Check for phrases like "throughout the period", "during the period", "for the period"
+
 ## Rules
 1. A Type 2 report includes both start and end dates (period of review).
 2. A Type 1 report includes only a single “as-of” date — treat that as end_date and set start_date = null.
 3. Use ISO format (YYYY-MM-DD) for all dates when possible.
 4. Include an explanation describing how you identified the report type and dates.
 5. If the period cannot be determined, set both dates to null.
+6. **IMPORTANT**: Carefully read the entire provided text. Dates are often in the opening paragraphs.
 
 ## Output
 {{
@@ -879,6 +1008,12 @@ WATERMARK_PATTERNS = [
     r"digitally signed by"
 ]
 
+# Watermark and date extraction thresholds
+WATERMARK_FREQUENCY_THRESHOLD = int(os.getenv("WATERMARK_FREQUENCY_THRESHOLD", "8"))  # Max occurrences before filtering as watermark
+COVERAGE_PERIOD_MIN_MONTHS = int(os.getenv("COVERAGE_PERIOD_MIN_MONTHS", "6"))  # Minimum months for Type 2 (informational only)
+COVERAGE_PERIOD_MAX_MONTHS = int(os.getenv("COVERAGE_PERIOD_MAX_MONTHS", "12"))  # Maximum valid coverage period duration
+REPORT_DATE_PROXIMITY_DAYS = int(os.getenv("REPORT_DATE_PROXIMITY_DAYS", "30"))  # Max days between coverage_end and report_date
+
 REGEX_PATTERNS = {
     'date': r"\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s+\d{4})\b",
     'email': r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+",
@@ -983,6 +1118,15 @@ SO_KEYWORDS = ["subservice", "subservice organization"]
 
 SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT = """
 You are a SOC report analysis expert. Your goal is to extract all third-party service providers (subservice organizations) mentioned in the provided text.
+
+## Key Section Headings (High Confidence Indicators)
+Pay special attention to sections with these titles or similar phrases:
+- "Complementary Subservice Organization Controls"
+- "Subservice Organization" or "Subservice Organizations"
+- "Third-Party Service Providers"
+- "Outsourced Services"
+- "External Service Providers"
+Statements in or near these sections are **highly likely** to be subservice organizations.
 
 ## Objective
 Identify each third party referenced in the “Description of System” or similar section.  
@@ -1796,6 +1940,22 @@ CONTROL_V4_SAVE_REJECTED = True         # Save rejected low-confidence controls 
 CONTROL_EXTRACTION_PROMPT_V4 = """
 You are a SOC 2 / COSO control extraction model. From unstructured SOC 2 text with all table structure removed, extract ALL complete control blocks in this chunk.
 
+**IMPORTANT: Line Markers & Multi-Line Patterns**
+Text contains line markers like ║123║ indicating line breaks. Control IDs and other text may span multiple lines.
+
+**Critical Rules for Combining Text:**
+1. If a control ID ends with a dash (-), underscore (_), or period (.) at a line break, it continues on the next line
+   Example: ║245║ REV- followed by ║246║ 01-01 → combine as "REV-01-01"
+   Example: ║2971║ 2.01_ followed by ║2972║ Ariba → combine as "2.01_Ariba"
+   Example: ║100║ CC2. followed by ║101║ 1 → combine as "CC2.1"
+
+2. If a text line is incomplete (doesn't end with punctuation or looks truncated), check the next line
+   Example: ║50║ The company implements followed by ║51║ access controls → combine
+
+3. ALWAYS check 1-2 lines ahead when you see partial control IDs or incomplete sentences
+
+When extracting control_id and other fields, combine text logically across line markers to reconstruct complete values.
+
 ## Goal
 Extract ALL complete control blocks found in this chunk. For each control, return:
 - the control identifier (if present)
@@ -1891,7 +2051,7 @@ Extract ALL complete control blocks found in this chunk. For each control, retur
 - one or more auditor test procedures
 - one or more test results
 - whether a deviation/exception is stated
-- which financial assertions this control addresses
+- which financial assertions this control addresses (list 1-3 most applicable)
 - where this control logically ends (line number estimate)
 
 ## Expected Output
@@ -1918,25 +2078,24 @@ Return a JSON object with a "controls" array containing one object per control f
 }}
 
 ## Financial Assertions (Management Assertions per PCAOB AS 2201)
-Map each control to relevant assertions:
+Map each control to relevant assertions (list 1-3 most applicable):
+
+**Transaction-Level Assertions:**
 - **EO** (Existence/Occurrence): Transactions occurred and pertain to entity
 - **C** (Completeness): All transactions recorded
 - **A** (Accuracy): Amounts recorded appropriately
 - **CO** (Cutoff): Transactions in correct period
 - **CL** (Classification): Transactions in proper accounts
-- **E** (Existence - Balance): Assets, liabilities exist
-- **R** (Rights and Obligations): Entity holds/controls rights
-- **CV** (Completeness and Valuation): Balances at appropriate amounts
-- **REV** (Revenue Recognition): Revenue controls
-- **AP** (Accounts Payable): Vendor payment controls
-- **AR** (Accounts Receivable): Customer billing controls
-- **INV** (Inventory): Inventory controls
-- **PPE** (Property, Plant & Equipment): Fixed asset controls
-- **PAY** (Payroll): Compensation controls
-- **CASH** (Cash Management): Cash controls
-- **JE** (Journal Entries): Journal entry controls
-- **FR** (Financial Reporting): Period-end close controls
-- **TAX** (Tax Compliance): Tax controls
+
+**Account Balance Assertions:**
+- **E** (Existence): Assets, liabilities exist
+- **R** (Rights): Entity holds/controls rights
+- **CV** (Valuation): Balances at appropriate amounts
+
+**Common Transaction Cycles (optional shorthand):**
+- **REV** (Revenue), **AP** (Payables), **AR** (Receivables), **INV** (Inventory), **PAY** (Payroll), **CASH** (Cash), **JE** (Journal Entries), **FR** (Financial Reporting)
+
+**Mapping Guidance:** Focus on the PRIMARY 1-3 assertions. Don't over-map. When uncertain, default to EO, C, and A.
 
 ## Parsing Strategy
 Analyze linguistic and structural cues — never rely on visible table columns.
@@ -1963,12 +2122,13 @@ Stop the block when a new control ID, header, or whitespace separator appears.
 - Otherwise, has_deviation = false and deviation_desc = ""
 
 ### 5. Financial assertion mapping
-Analyze control_desc and identify which financial assertions are addressed:
-- Look for transaction cycle keywords (revenue, purchases, payroll, inventory)
-- Look for assertion keywords (completeness, accuracy, existence, authorization, cutoff)
+**Strategy:** Extract the control FIRST with high quality, THEN map assertions.
+- Look for transaction cycle keywords in control_desc (revenue, purchases, payroll, inventory)
+- Look for assertion keywords (completeness, accuracy, authorization, cutoff)
 - Look for account balance references (AR, AP, cash, PPE, revenue, COGS)
-- List ALL applicable assertion codes in financial_assertions array
-- Provide brief reasoning in assertion_reasoning (max 150 chars)
+- List 1-3 primary assertions (avoid listing 5+ assertions per control)
+- Keep assertion_reasoning brief (max 100 chars)
+- If uncertain, it's better to list fewer assertions with high confidence
 
 ### 6. Confidence scoring
 - 0.9–1.0 → found control_id + description + ≥1 test + result + clear assertion mapping
@@ -1987,6 +2147,8 @@ Extract ALL complete controls found in this chunk. The chunk may contain:
 - Multiple controls (typical for dense reports)
 - Partial control (starts but doesn't complete - mark as continuation)
 
+**IMPORTANT:** For financial assertion mapping, focus on obvious assertions. If uncertain, list the most likely 1-3 assertions. Quality over quantity.
+
 Analyze this text (first line is line {start_line}). Extract ALL control blocks found:
 {text}
 """
@@ -1997,7 +2159,7 @@ Analyze this text (first line is line {start_line}). Extract ALL control blocks 
 ## Removed: deviation regex patterns (heuristics no longer used)
 
 TABLE_FIELD_MAP = {
-    "company": ["name", "parent_company", "confidence", "scan_id"],
+    "company": ["name", "parent_company", "confidence", "scan_id", "company_domain", "logo_url"],
     "control": [
         "control_id", "control_desc", "control_test", "control_test_results", "has_deviation", "deviation_desc", "control_page_refs", "control_line_ref", "control_seq",
         "control_tsc_id", "control_coso_id", "control_tsc_similarity", "control_coso_similarity", "control_tsc_confidence_pct",
@@ -2312,6 +2474,7 @@ GPT_PROMPTS = {
     'extract_toc': EXTRACT_TOC_PROMPT,
     'section_heading_validation': SECTION_HEADING_VALIDATION_PROMPT,
     'extract_toc_headings_and_pages': EXTRACT_TOC_HEADINGS_AND_PAGES_PROMPT,
+    'section_identification': SECTION_IDENTIFICATION_PROMPT,
     'cuec_extraction': CUEC_EXTRACTION_PROMPT,
     'cuec_consolidation': CUEC_CONSOLIDATION_PROMPT,
     'executive_summary': EXECUTIVE_SUMMARY_PROMPT,
@@ -2369,5 +2532,70 @@ Example for control:
 }}
 
 If the search term does not correspond to a valid {entity_type}, return confidence 0.0 and null for all fields except confidence.
+"""
+
+# ============================================================================
+# UNIFIED CONTROL EXTRACTOR - Configuration
+# ============================================================================
+
+# Enable financial assertion mapping (SOC1 only, opt-in via environment variable)
+ENABLE_ASSERTION_MAPPING = os.getenv('ENABLE_ASSERTION_MAPPING', 'false').lower() == 'true'
+
+# Maximum tokens per batch for financial assertion mapping (~20K = safe for GPT-4)
+MAX_ASSERTION_BATCH_TOKENS = 20000
+
+# Financial Assertion Batch Mapping Prompt (for SOC1 controls)
+FINANCIAL_ASSERTION_BATCH_MAPPING_PROMPT = """
+You are a SOC 1 / ICFR specialist. Map each control to its PRIMARY financial assertions based on PCAOB AS 2201.
+
+## Financial Assertions Reference
+
+**Transaction-Level Assertions:**
+- **EO** (Existence/Occurrence): Transactions occurred and pertain to entity
+- **C** (Completeness): All transactions recorded
+- **A** (Accuracy): Amounts recorded appropriately
+- **CO** (Cutoff): Transactions in correct period
+- **CL** (Classification): Transactions in proper accounts
+
+**Account Balance Assertions:**
+- **E** (Existence): Assets, liabilities exist
+- **R** (Rights): Entity holds/controls rights
+- **CV** (Valuation): Balances at appropriate amounts
+
+## Controls to Map
+
+{controls_json}
+
+## Task
+
+For each of the {num_controls} controls above, identify the 1-3 PRIMARY financial assertions based on:
+1. Transaction cycle keywords (revenue, purchases, payroll, inventory, cash, AR, AP)
+2. Assertion keywords (completeness, accuracy, authorization, occurrence, cutoff, valuation)
+3. Control purpose and tested procedures
+
+## Output Format
+
+Return JSON with "assertions" array containing one entry per control:
+
+{{{{
+  "assertions": [
+    {{{{
+      "control_id": "<control_id from input>",
+      "financial_assertions": ["EO", "A"],
+      "assertion_reasoning": "Control authorizes and validates transaction amounts"
+    }}}},
+    {{{{
+      "control_id": "<control_id from input>",
+      "financial_assertions": ["C", "CO"],
+      "assertion_reasoning": "Control ensures all transactions recorded in correct period"
+    }}}}
+  ]
+}}}}
+
+**Important:**
+- List 1-3 PRIMARY assertions only (avoid listing 5+ per control)
+- Keep assertion_reasoning brief (max 100 chars)
+- If uncertain, focus on most obvious 1-2 assertions
+- Use control_id exactly as provided in input
 """
 

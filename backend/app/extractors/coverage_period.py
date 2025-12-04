@@ -3,6 +3,10 @@ import os
 import json
 import logging
 import re
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+from dateutil import parser as date_parser
+from collections import Counter
 from .. import config
 from ..gpt_client import gpt_extract
 
@@ -34,50 +38,326 @@ def extract_text_for_lines(txt_lines, start_line, end_line):
     # Lines are 1-indexed in section_results.json
     return ''.join(txt_lines[start_line-1:end_line])
 
+def deduce_dates_from_candidates(txt_lines, section_results):
+    """
+    Deduce coverage period and report date using temporal relationship rules.
+    
+    Rules:
+    - Earliest date → coverage_start
+    - Latest date → report_date
+    - Coverage_end must be 6-12 months after coverage_start
+    - Coverage_end must be within 30 days before report_date
+    - If multiple valid coverage_end candidates, pick closest to report_date
+    
+    Args:
+        txt_lines: Full document text lines
+        section_results: Section metadata from section_results.json
+        
+    Returns:
+        Dict with type, start_date, end_date, as_of_date, explanation or None if deduction fails
+    """
+    logger.info("Starting date deduction with temporal rules...")
+    
+    # Collect dates from Management_Assertion and Service_Auditor_Report sections
+    management_section = next((s for s in section_results if s.get('topic') == 'Management_Assertion'), None)
+    auditor_section = next((s for s in section_results if s.get('topic') == 'Service_Auditor_Report'), None)
+    
+    sections_to_scan = [s for s in [management_section, auditor_section] if s]
+    if not sections_to_scan:
+        logger.warning("No Management_Assertion or Service_Auditor_Report sections found for date deduction")
+        return None
+    
+    # Extract all dates from sections
+    all_dates = []
+    for section in sections_to_scan:
+        start_line = section.get('start_line')
+        end_line = section.get('end_line')
+        if start_line and end_line:
+            text = extract_text_for_lines(txt_lines, start_line, end_line)
+            # Find dates using regex
+            date_pattern = r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b'
+            matches = re.finditer(date_pattern, text, re.IGNORECASE)
+            for match in matches:
+                try:
+                    date_obj = date_parser.parse(match.group(0))
+                    all_dates.append(date_obj)
+                except:
+                    pass
+    
+    if not all_dates:
+        logger.warning("No dates found in sections for deduction")
+        return None
+    
+    # Count frequency to filter watermarks
+    date_counter = Counter(d.date() for d in all_dates)
+    watermark_threshold = config.WATERMARK_FREQUENCY_THRESHOLD
+    filtered_dates = [d for d in all_dates if date_counter[d.date()] <= watermark_threshold]
+    
+    logger.info(f"Found {len(all_dates)} total dates, {len(filtered_dates)} after watermark filtering (threshold={watermark_threshold})")
+    
+    if len(filtered_dates) < 1:
+        logger.warning(f"Insufficient dates after filtering ({len(filtered_dates)} dates). Need at least 1.")
+        return None
+    
+    # Log all candidates with rejection reasons
+    for date_obj in sorted(set(all_dates), key=lambda d: d):
+        freq = date_counter[date_obj.date()]
+        status = "FILTERED" if freq > watermark_threshold else "VALID"
+        logger.info(f"Date candidate: {date_obj.strftime('%Y-%m-%d')} (frequency={freq}, status={status})")
+    
+    # Sort chronologically
+    sorted_dates = sorted(filtered_dates)
+    
+    # Handle different scenarios based on number of dates found
+    if len(sorted_dates) == 1:
+        # Only one date - likely Type 1 "as of" report
+        logger.info(f"Only one date found: {sorted_dates[0].strftime('%Y-%m-%d')}. Inferring Type 1 report.")
+        return {
+            'type': 'Type 1',
+            'start_date': None,
+            'end_date': sorted_dates[0].strftime('%Y-%m-%d'),
+            'as_of_date': sorted_dates[0].strftime('%Y-%m-%d'),
+            'explanation': f'Deduced Type 1: only one date found ({sorted_dates[0].strftime("%Y-%m-%d")}). Likely "as of" date.'
+        }
+    
+    elif len(sorted_dates) == 2:
+        # Two dates - could be coverage_end + report_date, need to infer start
+        # Assume 6-month coverage period (typical for SOC reports)
+        from dateutil.relativedelta import relativedelta
+        date1 = sorted_dates[0]
+        date2 = sorted_dates[1]
+        
+        # Check if dates are 6-12 months apart (Type 2) or within 30 days (Type 1)
+        months_apart = (date2.year - date1.year) * 12 + (date2.month - date1.month)
+        days_apart = (date2 - date1).days
+        
+        if months_apart >= 6 and months_apart <= 12:
+            # Dates span 6-12 months: date1 is coverage_start, date2 is coverage_end
+            logger.info(f"Two dates spanning {months_apart} months: inferring Type 2 with coverage_start={date1.strftime('%Y-%m-%d')}, coverage_end={date2.strftime('%Y-%m-%d')}")
+            return {
+                'type': 'Type 2',
+                'start_date': date1.strftime('%Y-%m-%d'),
+                'end_date': date2.strftime('%Y-%m-%d'),
+                'as_of_date': None,
+                'explanation': f'Deduced Type 2: two dates found spanning {months_apart} months. Assuming date1=coverage_start, date2=coverage_end.'
+            }
+        elif days_apart <= 30:
+            # Dates within 30 days: likely coverage_end + report_date, infer start as 6 months before
+            inferred_start = date1 - relativedelta(months=6)
+            logger.info(f"Two dates within {days_apart} days: inferring coverage_start as 6 months before first date")
+            logger.info(f"Inferred coverage_start={inferred_start.strftime('%Y-%m-%d')}, coverage_end={date1.strftime('%Y-%m-%d')}, report_date={date2.strftime('%Y-%m-%d')}")
+            return {
+                'type': 'Type 2',
+                'start_date': inferred_start.strftime('%Y-%m-%d'),
+                'end_date': date1.strftime('%Y-%m-%d'),
+                'as_of_date': None,
+                'explanation': f'Deduced Type 2: two dates found {days_apart} days apart. Inferred coverage_start as 6 months before coverage_end ({date1.strftime("%Y-%m-%d")}). Report date: {date2.strftime("%Y-%m-%d")}.'
+            }
+        else:
+            # Dates don't match expected patterns
+            logger.warning(f"Two dates found but spacing unclear ({months_apart} months, {days_apart} days apart). Defaulting to Type 1.")
+            return {
+                'type': 'Type 1',
+                'start_date': None,
+                'end_date': date2.strftime('%Y-%m-%d'),
+                'as_of_date': date2.strftime('%Y-%m-%d'),
+                'explanation': f'Two dates found but unclear relationship ({months_apart} months apart). Defaulting to Type 1 with as_of_date={date2.strftime("%Y-%m-%d")}.'
+            }
+    
+    # Three or more dates - original logic
+    coverage_start = sorted_dates[0]
+    report_date = sorted_dates[-1]
+    
+    logger.info(f"Deduced coverage_start (earliest): {coverage_start.strftime('%Y-%m-%d')}")
+    logger.info(f"Deduced report_date (latest): {report_date.strftime('%Y-%m-%d')}")
+    
+    # Find valid coverage_end candidates
+    min_months = config.COVERAGE_PERIOD_MIN_MONTHS
+    max_months = config.COVERAGE_PERIOD_MAX_MONTHS
+    proximity_days = config.REPORT_DATE_PROXIMITY_DAYS
+    
+    valid_coverage_ends = []
+    for date_obj in sorted_dates[1:-1]:  # Exclude earliest and latest
+        # Check temporal rules
+        months_after_start = (date_obj.year - coverage_start.year) * 12 + (date_obj.month - coverage_start.month)
+        days_before_report = (report_date - date_obj).days
+        
+        reasons = []
+        if months_after_start < min_months:
+            reasons.append(f"only {months_after_start} months after start (min={min_months})")
+        if months_after_start > max_months:
+            reasons.append(f"{months_after_start} months after start exceeds max={max_months}")
+        if days_before_report < 0:
+            reasons.append(f"after report date by {abs(days_before_report)} days")
+        if days_before_report > proximity_days:
+            reasons.append(f"{days_before_report} days before report exceeds proximity={proximity_days}")
+        
+        if reasons:
+            logger.info(f"Coverage_end candidate {date_obj.strftime('%Y-%m-%d')} REJECTED: {'; '.join(reasons)}")
+        else:
+            logger.info(f"Coverage_end candidate {date_obj.strftime('%Y-%m-%d')} VALID (months_after_start={months_after_start}, days_before_report={days_before_report})")
+            valid_coverage_ends.append(date_obj)
+    
+    if not valid_coverage_ends:
+        logger.warning("No valid coverage_end candidates found matching temporal rules")
+        return None
+    
+    # Pick coverage_end closest to report_date (but not later)
+    coverage_end = max(valid_coverage_ends, key=lambda d: d)
+    logger.info(f"Selected coverage_end (closest to report_date): {coverage_end.strftime('%Y-%m-%d')}")
+    
+    # Determine report type
+    months_duration = (coverage_end.year - coverage_start.year) * 12 + (coverage_end.month - coverage_start.month)
+    report_type = 'Type 2' if months_duration >= min_months else 'Type 1'
+    
+    result = {
+        'type': report_type,
+        'start_date': coverage_start.strftime('%Y-%m-%d'),
+        'end_date': coverage_end.strftime('%Y-%m-%d'),
+        'as_of_date': None,
+        'explanation': f'Deduced via temporal rules: earliest={coverage_start.strftime("%Y-%m-%d")}, end={coverage_end.strftime("%Y-%m-%d")} (closest to report), latest={report_date.strftime("%Y-%m-%d")}. Duration={months_duration} months.'
+    }
+    
+    logger.info(f"Date deduction successful: {result}")
+    return result
+
 def extract_coverage_period():
     # Reset output file at the start of extraction
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
         f.write('{}\n')
     section_results = load_json(SECTION_JSON_PATH)
+    # SOC1 reports often have coverage period in Management's Assertion or Service Auditor Report
+    management_section = next((s for s in section_results if s.get('topic') == 'Management_Assertion'), None)
+    system_desc_section = next((s for s in section_results if s.get('topic') == 'Description_of_System'), None)
     auditor_section = next((s for s in section_results if s.get('topic') == 'Service_Auditor_Report'), None)
-    if not auditor_section:
-        logging.warning('No Service_Auditor_Report section found. Falling back to full-document scan for coverage period.')
-    start_line = auditor_section.get('start_line') if auditor_section else None
-    end_line = auditor_section.get('end_line') if auditor_section else None
+    
+    # Check if management section is too short (likely just a header page)
+    if management_section:
+        section_length = management_section.get('end_line', 0) - management_section.get('start_line', 0)
+        if section_length < 10:
+            logging.warning(f'[COVERAGE_PERIOD] Management_Assertion section too short ({section_length} lines), trying Service_Auditor_Report instead')
+            management_section = None
+    
+    # Priority: Service Auditor Report (most reliable for dates) > Management Assertion > System Description
+    target_section = auditor_section or management_section or system_desc_section
+    if not target_section:
+        logging.warning('[COVERAGE_PERIOD] No system description or auditor report section found. Falling back to full-document scan.')
+    
+    start_line = target_section.get('start_line') if target_section else None
+    end_line = target_section.get('end_line') if target_section else None
     with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
     if start_line and end_line:
         text = extract_text_for_lines(txt_lines, start_line, end_line)
-    elif auditor_section and auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
-        start = auditor_section['DOC_page_ref']
-        end = auditor_section['end_DOC_page_ref']
+    elif target_section and target_section.get('DOC_page_ref') is not None and target_section.get('end_DOC_page_ref') is not None:
+        start = target_section['DOC_page_ref']
+        end = target_section['end_DOC_page_ref']
         pages = list(range(start, end + 1))
         text = extract_text_for_pages(txt_lines, pages)
     else:
-        logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section. Using entire document for heuristic extraction.')
+        section_name = 'system description or auditor report'
+        logging.error(f'DOC_page_ref or end_DOC_page_ref is None for {section_name} section. Using entire document for heuristic extraction.')
         with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
             text = f2.read()
     # Primary path: GPT extraction
-    # Get first 20 non-empty lines (to cover both Type 1 and Type 2 language)
+    # Get first 40 non-empty lines (increased from 20 for better SOC1 coverage)
     lines = [l.strip() for l in text.splitlines() if l.strip()]
-    first_lines = '\n'.join(lines[:20])
+    first_lines = '\n'.join(lines[:40])
+    
+    logging.info(f'[COVERAGE_PERIOD] Section target: {target_section.get("topic") if target_section else "full document"}')
+    logging.info(f'[COVERAGE_PERIOD] Extracted {len(lines[:40])} non-empty lines, {len(first_lines)} characters for GPT')
+    logging.debug(f'[COVERAGE_PERIOD] Text sample (first 300 chars): {first_lines[:300]}...')
+    
+    # Write the actual text to a debug file for verification
+    debug_file = config.OUTPUT_DIR / "coverage_period_gpt_input.txt"
+    try:
+        with open(debug_file, 'w', encoding='utf-8') as f:
+            f.write(f"=== TEXT SENT TO GPT FOR COVERAGE PERIOD EXTRACTION ===\n\n{first_lines}\n")
+        logging.debug(f'[COVERAGE_PERIOD] Wrote GPT input to {debug_file}')
+    except Exception as e:
+        logging.warning(f'[COVERAGE_PERIOD] Could not write debug file: {e}')
+    
     prompt = config.COVERAGE_PERIOD_EXTRACTION_PROMPT.format(text=first_lines)
+    logging.debug(f'[COVERAGE_PERIOD] Sending prompt to GPT (length: {len(prompt)} chars)')
+    
     response = gpt_extract(prompt, 'coverage_period_extractor')
+    logging.info(f'[COVERAGE_PERIOD] GPT response received (length: {len(response) if response else 0} chars)')
+    
     result = {'type': None, 'start_date': None, 'end_date': None, 'as_of_date': None, 'explanation': '', 'raw_gpt_response': response}
     if not response:
-        logging.error('No response from GPT.')
+        logging.error('[COVERAGE_PERIOD] No response from GPT.')
         result['explanation'] = 'No response from GPT.'
     else:
         try:
-            data = json.loads(response)
+            # Handle markdown code blocks from GPT
+            response_clean = response.strip()
+            if response_clean.startswith('```'):
+                # Extract JSON from markdown code block
+                json_match = re.search(r'```(?:json)?\s*\n(.*?)\n```', response_clean, re.DOTALL)
+                if json_match:
+                    response_clean = json_match.group(1)
+            
+            data = json.loads(response_clean)
             result['type'] = data.get('type')
             result['start_date'] = data.get('start_date')
             result['end_date'] = data.get('end_date')
             result['as_of_date'] = data.get('as_of_date')
             result['explanation'] = data.get('explanation', '')
+            logging.info(f'[COVERAGE_PERIOD] GPT extraction result: type={result["type"]}, start={result["start_date"]}, end={result["end_date"]}')
+            
+            # Sanity check: If GPT returned null dates but text contains obvious date patterns, warn
+            if not result.get('start_date') and not result.get('end_date') and not result.get('as_of_date'):
+                # Check for common date patterns in the text
+                date_hints = []
+                if re.search(r'\d{1,2}/\d{1,2}/\d{4}', first_lines):
+                    date_hints.append('MM/DD/YYYY format')
+                if re.search(r'[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s+(?:to|through)\s+[A-Za-z]+\s+\d{1,2},?\s+\d{4}', first_lines, re.IGNORECASE):
+                    date_hints.append('"Month DD, YYYY to Month DD, YYYY" pattern')
+                if re.search(r'(?:from|period|beginning).*\d{4}', first_lines, re.IGNORECASE):
+                    date_hints.append('date-related phrases with year')
+                
+                if date_hints:
+                    warning_msg = f'GPT returned null dates but text contains: {", ".join(date_hints)}'
+                    logging.warning(f'[COVERAGE_PERIOD] {warning_msg}')
+                    logging.warning(f'[COVERAGE_PERIOD] GPT may have hallucinated. Consider reviewing: {debug_file}')
+                    result['explanation'] += f' [WARNING: {warning_msg}]'
         except Exception as e:
-            logging.error(f'Failed to parse GPT response: {response} | Error: {e}')
+            logging.error(f'[COVERAGE_PERIOD] Failed to parse GPT response: {e}')
+            logging.debug(f'[COVERAGE_PERIOD] Raw response: {response[:500]}...')
             result['explanation'] = f'Failed to parse GPT response: {e}'
+    
+    # Deduction fallback: Try temporal rule-based deduction if GPT failed or incomplete
+    # Consider GPT extraction incomplete if:
+    # 1. No type returned, OR
+    # 2. Type is "Type 2" but no coverage dates (start_date and end_date both missing), OR  
+    # 3. Type is "Type 1" but no as_of_date, OR
+    # 4. end_date is missing (for both Type 1 and Type 2)
+    try:
+        is_type2_missing_coverage = (result.get('type') == 'Type 2' and 
+                                      not result.get('start_date') and not result.get('end_date'))
+        is_type1_missing_date = (result.get('type') == 'Type 1' and 
+                                 not result.get('as_of_date') and not result.get('end_date'))
+        missing_end_date = not result.get('end_date') and not result.get('as_of_date')
+        
+        need_deduction = (not result.get('type') or 
+                         is_type2_missing_coverage or 
+                         is_type1_missing_date or
+                         missing_end_date)
+        
+        logging.info(f"Deduction check: type={result.get('type')}, start={result.get('start_date')}, end={result.get('end_date')}, as_of={result.get('as_of_date')}, need_deduction={need_deduction}")
+    except Exception as e:
+        logging.error(f"Error checking deduction need: {e}")
+        need_deduction = True
+    
+    if need_deduction:
+        logging.info("GPT extraction incomplete, attempting date deduction fallback...")
+        deduced = deduce_dates_from_candidates(txt_lines, section_results)
+        if deduced:
+            result = deduced
+            result['raw_gpt_response'] = response  # Preserve GPT response for debugging
+            logging.info(f"Deduction fallback successful: {result}")
+        else:
+            logging.warning("Deduction fallback failed, trying regex heuristics...")
 
     # Fallback: heuristic parsing (disabled by default – see config.ALLOW_REGEX_FALLBACKS)
     def _parse_month_date(s):

@@ -60,8 +60,10 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
     analysis_start_time = time.time()
     
     # Validate and normalize report_type
+    logger.error(f"[DEBUG] analyze_pdf_file called with report_type={report_type}, type={type(report_type)}")
     try:
         validated_report_type = validate_report_type(report_type)
+        logger.error(f"[DEBUG] After validation: validated_report_type={validated_report_type}, value={validated_report_type.value}")
         logger.info(f"Analysis starting for report type: {validated_report_type.value}")
     except ValueError as e:
         logger.error(f"Invalid report_type: {e}")
@@ -79,6 +81,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         str(config.JSON_DIR / 'report_date_result.json'),
         str(config.JSON_DIR / 'coverage_period_result.json'),
         str(config.JSON_DIR / 'subservice_orgs_result.json'),
+        str(config.JSON_DIR / '_extraction_checkpoint.json'),
         str(config.LOGS_DIR / 'control_gpt.log'),
         str(config.LOGS_DIR / 'cuec_extractor.log'),
         str(config.LOGS_DIR / 'backend_errors.log'),
@@ -176,10 +179,53 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             pass
 
     try:
+        # Check for embedded PDFs first (common with protected/agreement PDFs)
+        update_progress(3, "Checking for embedded files...")
+        from .pdf_handler import extract_embedded_files, flatten_pdf
+        
+        temp_extract_dir = os.path.join(os.path.dirname(pdf_path), 'extracted')
+        embedded_pdfs = extract_embedded_files(pdf_path, temp_extract_dir)
+        
+        if embedded_pdfs:
+            logger.info(f"Found {len(embedded_pdfs)} embedded PDF(s), using first one: {embedded_pdfs[0]}")
+            # Use the first embedded PDF as the source
+            pdf_path = embedded_pdfs[0]
+            # Note: We'll clean this up later
+        
+        # Check if PDF needs flattening (has interactive elements or protected content)
+        # Try flattening first, then fall back to original if it fails
+        update_progress(5, "Preprocessing PDF...")
+        flattened_path = pdf_path.replace('.pdf', '_flattened.pdf')
+        flatten_success = flatten_pdf(pdf_path, flattened_path)
+        
+        if flatten_success and os.path.exists(flattened_path):
+            logger.info(f"Using flattened PDF for extraction: {flattened_path}")
+            extraction_path = flattened_path
+        else:
+            logger.warning(f"PDF flattening failed or skipped, using original PDF")
+            extraction_path = pdf_path
+        
         # Always (re)generate section_results.json before running extractors
         update_progress(10, "Extracting text from PDF...")
-        extract_text_from_pdf(pdf_path, OUTPUT_TEXT_FILE)
+        extract_text_from_pdf(extraction_path, OUTPUT_TEXT_FILE)
         logger.debug(f"Extracted text to {OUTPUT_TEXT_FILE}")
+        
+        # Clean up flattened PDF after extraction
+        if flatten_success and os.path.exists(flattened_path):
+            try:
+                os.remove(flattened_path)
+                logger.debug(f"Cleaned up flattened PDF: {flattened_path}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up flattened PDF: {e}")
+        
+        # Clean up extracted embedded files
+        if embedded_pdfs and os.path.exists(temp_extract_dir):
+            try:
+                import shutil
+                shutil.rmtree(temp_extract_dir)
+                logger.debug(f"Cleaned up extracted files directory: {temp_extract_dir}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up extracted files: {e}")
         update_progress(20, "Analyzing sections...")
         with open(OUTPUT_TEXT_FILE, 'r', encoding='utf-8') as f:
             text = f.read()
@@ -292,31 +338,33 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 pass
             return res
         
-        # Wrapper for control extraction - routes based on report_type
+        # Wrapper for control extraction - uses unified extractor
         def _run_control_extraction():
             """
-            Run control extraction using report_type routing:
-            - SOC1 → control_extractor_v4_soc1.py
-            - SOC2 → control_extractor_v4.py (default)
-            - COMBINED → control_extractor_combined.py
-            """
-            # Determine extractor version based on report_type
-            if report_type == 'SOC1':
-                version = 'v4_soc1'
-                logger.info(f"Routing to SOC 1 control extractor (report_type={report_type})")
-            elif report_type == 'COMBINED':
-                version = 'combined'
-                logger.info(f"Routing to Combined control extractor (report_type={report_type})")
-            else:
-                # Default: SOC 2
-                version = getattr(config, 'CONTROL_EXTRACTOR_VERSION', 'v4')
-                logger.info(f"Routing to SOC 2 control extractor (version={version}, report_type={report_type})")
+            Run unified control extraction for all report types.
             
-            extract_controls(version=version)
-            # All extractors write to config.CONTROL_JSON_PATH
-            with open(config.CONTROL_JSON_PATH, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return data.get("controls", [])
+            Uses control_extractor_unified.py which:
+            - Uses SOC2 prompt for ALL report types (proven, reliable)
+            - Optionally maps financial assertions via batch GPT (SOC1 only, if enabled)
+            - Gracefully degrades if assertion mapping fails
+            """
+            from .extractors.control_extractor_unified import extract_controls as extract_controls_unified
+            
+            logger.info(f"Using unified control extractor (report_type={validated_report_type.value})")
+            
+            # Load sections for extractor
+            with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as f:
+                sections = json.load(f)
+            
+            # Call unified extractor
+            result = extract_controls_unified(
+                sections=sections,
+                report_type=validated_report_type.value,
+                enable_assertion_mapping=config.ENABLE_ASSERTION_MAPPING
+            )
+            
+            # Return controls (already saved to config.CONTROL_JSON_PATH by extractor)
+            return result.get("controls", [])
         
         # Wrapper for CUEC extraction - routes based on report_type
         def _run_cuec_extraction():
@@ -326,14 +374,14 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             - SOC2 → cuec_extractor.py (default)
             - COMBINED → cuec_extractor.py (default to SOC 2 logic)
             """
-            if report_type == 'SOC1':
+            if validated_report_type == ReportType.SOC1:
                 from .extractors.cuec_extractor_soc1 import extract_cuecs as extract_cuecs_soc1
-                logger.info(f"Routing to SOC 1 CUEC extractor (report_type={report_type})")
+                logger.info(f"Routing to SOC 1 CUEC extractor (report_type={validated_report_type.value})")
                 return extract_cuecs_soc1()
             else:
                 # Default: SOC 2 CUEC extractor
                 from .extractors.cuec_extractor import extract_cuecs
-                logger.info(f"Routing to SOC 2 CUEC extractor (report_type={report_type})")
+                logger.info(f"Routing to SOC 2 CUEC extractor (report_type={validated_report_type.value})")
                 return extract_cuecs()
         
         prereq_steps = [
@@ -390,7 +438,9 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             'subservice_orgs_extraction': ('subservice_orgs', 'subservice_orgs'),
             'product_extraction': ('product', 'product'),
             'auditor_extraction': ('auditor', 'auditor'),
-            'company_extraction': ('company', 'company'),
+            # Company extraction returns a dict with company name, domain, etc.
+            # We want to preserve the entire dict, not just the 'company' string field
+            'company_extraction': ('company', None),  # None means use the whole result
             'report_date_extraction': ('report_date', 'report_date'),
             'coverage_period_extraction': ('coverage_period', 'coverage_period'),
         }
@@ -402,7 +452,10 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     val = current_results.get(ext_key)
                     if val is None:
                         continue
-                    if isinstance(val, dict) and inner_key in val:
+                    # If inner_key is None, use the entire value (for company extraction dict)
+                    if inner_key is None:
+                        standardized_partial[short_key] = val
+                    elif isinstance(val, dict) and inner_key in val:
                         if short_key == 'controls' and isinstance(val[inner_key], list):
                             standardized_partial[short_key] = [dict(c) for c in val[inner_key]]
                         else:
@@ -672,7 +725,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     else:
                         logf.write(f"{short_key}: type={type(val)}\n")
             logf.write(f"Full standardized results keys: {list(standardized_results.keys())}\n")
-        update_progress(100, "Analysis complete.")
+        update_progress(100, "Scan Complete")
         logger.debug(f"Final standardized results: {standardized_results}")
 
         # Ensure subservice orgs deduplication/enhancement is applied to the

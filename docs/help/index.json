@@ -1,0 +1,150 @@
+{
+  "version": "5.0.0",
+  "lastUpdated": "2025-12-03",
+  "categories": [
+    {
+      "id": "getting-started",
+      "title": "Getting Started",
+      "description": "Introduction and quick start guide",
+      "topics": [
+        {
+          "id": "overview",
+          "title": "System Overview",
+          "description": "Introduction to SOC Analyzer and its capabilities",
+          "filePath": "getting-started/overview.md"
+        },
+        {
+          "id": "quick-start",
+          "title": "Quick Start Guide",
+          "description": "Get up and running in minutes",
+          "filePath": "getting-started/quick-start.md"
+        }
+      ]
+    },
+    {
+      "id": "architecture",
+      "title": "Architecture",
+      "description": "System architecture and components",
+      "topics": [
+        {
+          "id": "architecture-overview",
+          "title": "Architecture Overview",
+          "description": "High-level system architecture with Docker, database, frontend, backend, Redis, and DNS",
+          "filePath": "architecture/overview.md"
+        },
+        {
+          "id": "database",
+          "title": "Database Schema",
+          "description": "PostgreSQL schema with Control, CUEC, SubserviceOrg tables and relationships",
+          "filePath": "architecture/database.md"
+        },
+        {
+          "id": "backend",
+          "title": "Backend Services",
+          "description": "FastAPI application, extractors, config, and services",
+          "filePath": "architecture/backend.md"
+        },
+        {
+          "id": "frontend",
+          "title": "Frontend Components",
+          "description": "React, Material-UI, tabs, and component architecture",
+          "filePath": "architecture/frontend.md"
+        },
+        {
+          "id": "redis",
+          "title": "Redis & WebSockets",
+          "description": "Real-time updates, job tracking, and caching layer",
+          "filePath": "architecture/redis.md"
+        }
+      ]
+    },
+    {
+      "id": "workflows",
+      "title": "Workflows",
+      "description": "Data extraction and processing workflows",
+      "topics": [
+        {
+          "id": "extraction-workflow",
+          "title": "Extraction Workflow",
+          "description": "PDF processing, chunking, and GPT extraction pipeline",
+          "filePath": "workflows/extraction.md"
+        },
+        {
+          "id": "control-merging",
+          "title": "Control Merging",
+          "description": "Automated cleanup, duplicate detection, and confidence scoring",
+          "filePath": "workflows/merging.md"
+        },
+        {
+          "id": "framework-mapping",
+          "title": "Framework Mapping",
+          "description": "TSC and COSO framework alignment process",
+          "filePath": "workflows/framework-mapping.md"
+        }
+      ]
+    },
+    {
+      "id": "features",
+      "title": "Features",
+      "description": "Feature guides and how-tos",
+      "topics": [
+        {
+          "id": "controls-tab",
+          "title": "Controls Tab",
+          "description": "Managing and editing control data",
+          "filePath": "features/controls-tab.md"
+        },
+        {
+          "id": "deviations-tab",
+          "title": "Deviations Tab",
+          "description": "Viewing and managing control deviations",
+          "filePath": "features/deviations-tab.md"
+        },
+        {
+          "id": "batch-edit",
+          "title": "Batch Edit Mode",
+          "description": "Efficiently edit multiple records at once",
+          "filePath": "features/batch-edit.md"
+        },
+        {
+          "id": "executive-summary",
+          "title": "Executive Summary",
+          "description": "AI-generated report summaries and regeneration",
+          "filePath": "features/executive-summary.md"
+        }
+      ]
+    },
+    {
+      "id": "troubleshooting",
+      "title": "Troubleshooting",
+      "description": "Common issues and solutions",
+      "topics": [
+        {
+          "id": "common-errors",
+          "title": "Common Errors",
+          "description": "Frequently encountered errors and how to resolve them",
+          "filePath": "troubleshooting/errors.md"
+        },
+        {
+          "id": "performance",
+          "title": "Performance Tips",
+          "description": "Optimizing extraction and improving performance",
+          "filePath": "troubleshooting/performance.md"
+        }
+      ]
+    },
+    {
+      "id": "whats-new",
+      "title": "What's New",
+      "description": "Recent changes and updates",
+      "topics": [
+        {
+          "id": "changelog",
+          "title": "Changelog",
+          "description": "Recent updates and enhancements",
+          "filePath": "whats-new.md"
+        }
+      ]
+    }
+  ]
+}

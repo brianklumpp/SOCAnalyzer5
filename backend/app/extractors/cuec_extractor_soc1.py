@@ -433,14 +433,14 @@ def extract_cuecs():
                     justification = [f"Base score: 0.3"]
                     gpt_opinion = cuec.get('cuec_gpt_opinion', '').lower()
                     if gpt_opinion == 'yes':
-                        conf += 0.1
-                        justification.append("+0.1: cuec_gpt_opinion is 'yes'")
+                        conf += 0.2
+                        justification.append("+0.2: cuec_gpt_opinion is 'yes'")
                     elif gpt_opinion == 'no':
                         conf -= 0.1
                         justification.append("-0.1: cuec_gpt_opinion is 'no'")
                     if cuec['cuec_distance_from_cuec_keywords'] < 5:
-                        conf += 0.1
-                        justification.append(f"+0.1: cuec_distance_from_cuec_keywords < 5 (actual: {cuec['cuec_distance_from_cuec_keywords']})")
+                        conf += 0.2
+                        justification.append(f"+0.2: cuec_distance_from_cuec_keywords < 5 (actual: {cuec['cuec_distance_from_cuec_keywords']})")
                     desc_lower = (cuec.get('cuec_description', '') or '').lower()
                     if any(kw in desc_lower for kw in CUEC_KEYWORDS):
                         conf += 0.2
@@ -452,7 +452,7 @@ def extract_cuecs():
                     else:
                         conf -= 0.2
                         justification.append("-0.2: Framework alignment undetermined")
-                    cuec['cuec_confidence'] = round(conf, 3)
+                    cuec['cuec_confidence'] = round(min(conf, 1.0), 3)
                     cuec['cuec_confidence_justification'] = justification
                     # Add percent confidence for TSC and COSO similarity
                     cuec['cuec_tsc_confidence_pct'] = int(round(100 * (tsc_sim + 1) / 2)) if tsc_sim != -1 else None

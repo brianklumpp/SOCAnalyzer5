@@ -109,14 +109,21 @@ services:
       CONTROL_EMBEDDING_MAPPING_ENABLED: "false"  # Temporarily disabled - GPT mapping overloads Dataiku
       SOCANALYZER_REDIS_URL: redis://redis:6379/0
       DOCKER_CONTROL_ENABLED: "true"
+      PYTHONUNBUFFERED: "1"
+      WATCHFILES_FORCE_POLLING: "true"  # Better file watching on Windows
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
-      - ./certs:/certs:ro
-      - ./backend/alembic.ini:/app/backend/alembic.ini:ro
+      # Bind mount source code for live editing
+      - ./backend/app:/app/backend/app
       - ./backend/alembic:/app/backend/alembic
+      - ./backend/alembic.ini:/app/backend/alembic.ini:ro
+      # Data, docs, and certs
+      - ./data:/app/data
+      - ./docs:/app/docs:ro
+      - ./certs:/certs:ro
       - /var/run/docker.sock:/var/run/docker.sock
+    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend/app
     networks:
       socanalyzer-network:
         ipv4_address: 172.20.0.5  # Fixed IP for backend
@@ -125,12 +132,29 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      target: build  # Use the build stage which has Node.js
     container_name: socanalyzer-frontend
     restart: unless-stopped
     depends_on:
       - backend
+    environment:
+      CHOKIDAR_USEPOLLING: "true"  # Better file watching on Windows
+      NODE_OPTIONS: "--max-old-space-size=8192"  # Increase heap size for memory-intensive builds
+      TSC_COMPILE_ON_ERROR: "true"  # Continue even if type errors
+      SKIP_PREFLIGHT_CHECK: "true"
     ports:
-      - "3000:80"
+      - "3000:3000"  # Dev server port
+    volumes:
+      # Bind mount source code for live editing
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/tsconfig.json:/app/tsconfig.json:ro
+      - ./frontend/package.json:/app/package.json:ro
+      # Preserve node_modules in container
+      - /app/node_modules
+    command: npm start
+    stdin_open: true
+    tty: true
     networks:
       - socanalyzer-network
 

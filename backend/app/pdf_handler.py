@@ -24,6 +24,170 @@ def load_api_key():
     load_dotenv()
     return os.getenv('OPENAI_API_KEY')
 
+def extract_embedded_files(input_path, output_dir):
+    """
+    Extract embedded/attached files from a PDF.
+    Many protected PDFs embed the actual content as an attachment.
+    
+    Args:
+        input_path: Path to the input PDF
+        output_dir: Directory to save extracted files
+        
+    Returns:
+        list: Paths to extracted PDF files (empty if none found)
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        import fitz  # pymupdf
+    except ImportError:
+        logger.error("PyMuPDF (fitz) is required")
+        return []
+    
+    try:
+        logger.error(f"[PDF_EMBED] Checking for embedded files in: {input_path}")
+        
+        doc = fitz.open(input_path)
+        
+        # Get list of embedded files
+        embedded_files = doc.embfile_names()
+        
+        if not embedded_files:
+            logger.error(f"[PDF_EMBED] No embedded files found")
+            doc.close()
+            return []
+        
+        logger.error(f"[PDF_EMBED] Found {len(embedded_files)} embedded file(s): {embedded_files}")
+        
+        extracted_pdfs = []
+        os.makedirs(output_dir, exist_ok=True)
+        
+        for file_name in embedded_files:
+            try:
+                # Get embedded file data
+                file_data = doc.embfile_get(file_name)
+                
+                logger.error(f"[PDF_EMBED] Extracting embedded file ({len(file_data)} bytes)")
+                
+                # Sanitize filename to avoid encoding issues
+                # Use a simple safe name based on index if the original has encoding issues
+                try:
+                    safe_name = file_name
+                    # Test if filename can be used safely
+                    test_path = os.path.join(output_dir, safe_name)
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    safe_name = f"embedded_{embedded_files.index(file_name)}.pdf"
+                    logger.error(f"[PDF_EMBED] Using safe filename: {safe_name}")
+                
+                # Save to output directory
+                output_path = os.path.join(output_dir, safe_name)
+                with open(output_path, 'wb') as f:
+                    f.write(file_data)
+                
+                logger.error(f"[PDF_EMBED] Saved to: {output_path}")
+                
+                # Check if it's a PDF (by extension or content)
+                is_pdf = safe_name.lower().endswith('.pdf') or file_name.lower().endswith('.pdf')
+                if is_pdf:
+                    extracted_pdfs.append(output_path)
+                    logger.error(f"[PDF_EMBED] Extracted PDF successfully")
+                else:
+                    logger.error(f"[PDF_EMBED] Extracted non-PDF file")
+                    
+            except Exception as e:
+                logger.error(f"[PDF_EMBED] Failed to extract {file_name}: {e}")
+        
+        doc.close()
+        return extracted_pdfs
+        
+    except Exception as e:
+        logger.error(f"[PDF_EMBED] Error checking for embedded files: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return []
+
+
+def flatten_pdf(input_path, output_path):
+    """
+    Attempt to unlock/flatten a PDF by removing form fields, JavaScript, and encryption.
+    This tries to expose hidden content without converting to images.
+    
+    Args:
+        input_path: Path to the input PDF
+        output_path: Path to save the flattened PDF
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        import fitz  # pymupdf
+    except ImportError:
+        logger.error("PyMuPDF (fitz) is required for PDF flattening")
+        return False
+    
+    try:
+        logger.error(f"[PDF_FLATTEN] Processing PDF: {input_path}")
+        
+        # Open the source PDF
+        doc = fitz.open(input_path)
+        
+        logger.error(f"[PDF_FLATTEN] PDF has {len(doc)} pages, encrypted={doc.is_encrypted}")
+        
+        # Check if document is encrypted or has restrictions
+        if doc.is_encrypted:
+            logger.error(f"[PDF_FLATTEN] PDF is encrypted, attempting to decrypt...")
+            # Try to authenticate with empty password (often works for "secured" PDFs)
+            if not doc.authenticate(""):
+                logger.error(f"[PDF_FLATTEN] Cannot decrypt PDF")
+                doc.close()
+                return False
+        
+        # Try removing interactive elements while preserving text
+        modified = False
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            
+            # Remove form fields/widgets (buttons, text fields, etc.)
+            widgets = list(page.widgets())  # Convert generator to list
+            if widgets:
+                logger.error(f"[PDF_FLATTEN] Page {page_num + 1}: Found {len(widgets)} widgets, removing...")
+                for widget in widgets:
+                    page.delete_widget(widget)
+                modified = True
+            
+            # Check for JavaScript actions
+            annots = list(page.annots()) if page.annots() else []
+            if annots:
+                for annot in annots:
+                    # Remove annotations with JavaScript actions
+                    annot_info = annot.info
+                    if annot_info and annot_info.get("JavaScript"):
+                        logger.error(f"[PDF_FLATTEN] Page {page_num + 1}: Removing JavaScript annotation")
+                        page.delete_annot(annot)
+                        modified = True
+        
+        if modified:
+            # Save the modified PDF
+            doc.save(output_path, garbage=4, deflate=True, clean=True)
+            logger.error(f"[PDF_FLATTEN] Saved modified PDF to: {output_path}")
+        else:
+            # No modifications needed, just copy
+            doc.save(output_path)
+            logger.error(f"[PDF_FLATTEN] No interactive elements found, saved copy to: {output_path}")
+        
+        doc.close()
+        return True
+        
+    except Exception as e:
+        logger.error(f"[PDF_FLATTEN] Error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
 def get_section_positions(text, model="gpt-3.5-turbo", temperature=0, top_p=1):
     """Use the configured provider (Dataiku by default) to estimate section positions."""
     prompt = SECTION_DETECTION_PROMPT.format(
@@ -39,27 +203,118 @@ def is_watermark(line):
             return True
     return False
 
+def is_legal_agreement_page(text):
+    """
+    Detect if a page contains legal agreement/disclaimer content that should be skipped.
+    
+    Common patterns in SOC report legal agreements:
+    - "I Agree" / "I Do Not Agree" buttons
+    - "Limits on Report Access and Distribution"
+    - "NOTICE" or "CONFIDENTIAL INFORMATION" headers
+    - "solely for the benefit and use of"
+    - "not intended to be used by anyone other than"
+    
+    Args:
+        text: Page text content
+        
+    Returns:
+        bool: True if page appears to be a legal agreement/disclaimer
+    """
+    text_lower = text.lower()
+    
+    # Strong indicators (any one confirms it's an agreement page)
+    strong_indicators = [
+        'i agree',
+        'i do not agree',
+        'limits on report access and distribution',
+        'solely for the benefit and use of',
+        'not intended to be used by anyone other than'
+    ]
+    
+    for indicator in strong_indicators:
+        if indicator in text_lower:
+            return True
+    
+    # Weak indicators (need multiple to confirm)
+    weak_indicators = [
+        ('notice', 'confidential'),
+        ('recipient agrees', 'report'),
+        ('ownership', 'property of'),
+        ('dissemination', 'prohibited'),
+        ('as is', 'sole risk')
+    ]
+    
+    weak_indicator_count = 0
+    for indicator_pair in weak_indicators:
+        if all(ind in text_lower for ind in indicator_pair):
+            weak_indicator_count += 1
+    
+    # If 2+ weak indicator pairs match, likely an agreement page
+    return weak_indicator_count >= 2
+
+
 def extract_text_from_pdf(pdf_path, output_path):
     """
     Extracts all text from a PDF file and writes it to a text file.
     Maintains pagination by inserting a page break marker between pages.
     Removes repetitive watermark-like patterns (dates, emails) that appear on >80% of pages.
+    Automatically skips legal agreement/disclaimer pages at the beginning of the document.
+    
+    Uses PyMuPDF's "blocks" extraction mode for better table and multi-column layout handling.
+    
     Args:
         pdf_path (str): Path to the PDF file.
         output_path (str): Path to the output text file.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         import fitz  # pymupdf
     except ImportError:
         raise ImportError("pymupdf (fitz) is required for PDF extraction. Please install it with 'pip install pymupdf'.")
     doc = fitz.open(pdf_path)
+    logger.info(f"Extracting text from PDF: {pdf_path} ({len(doc)} pages)")
+    
+    # First pass: detect and skip legal agreement pages at the beginning
+    # Only skip consecutive agreement pages from the start
+    start_page = 0
+    max_check_pages = min(5, len(doc))  # Only check first 5 pages for agreements
+    logger.error(f"[PDF_EXTRACTION] Checking first {max_check_pages} pages for legal agreements (total pages: {len(doc)})")
+    
+    consecutive_agreement_pages = 0
+    for page_num in range(max_check_pages):
+        text = doc[page_num].get_text() or ""   # type: ignore[attr-defined]
+        is_agreement = is_legal_agreement_page(text)
+        logger.error(f"[PDF_EXTRACTION] Page {page_num + 1}: is_agreement={is_agreement}, text_length={len(text)}")
+        if is_agreement:
+            consecutive_agreement_pages += 1
+        else:
+            # Once we hit a non-agreement page, stop checking and use that as start
+            logger.error(f"[PDF_EXTRACTION] Non-agreement page detected at page {page_num + 1}, stopping check")
+            break
+    
+    logger.error(f"[PDF_EXTRACTION] Check complete: consecutive_agreement_pages={consecutive_agreement_pages}, max_check_pages={max_check_pages}")
+    
+    # Only skip pages if we found consecutive agreements from the start
+    if consecutive_agreement_pages > 0 and consecutive_agreement_pages < max_check_pages:
+        start_page = consecutive_agreement_pages
+        logger.error(f"[PDF_EXTRACTION] Skipping {start_page} legal agreement page(s), starting extraction from page {start_page + 1}")
+    elif consecutive_agreement_pages >= max_check_pages:
+        # Safety check: if all checked pages are agreements, something is wrong - don't skip anything
+        logger.error(f"[PDF_EXTRACTION] All checked pages appear to be agreements, not skipping any pages (possible detection error)")
+        start_page = 0
+    else:
+        logger.error(f"[PDF_EXTRACTION] No agreement pages detected, starting from page 1")
+    
     all_text = []
     page_patterns = []
     date_regex = REGEX_PATTERNS['date']
     email_regex = REGEX_PATTERNS['email']
     time_regex = REGEX_PATTERNS['time']
-    # Collect patterns per page
-    for page_num in range(len(doc)):
+    
+    # Collect patterns per page (only from non-skipped pages)
+    for page_num in range(start_page, len(doc)):
         text = doc[page_num].get_text() or ""   # type: ignore[attr-defined]
         patterns = set()
         for regex in [date_regex, email_regex, time_regex]:
@@ -75,21 +330,41 @@ def extract_text_from_pdf(pdf_path, output_path):
     watermark_patterns = set([
         pat for pat, count in pattern_counter.items() if count / num_pages > 0.8
     ])
-    # Now extract and filter text
-    for i in range(len(doc)):
-        text = doc[i].get_text() or ""   # type: ignore[attr-defined]
+    # Now extract and filter text (starting from start_page)
+    for i in range(start_page, len(doc)):
+        # Use "text" layout mode for better date/prose handling
+        # The "blocks" method can break dates across blocks, causing extraction failures
+        # The "text" method preserves natural line flow and is better for continuous prose
+        try:
+            # Use basic text extraction (preserves natural layout)
+            text = doc[i].get_text() or ""   # type: ignore[attr-defined]
+        except Exception as e:
+            # Fallback to empty string on error
+            logger.warning(f"Page {i+1} text extraction failed: {e}")
+            text = ""
+        
         lines = text.splitlines()
         filtered_lines = []
         for line in lines:
             # Remove lines that match is_watermark
             if is_watermark(line):
                 continue
-            # Remove lines containing any repetitive watermark pattern
-            if any(pat in line for pat in watermark_patterns):
+            # Remove lines containing repetitive watermark patterns
+            # BUT: Only filter if the pattern is the ENTIRE line (not part of a sentence)
+            # This prevents removing legitimate content like coverage period dates
+            should_filter = False
+            for pat in watermark_patterns:
+                # Only filter if pattern is the entire line (with optional whitespace/punctuation)
+                stripped_line = line.strip().rstrip('.')
+                if stripped_line == pat or stripped_line == pat.rstrip(','):
+                    should_filter = True
+                    break
+            if should_filter:
                 continue
             filtered_lines.append(line)
-        # Insert page break marker
-        all_text.append(f"=== PAGE {i+1} ===")
+        # Insert page break marker (logical page numbering: starts at 1 after skipped pages)
+        logical_page_num = i - start_page + 1
+        all_text.append(f"=== PAGE {logical_page_num} ===")
         all_text.append('\n'.join(filtered_lines))
     # Collapse extra blank lines before writing
     output_text = '\n'.join(all_text)
@@ -97,6 +372,11 @@ def extract_text_from_pdf(pdf_path, output_path):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(output_text)
+    
+    logger.info(f"PDF extraction complete: {len(output_text)} characters, {len(output_text.splitlines())} lines written to {output_path}")
+    
+    # Return the extracted text for use by caller
+    return output_text
 
 def collapse_extra_blank_lines(text, max_blank_lines=2):
     """
@@ -171,8 +451,9 @@ def chunk_lines(lines, chunk_size=100, overlap=50):
             break
         i += chunk_size - overlap
 
-def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P, lookahead_lines=3):
+def find_section_candidates_legacy(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P, lookahead_lines=3):
     """
+    LEGACY FUNCTION - Preserved for reference.
     Enhanced: Use TOC headings and page refs, align to section topics, search for normalized/fuzzy matches in the document (with lookahead), and output detailed JSON with TOC/DOC page refs, line, offset, and snippet.
     Adds robust section end detection (by page, line, and offset) using all TOC entries as boundaries.
     """
@@ -724,6 +1005,262 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
         last_section['end_line'] = len(lines)
         last_section['end_offset'] = sum(len(l)+1 for l in lines)
     return section_list
+
+
+def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P, lookahead_lines=3):
+    """
+    GPT-based section identification with confidence scoring and retry logic.
+    
+    Extracts first 10 pages, uses GPT to identify sections with confidence scores.
+    If confidence < 80%, retries with first 20 pages (if token budget allows).
+    Returns list of sections compatible with existing section_results.json format.
+    
+    Raises:
+        Exception with user-friendly message if confidence remains < 80% after retry.
+    """
+    import pathlib
+    import json
+    
+    PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+    os.makedirs(PROJECT_ROOT / 'data/logs', exist_ok=True)
+    
+    lines = text.splitlines()
+    
+    def extract_pages(text_lines, max_pages):
+        """Extract text up to max_pages from document."""
+        page_count = 0
+        extracted_lines = []
+        for line in text_lines:
+            extracted_lines.append(line)
+            if line.startswith('=== PAGE '):
+                page_count += 1
+                if page_count >= max_pages:
+                    break
+        return '\n'.join(extracted_lines)
+    
+    def estimate_tokens(text_content):
+        """Rough token estimation: character count / 4."""
+        return len(text_content) // 4
+    
+    def parse_gpt_response(gpt_content):
+        """Parse GPT JSON response, handling markdown code blocks."""
+        # Remove markdown code blocks if present
+        content = gpt_content.strip()
+        if content.startswith('```'):
+            # Remove opening ```json or ```
+            content = re.sub(r'^```(?:json)?\s*\n', '', content)
+            # Remove closing ```
+            content = re.sub(r'\n```\s*$', '', content)
+        
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            raise Exception(f"Failed to parse GPT response as JSON: {e}\n{content[:500]}")
+    
+    def convert_to_legacy_format(gpt_result, text_lines):
+        """Convert GPT section identification to legacy section_results.json format."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        sections_list = []
+        
+        gpt_sections = gpt_result.get('sections', [])
+        controls_section_name = gpt_result.get('controls_section_name', '')
+        system_desc_section_name = gpt_result.get('system_description_section_name', '')
+        
+        # Find total number of pages
+        total_pages = 1
+        for line in text_lines:
+            if line.startswith('=== PAGE '):
+                try:
+                    page_num = int(line.split()[2])
+                    if page_num > total_pages:
+                        total_pages = page_num
+                except Exception:
+                    continue
+        
+        # Convert each GPT section to legacy format
+        for i, gpt_sec in enumerate(gpt_sections):
+            section_name = gpt_sec.get('name', '')
+            toc_page = gpt_sec.get('toc_page')
+            doc_page = gpt_sec.get('doc_page')
+            confidence = gpt_sec.get('confidence', 0)
+            
+            # Fallback: if toc_page missing, use doc_page for both
+            if toc_page is None:
+                toc_page = doc_page if doc_page else 1
+            if doc_page is None:
+                doc_page = toc_page if toc_page else 1
+            
+            # Validate and log significant offsets
+            offset_diff = abs(doc_page - toc_page)
+            if offset_diff > 10:
+                logger.warning(f"[SECTION_DETECT] Large page offset detected for '{section_name}': TOC={toc_page}, DOC={doc_page}, offset={offset_diff}")
+            
+            start_page = doc_page  # Use DOC page for line/offset calculations
+            
+            # Determine topic mapping based on GPT's explicit identification first
+            section_lower = section_name.lower()
+            if controls_section_name and section_name == controls_section_name:
+                # GPT explicitly identified this as the controls section
+                topic = 'Control_Descriptions'
+            elif system_desc_section_name and section_name == system_desc_section_name:
+                # GPT explicitly identified this as the system description
+                topic = 'Description_of_System'
+            elif 'auditor' in section_lower and 'report' in section_lower:
+                topic = 'Service_Auditor_Report'
+            elif 'management' in section_lower and ('assertion' in section_lower or 'statement' in section_lower):
+                topic = 'Management_Assertion'
+            elif 'description' in section_lower and 'system' in section_lower:
+                topic = 'Description_of_System'
+            elif 'control' in section_lower:
+                topic = 'Control_Descriptions'
+            else:
+                topic = 'Unknown'
+            
+            # Find start line for this page
+            start_line = 0
+            for idx, line in enumerate(text_lines):
+                if line.startswith(f'=== PAGE {start_page} ==='):
+                    start_line = idx + 1
+                    break
+            
+            # Calculate offset
+            offset = sum(len(l) + 1 for l in text_lines[:start_line])
+            
+            # Get snippet
+            snippet_lines = text_lines[start_line:start_line+5]
+            snippet = '\n'.join(snippet_lines)[:300]
+            
+            # Determine end boundaries (next section or document end)
+            if i + 1 < len(gpt_sections):
+                next_doc_page = gpt_sections[i+1].get('doc_page')
+                next_toc_page = gpt_sections[i+1].get('toc_page')
+                # Use doc_page from next section, fallback to toc_page if null
+                end_page = next_doc_page if next_doc_page else (next_toc_page if next_toc_page else total_pages)
+                # Find end line
+                end_line = len(text_lines)
+                for idx, line in enumerate(text_lines[start_line:], start_line):
+                    if line.startswith(f'=== PAGE {end_page} ==='):
+                        end_line = idx
+                        break
+            else:
+                end_page = total_pages
+                end_line = len(text_lines)
+            
+            end_offset = sum(len(l) + 1 for l in text_lines[:end_line])
+            
+            # Calculate end_TOC_page_ref by maintaining the same offset
+            page_offset = doc_page - toc_page
+            end_toc_page = end_page - page_offset
+            
+            section_dict = {
+                'topic': topic,
+                'clean_heading': section_name,
+                'TOC_page_ref': toc_page,
+                'DOC_page_ref': doc_page,
+                'start_line': start_line,
+                'confidence': confidence,
+                'gpt_reason': 'GPT section identification',
+                'offset': offset,
+                'snippet': snippet,
+                'type': 'mapped',
+                'level': 'section',
+                'end_TOC_page_ref': end_toc_page,
+                'end_DOC_page_ref': end_page,
+                'end_line': end_line,
+                'end_offset': end_offset
+            }
+            
+            sections_list.append(section_dict)
+        
+        return sections_list
+    
+    # Attempt 1: Extract first 15 pages
+    extracted_text_15 = extract_pages(lines, max_pages=15)
+    token_count_15 = estimate_tokens(extracted_text_15)
+    
+    log_path = PROJECT_ROOT / 'data/logs/section_identification.log'
+    with open(log_path, 'w', encoding='utf-8') as log_file:
+        log_file.write(f"=== Section Identification Attempt 1 (15 pages, ~{token_count_15} tokens) ===\n\n")
+        
+        try:
+            prompt = config.SECTION_IDENTIFICATION_PROMPT.format(text=extracted_text_15)
+            gpt_response = gpt_extract(prompt, 'section_identification')
+            
+            log_file.write(f"GPT Response:\n{gpt_response}\n\n")
+            
+            result = parse_gpt_response(gpt_response)
+            overall_confidence = result.get('overall_confidence', 0)
+            
+            log_file.write(f"Overall Confidence: {overall_confidence}\n")
+            log_file.write(f"Sections Found: {len(result.get('sections', []))}\n")
+            
+            if overall_confidence >= 80:
+                log_file.write("\n✓ Confidence threshold met (>=80), using results.\n")
+                return convert_to_legacy_format(result, lines)
+            
+            # Low confidence - attempt retry with more pages
+            log_file.write(f"\n⚠ Low confidence ({overall_confidence}%), attempting retry with 20 pages...\n")
+            
+        except Exception as e:
+            log_file.write(f"\n✗ Error in first attempt: {e}\n")
+            log_file.write("Attempting retry with 20 pages...\n")
+    
+    # Attempt 2: Extract first 20 pages
+    extracted_text_20 = extract_pages(lines, max_pages=20)
+    token_count_20 = estimate_tokens(extracted_text_20)
+    
+    with open(log_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(f"\n=== Section Identification Attempt 2 (20 pages, ~{token_count_20} tokens) ===\n\n")
+        
+        # Check token budget (rough limit: 7500 tokens for GPT-3.5)
+        if token_count_20 > 7500:
+            log_file.write(f"⚠ Token count ({token_count_20}) exceeds budget (7500), truncating...\n")
+            # Truncate to approximately 30,000 characters (7500 tokens)
+            extracted_text_20 = extracted_text_20[:30000]
+            token_count_20 = 7500
+        
+        try:
+            prompt = config.SECTION_IDENTIFICATION_PROMPT.format(text=extracted_text_20)
+            gpt_response = gpt_extract(prompt, 'section_identification')
+            
+            log_file.write(f"GPT Response:\n{gpt_response}\n\n")
+            
+            result = parse_gpt_response(gpt_response)
+            overall_confidence = result.get('overall_confidence', 0)
+            
+            log_file.write(f"Overall Confidence: {overall_confidence}\n")
+            log_file.write(f"Sections Found: {len(result.get('sections', []))}\n")
+            
+            if overall_confidence >= 80:
+                log_file.write("\n✓ Confidence threshold met (>=80), using results.\n")
+                return convert_to_legacy_format(result, lines)
+            
+            # Still low confidence after retry
+            log_file.write(f"\n✗ Confidence still below threshold ({overall_confidence}%) after retry.\n")
+            raise Exception(
+                f"Unable to reliably identify report sections (confidence {overall_confidence}% < 80%). "
+                "Please ensure this is a standard SOC 1 or SOC 2 report."
+            )
+            
+        except json.JSONDecodeError as e:
+            log_file.write(f"\n✗ Failed to parse GPT response: {e}\n")
+            raise Exception(
+                "Failed to parse section identification response. "
+                "Please ensure this is a standard SOC 1 or SOC 2 report."
+            )
+        except Exception as e:
+            log_file.write(f"\n✗ Error in second attempt: {e}\n")
+            # Re-raise if it's our confidence error
+            if "Unable to reliably identify" in str(e):
+                raise
+            # Otherwise wrap in user-friendly message
+            raise Exception(
+                f"Section identification failed: {str(e)}. "
+                "Please ensure this is a standard SOC 1 or SOC 2 report."
+            )
+
 
 def clean_toc_heading(heading):
     """Remove trailing spaces, dots, and normalize whitespace from a TOC heading."""

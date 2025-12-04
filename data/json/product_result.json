@@ -1,7 +1,0 @@
-{
-  "product": "Legal Spend and Matter Management Software System",
-  "confidence": 0.95,
-  "raw_gpt_responses": [
-    "{\n    \"product\": \"Legal Spend and Matter Management Software System\",\n    \"confidence\": 0.95,\n    \"explanation\": \"The report explicitly states that the scope of the SOC 2 examination covers the 'Legal Spend and Matter Management Software System,' which is repeated multiple times, including in 'Management's Assertion' and the system description sections. No conflicting information is present throughout the document to suggest ambiguity.\"\n}"
-  ]
-}

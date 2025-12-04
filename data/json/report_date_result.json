@@ -1,5 +1,0 @@
-{
-  "report_date": "2025-02-19",
-  "explanation": "The report signing date is explicitly provided at the end of the auditor's section, following the location 'Minneapolis, Minnesota'. It is the most recent complete date and represents when the auditor signed the report.",
-  "raw_gpt_response": "{\n    \"report_date\": \"2025-02-19\",\n    \"explanation\": \"The report signing date is explicitly provided at the end of the auditor's section, following the location 'Minneapolis, Minnesota'. It is the most recent complete date and represents when the auditor signed the report.\"\n}"
-}

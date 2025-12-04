@@ -14,7 +14,7 @@ import sqlalchemy
 import sqlalchemy.dialects.postgresql as pg_dialect
 import redis.asyncio as redis
 import redis as sync_redis
-from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, UploadFile, File, APIRouter
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, UploadFile, File, APIRouter, Form, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi import Body
 from fastapi.staticfiles import StaticFiles
@@ -359,23 +359,56 @@ async def estimate_processing_time(report_type: str = "SOC2", db=Depends(get_db)
         )
         scans = result.scalars().all()
         
-        # If less than 3 scans, use fixed estimate of 25 minutes
-        if len(scans) < 3:
+        # Use base estimate if fewer than minimum samples
+        min_samples = cfg.PROGRESS_HISTORY_MIN_SAMPLES
+        if len(scans) < min_samples:
+            # Use base estimate from config (20 min SOC1, 35 min SOC2)
+            base_estimate = cfg.PROGRESS_BASE_ESTIMATE_SOC1 if rt_enum == ReportType.SOC1 else cfg.PROGRESS_BASE_ESTIMATE_SOC2
             return {
                 "report_type": report_type,
-                "estimated_seconds": 1500.0,  # 25 minutes
+                "estimated_seconds": float(base_estimate),
                 "based_on_scans": len(scans),
                 "is_fixed_estimate": True
             }
         
-        # Calculate average from historical data
+        # Filter outliers using standard deviation (remove values > 2 std dev from mean)
+        import numpy as np
         elapsed_times = [s.elapsed_seconds for s in scans if s.elapsed_seconds]
-        avg_seconds = sum(elapsed_times) / len(elapsed_times)
+        if len(elapsed_times) < min_samples:
+            base_estimate = cfg.PROGRESS_BASE_ESTIMATE_SOC1 if rt_enum == ReportType.SOC1 else cfg.PROGRESS_BASE_ESTIMATE_SOC2
+            return {
+                "report_type": report_type,
+                "estimated_seconds": float(base_estimate),
+                "based_on_scans": len(elapsed_times),
+                "is_fixed_estimate": True
+            }
+        
+        times_array = np.array(elapsed_times)
+        mean_time = np.mean(times_array)
+        std_time = np.std(times_array)
+        
+        # Filter outliers (keep values within 2 standard deviations)
+        filtered_times = times_array[np.abs(times_array - mean_time) <= 2 * std_time]
+        
+        if len(filtered_times) < min_samples:
+            # Not enough data after filtering, use base estimate
+            base_estimate = cfg.PROGRESS_BASE_ESTIMATE_SOC1 if rt_enum == ReportType.SOC1 else cfg.PROGRESS_BASE_ESTIMATE_SOC2
+            return {
+                "report_type": report_type,
+                "estimated_seconds": float(base_estimate),
+                "based_on_scans": len(elapsed_times),
+                "is_fixed_estimate": True
+            }
+        
+        # Apply EMA smoothing (0.7 * new + 0.3 * previous) - use most recent first
+        ema_estimate = float(filtered_times[0])  # Start with most recent
+        for time_val in filtered_times[1:]:
+            ema_estimate = 0.7 * time_val + 0.3 * ema_estimate
         
         return {
             "report_type": report_type,
-            "estimated_seconds": round(avg_seconds, 1),
-            "based_on_scans": len(elapsed_times),
+            "estimated_seconds": round(ema_estimate, 1),
+            "based_on_scans": len(filtered_times),
             "is_fixed_estimate": False
         }
     except HTTPException:
@@ -397,10 +430,11 @@ async def get_scan_progress(scan_id: int, db=Depends(get_db)):
             "elapsed_seconds": float,  # Time elapsed so far
             "estimated_seconds": float,  # Total estimated time (from historical data)
             "estimated_remaining": float,  # Estimated time remaining
-            "percent_complete": int  # Rough percentage (0-100)
+            "percent_complete": float  # Progress percentage (0-90 during scan, 100 when complete)
         }
     """
     try:
+        import time
         result = await db.execute(select(Scan).where(Scan.id == scan_id))
         scan = result.scalar_one_or_none()
         
@@ -408,17 +442,29 @@ async def get_scan_progress(scan_id: int, db=Depends(get_db)):
             raise HTTPException(status_code=404, detail="Scan not found")
         
         progress_status = scan.progress_status or "Not started"
-        elapsed_seconds = scan.elapsed_seconds or 0.0
+        
+        # Calculate elapsed time dynamically from created_at timestamp
+        if scan.created_at:
+            elapsed_seconds = (datetime.utcnow() - scan.created_at).total_seconds()
+        else:
+            elapsed_seconds = scan.elapsed_seconds or 0.0
+        
         estimated_seconds = scan.estimated_time_seconds or 1500.0  # Default 25 minutes
         
         # Calculate remaining time
         estimated_remaining = max(0, estimated_seconds - elapsed_seconds)
         
-        # Calculate percent complete (rough estimate based on elapsed vs estimated)
-        if estimated_seconds > 0:
-            percent_complete = min(100, int((elapsed_seconds / estimated_seconds) * 100))
+        # Calculate percent complete with 90% cap during scan, 100% when complete
+        is_complete = scan.elapsed_seconds is not None  # elapsed_seconds only set when scan finishes
+        
+        if is_complete:
+            percent_complete = 100.0
+        elif estimated_seconds > 0:
+            # Cap at 90% during active scan
+            raw_percent = (elapsed_seconds / estimated_seconds) * 100
+            percent_complete = min(90.0, raw_percent)
         else:
-            percent_complete = 0
+            percent_complete = 0.0
         
         return {
             "scan_id": scan_id,
@@ -426,7 +472,7 @@ async def get_scan_progress(scan_id: int, db=Depends(get_db)):
             "elapsed_seconds": round(elapsed_seconds, 1),
             "estimated_seconds": round(estimated_seconds, 1),
             "estimated_remaining": round(estimated_remaining, 1),
-            "percent_complete": percent_complete
+            "percent_complete": round(percent_complete, 1)
         }
     except HTTPException:
         raise
@@ -632,6 +678,9 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
             except Exception as dump_err:
                 logging.error(f"/report/{scan_id} json dumps fallback error: {dump_err}\n{traceback.format_exc()}")
                 raise
+    except HTTPException:
+        # Re-raise HTTPException (404, etc.) without converting to 500
+        raise
     except Exception as e:
         logging.error(f"[REPORT] /report/{scan_id} error: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Report retrieval failed: {e}")
@@ -671,6 +720,224 @@ async def get_report_pdf(scan_id: int, db = Depends(get_db)):
     except Exception as e:
         logging.error(f"get_report_pdf error for scan_id={scan_id}: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve PDF: {e}")
+
+
+# ------------------------------
+# Deviation Endpoints
+# ------------------------------
+
+@app.get("/report/{scan_id}/deviations")
+async def get_deviations(scan_id: int, db=Depends(get_db)):
+    """
+    Get all deviation controls for a scan.
+    Returns controls where has_deviation=true with high confidence (>= HIGH_CONFIDENCE_THRESHOLD).
+    This automatically excludes merged controls (confidence=0) and low-quality extractions.
+    """
+    try:
+        from . import config as cfg
+        
+        result = await db.execute(
+            select(Control)
+            .where(Control.scan_id == scan_id)
+            .where(Control.has_deviation == True)
+            .where(Control.control_confidence >= cfg.HIGH_CONFIDENCE_THRESHOLD)
+            .order_by(Control.control_seq)
+        )
+        deviation_controls = result.scalars().all()
+        
+        # Serialize controls - map database columns to frontend field names
+        deviations = []
+        for ctrl in deviation_controls:
+            # Get first page ref from the JSON array if available
+            page_ref = None
+            if ctrl.control_page_refs and isinstance(ctrl.control_page_refs, list) and len(ctrl.control_page_refs) > 0:
+                page_ref = ctrl.control_page_refs[0]
+            
+            deviations.append({
+                "id": ctrl.id,
+                "control_id": ctrl.control_id,
+                "page_ref": page_ref,
+                "control_description": ctrl.control_desc,
+                "test_procedure": ctrl.control_test,
+                "test_result": ctrl.control_test_results,
+                "deviation": ctrl.has_deviation,
+                "deviation_summary": ctrl.deviation_summary,
+                "scan_id": ctrl.scan_id,
+            })
+        
+        return deviations
+        
+    except Exception as e:
+        logging.error(f"Error fetching deviations for scan {scan_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/control/{control_id}/deviation-summary")
+async def update_deviation_summary(control_id: int, data: dict, db=Depends(get_db)):
+    """
+    Update the deviation_summary field for a control.
+    """
+    try:
+        result = await db.execute(select(Control).where(Control.id == control_id))
+        control = result.scalar_one_or_none()
+        
+        if not control:
+            raise HTTPException(status_code=404, detail="Control not found")
+        
+        if "deviation_summary" in data:
+            summary = data["deviation_summary"]
+            # Truncate to 300 characters if needed
+            if summary and len(summary) > 300:
+                summary = summary[:297] + "..."
+            control.deviation_summary = summary
+            await db.commit()
+            
+            return {"status": "success", "deviation_summary": control.deviation_summary}
+        
+        return {"status": "no_change"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating deviation summary for control {control_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/control/{control_id}/regenerate-deviation-summary")
+async def regenerate_deviation_summary(control_id: int, db=Depends(get_db)):
+    """
+    Regenerate AI summary for a single deviation control.
+    """
+    try:
+        from .post_processors.deviation_summarizer import regenerate_single_summary
+        
+        summary = await regenerate_single_summary(control_id, db)
+        
+        if summary:
+            return {"status": "success", "deviation_summary": summary}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to generate summary")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error regenerating deviation summary for control {control_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/report/{scan_id}/deviations/regenerate-all")
+async def regenerate_all_deviation_summaries(scan_id: int, background_tasks: BackgroundTasks, db=Depends(get_db)):
+    """
+    Start background task to regenerate all deviation summaries for a scan.
+    Returns immediately with status.
+    """
+    try:
+        from .post_processors.deviation_summarizer import generate_summaries
+        from .database import AsyncSessionLocal
+        import redis.asyncio as aioredis
+        import asyncio
+        
+        # Get Redis client
+        redis_client = None
+        try:
+            redis_client = aioredis.from_url("redis://socanalyzer-redis:6379", decode_responses=True)
+        except Exception as e:
+            logging.warning(f"Redis not available: {e}")
+        
+        # Start background task using asyncio.create_task
+        async def background_regenerate():
+            try:
+                logging.info(f"Background task started for scan {scan_id}")
+                async with AsyncSessionLocal() as db_session:
+                    result = await generate_summaries(scan_id, db_session, redis_client)
+                    logging.info(f"Background task completed for scan {scan_id}: {result}")
+                if redis_client:
+                    await redis_client.close()
+            except Exception as e:
+                logging.error(f"Background task error for scan {scan_id}: {e}")
+        
+        # Use asyncio.create_task instead of BackgroundTasks for async functions
+        asyncio.create_task(background_regenerate())
+        
+        return {"status": "started", "scan_id": scan_id}
+        
+    except Exception as e:
+        logging.error(f"Error starting regenerate all for scan {scan_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/report/{scan_id}/deviations/regenerate-progress")
+async def get_regenerate_progress(scan_id: int):
+    """
+    Get progress of deviation summary regeneration.
+    Returns progress data from Redis.
+    """
+    try:
+        import redis.asyncio as aioredis
+        import json
+        
+        redis_client = aioredis.from_url("redis://socanalyzer-redis:6379", decode_responses=True)
+        redis_key = f"scan:{scan_id}:deviation_regen"
+        
+        progress_data = await redis_client.get(redis_key)
+        await redis_client.close()
+        
+        if progress_data:
+            return json.loads(progress_data)
+        else:
+            return {
+                "current": 0,
+                "total": 0,
+                "status": "not_started",
+                "timestamp": None
+            }
+            
+    except Exception as e:
+        logging.error(f"Error fetching regenerate progress for scan {scan_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/report/{scan_id}/deviation")
+async def create_deviation(scan_id: int, data: dict, db=Depends(get_db)):
+    """
+    Create a new deviation control manually.
+    Requires control_id reference for consistency.
+    """
+    try:
+        # Validate required fields
+        required_fields = ["control_id", "page_ref", "test_result"]
+        for field in required_fields:
+            if field not in data:
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+        
+        # Create new control with deviation=True
+        new_control = Control(
+            scan_id=scan_id,
+            control_id=data.get("control_id"),
+            page_ref=data.get("page_ref"),
+            control_description=data.get("control_description"),
+            test_procedure=data.get("test_procedure"),
+            test_result=data.get("test_result"),
+            deviation=True,
+            deviation_summary=data.get("deviation_summary")  # Optional, can be None
+        )
+        
+        db.add(new_control)
+        await db.commit()
+        await db.refresh(new_control)
+        
+        return {
+            "status": "success",
+            "control_id": new_control.id,
+            "deviation_summary": new_control.deviation_summary
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating deviation for scan {scan_id}: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ------------------------------
@@ -945,14 +1212,158 @@ def _result_counts_from_disk() -> Dict[str, int]:
 
 # (Removed duplicate earlier definition of _build_combined_results_from_disk; keeping the comprehensive version below.)
 
-def run_analysis_job(job_id, temp_pdf_path, filename, db):
+def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=False):
     import logging
     import asyncio
     import threading
     import time
     start_time = time.time()
     
-    # logging.error(f"[DEBUG] [run_analysis_job] Thread: {threading.current_thread().name}, job_id={job_id}")
+    logging.error(f"[DEBUG run_analysis_job] ENTRY - Thread: {threading.current_thread().name}, job_id={job_id}, report_type='{report_type}', type={type(report_type)}, resume={resume}")
+    logging.error(f"[DEBUG run_analysis_job] Condition check - not resume: {not resume}, not report_type: {not report_type}, cfg.REPORT_TYPE_AUTO_DETECT: {cfg.REPORT_TYPE_AUTO_DETECT}")
+    
+    # Auto-detect report type if not provided or if auto-detection is enabled
+    if not resume and (not report_type or cfg.REPORT_TYPE_AUTO_DETECT):
+        try:
+            from .extractors.report_type_detector import detect_report_type, compute_pdf_hash
+            from .models import ReportTypeDetection
+            from datetime import datetime, timedelta
+            
+            # Update job status to show detection in progress
+            redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
+            job = _json.loads(redis_client.get(f"job:{job_id}") or "{}")
+            job["status"] = "Detecting report type..."
+            job["progress"] = 1
+            redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+            
+            logging.info(f"[REPORT_TYPE_DETECTION] Starting auto-detection for job_id={job_id}")
+            
+            # Create sync session for database queries (since we're in a thread)
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+            sync_db_url = cfg.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+            sync_engine = create_engine(sync_db_url, echo=False)
+            SessionLocal = sessionmaker(bind=sync_engine)
+            sync_db = SessionLocal()
+            
+            try:
+                # Read PDF and compute hash
+                with open(temp_pdf_path, 'rb') as pdf_file:
+                    pdf_bytes = pdf_file.read()
+                pdf_hash = compute_pdf_hash(pdf_bytes)
+                
+                # Check cache first
+                cached_detection = None
+                if cfg.REPORT_TYPE_CACHE_ENABLED:
+                    cached_detection = sync_db.query(ReportTypeDetection).filter_by(pdf_hash=pdf_hash).first()
+                if cached_detection:
+                    # Check if cache is expired
+                    if cached_detection.expires_at and cached_detection.expires_at < datetime.utcnow():
+                        logging.info(f"[REPORT_TYPE_DETECTION] Cache expired for pdf_hash={pdf_hash}")
+                        cached_detection = None
+                    else:
+                        # Use cached result (prefer user override if available)
+                        if cached_detection.user_confirmed_type:
+                            report_type = cached_detection.user_confirmed_type
+                            logging.info(f"[REPORT_TYPE_DETECTION] Using cached user override: {report_type}")
+                        else:
+                            report_type = cached_detection.detected_type
+                            logging.info(f"[REPORT_TYPE_DETECTION] Using cached detection: {report_type} (confidence={cached_detection.confidence:.2f})")
+                        
+                        # Update Redis job status with cached detection
+                        redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
+                        job = _json.loads(redis_client.get(f"job:{job_id}") or "{}")
+                        job["status"] = f"Detected: {report_type}"
+                        job["progress"] = 2
+                        job["detected_report_type"] = report_type
+                        job["detected_subtype"] = cached_detection.detected_subtype or 'TYPE2'
+                        job["detection_confidence"] = cached_detection.confidence
+                        redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+                        logging.info(f"[REPORT_TYPE_DETECTION] Updated job status with cached detection")
+                
+                # Run detection if no valid cache
+                if not cached_detection:
+                    # Extract text for detection (we need this anyway for analysis)
+                    from .pdf_handler import extract_text_from_pdf
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tmp_txt:
+                        extracted_text = extract_text_from_pdf(temp_pdf_path, tmp_txt.name)
+                    
+                    # Run detection
+                    detection_result = detect_report_type(
+                        extracted_text=extracted_text,
+                        pdf_hash=pdf_hash,
+                        job_id=job_id
+                    )
+                    
+                    # Store detection in database
+                    try:
+                        expires_at = datetime.utcnow() + timedelta(days=cfg.REPORT_TYPE_CACHE_TTL_DAYS)
+                        new_detection = ReportTypeDetection(
+                            pdf_hash=pdf_hash,
+                            detected_type=detection_result['detected_type'],
+                            detected_subtype=detection_result['detected_subtype'],
+                            confidence=detection_result['confidence'],
+                            evidence=detection_result['evidence'],
+                            analysis_stage=detection_result['analysis_stage'],
+                            expires_at=expires_at
+                        )
+                        sync_db.add(new_detection)
+                        sync_db.commit()
+                        logging.info(f"[REPORT_TYPE_DETECTION] Stored detection in cache")
+                    except Exception as e:
+                        logging.error(f"[REPORT_TYPE_DETECTION] Failed to store detection: {e}", exc_info=True)
+                        sync_db.rollback()
+                    
+                    # Check if user confirmation is required
+                    if detection_result['requires_confirmation']:
+                        logging.info(
+                            f"[REPORT_TYPE_DETECTION] Confidence below threshold "
+                            f"({detection_result['confidence']:.2f} < {cfg.REPORT_TYPE_CONFIDENCE_THRESHOLD}), "
+                            f"awaiting user confirmation"
+                        )
+                        
+                        # Update job status to await confirmation
+                        redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
+                        job = _json.loads(redis_client.get(f"job:{job_id}") or "{}")
+                        job["status"] = "AWAITING_CONFIRMATION"
+                        job["awaiting_confirmation"] = True
+                        job["detection_result"] = detection_result
+                        job["pdf_hash"] = pdf_hash
+                        job["temp_pdf_path"] = temp_pdf_path
+                        job["filename"] = filename
+                        redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+                        
+                        # Exit thread - will resume when user confirms
+                        logging.info(f"[REPORT_TYPE_DETECTION] Paused for user confirmation")
+                        return
+                    else:
+                        # Use detected type
+                        report_type = detection_result['detected_type']
+                        logging.info(
+                            f"[REPORT_TYPE_DETECTION] Auto-detected: {report_type} "
+                            f"(confidence={detection_result['confidence']:.2f})"
+                        )
+                        
+                        # Update job status with detected type
+                        redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
+                        job = _json.loads(redis_client.get(f"job:{job_id}") or "{}")
+                        job["status"] = f"Detected: {report_type}"
+                        job["progress"] = 2
+                        job["detected_report_type"] = report_type
+                        job["detected_subtype"] = detection_result.get('detected_subtype', 'TYPE2')
+                        job["detection_confidence"] = detection_result['confidence']
+                        redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+            finally:
+                # Close sync session
+                sync_db.close()
+        except Exception as e:
+            logging.error(f"[REPORT_TYPE_DETECTION] Detection failed: {e}", exc_info=True)
+            # Fall back to provided report_type or default
+            if not report_type:
+                report_type = "SOC2"
+                logging.warning(f"[REPORT_TYPE_DETECTION] Falling back to default: {report_type}")
+    
     # Track progress and last update for watchdog
     last_progress_value = {"val": 0}
     last_progress_ts = {"ts": time.time()}
@@ -1029,7 +1440,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
                             async def _update_final():
                                 rc = _get_redis()
                                 job = await get_job(job_id, rc) or {}
-                                job["result"] = results
+                                # Filter out pdf_file bytes before storing in Redis
+                                results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
+                                job["result"] = results_for_redis
                                 job["done"] = True
                                 job["error"] = None
                                 job["db_saved"] = job.get("db_saved", False)
@@ -1072,16 +1485,20 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
             if job.get("cancelled"):
                 raise Exception("Scan cancelled by user")
         # Run the analysis, but check for cancellation after each major step
+        logging.error(f"[DEBUG] Calling analyze_pdf_file with report_type={report_type}, type={type(report_type)}")
         results = analyze_pdf_file(
             temp_pdf_path,
             progress_callback=progress_callback,
-            checklist_callback=checklist_callback
+            checklist_callback=checklist_callback,
+            report_type=report_type
         )
         
-    # Add timing and filename metadata to results
+    # Add timing, filename, and report_type metadata to results
         elapsed_time = time.time() - start_time
         results["estimated_time_seconds"] = elapsed_time
         results["pdf_filename"] = filename
+        results["report_type"] = report_type
+        logging.info(f"[run_analysis_job] Added report_type to results: {report_type}")
         # Ensure combined_result.json exists (some edge cases may skip write inside analyze_pdf_file) by rebuilding from disk artifacts now.
         try:
             # This will also emit a combined_result.json write attempt internally
@@ -1099,8 +1516,10 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
             PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
             combined_path = (PROJECT_ROOT / 'data' / 'json' / 'combined_result.json')
             combined_path.parent.mkdir(parents=True, exist_ok=True)
+            # Filter out pdf_file bytes before JSON serialization
+            results_for_json = {k: v for k, v in results.items() if k != 'pdf_file'}
             with open(str(combined_path), 'w', encoding='utf-8') as cf:
-                _json.dump(results, cf, ensure_ascii=False, indent=2)
+                _json.dump(results_for_json, cf, ensure_ascii=False, indent=2)
             logging.info(f"[run_analysis_job] Wrote combined_result.json to {combined_path}")
         except Exception as _werr:
             logging.error(f"[run_analysis_job] Failed to write combined_result.json: {_werr}")
@@ -1115,14 +1534,30 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
         try:
             import tempfile
             # Write result to a temp file and call insert_extracted_data
+            # Filter out pdf_file bytes before JSON serialization
+            results_for_db = {k: v for k, v in results.items() if k != 'pdf_file'}
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
-                _json.dump(results, tmpf, ensure_ascii=False)
+                _json.dump(results_for_db, tmpf, ensure_ascii=False)
                 tmpf.flush()
                 tmp_path = tmpf.name
             
             # Insert into database
             summary = insert_extracted_data(tmp_path)
             logging.error(f"[SUCCESS] Database insertion completed: {summary}")
+            
+            # Calculate and store elapsed_seconds and completion status
+            elapsed_seconds = time.time() - start_time
+            scan_id = summary.get("scan_id")
+            if scan_id:
+                try:
+                    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+                    if scan:
+                        scan.elapsed_seconds = elapsed_seconds
+                        scan.progress_status = "Scan Complete"
+                        db.commit()
+                        logging.info(f"[ELAPSED_TIME] Stored elapsed_seconds={elapsed_seconds:.1f}s and progress_status='Scan Complete' for scan_id={scan_id}")
+                except Exception as elapsed_err:
+                    logging.error(f"[ERROR] Failed to store elapsed_seconds: {elapsed_err}")
             
             # Clean up temp file
             import os
@@ -1144,7 +1579,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, db):
             logging.error(f"[DEBUG] [result_update:_update] Thread: {threading.current_thread().name}, job_id={job_id}, redis_client={id(redis_client)}")
             # Merge latest job state to preserve progress, status, checklist
             job = await get_job(job_id, redis_client) or {}
-            job["result"] = results
+            # Filter out pdf_file bytes before storing in Redis
+            results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
+            job["result"] = results_for_redis
             job["done"] = True
             job["error"] = None
             # Only mark as saved if no DB insertion error was captured
@@ -1249,53 +1686,167 @@ import traceback
 # ...existing code...
 
 @app.post("/analyze/")
-async def analyze_pdf_bg(file: UploadFile = File(...), db=Depends(get_db)):
+async def analyze_pdf_bg(
+    file: UploadFile = File(...), 
+    report_type: str = Form(None),
+    db=Depends(get_db)
+):
     """
-    DEPRECATED: This API endpoint with background threading has been deprecated
-    due to threading-related stability issues (hanging, high CPU usage).
+    Upload and analyze a SOC report PDF.
     
-    Please use the direct analysis script instead:
-        python run_analysis.py <path_to_pdf>
-    
-    This endpoint is disabled to prevent threading issues. If you need to use
-    the web interface, consider re-enabling it, but be aware of potential stability problems.
+    Args:
+        file: PDF file to analyze
+        report_type: Report type - "SOC1", "SOC2", or "COMBINED" (default: None for auto-detection)
+        db: Database session
+        
+    Returns:
+        {"job_id": str} - Job ID for polling status
     """
+    logging.error(f"[DEBUG /analyze/] Received report_type='{report_type}', type={type(report_type)}, file={file.filename}")
+    import uuid
+    import shutil
+    import threading
+    
+    # Normalize report_type - keep as None for auto-detection, or use provided value
+    if report_type and report_type.strip() == "":
+        report_type = None
+    
+    if report_type:
+        logging.error(f"[DEBUG /analyze/] Using explicit report_type='{report_type}'")
+    else:
+        logging.error(f"[DEBUG /analyze/] report_type=None, will use auto-detection")
+    
+    temp_dir = "data/tmp"
+    os.makedirs(temp_dir, exist_ok=True)
+    filename = file.filename if file.filename else "uploaded.pdf"
+    temp_pdf_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{filename}")
+    
+    with open(temp_pdf_path, "wb") as f_out:
+        shutil.copyfileobj(file.file, f_out)
+    
+    # Reset prior artifacts/logs to ensure clean scan state
+    try:
+        _reset_scan_state()
+    except Exception:
+        pass
+    
+    job_id = str(uuid.uuid4())
+    logging.error(f"[DEBUG /analyze/] Creating job {job_id} with report_type='{report_type}'")
+    await set_job(job_id, {
+        "status": "Queued",
+        "progress": 0,
+        "done": False,
+        "result": None,
+        "error": None,
+        "checklist": [],
+        "filename": filename,
+        "report_type": report_type
+    })
+    
+    # Start background thread with report_type parameter
+    logging.error(f"[DEBUG /analyze/] Starting thread with args: job_id={job_id}, filename={filename}, report_type='{report_type}'")
+    thread = threading.Thread(
+        target=run_analysis_job, 
+        args=(job_id, temp_pdf_path, filename, report_type, db)
+    )
+    thread.start()
+    
+    return {"job_id": job_id}
+
+@app.post("/analyze/cancel/{job_id}")
+async def cancel_analysis_job(job_id: str):
+    """
+    Cancel an in-progress analysis job.
+    Sets the 'cancelled' flag in Redis, which will be checked by run_analysis_job.
+    """
+    # Load current job status from Redis
+    job = await get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Set cancelled flag
+    job["cancelled"] = True
+    job["status"] = "Cancelled"
+    await set_job(job_id, job)
+    
+    return {"message": f"Job {job_id} has been cancelled", "job_id": job_id}
+
+@app.post("/analyze/confirm-type/{job_id}")
+async def confirm_report_type(
+    job_id: str,
+    confirmed_type: str = Form(...),
+    confirmed_subtype: str = Form(...),
+    db=Depends(get_db)
+):
+    """
+    User confirmation of detected report type.
+    Updates the detection cache with user override and resumes analysis.
+    
+    Args:
+        job_id: Job ID awaiting confirmation
+        confirmed_type: User-confirmed report type ('SOC1', 'SOC2', or 'COMBINED')
+        confirmed_subtype: User-confirmed subtype ('TYPE1' or 'TYPE2')
+    """
+    import logging
+    from .models import ReportTypeDetection
+    from datetime import datetime
+    
+    logging.info(f"[CONFIRM_TYPE] job_id={job_id}, confirmed_type={confirmed_type}, confirmed_subtype={confirmed_subtype}")
+    
+    # Load job from Redis
+    job = await get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Validate status
+    if job.get("status") != "AWAITING_CONFIRMATION":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Job is not awaiting confirmation (status: {job.get('status')})"
+        )
+    
+    # Update detection cache with user override
+    pdf_hash = job.get("pdf_hash")
+    if pdf_hash:
+        try:
+            detection = db.query(ReportTypeDetection).filter_by(pdf_hash=pdf_hash).first()
+            if detection:
+                detection.user_confirmed_type = confirmed_type
+                detection.user_confirmed_subtype = confirmed_subtype
+                detection.user_confirmed_at = datetime.utcnow()
+                db.commit()
+                logging.info(f"[CONFIRM_TYPE] Updated detection cache for pdf_hash={pdf_hash}")
+        except Exception as e:
+            logging.error(f"[CONFIRM_TYPE] Failed to update detection cache: {e}", exc_info=True)
+            db.rollback()
+    
+    # Update job with confirmed type and resume analysis
+    job["report_type"] = confirmed_type
+    job["report_subtype"] = confirmed_subtype
+    job["status"] = "Resuming analysis..."
+    job["awaiting_confirmation"] = False
+    await set_job(job_id, job)
+    
+    # Start background thread to continue analysis
+    temp_pdf_path = job.get("temp_pdf_path")
+    filename = job.get("filename")
+    
+    if not temp_pdf_path or not filename:
+        raise HTTPException(status_code=500, detail="Job missing required file information")
+    
+    logging.info(f"[CONFIRM_TYPE] Resuming analysis with report_type={confirmed_type}")
+    thread = threading.Thread(
+        target=run_analysis_job,
+        args=(job_id, temp_pdf_path, filename, confirmed_type, db, True)  # resume=True
+    )
+    thread.start()
+    
     return {
-        "error": "API-based analysis is deprecated",
-        "message": "Please use the direct analysis script: python run_analysis.py <pdf_path>",
-        "reason": "Threading-related stability issues (hanging, high CPU)",
-        "alternatives": [
-            "Use: python run_analysis.py soc2_reports/YourFile.pdf",
-            "Or: python run_analysis.py --list-reports (to see available reports)"
-        ]
+        "message": "Report type confirmed, analysis resuming",
+        "job_id": job_id,
+        "confirmed_type": confirmed_type,
+        "confirmed_subtype": confirmed_subtype
     }
-    
-    # ORIGINAL CODE DISABLED (uncomment to re-enable, but expect threading issues):
-    # temp_dir = "data/tmp"
-    # os.makedirs(temp_dir, exist_ok=True)
-    # filename = file.filename if file.filename else "uploaded.pdf"
-    # temp_pdf_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{filename}")
-    # with open(temp_pdf_path, "wb") as f_out:
-    #     shutil.copyfileobj(file.file, f_out)
-    # # Reset prior artifacts/logs to ensure clean scan state
-    # try:
-    #     _reset_scan_state()
-    # except Exception:
-    #     pass
-    # job_id = str(uuid.uuid4())
-    # await set_job(job_id, {
-    #     "status": "Queued",
-    #     "progress": 0,
-    #     "done": False,
-    #     "result": None,
-    #     "error": None,
-    #     "checklist": [],
-    #     "filename": filename
-    # })
-    # # Start background thread
-    # thread = threading.Thread(target=run_analysis_job, args=(job_id, temp_pdf_path, filename, db))
-    # thread.start()
-    # return {"job_id": job_id}
 
 # New endpoint: poll job status
 @app.get("/analyze/status/{job_id}")
@@ -1402,6 +1953,12 @@ async def get_job_status_min(job_id: str, include_artifacts: bool = False):
         "counts": counts,
         "checklist": checklist,
         "artifacts": artifacts,
+        "report_type": job.get("report_type"),  # Added for frontend report type display
+        "detected_report_type": job.get("detected_report_type"),  # Early detection result
+        "detected_subtype": job.get("detected_subtype"),  # Type 1 or Type 2
+        "detection_confidence": job.get("detection_confidence"),  # Confidence score
+        "awaiting_confirmation": job.get("awaiting_confirmation"),  # User confirmation needed
+        "detection_result": job.get("detection_result"),  # Full detection result for confirmation
         "transient_unavailable": False,
         "line_progress": line_progress,
     }
@@ -1586,8 +2143,10 @@ def _build_combined_results_from_disk() -> dict:
         try:
             if isinstance(standardized_results, dict) and len(standardized_results.keys()) > 0:
                 combined_result_path = data_path('data/json/combined_result.json')
+                # Filter out pdf_file bytes before JSON serialization (safety measure)
+                results_for_json = {k: v for k, v in standardized_results.items() if k != 'pdf_file'}
                 with open(combined_result_path, 'w', encoding='utf-8') as f:
-                    json.dump(standardized_results, f, indent=2, ensure_ascii=False)
+                    json.dump(results_for_json, f, indent=2, ensure_ascii=False)
                 logging.info(f"[_build_combined] Wrote combined_result.json to {combined_result_path}")
             else:
                 logging.info("[_build_combined] Skipping combined_result.json write (no content yet)")
@@ -1617,8 +2176,10 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
     if force_save:
         try:
             import tempfile
+            # Filter out pdf_file bytes before JSON serialization
+            results_for_db = {k: v for k, v in results.items() if k != 'pdf_file'}
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
-                _json.dump(results, tmpf, ensure_ascii=False)
+                _json.dump(results_for_db, tmpf, ensure_ascii=False)
                 tmpf.flush()
                 tmp_path = tmpf.name
             loop = asyncio.get_event_loop()
@@ -1645,6 +2206,32 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
                         except Exception as cleanup_err:
                             logging.warning(f"[/analyze/finalize] Automated cleanup failed: {cleanup_err}")
                         
+                        # Apply incomplete control penalties
+                        try:
+                            penalty_count = await penalize_incomplete_controls(scan_id_for_learning, db)
+                            logging.info(f"[/analyze/finalize] Incomplete control penalties applied: {penalty_count} controls")
+                        except Exception as penalty_err:
+                            logging.warning(f"[/analyze/finalize] Incomplete control penalties failed: {penalty_err}")
+                        
+                        # Generate deviation summaries for high-confidence controls
+                        try:
+                            from .post_processors.deviation_summarizer import generate_summaries
+                            import redis.asyncio as aioredis
+                            
+                            redis_client_deviation = None
+                            try:
+                                redis_client_deviation = aioredis.from_url("redis://socanalyzer-redis:6379", decode_responses=True)
+                            except Exception as redis_err:
+                                logging.warning(f"[/analyze/finalize] Redis not available for deviation summaries: {redis_err}")
+                            
+                            deviation_stats = await generate_summaries(scan_id_for_learning, db, redis_client_deviation)
+                            logging.info(f"[/analyze/finalize] Deviation summaries generated: {deviation_stats}")
+                            
+                            if redis_client_deviation:
+                                await redis_client_deviation.close()
+                        except Exception as deviation_err:
+                            logging.warning(f"[/analyze/finalize] Deviation summary generation failed: {deviation_err}")
+                        
                         # Then run pattern learning
                         from .services.verification_service import ControlVerificationService
                         
@@ -1663,7 +2250,9 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
     # Update job in Redis and broadcast done
     redis_client = _get_redis()
     job = await get_job(job_id, redis_client) or {}
-    job["result"] = results
+    # Filter out pdf_file bytes before storing in Redis
+    results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
+    job["result"] = results_for_redis
     job["done"] = True
     job["error"] = None
     job["db_saved"] = bool(insert_summary) if force_save else job.get("db_saved", False)
@@ -1726,7 +2315,9 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
             results = _build_combined_results_from_disk()
             redis_client = _get_redis()
             job = await get_job(job_id, redis_client) or {}
-            job["result"] = results
+            # Filter out pdf_file bytes before storing in Redis
+            results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
+            job["result"] = results_for_redis
             job["done"] = True
             job["error"] = None
             job["progress"] = 100
@@ -1735,8 +2326,10 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
             if payload.force_save:
                 try:
                     import tempfile
+                    # Filter out pdf_file bytes before JSON serialization
+                    results_for_db = {k: v for k, v in results.items() if k != 'pdf_file'}
                     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
-                        _json.dump(results, tmpf, ensure_ascii=False)
+                        _json.dump(results_for_db, tmpf, ensure_ascii=False)
                         tmpf.flush()
                         tmp_path = tmpf.name
                     loop = asyncio.get_event_loop()
@@ -1798,7 +2391,9 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
         results = _build_combined_results_from_disk()
         redis_client = _get_redis()
         job = await get_job(job_id, redis_client) or {}
-        job["result"] = results
+        # Filter out pdf_file bytes before storing in Redis
+        results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
+        job["result"] = results_for_redis
         job["status"] = f"Resumed extractors: {', '.join(requested)}"
         job["done"] = True
         job["progress"] = 100
@@ -1807,8 +2402,10 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
             # Optionally re-insert into DB (may create duplicates if the same scan already saved)
             try:
                 import tempfile
+                # Filter out pdf_file bytes before JSON serialization
+                results_for_db = {k: v for k, v in results.items() if k != 'pdf_file'}
                 with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmpf:
-                    _json.dump(results, tmpf, ensure_ascii=False)
+                    _json.dump(results_for_db, tmpf, ensure_ascii=False)
                     tmpf.flush()
                     tmp_path = tmpf.name
                 loop = asyncio.get_event_loop()
@@ -2044,6 +2641,15 @@ async def get_runtime_config():
             "per_control_max_chars": cfg.EXEC_SUMMARY_PER_CONTROL_MAX_CHARS,
             "max_non_deviation_controls": cfg.EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS,
         },
+        "thresholds": {
+            "high_confidence_threshold": cfg.HIGH_CONFIDENCE_THRESHOLD,
+            "merge_suggestion_min_confidence": cfg.MERGE_SUGGESTION_MIN_CONFIDENCE,
+            "auto_merge_min_confidence": cfg.AUTO_MERGE_MIN_CONFIDENCE,
+        },
+        "help": {
+            "version": "5.0.0",
+            "last_updated": "2025-12-03"
+        },
         "feature_toggles": {
             "allow_regex_fallbacks": cfg.ALLOW_REGEX_FALLBACKS,
             "control_embedding_mapping_enabled": cfg.CONTROL_EMBEDDING_MAPPING_ENABLED,
@@ -2070,6 +2676,66 @@ async def get_budget_snapshot():
         "overlap_chars": cfg.TEXT_OVERLAP,
         "chars_per_token": cfg.CHARS_PER_TOKEN,
     }
+
+# Help system endpoints
+@app.get("/help/index")
+async def get_help_index():
+    """Get help topics index/manifest"""
+    import json
+    from pathlib import Path
+    
+    try:
+        help_index_path = Path(__file__).parent.parent.parent / "docs" / "help" / "index.json"
+        with open(help_index_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logging.error(f"Error loading help index: {e}")
+        raise HTTPException(status_code=500, detail="Help index not found")
+
+@app.get("/help/content/{topic_id}")
+async def get_help_content(topic_id: str):
+    """Get markdown content for a specific help topic"""
+    import json
+    from pathlib import Path
+    
+    try:
+        # Load index to validate topic and get file path
+        help_dir = Path(__file__).parent.parent.parent / "docs" / "help"
+        index_path = help_dir / "index.json"
+        
+        with open(index_path, 'r', encoding='utf-8') as f:
+            index = json.load(f)
+        
+        # Find topic in index
+        topic_file = None
+        for category in index['categories']:
+            for topic in category['topics']:
+                if topic['id'] == topic_id:
+                    topic_file = topic['filePath']
+                    break
+            if topic_file:
+                break
+        
+        if not topic_file:
+            raise HTTPException(status_code=404, detail="Help topic not found")
+        
+        # Read markdown file
+        content_path = help_dir / topic_file
+        
+        # Security: ensure path is within help directory
+        if not str(content_path.resolve()).startswith(str(help_dir.resolve())):
+            raise HTTPException(status_code=403, detail="Invalid topic path")
+        
+        with open(content_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return Response(content=content, media_type="text/markdown")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error loading help content for {topic_id}: {e}")
+        raise HTTPException(status_code=500, detail="Help content not found")
 
 # Docker control endpoints (guarded)
 def _run_docker_cmd(args):
@@ -2126,12 +2792,22 @@ async def docker_start(container: str):
 
 # History endpoints
 @app.get("/history")
-async def get_history(db=Depends(get_db)):
-    # Get all scans
+async def get_history(limit: int = 100, db=Depends(get_db)):
+    """
+    Get scan history with minimal metadata for dropdown/list.
+    Excludes heavy result_json field for performance.
+    
+    Args:
+        limit: Maximum number of scans to return (default 100, max 500)
+    """
+    # Cap limit to prevent excessive queries
+    limit = min(max(1, limit), 500)
+    
+    # Get scans with optimized query
     result = await db.execute(
         select(Scan)
         .order_by(Scan.scan_date.desc())
-        .limit(20)
+        .limit(limit)
     )
     scan_rows = result.scalars().all()
     
@@ -2143,6 +2819,8 @@ async def get_history(db=Depends(get_db)):
         )
         company_row = company_result.scalar_one_or_none()
         company_name = company_row.name if company_row else None
+        company_domain = company_row.company_domain if company_row else None
+        logo_url = company_row.logo_url if company_row else None
         
         history.append({
             "id": row.id,
@@ -2150,10 +2828,13 @@ async def get_history(db=Depends(get_db)):
             "filename": row.pdf_filename,
             "product": row.product,
             "company": company_name,
+            "company_domain": company_domain,
+            "logo_url": logo_url,
             "coverage_start": row.coverage_start.date().isoformat() if row.coverage_start else None,
             "coverage_end": row.coverage_end.date().isoformat() if row.coverage_end else None,
             "report_date": row.report_date.isoformat() if row.report_date else None,
-            "results": row.result_json
+            "report_type": row.report_type.value if row.report_type else "SOC2"
+            # Note: result_json excluded for performance - use /report/{scan_id} for full data
         })
     
     return history
@@ -2963,12 +3644,12 @@ Description 2: {desc2[:500]}"""
                         sim_response = gpt_extract(similarity_prompt, "automated_cleanup")
                         desc_similarity = float(sim_response.strip())
                         desc_similarity = max(0.0, min(1.0, desc_similarity))
-                        confidence_score += desc_similarity * 0.70
+                        confidence_score += desc_similarity * 0.65  # Reduced from 0.70 to 0.65
                     except Exception:
                         if desc1.lower() == desc2.lower():
-                            confidence_score += 0.70
+                            confidence_score += 0.65
                         else:
-                            confidence_score += 0.42
+                            confidence_score += 0.39
                 
                 # TSC/COSO mapping match
                 if primary.control_tsc_id and candidate.control_tsc_id:
@@ -2993,8 +3674,21 @@ Description 2: {desc2[:500]}"""
                 if primary.has_deviation == candidate.has_deviation:
                     confidence_score += 0.05
                 
+                # Page proximity bonus - if controls are on adjacent pages, likely chunk-split duplicates
+                primary_pages = primary.control_page_refs or []
+                candidate_pages = candidate.control_page_refs or []
+                if primary_pages and candidate_pages:
+                    primary_min = min([int(p) for p in primary_pages if str(p).isdigit()])
+                    primary_max = max([int(p) for p in primary_pages if str(p).isdigit()])
+                    candidate_min = min([int(p) for p in candidate_pages if str(p).isdigit()])
+                    candidate_max = max([int(p) for p in candidate_pages if str(p).isdigit()])
+                    
+                    # Adjacent pages or overlapping ranges
+                    if abs(primary_max - candidate_min) <= 1 or abs(candidate_max - primary_min) <= 1:
+                        confidence_score += cfg.PAGE_PROXIMITY_WEIGHT  # +0.05 for adjacent pages
+                
                 # Decision: merge if high confidence, flag if low confidence
-                if confidence_score >= 0.85:
+                if confidence_score >= cfg.AUTO_MERGE_MIN_CONFIDENCE:  # Changed from 0.85 to configurable 0.70
                     # Auto-merge high-confidence duplicates
                     candidate.merged_to_control_id = str(primary.id)
                     original_conf = candidate.control_confidence
@@ -3003,14 +3697,26 @@ Description 2: {desc2[:500]}"""
                     candidate.confidence_calc = (candidate.confidence_calc or "") + note
                     
                     # Consolidate page refs to primary
-                    primary_pages = set(primary.control_page_refs or [])
-                    candidate_pages = set(candidate.control_page_refs or [])
-                    merged_pages = sorted(primary_pages | candidate_pages)
+                    primary_pages_set = set(primary.control_page_refs or [])
+                    candidate_pages_set = set(candidate.control_page_refs or [])
+                    merged_pages = sorted(primary_pages_set | candidate_pages_set)
                     primary.control_page_refs = merged_pages
                     
                     # Update primary annotation
                     merge_note = f"Consolidated from automated cleanup on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     primary.annotation = merge_note
+                    
+                    # Track merge history
+                    merge_event = {
+                        "timestamp": datetime.datetime.now().isoformat(),
+                        "type": "auto",
+                        "confidence": round(confidence_score, 3),
+                        "merged_from_ids": [str(candidate.id)],
+                        "reason": f"Automated cleanup: duplicate control_id with {confidence_score:.2f} similarity"
+                    }
+                    if not primary.merge_history:
+                        primary.merge_history = []
+                    primary.merge_history.append(merge_event)
                     
                     db.add(candidate)
                     db.add(primary)
@@ -3062,6 +3768,63 @@ Description 2: {desc2[:500]}"""
         logging.error(f"[CLEANUP] Error in automated cleanup for scan {scan_id}: {e}", exc_info=True)
         await db.rollback()
         return None
+
+async def penalize_incomplete_controls(scan_id: int, db):
+    """
+    Apply confidence penalty to controls missing required fields.
+    
+    Reduces confidence by CONTROL_INCOMPLETE_PENALTY (default 0.20) for controls missing:
+    - control_id
+    - control_desc
+    - control_test
+    - control_test_results
+    
+    This helps identify low-quality extractions that need review.
+    """
+    try:
+        from . import config as cfg
+        
+        logging.error(f"[INCOMPLETE-PENALTY] Starting for scan {scan_id}")
+        
+        result = await db.execute(
+            select(Control).where(
+                Control.scan_id == scan_id,
+                Control.merged_to_control_id == None
+            )
+        )
+        controls = result.scalars().all()
+        
+        penalized_count = 0
+        for ctrl in controls:
+            missing_fields = []
+            if not ctrl.control_id or str(ctrl.control_id).strip() == "":
+                missing_fields.append("control_id")
+            if not ctrl.control_desc or str(ctrl.control_desc).strip() == "":
+                missing_fields.append("control_desc")
+            if not ctrl.control_test or str(ctrl.control_test).strip() == "":
+                missing_fields.append("control_test")
+            if not ctrl.control_test_results or str(ctrl.control_test_results).strip() == "":
+                missing_fields.append("control_test_results")
+            
+            if missing_fields:
+                original_conf = ctrl.control_confidence or 0.0
+                penalty = cfg.CONTROL_INCOMPLETE_PENALTY
+                new_conf = max(0.0, original_conf - penalty)
+                
+                ctrl.control_confidence = new_conf
+                note = f"\nIncomplete control penalty: -{penalty:.2f} for missing fields: {', '.join(missing_fields)} | Original: {original_conf:.2f} → New: {new_conf:.2f}"
+                ctrl.confidence_calc = (ctrl.confidence_calc or "") + note
+                db.add(ctrl)
+                penalized_count += 1
+        
+        await db.commit()
+        logging.error(f"[INCOMPLETE-PENALTY] Penalized {penalized_count} controls for scan {scan_id}")
+        return penalized_count
+        
+    except Exception as e:
+        logging.error(f"[INCOMPLETE-PENALTY] Error for scan {scan_id}: {e}", exc_info=True)
+        await db.rollback()
+        return 0
 
 @app.post("/report/{scan_id}/cleanup")
 async def trigger_cleanup(scan_id: int, db=Depends(get_db)):
@@ -3137,7 +3900,7 @@ async def suggest_control_merges(scan_id: int, db=Depends(get_db)):
                 confidence_score = 0.0
                 confidence_breakdown = []
                 
-                # 1. Description similarity (70% weight) - use GPT
+                # 1. Description similarity (65% weight) - use GPT
                 desc1 = (primary.control_desc or "").strip()
                 desc2 = (candidate.control_desc or "").strip()
                 
@@ -3152,17 +3915,17 @@ Description 2: {desc2[:500]}"""
                         sim_response = gpt_extract(similarity_prompt, "merge_suggestions")
                         desc_similarity = float(sim_response.strip())
                         desc_similarity = max(0.0, min(1.0, desc_similarity))  # Clamp to [0, 1]
-                        confidence_score += desc_similarity * 0.70
-                        confidence_breakdown.append(f"Description similarity: {desc_similarity:.2f} (weight: 0.70)")
+                        confidence_score += desc_similarity * 0.65
+                        confidence_breakdown.append(f"Description similarity: {desc_similarity:.2f} (weight: 0.65)")
                     except Exception as e:
                         logging.warning(f"Description similarity failed for {ctrl_id}: {e}")
                         # Fallback: exact match = 1.0, different = 0.6
                         if desc1.lower() == desc2.lower():
-                            confidence_score += 0.70
-                            confidence_breakdown.append("Description exact match (weight: 0.70)")
+                            confidence_score += 0.65
+                            confidence_breakdown.append("Description exact match (weight: 0.65)")
                         else:
-                            confidence_score += 0.42  # 0.6 * 0.70
-                            confidence_breakdown.append("Description different (weight: 0.70, score: 0.60)")
+                            confidence_score += 0.39  # 0.6 * 0.65
+                            confidence_breakdown.append("Description different (weight: 0.65, score: 0.60)")
                 
                 # 2. TSC/COSO mapping match (15% weight)
                 if primary.control_tsc_id and candidate.control_tsc_id:
@@ -3193,6 +3956,23 @@ Description 2: {desc2[:500]}"""
                 if primary.has_deviation == candidate.has_deviation:
                     confidence_score += 0.05
                     confidence_breakdown.append("Deviation flags match (weight: 0.05)")
+                
+                # 5. Page proximity bonus (5% weight) - adjacent pages likely indicate chunk-split duplicates
+                primary_pages = primary.control_page_refs or []
+                candidate_pages = candidate.control_page_refs or []
+                if primary_pages and candidate_pages:
+                    try:
+                        primary_min = min([int(p) for p in primary_pages if str(p).isdigit()])
+                        primary_max = max([int(p) for p in primary_pages if str(p).isdigit()])
+                        candidate_min = min([int(p) for p in candidate_pages if str(p).isdigit()])
+                        candidate_max = max([int(p) for p in candidate_pages if str(p).isdigit()])
+                        
+                        # Adjacent pages or overlapping ranges
+                        if abs(primary_max - candidate_min) <= 1 or abs(candidate_max - primary_min) <= 1:
+                            confidence_score += cfg.PAGE_PROXIMITY_WEIGHT
+                            confidence_breakdown.append(f"Page proximity bonus (weight: {cfg.PAGE_PROXIMITY_WEIGHT})")
+                    except (ValueError, TypeError):
+                        pass  # Skip if page refs are non-numeric
                 
                 logging.error(f"[SUGGEST-MERGES] Final score: {confidence_score:.3f}, threshold: {cfg.MERGE_SUGGESTION_MIN_CONFIDENCE}, breakdown: {confidence_breakdown}")
                 
@@ -3375,6 +4155,18 @@ async def merge_controls(scan_id: int, data: Dict[str, Any] = Body(...), db=Depe
         # Update primary annotation
         merge_note = f"Consolidated from {len(secondaries)} duplicate(s) (IDs: {', '.join(map(str, merged_ids_list))}) on {datetime.datetime.now()}"
         primary.annotation = f"{primary.annotation}\n{merge_note}" if primary.annotation else merge_note
+        
+        # Track merge history
+        merge_event = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "type": "manual",
+            "confidence": None,  # Manual merges don't have calculated confidence
+            "merged_from_ids": [str(sid) for sid in merged_ids_list],
+            "reason": "Manual merge via UI"
+        }
+        if not primary.merge_history:
+            primary.merge_history = []
+        primary.merge_history.append(merge_event)
         
         db.add(primary)
         
@@ -5520,3 +6312,154 @@ async def test_gpt_models():
         "dataiku_host": cfg.DATAIKU_DSS_HOST,
         "results": results
     }
+
+
+# ============================================================================
+# VALIDATION BASELINE ENDPOINTS
+# ============================================================================
+
+from .baseline_manager import BaselineManager
+
+@app.post("/baseline/create")
+async def create_validation_baseline(
+    scan_id: int,
+    extractor_version: str,
+    reviewer_notes: Optional[str] = None,
+    db = Depends(get_db)
+):
+    """
+    Create a validation baseline from an approved scan.
+    Used for regression testing and accuracy monitoring.
+    """
+    try:
+        # Fetch scan data
+        result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan_row = result.scalar_one_or_none()
+        if not scan_row:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        # Fetch all related data
+        controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
+        cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
+        suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
+        
+        # Build scan data dict
+        scan_data = {
+            "scan_id": scan_id,
+            "report_type": getattr(scan_row, "report_type", "SOC2"),
+            "filename": scan_row.pdf_filename,
+            "scan_date": scan_row.scan_date.isoformat() if scan_row.scan_date else None,
+            "controls": [
+                {k: getattr(ctrl, k, None) for k in [
+                    "id", "control_id", "control_desc", "control_confidence",
+                    "financial_assertions", "framework_category", "control_tsc_mappings"
+                ]} for ctrl in controls
+            ],
+            "cuecs": [
+                {k: getattr(c, k, None) for k in [
+                    "id", "cuec_tsc_id", "cuec_description", "cuec_confidence"
+                ]} for c in cuecs
+            ],
+            "subservice_orgs": [
+                {k: getattr(s, k, None) for k in [
+                    "id", "name", "confidence", "likely_so"
+                ]} for s in suborgs
+            ]
+        }
+        
+        # Extract report name from filename
+        report_name = scan_row.pdf_filename.rsplit('.', 1)[0] if scan_row.pdf_filename else f"scan_{scan_id}"
+        
+        # Create baseline
+        baseline_info = BaselineManager.create_baseline(
+            scan_data=scan_data,
+            report_name=report_name,
+            extractor_version=extractor_version,
+            reviewer_notes=reviewer_notes
+        )
+        
+        return baseline_info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to create baseline: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Baseline creation failed: {e}")
+
+
+@app.get("/baseline/list")
+async def list_baselines(report_name: Optional[str] = None):
+    """List all validation baselines, optionally filtered by report name."""
+    try:
+        baselines = BaselineManager.list_baselines(report_name)
+        return {"baselines": baselines, "count": len(baselines)}
+    except Exception as e:
+        logging.error(f"Failed to list baselines: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/baseline/{baseline_id}")
+async def get_baseline(baseline_id: str):
+    """Get a specific baseline by ID."""
+    try:
+        baseline = BaselineManager.get_baseline(baseline_id)
+        if not baseline:
+            raise HTTPException(status_code=404, detail="Baseline not found")
+        return baseline
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to get baseline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/baseline/compare")
+async def compare_to_baseline(
+    scan_id: int,
+    baseline_id: str,
+    db = Depends(get_db)
+):
+    """Compare current scan results to a baseline for regression detection."""
+    try:
+        # Fetch current scan data (same as create_baseline)
+        result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan_row = result.scalar_one_or_none()
+        if not scan_row:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
+        
+        current_scan = {
+            "scan_id": scan_id,
+            "controls": [
+                {k: getattr(ctrl, k, None) for k in [
+                    "id", "control_id", "control_desc", "control_confidence",
+                    "financial_assertions", "framework_category"
+                ]} for ctrl in controls
+            ]
+        }
+        
+        # Compare
+        comparison = BaselineManager.compare_to_baseline(current_scan, baseline_id)
+        return comparison
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to compare baseline: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/baseline/{baseline_id}")
+async def delete_baseline(baseline_id: str):
+    """Delete a baseline by ID."""
+    try:
+        success = BaselineManager.delete_baseline(baseline_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Baseline not found")
+        return {"message": "Baseline deleted", "baseline_id": baseline_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to delete baseline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

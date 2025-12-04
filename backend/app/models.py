@@ -1,9 +1,15 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, LargeBinary, Boolean, Enum
 import datetime
+from datetime import timezone
 import enum
 
 Base = declarative_base()
+
+# Helper function for timezone-aware current time
+def get_local_now():
+    """Return current local time as timezone-aware datetime"""
+    return datetime.datetime.now(timezone.utc).astimezone()
 
 
 class ReportType(enum.Enum):
@@ -18,7 +24,7 @@ class Scan(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     company_id = Column(Integer)
     product = Column(String(256))
-    scan_date = Column(DateTime, default=datetime.datetime.utcnow)
+    scan_date = Column(DateTime, default=get_local_now)
     report_date = Column(DateTime)
     coverage_start = Column(DateTime)
     coverage_end = Column(DateTime)
@@ -49,6 +55,8 @@ class Company(Base):
     parent_company = Column(String(256))
     confidence = Column(Float)
     scan_id = Column(Integer)
+    company_domain = Column(String(256), index=True)  # Company website domain for logo fetching
+    logo_url = Column(String(512))  # Cached logo URL from Clearbit API
 
 class Control(Base):
     __tablename__ = "control"
@@ -107,6 +115,10 @@ class Control(Base):
     verification_metadata = Column(JSON)  # Detailed scoring breakdown
     pattern_confidence = Column(Float)  # Score from pattern library (0.0-1.0)
     final_confidence = Column(Float)  # Combined multi-factor confidence
+    # Deviation summary - AI-generated plain language explanation of what a deviation means
+    deviation_summary = Column(Text)  # GPT-generated summary (≤300 chars) for controls with deviation=true
+    # Merge history - audit trail of all merge events
+    merge_history = Column(JSON)  # [{"timestamp": "2025-01-07T12:34:56", "type": "auto|manual", "confidence": 0.85, "merged_from_ids": ["CTL-001", "CTL-002"], "reason": "..."}]
 
 class CUEC(Base):
     __tablename__ = "cuec"
@@ -246,3 +258,22 @@ class ControlReview(Base):
     final_confidence_at_review = Column(Float, nullable=True)  # Snapshot of confidence when reviewed
     reviewed_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
     created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+class ReportTypeDetection(Base):
+    """
+    Cache for GPT-based report type detection results.
+    Stores detection by PDF hash to avoid re-analyzing same files.
+    """
+    __tablename__ = "report_type_detections"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pdf_hash = Column(String(64), nullable=False, unique=True, index=True)
+    detected_type = Column(String(32), nullable=False)  # 'SOC1', 'SOC2', 'COMBINED'
+    detected_subtype = Column(String(32), nullable=False)  # 'TYPE1', 'TYPE2'
+    confidence = Column(Float, nullable=False)
+    evidence = Column(JSON, nullable=True)  # Array of key evidence strings
+    analysis_stage = Column(String(16), nullable=False)  # 'quick' or 'deep'
+    user_confirmed_type = Column(String(32), nullable=True)  # User override if any
+    user_confirmed_subtype = Column(String(32), nullable=True)
+    user_confirmed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)  # For TTL-based cache expiry

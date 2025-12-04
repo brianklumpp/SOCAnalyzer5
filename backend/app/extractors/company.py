@@ -91,6 +91,7 @@ def extract_company_from_report():
         responses.append(response)
     company = None
     parent_company = None
+    company_domain = None
     confidence = 0
     for resp in responses:
         try:
@@ -98,13 +99,56 @@ def extract_company_from_report():
             if data.get('company'):
                 company = data['company']
                 parent_company = data.get('parent_company', None)
+                company_domain = data.get('company_domain', None)
                 confidence = data.get('confidence', 1)
                 break
         except Exception as e:
             logging.error(f'Failed to parse GPT response: {resp} | Error: {e}')
+    
+    # Fallback: Infer domain for well-known companies if not found in text
+    if company and not company_domain:
+        domain_map = {
+            # Big 4 Accounting Firms
+            'deloitte': 'deloitte.com',
+            'pwc': 'pwc.com',
+            'pricewaterhousecoopers': 'pwc.com',
+            'ernst & young': 'ey.com',
+            'ey': 'ey.com',
+            'kpmg': 'kpmg.com',
+            # Major Tech Companies
+            'microsoft': 'microsoft.com',
+            'google': 'google.com',
+            'amazon': 'amazon.com',
+            'aws': 'aws.amazon.com',
+            'salesforce': 'salesforce.com',
+            'oracle': 'oracle.com',
+            'ibm': 'ibm.com',
+            'sap': 'sap.com',
+            # Major Banks
+            'jpmorgan': 'jpmorgan.com',
+            'bank of america': 'bankofamerica.com',
+            'wells fargo': 'wellsfargo.com',
+            'citibank': 'citibank.com',
+            'citigroup': 'citigroup.com',
+            'citi': 'citi.com',
+            'goldman sachs': 'goldmansachs.com',
+            'morgan stanley': 'morganstanley.com',
+            'barclays': 'barclays.com',
+            'hsbc': 'hsbc.com',
+        }
+        
+        # Normalize company name for lookup
+        company_lower = company.lower()
+        for key, domain in domain_map.items():
+            if key in company_lower:
+                company_domain = domain
+                logger.info(f'[COMPANY] Inferred domain "{domain}" for company "{company}"')
+                break
+    
     result = {
         'company': company,
         'parent_company': parent_company,
+        'company_domain': company_domain,
         'confidence': confidence,
         'raw_gpt_responses': responses
     }
