@@ -11,17 +11,18 @@ import traceback
 import pathlib
 import asyncio
 import sqlalchemy
+from sqlalchemy import and_
 import sqlalchemy.dialects.postgresql as pg_dialect
 import redis.asyncio as redis
 import redis as sync_redis
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, UploadFile, File, APIRouter, Form, BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi import Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 # Removed premature stream_handler formatter assignment (stream_handler not yet defined here).
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 # Boot marker to verify container/image version and source path
 logging.warning(f"[BOOT] Loaded backend.app.main from {__file__}")
@@ -35,7 +36,7 @@ from .database import engine, get_db
 from .config import AUTO_CREATE_SCHEMA, RUN_MIGRATIONS_ON_START, ALEMBIC_INI_PATH, LOG_LEVEL, EXCLUDE_ACCESS_LOG_PATHS, DOCKER_CONTROL_ENABLED
 from .analyze import analyze_pdf_file
 from .config import REDIS_URL, TSC_CRITERIA, COSO_2013_CRITERIA, EXECUTIVE_SUMMARY_PROMPT
-from .extractors.cuec_extractor import map_cuec_to_frameworks
+from .frameworks.mapper import map_cuec_to_frameworks_dynamic as map_cuec_to_frameworks
 from . import config as cfg
 from .config import (
     EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS,
@@ -48,7 +49,6 @@ from .config import (
 from .explicit_sql_insert import insert_extracted_data
 import concurrent.futures
 from .gpt_client import gpt_extract, set_gpt_log_context, clear_gpt_log_context
-from .extractors.cuec_extractor import map_cuec_to_frameworks
 
 app = FastAPI()
 # Minimal direct diagnostic route (bypasses router) to ensure availability
@@ -546,19 +546,42 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
             "controls": get_persisted_bad_chunks("controls"),
             "subservice_orgs": get_persisted_bad_chunks("subservice_orgs"),
         }
+        # PDF viewer metadata
+        has_pdf_stored = bool(getattr(scan_row, "pdf_file", None))
+        page_count = None
+        sections_data = getattr(scan_row, "sections", None)
+        sections_list = []
+        
+        if sections_data:
+            import json as _json
+            if isinstance(sections_data, str):
+                try:
+                    sections_list = _json.loads(sections_data)
+                except Exception as e:
+                    logging.error(f"Failed to parse sections JSON for scan {scan_id}: {e}")
+            elif isinstance(sections_data, list):
+                sections_list = sections_data
+        
+        # Extract page count from sections if available
+        if sections_list and len(sections_list) > 0:
+            try:
+                page_count = max(s.get("end_DOC_page_ref", 0) for s in sections_list if isinstance(s, dict))
+            except Exception:
+                pass
+        
         payload = {
             "scan_id": scan_row.id,
             # Ensure datetimes are JSON-serializable
             "scan_date": (scan_row.scan_date.isoformat() if getattr(scan_row, "scan_date", None) else None),
             "filename": scan_row.pdf_filename,
-            "company": company.name if company else None,
+            "company": getattr(scan_row, "company", None) or (company.name if company else None),
             "parent_company": company.parent_company if company else None,
             "auditor": getattr(scan_row, "auditor", None) or auditor,
             "coverage_period": coverage_period,
             "coverage_start": (getattr(scan_row, "coverage_start", None).date().isoformat() if getattr(scan_row, "coverage_start", None) else None),
             "coverage_end": (getattr(scan_row, "coverage_end", None).date().isoformat() if getattr(scan_row, "coverage_end", None) else None),
             "report_date": report_date,
-            "product": product.name if product else None,
+            "product": getattr(scan_row, "product", None) or (product.name if product else None),
             "report_type": getattr(scan_row, "report_type", "SOC2"),
             "as_of_date": (getattr(scan_row, "as_of_date", None).date().isoformat() if getattr(scan_row, "as_of_date", None) else None),
             "gpt_cost": getattr(scan_row, "gpt_cost", None),
@@ -573,6 +596,11 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
             "company_id": getattr(scan_row, "company_id", None),
             "executive_summary_stale": getattr(scan_row, "executive_summary_stale", False),
             "is_sox_vendor": getattr(scan_row, "is_sox_vendor", False),
+            "toc_page_offset": getattr(scan_row, "toc_page_offset", None) or results.get("toc_page_offset", 0),
+            # PDF viewer metadata
+            "has_pdf_stored": has_pdf_stored,
+            "page_count": page_count,
+            "sections": sections_list,
             # Temporarily return empty lists to isolate serialization issues
             "subservice_organizations": [
                 {
@@ -589,6 +617,8 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                     "confidence_justification": getattr(s, "confidence_justification", None),
                     "third_party_controls": getattr(s, "third_party_controls", None),
                     "annotation": getattr(s, "annotation", None),
+                    "analyst_notes": getattr(s, "analyst_notes", None),
+                    "pdf_snippet": getattr(s, "pdf_snippet", None),
                 } for s in suborgs
             ],
             "cuecs": [
@@ -599,6 +629,7 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                     "cuec_tsc_id": getattr(c, "cuec_tsc_id", None),
                     "cuec_description": getattr(c, "cuec_description", None) or getattr(c, "description", None),
                     "cuec_line_ref": getattr(c, "cuec_line_ref", None),
+                    "cuec_page_refs": getattr(c, "cuec_page_refs", None),
                     "cuec_confidence": getattr(c, "cuec_confidence", None),
                     "cuec_gpt_opinion": getattr(c, "cuec_gpt_opinion", None),
                     "cuec_distance_from_cuec_keywords": getattr(c, "cuec_distance_from_cuec_keywords", None),
@@ -613,8 +644,16 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                     "cuec_coso_confidence_pct": getattr(c, "cuec_coso_confidence_pct", None),
                     "cuec_closest_framework": getattr(c, "cuec_closest_framework", None),
                     "cuec_confidence_justification": getattr(c, "cuec_confidence_justification", None),
+                    "cuec_tsc_mappings": getattr(c, "cuec_tsc_mappings", None),
+                    "cuec_coso_mappings": getattr(c, "cuec_coso_mappings", None),
+                    "cuec_framework_mappings": getattr(c, "cuec_framework_mappings", None),
+                    "cuec_primary_framework": getattr(c, "cuec_primary_framework", None),
+                    "cuec_primary_criterion_id": getattr(c, "cuec_primary_criterion_id", None),
+                    "cuec_primary_confidence": getattr(c, "cuec_primary_confidence", None),
                     "annotation": getattr(c, "annotation", None),
+                    "analyst_notes": getattr(c, "analyst_notes", None),
                     "control_strength": getattr(c, "control_strength", None),
+                    "pdf_snippet": getattr(c, "pdf_snippet", None),
                 } for c in cuecs
                 ],
             "controls": [
@@ -651,8 +690,17 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                     "pattern_confidence",
                     "final_confidence",
                     "annotation",
+                    "analyst_notes",
                     "financial_assertions",
-                    "framework_category"
+                    "framework_category",
+                    "pdf_snippet",
+                    "framework_mappings",
+                    "primary_framework",
+                    "primary_criterion_id",
+                    "primary_confidence",
+                    "is_duplicate_instance",
+                    "duplicate_group_id",
+                    "instance_differentiator"
                 ]}) for ctrl in controls
             ],
             "bad_chunks": bad_chunks if any(bad_chunks.values()) else persisted_bad_chunks,
@@ -665,6 +713,14 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
             import json as _json_mod
             from starlette.responses import Response
             resp_text = _json_mod.dumps(encoded)
+            # Log sample control to verify fields
+            if encoded.get("controls") and len(encoded["controls"]) > 0:
+                sample_ctrl = encoded["controls"][0]
+                logging.error(f"[REPORT] Sample control keys: {list(sample_ctrl.keys())}")
+                logging.error(f"[REPORT] Sample has analyst_notes: {'analyst_notes' in sample_ctrl}")
+                logging.error(f"[REPORT] Sample has control_tsc_mappings: {'control_tsc_mappings' in sample_ctrl}")
+                logging.error(f"[REPORT] Sample control_tsc_id value: {sample_ctrl.get('control_tsc_id')}")
+                logging.error(f"[REPORT] Sample control_tsc_mappings value: {sample_ctrl.get('control_tsc_mappings')}")
             logging.error(f"[REPORT] Returning payload for scan_id={scan_id} (size={len(resp_text)} bytes)")
             return Response(content=resp_text, media_type="application/json")
         except Exception as enc_err:
@@ -678,12 +734,39 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
             except Exception as dump_err:
                 logging.error(f"/report/{scan_id} json dumps fallback error: {dump_err}\n{traceback.format_exc()}")
                 raise
+
+    except Exception as e:
+        logging.error(f"/report/{scan_id} failed: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/pdf/{scan_id}")
+async def get_pdf(scan_id: int, db=Depends(get_db)):
+    """Serve PDF file for a scan. Returns PDF bytes with proper Content-Type."""
+    try:
+        result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan_row = result.scalar_one_or_none()
+        
+        if not scan_row:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        pdf_bytes = getattr(scan_row, "pdf_file", None)
+        if not pdf_bytes:
+            raise HTTPException(status_code=404, detail="PDF not stored for this scan")
+        
+        from starlette.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{scan_row.pdf_filename or "report.pdf"}"',
+                "Cache-Control": "public, max-age=31536000"  # Cache for 1 year
+            }
+        )
     except HTTPException:
-        # Re-raise HTTPException (404, etc.) without converting to 500
         raise
     except Exception as e:
-        logging.error(f"[REPORT] /report/{scan_id} error: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Report retrieval failed: {e}")
+        logging.error(f"/pdf/{scan_id} failed: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/report/{scan_id}/pdf")
@@ -949,6 +1032,7 @@ ALLOWED_SUBORG_FIELDS = {
     "confidence",
     "confidence_justification",
     "annotation",
+    "analyst_notes",
     "third_party_description",
     "third_party_page_ref",
     "name",
@@ -1278,8 +1362,13 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                         job["detected_report_type"] = report_type
                         job["detected_subtype"] = cached_detection.detected_subtype or 'TYPE2'
                         job["detection_confidence"] = cached_detection.confidence
+                        # Update identified_entities with report_type
+                        if "identified_entities" not in job:
+                            job["identified_entities"] = {}
+                        job["identified_entities"]["report_type"] = report_type
                         redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
                         logging.info(f"[REPORT_TYPE_DETECTION] Updated job status with cached detection")
+                        logging.info(f"[PROGRESS] Report type identified: {report_type}")
                 
                 # Run detection if no valid cache
                 if not cached_detection:
@@ -1345,7 +1434,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                             f"(confidence={detection_result['confidence']:.2f})"
                         )
                         
-                        # Update job status with detected type
+                        # Update job status with detected type and identified_entities
                         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
                         job = _json.loads(redis_client.get(f"job:{job_id}") or "{}")
                         job["status"] = f"Detected: {report_type}"
@@ -1353,7 +1442,12 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                         job["detected_report_type"] = report_type
                         job["detected_subtype"] = detection_result.get('detected_subtype', 'TYPE2')
                         job["detection_confidence"] = detection_result['confidence']
+                        # Update identified_entities with report_type
+                        if "identified_entities" not in job:
+                            job["identified_entities"] = {}
+                        job["identified_entities"]["report_type"] = report_type
                         redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+                        logging.info(f"[PROGRESS] Report type identified: {report_type}")
             finally:
                 # Close sync session
                 sync_db.close()
@@ -1490,7 +1584,8 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
             temp_pdf_path,
             progress_callback=progress_callback,
             checklist_callback=checklist_callback,
-            report_type=report_type
+            report_type=report_type,
+            job_id=job_id
         )
         
     # Add timing, filename, and report_type metadata to results
@@ -1499,6 +1594,26 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
         results["pdf_filename"] = filename
         results["report_type"] = report_type
         logging.info(f"[run_analysis_job] Added report_type to results: {report_type}")
+        
+        # Auto-detect standards from extracted text
+        # Strategy: Use report_type to get baseline frameworks (most reliable),
+        # then scan text for additional regional/international standards
+        try:
+            from .frameworks.loader import detect_frameworks_from_standards
+            extracted_text = results.get("extracted_text", "")
+            if extracted_text:
+                detected_standards = detect_frameworks_from_standards(extracted_text, report_type=report_type)
+                results["detected_standards"] = detected_standards
+                logging.info(f"[STANDARDS_DETECTION] Detected frameworks for {report_type}: {detected_standards}")
+            else:
+                # Fallback to defaults if no text available
+                from .frameworks.loader import get_default_frameworks_for_report
+                detected_standards = get_default_frameworks_for_report(report_type) if report_type else []
+                results["detected_standards"] = detected_standards
+                logging.warning(f"[STANDARDS_DETECTION] No extracted text, using defaults: {detected_standards}")
+        except Exception as e:
+            logging.error(f"[STANDARDS_DETECTION] Failed to detect standards: {e}", exc_info=True)
+            results["detected_standards"] = []
         # Ensure combined_result.json exists (some edge cases may skip write inside analyze_pdf_file) by rebuilding from disk artifacts now.
         try:
             # This will also emit a combined_result.json write attempt internally
@@ -1541,8 +1656,8 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                 tmpf.flush()
                 tmp_path = tmpf.name
             
-            # Insert into database
-            summary = insert_extracted_data(tmp_path)
+            # Insert into database with PDF path for storage
+            summary = insert_extracted_data(tmp_path, pdf_path=temp_pdf_path, job_id=job_id)
             logging.error(f"[SUCCESS] Database insertion completed: {summary}")
             
             # Calculate and store elapsed_seconds and completion status
@@ -1740,7 +1855,24 @@ async def analyze_pdf_bg(
         "error": None,
         "checklist": [],
         "filename": filename,
-        "report_type": report_type
+        "report_type": report_type,
+        "start_time": time.time(),
+        "identified_entities": {},
+        "counters": {
+            "subservice_orgs_count": 0,
+            "controls_count": 0,
+            "controls_total_estimate": 0,
+            "controls_percent": 0,
+            "controls_mapped_count": 0,
+            "controls_mapped_percent": 0,
+            "cuecs_count": 0
+        },
+        "phase_completion": {
+            "logo_fetched": False,
+            "cleanup_done": False,
+            "db_uploaded": False
+        },
+        "extraction_partial": False
     })
     
     # Start background thread with report_type parameter
@@ -1877,6 +2009,32 @@ async def get_job_status(job_id: str):
         artifacts = _artifact_presence()
         result_obj = job.get("result") or {}
         counts = _result_counts_from_obj(result_obj) if result_obj else _result_counts_from_disk()
+    
+    # Calculate elapsed time
+    import time
+    elapsed_seconds = 0
+    start_time = job.get("start_time")
+    if start_time:
+        elapsed_seconds = int(time.time() - start_time)
+    
+    # Extract new progress fields with graceful defaults
+    identified_entities = job.get("identified_entities", {})
+    counters = job.get("counters", {
+        "controls_count": 0,
+        "controls_total_estimate": 0,
+        "controls_percent": 0,
+        "controls_mapped_count": 0,
+        "controls_mapped_percent": 0,
+        "subservice_orgs_count": 0,
+        "cuecs_count": 0
+    })
+    phase_completion = job.get("phase_completion", {
+        "logo_fetched": False,
+        "cleanup_complete": False,
+        "db_uploaded": False
+    })
+    extraction_partial = job.get("extraction_partial", False)
+    
     return {
         "status": job.get("status"),
         "progress": job.get("progress"),
@@ -1888,6 +2046,12 @@ async def get_job_status(job_id: str):
         "artifacts": artifacts,
         "counts": counts,
         "transient_unavailable": False,
+        # New real-time progress fields
+        "elapsed_seconds": elapsed_seconds,
+        "identified_entities": identified_entities,
+        "counters": counters,
+        "phase_completion": phase_completion,
+        "extraction_partial": extraction_partial,
         # Debug payload removed to reduce response size and avoid client timeouts
     }
 
@@ -1917,6 +2081,31 @@ async def get_job_status_min(job_id: str, include_artifacts: bool = False):
     artifacts = None
     if job.get("done") or include_artifacts:
         artifacts = _artifact_presence()
+    
+    # Calculate elapsed time
+    import time
+    elapsed_seconds = 0
+    start_time = job.get("start_time")
+    if start_time:
+        elapsed_seconds = int(time.time() - start_time)
+    
+    # Extract new progress fields with graceful defaults
+    identified_entities = job.get("identified_entities", {})
+    counters = job.get("counters", {
+        "controls_count": 0,
+        "controls_total_estimate": 0,
+        "controls_percent": 0,
+        "controls_mapped_count": 0,
+        "controls_mapped_percent": 0,
+        "subservice_orgs_count": 0,
+        "cuecs_count": 0
+    })
+    phase_completion = job.get("phase_completion", {
+        "logo_fetched": False,
+        "cleanup_complete": False,
+        "db_uploaded": False
+    })
+    extraction_partial = job.get("extraction_partial", False)
     # Optional line-based progress (e.g., control extraction advancing through section)
     def _line_progress():
         try:
@@ -1961,6 +2150,12 @@ async def get_job_status_min(job_id: str, include_artifacts: bool = False):
         "detection_result": job.get("detection_result"),  # Full detection result for confirmation
         "transient_unavailable": False,
         "line_progress": line_progress,
+        # New real-time progress fields
+        "elapsed_seconds": elapsed_seconds,
+        "identified_entities": identified_entities,
+        "counters": counters,
+        "phase_completion": phase_completion,
+        "extraction_partial": extraction_partial,
     }
 
 # New endpoint: get job result
@@ -2350,7 +2545,7 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
 
     # Run the selected extractors synchronously
     try:
-        from .extractors.control_extractor_v2 import extract_controls_v2
+        from .extractors.control_extractor import extract_controls
         from .extractors.cuec_extractor import extract_cuecs
         from .extractors.subservice_orgs import extract_subservice_orgs, filter_third_parties_with_gpt
         from .extractors.product import extract_product_from_report
@@ -2362,16 +2557,33 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
         for name in requested:
             if name == "controls":
                 # Pass granular start hints if available
-                # Refresh latest job snapshot including granular hints
+                # Refresh latest job snapshot including granular hints and report type
                 redis_client = _get_redis()
                 job = await get_job(job_id, redis_client) or {}
-                start_at_control = job.get('resume_start_at_control')
                 start_at_line = job.get('resume_start_at_line')
+                report_type = job.get('report_type', 'SOC2')  # Default to SOC2 if not set
+                
+                # Load section results for unified extractor
                 try:
-                    ran[name] = extract_controls_v2(start_at_control=start_at_control, start_at_line=start_at_line)
-                except TypeError:
-                    # Backward compatibility if signature not yet updated
-                    ran[name] = extract_controls_v2()
+                    import json as _json_module
+                    with open(data_path('data/json/section_results.json'), 'r', encoding='utf-8') as sf:
+                        sections = _json_module.load(sf)
+                except Exception as section_err:
+                    logging.error(f"Failed to load section_results.json: {section_err}")
+                    sections = []
+                
+                # Call unified extractor with report type and sections
+                try:
+                    ran[name] = extract_controls(
+                        sections=sections,
+                        report_type=report_type,
+                        enable_assertion_mapping=False,  # Can be enabled based on config or user preference
+                        start_at_line=start_at_line
+                    )
+                except TypeError as te:
+                    # Fallback to minimal signature if something is wrong
+                    logging.error(f"extract_controls signature error: {te}, trying minimal call")
+                    ran[name] = extract_controls(sections=sections, report_type=report_type)
             elif name == "cuecs":
                 ran[name] = extract_cuecs()
             elif name == "subservice_orgs":
@@ -2654,6 +2866,11 @@ async def get_runtime_config():
             "allow_regex_fallbacks": cfg.ALLOW_REGEX_FALLBACKS,
             "control_embedding_mapping_enabled": cfg.CONTROL_EMBEDDING_MAPPING_ENABLED,
             "docker_control_enabled": cfg.DOCKER_CONTROL_ENABLED,
+            "quick_test_mode_enabled": cfg.QUICK_TEST_MODE_ENABLED,
+        },
+        "quick_test": {
+            "enabled": cfg.QUICK_TEST_MODE_ENABLED,
+            "max_controls": cfg.QUICK_TEST_MAX_CONTROLS,
         }
     }
 
@@ -2676,6 +2893,54 @@ async def get_budget_snapshot():
         "overlap_chars": cfg.TEXT_OVERLAP,
         "chars_per_token": cfg.CHARS_PER_TOKEN,
     }
+
+@app.post("/config/quick-test-mode")
+async def toggle_quick_test_mode(request: Request):
+    """Toggle quick test mode by updating .env file"""
+    from pathlib import Path
+    import os
+    
+    try:
+        data = await request.json()
+        enabled = data.get("enabled", False)
+        max_controls = data.get("max_controls", 10)
+        
+        # Find .env file
+        env_file = Path(os.getenv("ENV_FILE_PATH", ".env"))
+        if not env_file.is_absolute():
+            # Try project root
+            env_file = Path(__file__).parent.parent.parent / ".env"
+        
+        if not env_file.exists():
+            return JSONResponse({"error": ".env file not found"}, status_code=404)
+        
+        # Read current content
+        content = env_file.read_text(encoding='utf-8')
+        
+        # Remove existing settings
+        import re
+        content = re.sub(r'(?m)^QUICK_TEST_MODE=.*$', '', content)
+        content = re.sub(r'(?m)^QUICK_TEST_MAX_CONTROLS=.*$', '', content)
+        content = re.sub(r'(?m)^\s*# Quick Test Mode.*$', '', content)
+        content = content.strip()
+        
+        # Add new settings if enabled
+        if enabled:
+            content += f"\n\n# Quick Test Mode - Extract limited controls for faster testing\nQUICK_TEST_MODE=true\nQUICK_TEST_MAX_CONTROLS={max_controls}\n"
+        
+        # Write back
+        env_file.write_text(content, encoding='utf-8')
+        
+        return {
+            "status": "ok",
+            "enabled": enabled,
+            "max_controls": max_controls if enabled else None,
+            "message": "Settings updated. Backend restart required for changes to take effect.",
+            "requires_restart": True
+        }
+    except Exception as e:
+        logging.error(f"Error toggling quick test mode: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 # Help system endpoints
 @app.get("/help/index")
@@ -2814,8 +3079,12 @@ async def get_history(limit: int = 100, db=Depends(get_db)):
     history = []
     for row in scan_rows:
         # Get company name for this scan
+        # Order by confidence DESC, id DESC to get the most confident/recent company record
         company_result = await db.execute(
-            select(Company).where(Company.scan_id == row.id)
+            select(Company)
+            .where(Company.scan_id == row.id)
+            .order_by(Company.confidence.desc().nullslast(), Company.id.desc())
+            .limit(1)
         )
         company_row = company_result.scalar_one_or_none()
         company_name = company_row.name if company_row else None
@@ -2954,21 +3223,51 @@ def sanitize_orm_kwargs(kwargs):
 
 @app.get("/framework_criteria")
 async def get_framework_criteria():
-    # Group TSC by section
-    tsc_by_section = {}
-    for crit in TSC_CRITERIA:
-        section = crit.get("section", "Unspecified")
-        if section not in tsc_by_section:
-            tsc_by_section[section] = []
-        tsc_by_section[section].append({"id": crit["id"], "description": crit["description"]})
-    # Group COSO by component/section
-    coso_by_section = {}
-    for crit in COSO_2013_CRITERIA:
-        section = crit.get("component", "Unspecified")
-        if section not in coso_by_section:
-            coso_by_section[section] = []
-        coso_by_section[section].append({"id": crit["id"], "description": crit["description"]})
-    return {"tsc": tsc_by_section, "coso": coso_by_section}
+    """
+    Get all framework criteria grouped by framework and section.
+    Returns a dynamic structure supporting all registered frameworks.
+    """
+    from .frameworks import FRAMEWORK_REGISTRY, load_framework_criteria
+    
+    result = {}
+    
+    for framework_name, framework_info in FRAMEWORK_REGISTRY.items():
+        criteria_list = load_framework_criteria(framework_name)
+        
+        if not criteria_list:
+            continue  # Skip frameworks without criteria definitions
+        
+        # Group criteria by section/component/category
+        grouped = {}
+        for crit in criteria_list:
+            # Determine grouping key based on framework structure
+            # TSC uses "domain", COSO uses "component", others use "section" or "category"
+            section_key = (
+                crit.get("section") or 
+                crit.get("component") or 
+                crit.get("category") or 
+                crit.get("domain") or 
+                "Unspecified"
+            )
+            
+            if section_key not in grouped:
+                grouped[section_key] = []
+            
+            grouped[section_key].append({
+                "id": crit["id"],
+                "description": crit.get("description") or crit.get("name") or "",
+                "name": crit.get("name", "")
+            })
+        
+        result[framework_name.lower()] = {
+            "framework_name": framework_name,
+            "display_name": framework_info.display_name,
+            "sections": grouped,
+            "color": framework_info.color,
+            "icon": framework_info.icon
+        }
+    
+    return result
 
 @app.get("/executive_summary/{scan_id}")
 async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=Depends(get_db)):
@@ -3466,7 +3765,14 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             if new_val is not None:
                 ctrl.control_confidence = new_val
             justification_note = f"UI edit: control_confidence {old} -> {ctrl.control_confidence}"
-        if "confidence_calc" in data:
+        if "analyst_notes" in data:
+            ctrl.analyst_notes = data["analyst_notes"]
+            from datetime import datetime
+            now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+            existing = ctrl.confidence_calc or ""
+            separator = "\n" if existing and not existing.endswith("\n") else ""
+            ctrl.confidence_calc = f"{existing}{separator}Analyst notes updated {now}"
+        elif "confidence_calc" in data:
             ctrl.confidence_calc = data["confidence_calc"]
         if "annotation" in data:
             ctrl.annotation = data["annotation"]
@@ -3496,7 +3802,21 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             db.add(scan_row)
         db.add(ctrl)
         await db.commit()
-        return {"status": "ok"}
+        await db.refresh(ctrl)
+        return {
+            "id": ctrl.id,
+            "control_id": ctrl.control_id,
+            "control_desc": ctrl.control_desc,
+            "control_confidence": ctrl.control_confidence,
+            "confidence_calc": ctrl.confidence_calc,
+            "analyst_notes": ctrl.analyst_notes,
+            "annotation": ctrl.annotation,
+            "control_tsc_id": ctrl.control_tsc_id,
+            "control_coso_id": ctrl.control_coso_id,
+            "control_page_refs": ctrl.control_page_refs,
+            "has_deviation": ctrl.has_deviation,
+            "deviation_desc": ctrl.deviation_desc
+        }
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/controls/{control_id} DB error: {e}")
@@ -3505,6 +3825,8 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
 @app.patch("/report/{scan_id}/controls/id/{control_db_id}")
 async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     """Update a control by its numeric database ID to avoid duplicate control_id ambiguity."""
+    logging.error(f"[PATCH CONTROL] scan_id={scan_id}, control_id={control_db_id}, payload keys: {list(data.keys())}")
+    logging.error(f"[PATCH CONTROL] Full payload: {data}")
     logging.debug(f"/report/{scan_id}/controls/{control_db_id} payload: {data}")
     try:
         ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id))).scalar_one_or_none()
@@ -3532,7 +3854,14 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, 
             if new_val is not None:
                 ctrl.control_confidence = new_val
             justification_note = f"UI edit: control_confidence {old} -> {ctrl.control_confidence}"
-        if "confidence_calc" in data:
+        if "analyst_notes" in data:
+            ctrl.analyst_notes = data["analyst_notes"]
+            from datetime import datetime
+            now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+            existing = ctrl.confidence_calc or ""
+            separator = "\n" if existing and not existing.endswith("\n") else ""
+            ctrl.confidence_calc = f"{existing}{separator}Analyst notes updated {now}"
+        elif "confidence_calc" in data:
             ctrl.confidence_calc = data["confidence_calc"]
         if "annotation" in data:
             ctrl.annotation = data["annotation"]
@@ -3560,7 +3889,21 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, 
             db.add(scan_row)
         db.add(ctrl)
         await db.commit()
-        return {"status": "ok"}
+        await db.refresh(ctrl)
+        return {
+            "id": ctrl.id,
+            "control_id": ctrl.control_id,
+            "control_desc": ctrl.control_desc,
+            "control_confidence": ctrl.control_confidence,
+            "confidence_calc": ctrl.confidence_calc,
+            "analyst_notes": ctrl.analyst_notes,
+            "annotation": ctrl.annotation,
+            "control_tsc_id": ctrl.control_tsc_id,
+            "control_coso_id": ctrl.control_coso_id,
+            "control_page_refs": ctrl.control_page_refs,
+            "has_deviation": ctrl.has_deviation,
+            "deviation_desc": ctrl.deviation_desc
+        }
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/controls/{control_db_id} DB error: {e}")
@@ -3584,11 +3927,14 @@ async def automated_cleanup(scan_id: int, db):
             "low_confidence_subservice_orgs": 0
         }
         
-        # 1. Get all controls for analysis
+        # 1. Get all controls for analysis (include duplicate instances)
         result = await db.execute(
             select(Control).where(
                 Control.scan_id == scan_id,
-                Control.merged_to_control_id == None
+                and_(
+                    (Control.merged_to_control_id == None) | 
+                    (Control.merged_to_control_id == 'DUPLICATE_INSTANCE')
+                )
             ).order_by(Control.control_seq)
         )
         controls = result.scalars().all()
@@ -3789,7 +4135,10 @@ async def penalize_incomplete_controls(scan_id: int, db):
         result = await db.execute(
             select(Control).where(
                 Control.scan_id == scan_id,
-                Control.merged_to_control_id == None
+                and_(
+                    (Control.merged_to_control_id == None) | 
+                    (Control.merged_to_control_id == 'DUPLICATE_INSTANCE')
+                )
             )
         )
         controls = result.scalars().all()
@@ -3839,6 +4188,145 @@ async def trigger_cleanup(scan_id: int, db=Depends(get_db)):
         logging.error(f"Error triggering cleanup: {e}", exc_info=True)
         return JSONResponse({"error": str(e)}, status_code=500)
 
+def detect_duplicate_type(ctrl1: Control, ctrl2: Control) -> Tuple[str, float, Dict[str, Any]]:
+    """
+    Classify duplicate controls as IDENTICAL, CRITERIA_VARIANT, TEST_VARIANT, or AMBIGUOUS.
+    
+    Returns:
+        Tuple of (type, confidence, metadata) where:
+        - type: "IDENTICAL" | "CRITERIA_VARIANT" | "TEST_VARIANT" | "AMBIGUOUS"
+        - confidence: 0.0-1.0 score for this classification
+        - metadata: dict with detailed comparison info
+    """
+    from .gpt_client import gpt_extract
+    import json
+    
+    metadata = {}
+    
+    # Extract descriptions
+    desc1 = (ctrl1.control_desc or "").strip()
+    desc2 = (ctrl2.control_desc or "").strip()
+    
+    if not desc1 or not desc2:
+        return ("AMBIGUOUS", 0.3, {"reason": "Missing description(s)"})
+    
+    # 1. Calculate description similarity using GPT
+    try:
+        desc_prompt = f"""Rate the semantic similarity between these two control descriptions on a scale of 0.0 to 1.0.
+Return ONLY a number between 0.0 and 1.0, nothing else.
+
+Description 1: {desc1[:500]}
+Description 2: {desc2[:500]}"""
+        
+        desc_sim_response = gpt_extract(desc_prompt, "duplicate_detection")
+        desc_similarity = float(desc_sim_response.strip())
+        desc_similarity = max(0.0, min(1.0, desc_similarity))
+        metadata["description_similarity"] = desc_similarity
+    except Exception as e:
+        logging.warning(f"Description similarity GPT call failed: {e}")
+        # Fallback: exact match check
+        desc_similarity = 1.0 if desc1.lower() == desc2.lower() else 0.6
+        metadata["description_similarity"] = desc_similarity
+        metadata["desc_sim_fallback"] = True
+    
+    # 2. Compare TSC/COSO mappings
+    tsc1 = ctrl1.control_tsc_mappings or []
+    tsc2 = ctrl2.control_tsc_mappings or []
+    coso1 = ctrl1.control_coso_mappings or []
+    coso2 = ctrl2.control_coso_mappings or []
+    
+    # Get primary criteria (first in array)
+    tsc1_primary = tsc1[0].get("id") if tsc1 and isinstance(tsc1, list) and len(tsc1) > 0 else None
+    tsc2_primary = tsc2[0].get("id") if tsc2 and isinstance(tsc2, list) and len(tsc2) > 0 else None
+    coso1_primary = coso1[0].get("id") if coso1 and isinstance(coso1, list) and len(coso1) > 0 else None
+    coso2_primary = coso2[0].get("id") if coso2 and isinstance(coso2, list) and len(coso2) > 0 else None
+    
+    criteria_match = (tsc1_primary == tsc2_primary if tsc1_primary and tsc2_primary else False) or \
+                     (coso1_primary == coso2_primary if coso1_primary and coso2_primary else False)
+    
+    metadata["criteria_match"] = criteria_match
+    metadata["tsc1_primary"] = tsc1_primary
+    metadata["tsc2_primary"] = tsc2_primary
+    metadata["coso1_primary"] = coso1_primary
+    metadata["coso2_primary"] = coso2_primary
+    
+    # 3. Compare test procedures using GPT
+    test1 = (ctrl1.control_test or "").strip()
+    test2 = (ctrl2.control_test or "").strip()
+    
+    test_difference = 0.0
+    if test1 and test2:
+        try:
+            test_prompt = f"""Rate how different these test procedures are on a scale of 0.0 to 1.0.
+Consider: sampling methods, frequency, scope, evidence types.
+0.0 = identical, 1.0 = completely different
+Return ONLY a number between 0.0 and 1.0, nothing else.
+
+Test 1: {test1[:400]}
+Test 2: {test2[:400]}"""
+            
+            test_diff_response = gpt_extract(test_prompt, "duplicate_detection")
+            test_difference = float(test_diff_response.strip())
+            test_difference = max(0.0, min(1.0, test_difference))
+        except Exception as e:
+            logging.warning(f"Test procedure difference GPT call failed: {e}")
+            # Fallback: exact match check
+            test_difference = 0.0 if test1.lower() == test2.lower() else 0.5
+            metadata["test_diff_fallback"] = True
+    
+    metadata["test_difference"] = test_difference
+    
+    # 4. Compare deviation status
+    dev1 = ctrl1.has_deviation or False
+    dev2 = ctrl2.has_deviation or False
+    deviation_differs = (dev1 != dev2)
+    metadata["deviation_differs"] = deviation_differs
+    
+    # 5. Calculate page distance
+    pages1 = ctrl1.control_page_refs or []
+    pages2 = ctrl2.control_page_refs or []
+    page_distance = 0
+    if pages1 and pages2:
+        try:
+            min1 = min([int(p) for p in pages1 if str(p).isdigit()])
+            min2 = min([int(p) for p in pages2 if str(p).isdigit()])
+            page_distance = abs(min1 - min2)
+        except (ValueError, TypeError):
+            pass
+    metadata["page_distance"] = page_distance
+    
+    # CLASSIFICATION LOGIC
+    
+    # IDENTICAL: Very similar descriptions (>95%), same criteria, test procedures similar (<20% diff)
+    if desc_similarity >= 0.95 and criteria_match and test_difference < 0.20:
+        confidence = 0.90 + (desc_similarity - 0.95) * 2  # 0.90-1.0
+        return ("IDENTICAL", min(confidence, 1.0), metadata)
+    
+    # CRITERIA_VARIANT: Similar descriptions (>85%), DIFFERENT criteria, tests somewhat different (>30%)
+    if desc_similarity >= 0.85 and not criteria_match and test_difference >= 0.30:
+        confidence = 0.70 + (desc_similarity - 0.85) * 0.67  # 0.70-0.80
+        # Bonus for page distance (suggests different sections)
+        if page_distance > 10:
+            confidence += 0.05
+        return ("CRITERIA_VARIANT", min(confidence, 0.95), metadata)
+    
+    # TEST_VARIANT: Same criteria, but tests significantly different (>40%) OR different deviation status
+    if criteria_match and (test_difference >= 0.40 or deviation_differs):
+        confidence = 0.70 + test_difference * 0.15
+        if deviation_differs:
+            confidence += 0.05
+        return ("TEST_VARIANT", min(confidence, 0.90), metadata)
+    
+    # AMBIGUOUS: Doesn't fit clear patterns
+    # Calculate ambiguity confidence based on how unclear the situation is
+    ambiguity_confidence = 0.50
+    if desc_similarity < 0.85:
+        ambiguity_confidence += 0.15  # Lower desc similarity = more ambiguous
+    if 0.20 <= test_difference <= 0.40:
+        ambiguity_confidence += 0.10  # Mid-range test diff = unclear
+    
+    return ("AMBIGUOUS", min(ambiguity_confidence, 0.75), metadata)
+
 @app.get("/report/{scan_id}/controls/suggest-merges")
 async def suggest_control_merges(scan_id: int, db=Depends(get_db)):
     """
@@ -3857,11 +4345,14 @@ async def suggest_control_merges(scan_id: int, db=Depends(get_db)):
         from .gpt_client import gpt_extract
         
         # Get all controls for this scan that haven't been merged away
-        # (merged_to_control_id is NULL for primary controls and controls not yet merged)
+        # (merged_to_control_id is NULL for standalone controls, 'DUPLICATE_INSTANCE' for linked variants)
         result = await db.execute(
             select(Control).where(
                 Control.scan_id == scan_id,
-                Control.merged_to_control_id == None
+                and_(
+                    (Control.merged_to_control_id == None) | 
+                    (Control.merged_to_control_id == 'DUPLICATE_INSTANCE')
+                )
             ).order_by(Control.control_seq)
         )
         controls = result.scalars().all()
@@ -3896,88 +4387,70 @@ async def suggest_control_merges(scan_id: int, db=Depends(get_db)):
             
             for idx, candidate in enumerate(candidates):
                 logging.error(f"[SUGGEST-MERGES] Processing candidate {idx+1}/{len(candidates)}: DB ID {candidate.id}")
-                # Calculate merge confidence
-                confidence_score = 0.0
-                confidence_breakdown = []
                 
-                # 1. Description similarity (65% weight) - use GPT
+                # Use new duplicate detection algorithm
+                duplicate_type, confidence, metadata = detect_duplicate_type(primary, candidate)
+                
+                logging.error(f"[SUGGEST-MERGES] Duplicate type: {duplicate_type}, confidence: {confidence:.3f}")
+                
+                # Determine action based on duplicate type
+                if duplicate_type == "IDENTICAL":
+                    action = "merge"
+                    recommended_action = "Merge - identical controls"
+                elif duplicate_type in ["CRITERIA_VARIANT", "TEST_VARIANT"]:
+                    action = "link_as_instances"
+                    if duplicate_type == "CRITERIA_VARIANT":
+                        recommended_action = "Link as instances - same control for different TSC/COSO criteria"
+                    else:
+                        recommended_action = "Link as instances - same control with different test procedures or deviation status"
+                else:  # AMBIGUOUS
+                    action = "review_manually"
+                    recommended_action = "Manual review needed - unclear relationship"
+                
+                # Extract comparison details
                 desc1 = (primary.control_desc or "").strip()
                 desc2 = (candidate.control_desc or "").strip()
-                
-                if desc1 and desc2:
-                    try:
-                        similarity_prompt = f"""Rate the semantic similarity between these two control descriptions on a scale of 0.0 to 1.0.
-Return ONLY a number between 0.0 and 1.0, nothing else.
-
-Description 1: {desc1[:500]}
-Description 2: {desc2[:500]}"""
-                        
-                        sim_response = gpt_extract(similarity_prompt, "merge_suggestions")
-                        desc_similarity = float(sim_response.strip())
-                        desc_similarity = max(0.0, min(1.0, desc_similarity))  # Clamp to [0, 1]
-                        confidence_score += desc_similarity * 0.65
-                        confidence_breakdown.append(f"Description similarity: {desc_similarity:.2f} (weight: 0.65)")
-                    except Exception as e:
-                        logging.warning(f"Description similarity failed for {ctrl_id}: {e}")
-                        # Fallback: exact match = 1.0, different = 0.6
-                        if desc1.lower() == desc2.lower():
-                            confidence_score += 0.65
-                            confidence_breakdown.append("Description exact match (weight: 0.65)")
-                        else:
-                            confidence_score += 0.39  # 0.6 * 0.65
-                            confidence_breakdown.append("Description different (weight: 0.65, score: 0.60)")
-                
-                # 2. TSC/COSO mapping match (15% weight)
-                if primary.control_tsc_id and candidate.control_tsc_id:
-                    if primary.control_tsc_id == candidate.control_tsc_id:
-                        confidence_score += 0.15
-                        confidence_breakdown.append("TSC ID match (weight: 0.15)")
-                    
-                if primary.control_coso_id and candidate.control_coso_id:
-                    if primary.control_coso_id == candidate.control_coso_id:
-                        # Don't double-count if already matched on TSC
-                        if not (primary.control_tsc_id and candidate.control_tsc_id and primary.control_tsc_id == candidate.control_tsc_id):
-                            confidence_score += 0.15
-                            confidence_breakdown.append("COSO ID match (weight: 0.15)")
-                
-                # 3. Test procedure similarity (10% weight)
                 test1 = (primary.control_test or "").strip()
                 test2 = (candidate.control_test or "").strip()
-                if test1 and test2:
-                    # Simple Levenshtein-like comparison
-                    if test1.lower() == test2.lower():
-                        confidence_score += 0.10
-                        confidence_breakdown.append("Test procedures identical (weight: 0.10)")
-                    elif len(test1) > 20 and len(test2) > 20 and test1[:50].lower() == test2[:50].lower():
-                        confidence_score += 0.07
-                        confidence_breakdown.append("Test procedures similar (weight: 0.10, score: 0.70)")
                 
-                # 4. Deviation flag agreement (5% weight)
-                if primary.has_deviation == candidate.has_deviation:
-                    confidence_score += 0.05
-                    confidence_breakdown.append("Deviation flags match (weight: 0.05)")
+                # Build criteria differences
+                criteria_differences = {
+                    "control_1_primary": [metadata.get("tsc1_primary")] if metadata.get("tsc1_primary") else [],
+                    "control_2_primary": [metadata.get("tsc2_primary")] if metadata.get("tsc2_primary") else [],
+                    "overlap": []
+                }
+                if metadata.get("tsc1_primary") and metadata.get("tsc2_primary") and metadata.get("tsc1_primary") == metadata.get("tsc2_primary"):
+                    criteria_differences["overlap"].append(metadata.get("tsc1_primary"))
                 
-                # 5. Page proximity bonus (5% weight) - adjacent pages likely indicate chunk-split duplicates
-                primary_pages = primary.control_page_refs or []
-                candidate_pages = candidate.control_page_refs or []
-                if primary_pages and candidate_pages:
-                    try:
-                        primary_min = min([int(p) for p in primary_pages if str(p).isdigit()])
-                        primary_max = max([int(p) for p in primary_pages if str(p).isdigit()])
-                        candidate_min = min([int(p) for p in candidate_pages if str(p).isdigit()])
-                        candidate_max = max([int(p) for p in candidate_pages if str(p).isdigit()])
-                        
-                        # Adjacent pages or overlapping ranges
-                        if abs(primary_max - candidate_min) <= 1 or abs(candidate_max - primary_min) <= 1:
-                            confidence_score += cfg.PAGE_PROXIMITY_WEIGHT
-                            confidence_breakdown.append(f"Page proximity bonus (weight: {cfg.PAGE_PROXIMITY_WEIGHT})")
-                    except (ValueError, TypeError):
-                        pass  # Skip if page refs are non-numeric
+                # Build test differences summary
+                test_differences = ""
+                if metadata.get("test_difference", 0) > 0.3:
+                    test_differences = f"Test procedures differ significantly (difference score: {metadata.get('test_difference', 0):.2f})"
+                elif metadata.get("test_difference", 0) > 0:
+                    test_differences = f"Test procedures somewhat similar (difference score: {metadata.get('test_difference', 0):.2f})"
+                else:
+                    test_differences = "Test procedures identical or very similar"
                 
-                logging.error(f"[SUGGEST-MERGES] Final score: {confidence_score:.3f}, threshold: {cfg.MERGE_SUGGESTION_MIN_CONFIDENCE}, breakdown: {confidence_breakdown}")
+                # Build deviation differences
+                deviation_differences = ""
+                if metadata.get("deviation_differs"):
+                    dev1 = primary.has_deviation or False
+                    dev2 = candidate.has_deviation or False
+                    deviation_differences = f"Control 1: {'has deviation' if dev1 else 'no deviation'}, Control 2: {'has deviation' if dev2 else 'no deviation'}"
+                else:
+                    deviation_differences = "Both controls have same deviation status"
+                
+                # Build rationale
+                rationale = f"Description similarity: {metadata.get('description_similarity', 0):.2f}. "
+                if duplicate_type == "CRITERIA_VARIANT":
+                    rationale += f"Different TSC/COSO mappings ({metadata.get('tsc1_primary')} vs {metadata.get('tsc2_primary')}). "
+                elif duplicate_type == "TEST_VARIANT":
+                    rationale += "Same criteria but different test approaches. "
+                if metadata.get("page_distance", 0) > 10:
+                    rationale += f"Appears in different sections (page distance: {metadata.get('page_distance')})."
                 
                 # Only suggest if confidence meets threshold
-                if confidence_score >= cfg.MERGE_SUGGESTION_MIN_CONFIDENCE:
+                if confidence >= cfg.MERGE_SUGGESTION_MIN_CONFIDENCE:
                     logging.error(f"[SUGGEST-MERGES] Adding suggestion: {ctrl_id} (primary {primary.id}, candidate {candidate.id})")
                     suggestions.append({
                         "control_id": ctrl_id,
@@ -3985,21 +4458,35 @@ Description 2: {desc2[:500]}"""
                         "candidate_db_id": candidate.id,
                         "primary_pages": primary.control_page_refs or [],
                         "candidate_pages": candidate.control_page_refs or [],
-                        "merge_confidence": round(confidence_score, 3),
-                        "confidence_breakdown": confidence_breakdown,
-                        "primary_desc": desc1[:100] + "..." if len(desc1) > 100 else desc1,
-                        "candidate_desc": desc2[:100] + "..." if len(desc2) > 100 else desc2
+                        "merge_confidence": round(confidence, 3),
+                        "duplicate_type": duplicate_type,
+                        "action": action,
+                        "recommended_action": recommended_action,
+                        "criteria_differences": criteria_differences,
+                        "test_differences": test_differences,
+                        "deviation_differences": deviation_differences,
+                        "rationale": rationale,
+                        "metadata": metadata,
+                        "primary_desc": desc1,
+                        "candidate_desc": desc2,
+                        "primary_test": test1,
+                        "candidate_test": test2,
+                        "primary_deviation": primary.deviation_desc or "",
+                        "candidate_deviation": candidate.deviation_desc or "",
+                        "primary_has_deviation": primary.has_deviation or False,
+                        "candidate_has_deviation": candidate.has_deviation or False
                     })
                 else:
-                    logging.error(f"[SUGGEST-MERGES] Score {confidence_score:.3f} below threshold {cfg.MERGE_SUGGESTION_MIN_CONFIDENCE}, skipping")
+                    logging.error(f"[SUGGEST-MERGES] Confidence {confidence:.3f} below threshold {cfg.MERGE_SUGGESTION_MIN_CONFIDENCE}, skipping")
                     
-                    # Flag as extraction error if score is very low (<0.60) - likely duplicate control_id with different descriptions
-                    if confidence_score < 0.60 and candidate.control_confidence > 0.3:
+                    # Flag as extraction error if description similarity is very low (<0.60) - likely duplicate control_id with different descriptions
+                    desc_sim = metadata.get("description_similarity", 0)
+                    if desc_sim < 0.60 and candidate.control_confidence > 0.3:
                         candidate.control_confidence = 0.3
-                        note = "\nConfidence reduced to 0.3: Likely extraction error - duplicate control_id with dissimilar description (similarity score < 0.60)"
+                        note = f"\nConfidence reduced to 0.3: Likely extraction error - duplicate control_id with dissimilar description (similarity score {desc_sim:.2f} < 0.60)"
                         candidate.confidence_calc = (candidate.confidence_calc or "") + note
                         db.add(candidate)
-                        logging.error(f"[SUGGEST-MERGES] Flagged control {candidate.id} as extraction error (score {confidence_score:.3f})")
+                        logging.error(f"[SUGGEST-MERGES] Flagged control {candidate.id} as extraction error (similarity {desc_sim:.3f})")
         
         # Flag controls with blank/null control_id as extraction errors
         blank_controls = [c for c in controls if not c.control_id or str(c.control_id).strip() == ""]
@@ -4274,6 +4761,382 @@ async def split_control(scan_id: int, control_db_id: int, db=Depends(get_db)):
         logging.error(f"Error splitting control {control_db_id}: {e}", exc_info=True)
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@app.post("/report/{scan_id}/controls/link_instances")
+async def link_control_instances(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+    """
+    Link duplicate controls as instances of the same control with different criteria/test procedures.
+    
+    Request body:
+    {
+        "control_ids": [123, 456, 789],
+        "duplicate_type": "criteria_variant"|"test_variant",
+        "user_note": "optional explanation"
+    }
+    
+    Actions:
+    - Generates UUID for duplicate_group_id
+    - Sets is_duplicate_instance=True and merged_to_control_id='DUPLICATE_INSTANCE'
+    - Populates instance_differentiator with criteria/test differences
+    - Boosts confidence by +0.15 with audit trail
+    - Creates merge_history entry
+    """
+    import json
+    import uuid
+    from .gpt_client import gpt_extract
+    
+    try:
+        control_ids = data.get("control_ids", [])
+        duplicate_type = data.get("duplicate_type", "criteria_variant")
+        user_note = data.get("user_note", "")
+        
+        if len(control_ids) < 2:
+            raise HTTPException(status_code=400, detail="Need at least 2 controls to link as instances")
+        
+        # Get all controls
+        result = await db.execute(
+            select(Control).where(Control.scan_id == scan_id, Control.id.in_(control_ids))
+        )
+        controls = result.scalars().all()
+        
+        if len(controls) != len(control_ids):
+            raise HTTPException(status_code=404, detail="Some control IDs not found")
+        
+        # Generate shared duplicate_group_id
+        duplicate_group_id = str(uuid.uuid4())
+        total_instances = len(controls)
+        
+        logging.info(f"[LINK-INSTANCES] Linking {total_instances} controls with group ID {duplicate_group_id}")
+        
+        # Collect all page refs for audit trail
+        all_pages = []
+        for ctrl in controls:
+            if ctrl.control_page_refs:
+                all_pages.extend(ctrl.control_page_refs)
+        all_pages = sorted(list(set(all_pages)))
+        
+        # Process each control
+        for idx, ctrl in enumerate(controls):
+            instance_number = idx + 1
+            
+            # Extract unique criteria for this instance
+            tsc_mappings = ctrl.control_tsc_mappings or []
+            coso_mappings = ctrl.control_coso_mappings or []
+            criteria = []
+            if tsc_mappings and isinstance(tsc_mappings, list) and len(tsc_mappings) > 0:
+                criteria.extend([m.get("id") for m in tsc_mappings[:2] if m.get("id")])
+            if coso_mappings and isinstance(coso_mappings, list) and len(coso_mappings) > 0:
+                criteria.extend([m.get("id") for m in coso_mappings[:2] if m.get("id")])
+            
+            # Summarize test approach using GPT
+            test_variance = ""
+            if ctrl.control_test:
+                try:
+                    test_summary_prompt = f"""In 50 characters or less, what's unique about this test approach?
+
+Test procedure: {ctrl.control_test[:300]}
+
+Return ONLY the summary, nothing else."""
+                    test_variance = gpt_extract(test_summary_prompt, "link_instances")
+                    test_variance = test_variance.strip()[:50]
+                except Exception as e:
+                    logging.warning(f"GPT test summary failed for control {ctrl.id}: {e}")
+                    test_variance = "Test procedure present"
+            
+            # Note deviation differences
+            deviation_variance = ""
+            if ctrl.has_deviation:
+                deviation_variance = "Has deviation/exception"
+            
+            # Build instance_differentiator
+            instance_differentiator = {
+                "criteria": criteria,
+                "test_variance": test_variance,
+                "deviation_variance": deviation_variance,
+                "instance_number": instance_number,
+                "total_instances": total_instances,
+                "pages": ctrl.control_page_refs or []
+            }
+            
+            # Set instance fields
+            ctrl.is_duplicate_instance = True
+            ctrl.duplicate_group_id = duplicate_group_id
+            ctrl.merged_to_control_id = "DUPLICATE_INSTANCE"
+            ctrl.instance_differentiator = instance_differentiator
+            
+            # Boost confidence by +0.15
+            original_confidence = ctrl.control_confidence or 0.0
+            new_confidence = min(1.0, original_confidence + 0.15)
+            ctrl.control_confidence = new_confidence
+            
+            # Other instance pages for audit trail
+            other_pages = [p for p in all_pages if p not in (ctrl.control_page_refs or [])]
+            
+            # Document confidence boost
+            boost_note = f"\nConfidence boost (+0.15): Confirmed duplicate instance - control appears {total_instances} times with consistent description, validating extraction accuracy. Original: {original_confidence:.2f} → New: {new_confidence:.2f}. Other instances at pages {other_pages}."
+            ctrl.confidence_calc = (ctrl.confidence_calc or "") + boost_note
+            
+            # Create merge_history entry
+            criteria_str = ", ".join(criteria) if criteria else "N/A"
+            history_entry = {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "type": "instance_link",
+                "duplicate_group_id": duplicate_group_id,
+                "linked_control_ids": control_ids,
+                "duplicate_type": duplicate_type,
+                "reason": f"Same control tested for different {'TSC/COSO criteria' if duplicate_type == 'criteria_variant' else 'test procedures'} ({criteria_str})",
+                "user_note": user_note,
+                "confidence_boost": 0.15
+            }
+            if not ctrl.merge_history:
+                ctrl.merge_history = []
+            ctrl.merge_history.append(history_entry)
+            
+            db.add(ctrl)
+            logging.info(f"[LINK-INSTANCES] Linked control {ctrl.id} as instance {instance_number}/{total_instances}")
+        
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        
+        await db.commit()
+        
+        logging.info(f"[LINK-INSTANCES] Successfully linked {total_instances} controls with group ID {duplicate_group_id}")
+        
+        return {
+            "success": True,
+            "duplicate_group_id": duplicate_group_id,
+            "controls_linked": total_instances,
+            "confidence_boost_applied": 0.15,
+            "linked_control_ids": control_ids
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error linking control instances: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/controls/unlink_instance/{control_id}")
+async def unlink_control_instance(scan_id: int, control_id: int, db=Depends(get_db)):
+    """
+    Unlink a duplicate instance group, restoring all controls to standalone status.
+    
+    Actions:
+    - Finds all controls in the same duplicate_group_id
+    - Clears is_duplicate_instance, duplicate_group_id, instance_differentiator, merged_to_control_id
+    - Reverses confidence boost (-0.15)
+    - Adds audit trail to merge_history
+    """
+    try:
+        # Get the control to find its duplicate_group_id
+        ctrl = (await db.execute(
+            select(Control).where(Control.scan_id == scan_id, Control.id == control_id)
+        )).scalar_one_or_none()
+        
+        if not ctrl:
+            raise HTTPException(status_code=404, detail="Control not found")
+        
+        if not ctrl.duplicate_group_id:
+            return JSONResponse({"error": "Control is not part of a duplicate instance group"}, status_code=400)
+        
+        group_id = ctrl.duplicate_group_id
+        
+        # Get all controls in the same group
+        result = await db.execute(
+            select(Control).where(
+                Control.scan_id == scan_id,
+                Control.duplicate_group_id == group_id
+            )
+        )
+        grouped_controls = result.scalars().all()
+        
+        logging.info(f"[UNLINK-INSTANCES] Unlinking {len(grouped_controls)} controls from group {group_id}")
+        
+        affected_ids = []
+        for ctrl in grouped_controls:
+            affected_ids.append(ctrl.id)
+            
+            # Reverse confidence boost
+            original_confidence = ctrl.control_confidence or 0.0
+            new_confidence = max(0.0, original_confidence - 0.15)
+            ctrl.control_confidence = new_confidence
+            
+            # Document confidence adjustment
+            adjust_note = f"\nConfidence adjustment (-0.15): Duplicate instance link removed on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}. Previous group ID: {group_id}. Original: {original_confidence:.2f} → New: {new_confidence:.2f}"
+            ctrl.confidence_calc = (ctrl.confidence_calc or "") + adjust_note
+            
+            # Add audit trail to merge_history
+            history_entry = {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "type": "instance_unlink",
+                "previous_group_id": group_id,
+                "reason": "User unlinked duplicate instance group",
+                "controls_affected": affected_ids,
+                "confidence_adjustment": -0.15
+            }
+            if not ctrl.merge_history:
+                ctrl.merge_history = []
+            ctrl.merge_history.append(history_entry)
+            
+            # Clear instance fields
+            ctrl.is_duplicate_instance = False
+            ctrl.duplicate_group_id = None
+            ctrl.instance_differentiator = None
+            ctrl.merged_to_control_id = None
+            
+            db.add(ctrl)
+            logging.info(f"[UNLINK-INSTANCES] Unlinked control {ctrl.id}")
+        
+        # Mark executive summary stale
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            db.add(scan_row)
+        
+        await db.commit()
+        
+        logging.info(f"[UNLINK-INSTANCES] Successfully unlinked {len(grouped_controls)} controls from group {group_id}")
+        
+        return {
+            "success": True,
+            "controls_unlinked": len(grouped_controls),
+            "previous_group_id": group_id,
+            "confidence_adjustment": -0.15,
+            "affected_control_ids": affected_ids
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error unlinking control instance: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/report/{scan_id}/controls/dismiss_merge_suggestion")
+async def dismiss_merge_suggestion(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+    """
+    Dismiss a merge suggestion - mark controls as reviewed and accept as separate/disparate records.
+    This prevents the same controls from appearing in future merge suggestions.
+    
+    Request body:
+    {
+        "control_ids": [123, 456],  // The two controls involved in the dismissed suggestion
+        "reason": "Different intent/context"  // Optional explanation
+    }
+    
+    Actions:
+    - Adds audit entry to both controls' merge_history documenting dismissal
+    - Adds note to confidence_calc for transparency
+    - Does NOT change confidence scores or merge status
+    """
+    try:
+        control_ids = data.get("control_ids", [])
+        reason = data.get("reason", "User reviewed and accepted as separate controls")
+        
+        if len(control_ids) != 2:
+            raise HTTPException(status_code=400, detail="Need exactly 2 control IDs for dismissal")
+        
+        # Get both controls
+        result = await db.execute(
+            select(Control).where(Control.scan_id == scan_id, Control.id.in_(control_ids))
+        )
+        controls = result.scalars().all()
+        
+        if len(controls) != 2:
+            raise HTTPException(status_code=404, detail="One or both controls not found")
+        
+        timestamp = datetime.datetime.now()
+        
+        # Process each control
+        for ctrl in controls:
+            other_id = [c.id for c in controls if c.id != ctrl.id][0]
+            
+            # Add audit trail to merge_history
+            dismissal_entry = {
+                "timestamp": timestamp.isoformat(),
+                "type": "merge_suggestion_dismissed",
+                "dismissed_pairing_with": other_id,
+                "reason": reason,
+                "action": "User reviewed potential duplicate and confirmed as separate control"
+            }
+            if not ctrl.merge_history:
+                ctrl.merge_history = []
+            ctrl.merge_history.append(dismissal_entry)
+            
+            # Document in confidence_calc for transparency
+            dismiss_note = f"\nMerge suggestion dismissed on {timestamp.strftime('%Y-%m-%d %H:%M:%S')}: Reviewed pairing with control ID {other_id} and accepted as separate records. Reason: {reason}"
+            ctrl.confidence_calc = (ctrl.confidence_calc or "") + dismiss_note
+            
+            db.add(ctrl)
+            logging.info(f"[DISMISS-MERGE] Dismissed merge suggestion for control {ctrl.id} paired with {other_id}")
+        
+        await db.commit()
+        
+        return {
+            "status": "ok",
+            "dismissed_controls": control_ids,
+            "message": "Merge suggestion dismissed and logged in both controls' audit trails"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error dismissing merge suggestion: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/report/{scan_id}/controls/duplicate_groups")
+async def get_duplicate_groups(scan_id: int, db=Depends(get_db)):
+    """
+    Get all duplicate control instance groups for a scan.
+    Returns grouped controls with metadata about their differences.
+    """
+    try:
+        # Find all controls with duplicate_group_id set
+        result = await db.execute(
+            select(Control).where(
+                Control.scan_id == scan_id,
+                Control.is_duplicate_instance == True,
+                Control.duplicate_group_id != None
+            ).order_by(Control.duplicate_group_id, Control.control_seq)
+        )
+        duplicate_controls = result.scalars().all()
+        
+        # Group by duplicate_group_id
+        groups = {}
+        for ctrl in duplicate_controls:
+            group_id = ctrl.duplicate_group_id
+            if group_id not in groups:
+                groups[group_id] = {
+                    "group_id": group_id,
+                    "control_id": ctrl.control_id,
+                    "controls": []
+                }
+            
+            groups[group_id]["controls"].append({
+                "id": ctrl.id,
+                "control_seq": ctrl.control_seq,
+                "control_desc": ctrl.control_desc,
+                "control_test": ctrl.control_test,
+                "tsc_criteria": ctrl.tsc_criteria,
+                "coso_criteria": ctrl.coso_criteria,
+                "control_confidence": ctrl.control_confidence,
+                "instance_differentiator": ctrl.instance_differentiator
+            })
+        
+        return {
+            "success": True,
+            "total_groups": len(groups),
+            "groups": list(groups.values())
+        }
+        
+    except Exception as e:
+        logging.error(f"Error fetching duplicate groups: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.patch("/report/{scan_id}/cuecs/{cuec_id}/annotation")
 async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.cuec_tsc_id == cuec_id))).scalar_one_or_none()
@@ -4320,6 +5183,8 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...
             cuec.cuec_confidence_justification = f"{prev}{sep}{data['cuec_confidence_justification']}"
         if "annotation" in data:
             cuec.annotation = data["annotation"]
+        if "analyst_notes" in data:
+            cuec.analyst_notes = data["analyst_notes"]
         if "control_strength" in data:
             cuec.control_strength = data["control_strength"]
         # New: allow editing CUEC text fields
@@ -4419,55 +5284,72 @@ async def patch_cuec_by_tsc(scan_id: int, cuec_tsc_id: str, data: Dict[str, Any]
 
 @app.post("/report/{scan_id}/cuecs/{cuec_id}/recompute_frameworks")
 async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_db)):
-    """Recompute TSC/COSO mapping for a CUEC description using multi-match mapping.
-    Updates and persists: cuec_tsc_mappings, cuec_coso_mappings (JSON arrays),
-    plus legacy columns: cuec_tsc_id, cuec_coso_id, cuec_tsc_similarity, cuec_coso_similarity,
-    cuec_tsc_confidence_pct, cuec_coso_confidence_pct, cuec_closest_framework, and framework_alignment fields.
+    """Recompute framework mappings for a CUEC using dynamic multi-framework system.
     
-    Note: For CUECs, we reuse the same map_control_to_frameworks_multi function since the logic is identical.
-    CUECs typically don't have deviations, but the function handles this gracefully.
+    Phase 2: Now supports unlimited frameworks beyond TSC/COSO based on report type.
+    
+    Updates and persists:
+    - framework_mappings: Universal JSON with all framework mappings
+    - primary_framework, primary_criterion_id, primary_confidence
+    - Legacy columns: cuec_tsc_mappings, cuec_coso_mappings (backward compatibility)
+    - Legacy single-match: cuec_tsc_id, cuec_coso_id, etc.
     """
-    from .extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    from .frameworks import get_available_frameworks, map_cuec_to_frameworks_dynamic
+    
+    logging.info(f"[RECOMPUTE] Starting framework recompute for CUEC scan_id={scan_id}, cuec_id={cuec_id}")
     
     try:
         cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.id == cuec_id))).scalar_one_or_none()
         if not cuec:
+            logging.error(f"[RECOMPUTE] CUEC not found: scan_id={scan_id}, cuec_id={cuec_id}")
             return JSONResponse({"error": "CUEC not found"}, status_code=404)
+        
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if not scan_row:
+            logging.error(f"[RECOMPUTE] Scan not found: scan_id={scan_id}")
+            return JSONResponse({"error": "Scan not found"}, status_code=404)
         
         desc = getattr(cuec, "cuec_description", None) or getattr(cuec, "description", None)
         if not desc or not isinstance(desc, str) or not desc.strip():
             return JSONResponse({"error": "CUEC description is empty; cannot compute mapping"}, status_code=400)
         
-        # Call multi-match mapping if enabled, otherwise use legacy single-match
-        if cfg.ENABLE_MULTI_MATCH_MAPPING:
+        logging.info(f"[RECOMPUTE] Found CUEC: cuec_id={cuec.id}")
+        
+        # Get report type
+        report_type = scan_row.report_type.value if scan_row.report_type else "SOC2"
+        logging.info(f"[RECOMPUTE] Report type: {report_type}")
+        
+        # Load available frameworks for this report type
+        detected_standards = scan_row.detected_standards if scan_row.detected_standards else None
+        available_frameworks = get_available_frameworks(report_type, detected_standards)
+        logging.info(f"[RECOMPUTE] Available frameworks: {list(available_frameworks.keys())}")
+        
+        # Phase 2: Use dynamic multi-framework mapping
+        if cfg.ENABLE_MULTI_MATCH_MAPPING and available_frameworks:
             try:
-                tsc_matches, coso_matches = map_control_to_frameworks_multi(
-                    control_desc=desc,
-                    control_id=f"CUEC_{cuec.id}",
-                    has_deviation=False,  # CUECs typically don't have deviations
-                    deviation_desc="",
-                    tsc_criteria=TSC_CRITERIA,
-                    coso_criteria=COSO_2013_CRITERIA,
-                    top_k=3
+                logging.info(f"[RECOMPUTE] Calling map_cuec_to_frameworks_dynamic...")
+                result = map_cuec_to_frameworks_dynamic(
+                    cuec_desc=desc,
+                    cuec_id=f"CUEC_{cuec.id}",
+                    available_frameworks=available_frameworks,
+                    top_k=5
                 )
                 
-                # Store arrays (with type validation)
-                # TYPE VALIDATION: Ensure mappings are arrays (defensive programming)
-                if isinstance(tsc_matches, str):
-                    try:
-                        tsc_matches = json.loads(tsc_matches)
-                        if not isinstance(tsc_matches, list):
-                            tsc_matches = []
-                    except (json.JSONDecodeError, TypeError):
-                        tsc_matches = []
-                if isinstance(coso_matches, str):
-                    try:
-                        coso_matches = json.loads(coso_matches)
-                        if not isinstance(coso_matches, list):
-                            coso_matches = []
-                    except (json.JSONDecodeError, TypeError):
-                        coso_matches = []
+                framework_mappings = result.get("framework_mappings", {})
+                logging.info(f"[RECOMPUTE] Mapping complete: {len(framework_mappings)} frameworks mapped")
                 
+                # Store universal framework_mappings
+                cuec.cuec_framework_mappings = framework_mappings
+                cuec.cuec_primary_framework = result.get("primary_framework")
+                cuec.cuec_primary_criterion_id = result.get("primary_criterion_id")
+                cuec.cuec_primary_confidence = result.get("primary_confidence")
+                
+                # Extract TSC/COSO for backward compatibility
+                tsc_matches = framework_mappings.get("TSC", [])
+                coso_matches = framework_mappings.get("COSO", [])
+                logging.info(f"[RECOMPUTE] TSC matches: {len(tsc_matches)}, COSO matches: {len(coso_matches)}")
+                
+                # Store legacy arrays for backward compatibility
                 cuec.cuec_tsc_mappings = tsc_matches if isinstance(tsc_matches, list) else []
                 cuec.cuec_coso_mappings = coso_matches if isinstance(coso_matches, list) else []
                 
@@ -4509,9 +5391,12 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
                 else:
                     cuec.cuec_framework_alignment = 'Undetermined'
                     cuec.cuec_framework_alignment_id = None
+                
+                logging.info(f"[RECOMPUTE] Framework determination complete: {cuec.cuec_closest_framework}")
                     
             except Exception as e:
-                return JSONResponse({"error": f"Multi-match mapping failed: {e}"}, status_code=503)
+                logging.error(f"[RECOMPUTE] Dynamic multi-framework mapping failed: {e}", exc_info=True)
+                return JSONResponse({"error": f"Multi-framework mapping failed: {str(e)}"}, status_code=503)
         else:
             # Legacy single-match fallback
             try:
@@ -4570,6 +5455,10 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
                 "cuec_closest_framework": cuec.cuec_closest_framework,
                 "cuec_framework_alignment": cuec.cuec_framework_alignment,
                 "cuec_framework_alignment_id": cuec.cuec_framework_alignment_id,
+                "cuec_framework_mappings": cuec.cuec_framework_mappings,
+                "cuec_primary_framework": cuec.cuec_primary_framework,
+                "cuec_primary_criterion_id": cuec.cuec_primary_criterion_id,
+                "cuec_primary_confidence": cuec.cuec_primary_confidence,
             }
         }
         
@@ -4587,22 +5476,43 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
 
 @app.post("/report/{scan_id}/controls/id/{control_db_id}/recompute_frameworks")
 async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depends(get_db)):
-    """Recompute TSC/COSO mapping for a Control using multi-match mapping.
-    Updates and persists: control_tsc_mappings, control_coso_mappings (JSON arrays),
-    plus legacy columns: control_tsc_id, control_coso_id, control_tsc_similarity, control_coso_similarity,
-    control_tsc_confidence_pct, control_coso_confidence_pct, control_closest_framework.
+    """Recompute framework mappings for a Control using dynamic multi-framework system.
+    
+    Phase 2: Now supports unlimited frameworks beyond TSC/COSO based on report type.
+    
+    Updates and persists:
+    - framework_mappings: Universal JSON with all framework mappings
+    - primary_framework, primary_criterion_id, primary_confidence
+    - Legacy columns: control_tsc_mappings, control_coso_mappings (backward compatibility)
+    - Legacy single-match: control_tsc_id, control_coso_id, etc.
     """
-    from .extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    from .extractors.control_extractor_v4 import map_control_to_frameworks_multi, map_control_to_frameworks_dynamic
+    from .frameworks import get_available_frameworks
     
     logging.info(f"[RECOMPUTE] Starting framework recompute for scan_id={scan_id}, control_db_id={control_db_id}")
     
     try:
+        # Get control and scan
         ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id))).scalar_one_or_none()
         if not ctrl:
             logging.error(f"[RECOMPUTE] Control not found: scan_id={scan_id}, control_db_id={control_db_id}")
             return JSONResponse({"error": "Control not found"}, status_code=404)
         
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if not scan_row:
+            logging.error(f"[RECOMPUTE] Scan not found: scan_id={scan_id}")
+            return JSONResponse({"error": "Scan not found"}, status_code=404)
+        
         logging.info(f"[RECOMPUTE] Found control: control_id={ctrl.control_id}, has_deviation={ctrl.has_deviation}")
+        
+        # Get report type
+        report_type = scan_row.report_type.value if scan_row.report_type else "SOC2"
+        logging.info(f"[RECOMPUTE] Report type: {report_type}")
+        
+        # Load available frameworks for this report type
+        detected_standards = scan_row.detected_standards if scan_row.detected_standards else None
+        available_frameworks = get_available_frameworks(report_type, detected_standards)
+        logging.info(f"[RECOMPUTE] Available frameworks: {list(available_frameworks.keys())}")
         
         # Prefer control_desc; fallback to control_test
         desc = (getattr(ctrl, "control_desc", None) or "").strip()
@@ -4614,45 +5524,36 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
         
         logging.info(f"[RECOMPUTE] Using description of length {len(desc)}")
         
-        # Validate TSC/COSO criteria are loaded
-        if not TSC_CRITERIA:
-            logging.error("[RECOMPUTE] TSC_CRITERIA not loaded!")
-            return JSONResponse({"error": "TSC criteria not available"}, status_code=500)
-        if not COSO_2013_CRITERIA:
-            logging.error("[RECOMPUTE] COSO_2013_CRITERIA not loaded!")
-            return JSONResponse({"error": "COSO criteria not available"}, status_code=500)
-        
-        logging.info(f"[RECOMPUTE] TSC criteria count: {len(TSC_CRITERIA)}, COSO criteria count: {len(COSO_2013_CRITERIA)}")
-        
-        # Call multi-match mapping if enabled, otherwise use legacy single-match
-        if cfg.ENABLE_MULTI_MATCH_MAPPING:
+        # Phase 2: Use dynamic multi-framework mapping
+        if cfg.ENABLE_MULTI_MATCH_MAPPING and available_frameworks:
             try:
-                logging.info(f"[RECOMPUTE] Calling map_control_to_frameworks_multi...")
-                tsc_matches, coso_matches = map_control_to_frameworks_multi(
+                logging.info(f"[RECOMPUTE] Calling map_control_to_frameworks_dynamic...")
+                result = map_control_to_frameworks_dynamic(
                     control_desc=desc,
                     control_id=ctrl.control_id or f"Control_{ctrl.id}",
+                    available_frameworks=available_frameworks,
                     has_deviation=ctrl.has_deviation or False,
                     deviation_desc=ctrl.deviation_desc or "",
-                    tsc_criteria=TSC_CRITERIA,
-                    coso_criteria=COSO_2013_CRITERIA,
-                    top_k=3
+                    top_k=5
                 )
-                logging.info(f"[RECOMPUTE] Mapping complete: {len(tsc_matches)} TSC matches, {len(coso_matches)} COSO matches")
                 
-                # Store arrays with validation
-                logging.info(f"[RECOMPUTE] Storing TSC mappings: {tsc_matches}")
-                logging.info(f"[RECOMPUTE] Storing COSO mappings: {coso_matches}")
+                framework_mappings = result.get("framework_mappings", {})
+                logging.info(f"[RECOMPUTE] Mapping complete: {len(framework_mappings)} frameworks mapped")
                 
-                # Ensure arrays are valid JSON
-                if not isinstance(tsc_matches, list):
-                    logging.error(f"[RECOMPUTE] TSC matches not a list: {type(tsc_matches)}")
-                    tsc_matches = []
-                if not isinstance(coso_matches, list):
-                    logging.error(f"[RECOMPUTE] COSO matches not a list: {type(coso_matches)}")
-                    coso_matches = []
+                # Store universal framework_mappings
+                ctrl.framework_mappings = framework_mappings
+                ctrl.primary_framework = result.get("primary_framework")
+                ctrl.primary_criterion_id = result.get("primary_criterion_id")
+                ctrl.primary_confidence = result.get("primary_confidence")
                 
-                ctrl.control_tsc_mappings = tsc_matches
-                ctrl.control_coso_mappings = coso_matches
+                # Extract TSC/COSO for backward compatibility
+                tsc_matches = framework_mappings.get("TSC", [])
+                coso_matches = framework_mappings.get("COSO", [])
+                logging.info(f"[RECOMPUTE] TSC matches: {len(tsc_matches)}, COSO matches: {len(coso_matches)}")
+                
+                # Store legacy arrays for backward compatibility
+                ctrl.control_tsc_mappings = tsc_matches if isinstance(tsc_matches, list) else []
+                ctrl.control_coso_mappings = coso_matches if isinstance(coso_matches, list) else []
                 
                 # Populate legacy columns with highest confidence match
                 if tsc_matches:
@@ -4685,7 +5586,57 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
                 logging.info(f"[RECOMPUTE] Framework determination complete: {ctrl.control_closest_framework}")
                     
             except Exception as e:
-                logging.error(f"[RECOMPUTE] Multi-match mapping failed: {e}", exc_info=True)
+                logging.error(f"[RECOMPUTE] Dynamic multi-framework mapping failed: {e}", exc_info=True)
+                return JSONResponse({"error": f"Multi-framework mapping failed: {str(e)}"}, status_code=503)
+        elif cfg.ENABLE_MULTI_MATCH_MAPPING:
+            # Fallback to old multi-match if no frameworks available
+            logging.warning(f"[RECOMPUTE] No frameworks available, falling back to legacy TSC/COSO mapping")
+            try:
+                if not TSC_CRITERIA or not COSO_2013_CRITERIA:
+                    return JSONResponse({"error": "Framework criteria not available"}, status_code=500)
+                    
+                tsc_matches, coso_matches = map_control_to_frameworks_multi(
+                    control_desc=desc,
+                    control_id=ctrl.control_id or f"Control_{ctrl.id}",
+                    has_deviation=ctrl.has_deviation or False,
+                    deviation_desc=ctrl.deviation_desc or "",
+                    tsc_criteria=TSC_CRITERIA,
+                    coso_criteria=COSO_2013_CRITERIA,
+                    top_k=3
+                )
+                
+                ctrl.control_tsc_mappings = tsc_matches if isinstance(tsc_matches, list) else []
+                ctrl.control_coso_mappings = coso_matches if isinstance(coso_matches, list) else []
+                
+                # Continue with same logic as dynamic mapping for legacy columns...
+                if tsc_matches:
+                    top_tsc = tsc_matches[0]
+                    ctrl.control_tsc_id = top_tsc.get("id")
+                    ctrl.control_tsc_similarity = top_tsc.get("confidence")
+                    ctrl.control_tsc_confidence_pct = int(round(top_tsc.get("confidence", 0) * 100))
+                
+                if coso_matches:
+                    top_coso = coso_matches[0]
+                    ctrl.control_coso_id = top_coso.get("id")
+                    ctrl.control_coso_similarity = top_coso.get("confidence")
+                    ctrl.control_coso_confidence_pct = int(round(top_coso.get("confidence", 0) * 100))
+                
+                if tsc_matches and coso_matches:
+                    if tsc_matches[0].get("confidence", 0) > coso_matches[0].get("confidence", 0):
+                        ctrl.control_closest_framework = "TSC"
+                    elif coso_matches[0].get("confidence", 0) > tsc_matches[0].get("confidence", 0):
+                        ctrl.control_closest_framework = "COSO"
+                    else:
+                        ctrl.control_closest_framework = "Equal"
+                elif tsc_matches:
+                    ctrl.control_closest_framework = "TSC"
+                elif coso_matches:
+                    ctrl.control_closest_framework = "COSO"
+                else:
+                    ctrl.control_closest_framework = "Undetermined"
+                    
+            except Exception as e:
+                logging.error(f"[RECOMPUTE] Legacy multi-match mapping failed: {e}", exc_info=True)
                 return JSONResponse({"error": f"Multi-match mapping failed: {str(e)}"}, status_code=503)
         else:
             # Legacy single-match fallback
@@ -4731,10 +5682,15 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
                 "control_tsc_confidence_pct": ctrl.control_tsc_confidence_pct,
                 "control_coso_confidence_pct": ctrl.control_coso_confidence_pct,
                 "control_closest_framework": ctrl.control_closest_framework,
+                # Phase 2: Include new multi-framework columns
+                "framework_mappings": ctrl.framework_mappings,
+                "primary_framework": ctrl.primary_framework,
+                "primary_criterion_id": ctrl.primary_criterion_id,
+                "primary_confidence": ctrl.primary_confidence,
             }
         }
         
-        # Include multi-match arrays if enabled
+        # Include multi-match arrays if enabled (legacy columns)
         if cfg.ENABLE_MULTI_MATCH_MAPPING:
             response["control"]["control_tsc_mappings"] = ctrl.control_tsc_mappings
             response["control"]["control_coso_mappings"] = ctrl.control_coso_mappings
@@ -4891,10 +5847,20 @@ async def batch_recompute_control_frameworks(
     """
     import asyncio
     import time as time_module
-    from .extractors.control_extractor_v4 import map_control_to_frameworks_multi
+    from .frameworks import get_available_frameworks, map_control_to_frameworks_dynamic
     
     try:
         start_time = time_module.time()
+        
+        # Get scan and report type
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if not scan_row:
+            return JSONResponse({"error": "Scan not found"}, status_code=404)
+        
+        report_type = scan_row.report_type.value if scan_row.report_type else "SOC2"
+        detected_standards = scan_row.detected_standards if scan_row.detected_standards else None
+        available_frameworks = get_available_frameworks(report_type, detected_standards)
+        logging.info(f"[BATCH RECOMPUTE] Available frameworks: {list(available_frameworks.keys())}")
         
         # Get configuration
         batch_size = cfg.BATCH_MAPPING_BATCH_SIZE
@@ -4929,7 +5895,7 @@ async def batch_recompute_control_frameworks(
         total_controls = len(controls)
         updated_count = 0
         
-        logging.info(f"Batch recompute starting for {total_controls} controls (throttle: {throttle_ms}ms, batch_size: {batch_size})")
+        logging.info(f"[BATCH RECOMPUTE] Starting for {total_controls} controls (throttle: {throttle_ms}ms, batch_size: {batch_size})")
         
         # Process in batches with rate limiting
         for batch_idx in range(0, total_controls, batch_size):
@@ -4957,20 +5923,31 @@ async def batch_recompute_control_frameworks(
                         if not desc:
                             return False
                         
-                        # Call multi-match mapping
-                        tsc_matches, coso_matches = map_control_to_frameworks_multi(
+                        # Call dynamic multi-framework mapping
+                        result = map_control_to_frameworks_dynamic(
                             control_desc=desc,
                             control_id=ctrl.control_id or f"Control_{ctrl.id}",
+                            available_frameworks=available_frameworks,
                             has_deviation=ctrl.has_deviation or False,
                             deviation_desc=ctrl.deviation_desc or "",
-                            tsc_criteria=TSC_CRITERIA,
-                            coso_criteria=COSO_2013_CRITERIA,
-                            top_k=3
+                            top_k=5
                         )
                         
-                        # Store arrays
-                        ctrl.control_tsc_mappings = tsc_matches
-                        ctrl.control_coso_mappings = coso_matches
+                        framework_mappings = result.get("framework_mappings", {})
+                        
+                        # Store universal framework_mappings
+                        ctrl.framework_mappings = framework_mappings
+                        ctrl.primary_framework = result.get("primary_framework")
+                        ctrl.primary_criterion_id = result.get("primary_criterion_id")
+                        ctrl.primary_confidence = result.get("primary_confidence")
+                        
+                        # Extract TSC/COSO for backward compatibility
+                        tsc_matches = framework_mappings.get("TSC", [])
+                        coso_matches = framework_mappings.get("COSO", [])
+                        
+                        # Store legacy arrays
+                        ctrl.control_tsc_mappings = tsc_matches if isinstance(tsc_matches, list) else []
+                        ctrl.control_coso_mappings = coso_matches if isinstance(coso_matches, list) else []
                         
                         # Populate legacy columns with highest confidence match
                         if tsc_matches:
@@ -5001,7 +5978,7 @@ async def batch_recompute_control_frameworks(
                         db.add(ctrl)
                         return True
                     except Exception as e:
-                        logging.error(f"Failed to map control {ctrl.id}: {e}")
+                        logging.error(f"[BATCH RECOMPUTE] Failed to map control {ctrl.id}: {e}")
                         return False
             
             # Process batch concurrently
@@ -5846,6 +6823,8 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, data: dict, db=Depend
             suborg.confidence_justification = f"{prev}{sep}{data['confidence_justification']}"
         if "annotation" in data:
             suborg.annotation = data["annotation"]
+        if "analyst_notes" in data:
+            suborg.analyst_notes = data["analyst_notes"]
         # New: allow editing suborg text fields
         if "third_party_description" in data:
             suborg.third_party_description = data["third_party_description"]
@@ -5909,6 +6888,8 @@ async def patch_suborg(scan_id: int, suborg_name: str, data: dict, db=Depends(ge
             suborg.confidence_justification = f"{prev}{sep}{data['confidence_justification']}"
         if "annotation" in data:
             suborg.annotation = data["annotation"]
+        if "analyst_notes" in data:
+            suborg.analyst_notes = data["analyst_notes"]
         # New: allow editing suborg text fields
         if "third_party_description" in data:
             suborg.third_party_description = data["third_party_description"]
@@ -6463,3 +7444,47 @@ async def delete_baseline(baseline_id: str):
     except Exception as e:
         logging.error(f"Failed to delete baseline: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# PHASE 2: Framework Mappings Migration Endpoint
+# ============================================================================
+
+@app.post("/report/{scan_id}/migrate_framework_mappings")
+async def migrate_scan_framework_mappings(scan_id: int, db=Depends(get_db)):
+    """
+    Migrate legacy framework mapping columns to unified framework_mappings structure.
+    
+    Phase 2: Consolidates control_tsc_mappings, control_coso_mappings, and
+    financial_assertions into the new framework_mappings JSON column.
+    
+    This is a one-time migration endpoint that can be run on existing scans
+    to populate the new Phase 1 columns.
+    """
+    from .frameworks.migration_helper import migrate_scan_frameworks
+    
+    logging.info(f"[MIGRATE_ENDPOINT] Starting migration for scan_id={scan_id}")
+    
+    try:
+        # Verify scan exists
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if not scan_row:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        # Run migration
+        result = await migrate_scan_frameworks(db, scan_id)
+        
+        logging.info(f"[MIGRATE_ENDPOINT] Migration complete for scan_id={scan_id}: {result}")
+        
+        return {
+            "status": "success",
+            "message": f"Migrated scan {scan_id} to unified framework_mappings",
+            "statistics": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"[MIGRATE_ENDPOINT] Migration failed for scan_id={scan_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")

@@ -34,6 +34,7 @@ env/
 data/tmp/
 data/logs/
 data/output/
+data/json/*.json
 data/**/*.pdf
 *.sqlite
 

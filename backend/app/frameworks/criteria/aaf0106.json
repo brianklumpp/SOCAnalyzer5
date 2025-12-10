@@ -1,0 +1,130 @@
+[
+  {
+    "id": "CO1",
+    "section": "Control Objectives",
+    "category": "Control Objectives",
+    "component": "Control Objectives",
+    "description": "Control objectives are defined and documented",
+    "principle": "Definition of Control Objectives"
+  },
+  {
+    "id": "CO2",
+    "section": "Control Objectives",
+    "category": "Control Objectives",
+    "component": "Control Objectives",
+    "description": "Control objectives are communicated to relevant personnel",
+    "principle": "Communication of Objectives"
+  },
+  {
+    "id": "CE1",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Management demonstrates commitment to integrity and competence",
+    "principle": "Management Philosophy"
+  },
+  {
+    "id": "CE2",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Organizational structure supports achievement of objectives",
+    "principle": "Organizational Structure"
+  },
+  {
+    "id": "CE3",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Authority and responsibility are assigned appropriately",
+    "principle": "Assignment of Authority"
+  },
+  {
+    "id": "RA1",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "Risks to achievement of control objectives are identified",
+    "principle": "Risk Identification"
+  },
+  {
+    "id": "RA2",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "Risks are analyzed and evaluated",
+    "principle": "Risk Analysis"
+  },
+  {
+    "id": "RA3",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "Risk mitigation strategies are developed",
+    "principle": "Risk Mitigation"
+  },
+  {
+    "id": "CP1",
+    "section": "Control Procedures",
+    "category": "Control Procedures",
+    "component": "Control Procedures",
+    "description": "Control procedures are designed to address identified risks",
+    "principle": "Control Design"
+  },
+  {
+    "id": "CP2",
+    "section": "Control Procedures",
+    "category": "Control Procedures",
+    "component": "Control Procedures",
+    "description": "Control procedures are implemented and operating effectively",
+    "principle": "Control Implementation"
+  },
+  {
+    "id": "CP3",
+    "section": "Control Procedures",
+    "category": "Control Procedures",
+    "component": "Control Procedures",
+    "description": "Information technology general controls are established",
+    "principle": "IT General Controls"
+  },
+  {
+    "id": "CP4",
+    "section": "Control Procedures",
+    "category": "Control Procedures",
+    "component": "Control Procedures",
+    "description": "Application controls are established for key systems",
+    "principle": "Application Controls"
+  },
+  {
+    "id": "IC1",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "Relevant information is identified and captured",
+    "principle": "Information Capture"
+  },
+  {
+    "id": "IC2",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "Information is communicated in a timely manner",
+    "principle": "Timely Communication"
+  },
+  {
+    "id": "MO1",
+    "section": "Monitoring",
+    "category": "Monitoring",
+    "component": "Monitoring",
+    "description": "Ongoing monitoring activities are performed",
+    "principle": "Ongoing Monitoring"
+  },
+  {
+    "id": "MO2",
+    "section": "Monitoring",
+    "category": "Monitoring",
+    "component": "Monitoring",
+    "description": "Control deficiencies are identified and reported",
+    "principle": "Deficiency Reporting"
+  }
+]

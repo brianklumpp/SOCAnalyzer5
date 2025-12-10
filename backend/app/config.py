@@ -49,6 +49,11 @@ REPORT_TYPE_CONFIDENCE_THRESHOLD = float(os.getenv("REPORT_TYPE_CONFIDENCE_THRES
 # Number of pages to analyze in quick scan stage
 REPORT_TYPE_QUICK_SCAN_PAGES = int(os.getenv("REPORT_TYPE_QUICK_SCAN_PAGES", "10"))
 
+# --- PDF Snippet Generation Settings ---
+# Enable generation of pdf_snippet field for controls/CUECs/subservice orgs (for PDF viewer search)
+# When enabled, extractors generate 150-200 char snippets for fuzzy text matching in PDF viewer
+ENABLE_PDF_SNIPPETS = os.getenv("ENABLE_PDF_SNIPPETS", "true").lower() == "true"
+
 # --- Progress Estimation Settings ---
 # Minimum number of historical scans needed to use averaged elapsed times for progress estimation
 PROGRESS_HISTORY_MIN_SAMPLES = int(os.getenv("PROGRESS_HISTORY_MIN_SAMPLES", "5"))
@@ -1892,6 +1897,11 @@ Control Test Results:
 """
 
 # --- Control Extraction Testing Config ---
+# Quick testing mode - extract limited controls for faster development/testing cycles
+QUICK_TEST_MODE_ENABLED = os.getenv('QUICK_TEST_MODE', 'false').lower() == 'true'
+QUICK_TEST_MAX_CONTROLS = int(os.getenv('QUICK_TEST_MAX_CONTROLS', '10'))  # Extract only N controls in test mode
+
+# Legacy testing config (deprecated - use QUICK_TEST_MODE_ENABLED instead)
 CONTROL_TESTING_ENABLED = False  # Set to False to disable test mode and process the full file
 CONTROL_TESTING_MAX_LINE = 2000  # Only process up to this line number when testing is enabled
 
@@ -1933,7 +1943,7 @@ CONTROL_EXTRACTOR_VERSION = os.getenv("CONTROL_EXTRACTOR_VERSION", "v4")
 # V4 Architecture: Token-based aware chunking with continuation handling
 CONTROL_V4_TOKENS_PER_CHUNK = 500       # Approximate tokens per chunk (~4 chars = 1 token) - balanced for various report formats
 CONTROL_V4_OVERLAP_TOKENS = 100         # Token overlap between chunks for context continuity
-CONTROL_V4_MIN_CONFIDENCE = 0.5         # Minimum confidence threshold (controls below are filtered)
+CONTROL_V4_MIN_CONFIDENCE = 0.0         # Minimum confidence threshold - 0.0 keeps all controls (frontend filters by confidence)
 CONTROL_V4_SAVE_REJECTED = True         # Save rejected low-confidence controls for review
 
 # V4 Prompt: Multi-control extraction with linguistic cue detection and CoT reasoning
@@ -2164,15 +2174,21 @@ TABLE_FIELD_MAP = {
         "control_id", "control_desc", "control_test", "control_test_results", "has_deviation", "deviation_desc", "control_page_refs", "control_line_ref", "control_seq",
         "control_tsc_id", "control_coso_id", "control_tsc_similarity", "control_coso_similarity", "control_tsc_confidence_pct",
         "control_coso_confidence_pct", "control_closest_framework", "control_tsc_section", "control_coso_section", "control_soc_domain",
-        "control_status", "merged_to_control_id", "control_gpt_opinion", "control_gpt_reasoning", "control_confidence", "confidence_calc", "scan_id"
+        "financial_assertions", "framework_category",
+        "control_tsc_mappings", "control_coso_mappings",
+        "framework_mappings", "primary_framework", "primary_criterion_id", "primary_confidence",
+        "control_status", "merged_to_control_id", "control_gpt_opinion", "control_gpt_reasoning", "control_confidence", "confidence_calc", "pdf_snippet", "scan_id"
     ],
     "cuec": [
-        "cuec_seq", "cuec_tsc_id", "cuec_description", "cuec_line_ref", "cuec_confidence", "cuec_gpt_opinion",
+        "cuec_seq", "cuec_tsc_id", "cuec_description", "cuec_line_ref", "cuec_page_refs", "cuec_confidence", "cuec_gpt_opinion",
         "cuec_distance_from_cuec_keywords", "cuec_gpt_reasoning", "cuec_framework_alignment", "cuec_framework_alignment_id",
         "cuec_justification", "cuec_coso_id", "cuec_tsc_similarity", "cuec_coso_similarity", "cuec_tsc_confidence_pct",
-        "cuec_coso_confidence_pct", "cuec_closest_framework", "cuec_confidence_justification", "annotation", "control_strength", "scan_id"
+        "cuec_coso_confidence_pct", "cuec_closest_framework", "cuec_confidence_justification",
+        "cuec_tsc_mappings", "cuec_coso_mappings",
+        "framework_mappings", "primary_framework", "primary_criterion_id", "primary_confidence",
+        "annotation", "control_strength", "pdf_snippet", "scan_id"
     ],
-    "subservice_org": ["name", "confidence", "scan_id"],
+    "subservice_org": ["name", "confidence", "pdf_snippet", "scan_id"],
     "product": ["name", "scan_id"]
 }
 
@@ -2598,4 +2614,205 @@ Return JSON with "assertions" array containing one entry per control:
 - If uncertain, focus on most obvious 1-2 assertions
 - Use control_id exactly as provided in input
 """
+
+# ============================================================================
+# FRAMEWORK MAPPING PROMPTS - SOC1 FRAMEWORKS
+# ============================================================================
+
+FRAMEWORK_MULTI_MATCH_PROMPT_FINANCIAL_ASSERTIONS = """
+You are an expert SOC 1 auditor specializing in financial reporting controls. Select the top 2-4 most relevant financial assertions for this control.
+
+Control Description:
+{control_desc}
+
+{deviation_context}
+
+Available Financial Assertions (with full descriptions):
+{criteria_list}
+
+## Financial Assertion Mapping Guidelines:
+
+**Transaction-Level Assertions (Transaction Processing):**
+- **EO (Existence/Occurrence)**: Authorization, approval, valid transactions, legitimate business purpose
+  - Keywords: "authorize", "approve", "valid", "legitimate", "occurred", "verification"
+- **C (Completeness)**: All transactions recorded, no missing entries, comprehensive capture
+  - Keywords: "complete", "all transactions", "missing", "unrecorded", "omission"
+- **A (Accuracy)**: Correct amounts, calculations, mathematical accuracy, data integrity
+  - Keywords: "accurate", "calculation", "amount", "precise", "correct", "verify amounts"
+- **CO (Cutoff)**: Correct accounting period, period-end procedures, accruals
+  - Keywords: "period-end", "cutoff", "accrual", "timing", "correct period", "fiscal year"
+- **CL (Classification)**: Proper account coding, chart of accounts, categorization
+  - Keywords: "classification", "account code", "GL account", "categorize", "proper account"
+
+**Account Balance Assertions (Balance Sheet Focus):**
+- **E (Existence)**: Assets/liabilities exist, physical verification, confirmations
+  - Keywords: "exist", "physical count", "confirmation", "inventory", "asset verification"
+- **R (Rights and Obligations)**: Ownership, legal rights, contractual obligations
+  - Keywords: "ownership", "rights", "obligations", "contract", "legal", "title"
+- **CV (Completeness and Valuation)**: Complete balances, fair value, impairment, carrying amounts
+  - Keywords: "valuation", "fair value", "impairment", "carrying amount", "balance complete"
+
+**Presentation and Disclosure Assertions:**
+- **OC, CD, CU, AV**: Disclosure-related assertions (less common for operational controls)
+
+**Control Objective Assertions (Process-Specific):**
+- **REV (Revenue Recognition)**: Revenue timing, measurement, billing, customer invoicing
+- **AP (Accounts Payable)**: Vendor invoices, payment processing, payables
+- **AR (Accounts Receivable)**: Customer billing, collections, receivables
+- **INV (Inventory)**: Inventory counts, COGS, valuation
+- **PPE (Property, Plant & Equipment)**: Fixed assets, depreciation, disposals
+- **PAY (Payroll)**: Payroll processing, compensation, employee data
+- **CASH (Cash Management)**: Cash receipts, disbursements, bank reconciliations
+- **JE (Journal Entries)**: Manual entries, automated entries, adjustments
+- **FR (Financial Reporting)**: Period-end close, consolidation, financial statements
+- **TAX (Tax Compliance)**: Tax calculations, filings, compliance
+
+## Multi-Mapping Rules:
+
+**Most financial reporting controls map to 2-3 assertions:**
+1. One primary transaction assertion (EO, C, A, CO, CL)
+2. One control objective (REV, AP, AR, etc.)
+3. Optionally one account balance assertion (E, R, CV)
+
+**Common Patterns:**
+- Revenue controls → REV + EO/C/A
+- AP controls → AP + C/A + possible E
+- AR controls → AR + EO/C + possible CV
+- Payroll controls → PAY + C/A + possible E
+- Period-end controls → FR + CO + possible CV
+- Journal entry controls → JE + EO/A + possible CL
+
+**Deviation Consideration:** If deviation exists, consider:
+- Emphasize monitoring assertions
+- Consider compensating controls
+- May affect completeness or accuracy
+
+## Response Format:
+
+Return 2-4 most relevant assertions (NOT more than 4).
+Include only assertions with confidence ≥ 0.65.
+Prioritize transaction-level and control objective assertions over disclosure assertions.
+
+Respond ONLY with JSON:
+{{
+  "matches": [
+    {{
+      "id": "Assertion ID (e.g., EO, REV, AP)",
+      "confidence": 0.0-1.0,
+      "keywords_matched": ["keyword1", "keyword2"],
+      "aspect_addressed": "Transaction processing/balance verification/disclosure",
+      "reasoning": "Brief explanation (max 100 chars)"
+    }}
+  ]
+}}
+
+**Return 2-4 matches only** (financial controls typically don't map to 5+ assertions).
+Each match MUST have DISTINCT assertion ID.
+If no good matches, return {{"matches": []}}.
+"""
+
+FRAMEWORK_MULTI_MATCH_PROMPT_COSO_ICFR = """
+You are an expert SOC 1 auditor specializing in COSO Internal Control - Integrated Framework (Financial Reporting focus). Select the top 3-5 most relevant COSO principles for this control.
+
+Control Description:
+{control_desc}
+
+{deviation_context}
+
+Available COSO 2013 Principles (Financial Reporting Context):
+{criteria_list}
+
+## COSO ICFR Mapping Guidelines:
+
+**Control Environment (P1-5)** - Organizational and ethical foundation:
+- P1: Integrity, ethics, code of conduct, tone at top (financial integrity)
+- P2: Board oversight, audit committee, governance (financial oversight)
+- P3: Authority, responsibility, segregation of duties (financial roles)
+- P4: Competence, financial expertise, training (accounting skills)
+- P5: Accountability, performance measures (financial accountability)
+
+**Risk Assessment (P6-9)** - Financial reporting risks:
+- P6: Financial reporting objectives, GAAP compliance
+- P7: Financial risks identification (misstatement risks, fraud risks)
+- P8: Fraud risk assessment (financial statement fraud)
+- P9: Change management (financial systems, accounting standards)
+
+**Control Activities (P10-12)** - Financial control execution:
+- P10: Control activities selection (financial control design)
+- P11: Technology controls (financial systems, ERP controls)
+- P12: Policies and procedures (financial policies, SOPs)
+
+**Information & Communication (P13-14)** - Financial information:
+- P13: Financial information quality, GL, trial balance
+- P14: Communication of financial policies, accounting guidance
+
+**Monitoring Activities (P15-17)** - Financial control monitoring:
+- P15: Ongoing monitoring (financial control effectiveness)
+- P16: Evaluation of deficiencies (control weaknesses)
+- P17: Remediation of deficiencies (corrective actions)
+
+## Financial Reporting Focus:
+
+Unlike SOC 2, COSO ICFR emphasizes:
+- **Financial accuracy** over data security
+- **GAAP compliance** and **financial statement accuracy**
+- **Segregation of duties** for financial transactions
+- **Account reconciliations** and **journal entry controls**
+- **Period-end close** and **financial reporting processes**
+
+## Multi-Mapping Rules:
+
+**Financial controls typically map to 2-4 COSO principles:**
+1. One Control Activities principle (P10, P11, or P12) - primary
+2. One Risk Assessment or Control Environment principle (P1-9)
+3. Optionally one Monitoring principle (P15-17) if review/monitoring involved
+
+**Common Patterns:**
+- Authorization controls → P10 + P3 (control activities + segregation)
+- Reconciliation controls → P10 + P15 (control activities + monitoring)
+- System controls → P11 + P10 (technology + control activities)
+- Period-end controls → P10 + P13 (control activities + information)
+- Review controls → P10 + P15 (control activities + monitoring)
+- Access controls → P11 + P3 (technology + segregation)
+
+**Deviation Consideration:** If deviation exists, ADD:
+- P15 (Ongoing monitoring)
+- P16 (Deficiency evaluation)
+- P17 (Remediation)
+
+## Response Format:
+
+Return 3-5 most relevant COSO principles.
+Include only principles with confidence ≥ 0.6.
+Prioritize Control Activities (P10-12) and Risk Assessment (P6-9) for financial controls.
+
+Respond ONLY with JSON:
+{{
+  "matches": [
+    {{
+      "id": "Principle number (e.g., P10, P11)",
+      "confidence": 0.0-1.0,
+      "keywords_matched": ["keyword1", "keyword2"],
+      "aspect_addressed": "Component and focus (e.g., Control Activities - authorization)",
+      "reasoning": "Brief explanation (max 100 chars)"
+    }}
+  ]
+}}
+
+**Return 3-5 matches** (extend to 5 if multiple strong matches exist).
+Each match MUST have DISTINCT principle ID.
+If no good matches, return {{"matches": []}}.
+"""
+
+# Note: ISAE 3402, CSAE 3416, AAF 01/06, GS 007 use similar prompts
+# They can fall back to COSO_ICFR or FINANCIAL_ASSERTIONS prompts as they
+# have similar structures focused on financial reporting controls
+FRAMEWORK_MULTI_MATCH_PROMPT_ISAE3402 = FRAMEWORK_MULTI_MATCH_PROMPT_COSO_ICFR
+FRAMEWORK_MULTI_MATCH_PROMPT_CSAE3416 = FRAMEWORK_MULTI_MATCH_PROMPT_COSO_ICFR
+FRAMEWORK_MULTI_MATCH_PROMPT_AAF0106 = FRAMEWORK_MULTI_MATCH_PROMPT_COSO_ICFR
+FRAMEWORK_MULTI_MATCH_PROMPT_GS007 = FRAMEWORK_MULTI_MATCH_PROMPT_COSO_ICFR
+
+# ISO 27001 and NIST can use TSC prompt as fallback since they're security-focused
+FRAMEWORK_MULTI_MATCH_PROMPT_ISO27001 = FRAMEWORK_MULTI_MATCH_PROMPT_TSC
+FRAMEWORK_MULTI_MATCH_PROMPT_NIST = FRAMEWORK_MULTI_MATCH_PROMPT_TSC
 

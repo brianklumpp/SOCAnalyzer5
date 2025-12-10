@@ -934,6 +934,73 @@ def extract_controls(
     # Step 5: Validate
     validated_controls = validate_controls(accepted_controls)
     
+    # Remove text_lines to avoid bloating the JSON output
+    for control in validated_controls:
+        control.pop("text_lines", None)
+    
+    # Step 5b: Framework mapping - Map controls to appropriate frameworks based on report type
+    try:
+        from ..frameworks import get_available_frameworks, map_control_to_frameworks_dynamic, extract_mapping_fields_for_db
+        
+        logging.info(f"Framework mapping: Loading frameworks for report_type={report_type}")
+        available_frameworks = get_available_frameworks(report_type=report_type)
+        logging.info(f"Framework mapping: Found {len(available_frameworks)} frameworks: {list(available_frameworks.keys())}")
+        
+        for control in validated_controls:
+            control_desc = control.get("control_desc", "") or control.get("description", "")
+            control_id = control.get("control_id", "UNKNOWN")
+            has_deviation = control.get("has_deviation", False)
+            deviation_desc = control.get("deviation_desc")
+            
+            if not control_desc:
+                logging.warning(f"[{control_id}] No description available for framework mapping, skipping")
+                continue
+            
+            # Map control to all available frameworks
+            mapping_result = map_control_to_frameworks_dynamic(
+                control_desc=control_desc,
+                control_id=control_id,
+                available_frameworks=available_frameworks,
+                has_deviation=has_deviation,
+                deviation_desc=deviation_desc,
+                top_k=5
+            )
+            
+            # Extract DB-compatible fields
+            db_fields = extract_mapping_fields_for_db(mapping_result)
+            
+            # Add to control dict
+            control["framework_mappings"] = db_fields["framework_mappings"]
+            control["primary_framework"] = db_fields["primary_framework"]
+            control["primary_criterion_id"] = db_fields["primary_criterion_id"]
+            control["primary_confidence"] = db_fields["primary_confidence"]
+            
+            # Add legacy fields for backward compatibility
+            control["control_tsc_mappings"] = db_fields.get("control_tsc_mappings", [])
+            control["control_coso_mappings"] = db_fields.get("control_coso_mappings", [])
+            
+            # Determine closest framework (legacy field)
+            control["control_closest_framework"] = db_fields["primary_framework"] or "Undetermined"
+            
+            logging.info(f"[{control_id}] Mapped to {len(db_fields['framework_mappings'])} frameworks, primary: {db_fields['primary_framework']}")
+        
+        frameworks_mapped = sum(1 for c in validated_controls if c.get("framework_mappings"))
+        logging.info(f"Framework mapping complete: {frameworks_mapped}/{len(validated_controls)} controls mapped")
+        
+    except Exception as e:
+        logging.error(f"Framework mapping failed: {e}", exc_info=True)
+        logging.warning("Continuing without framework mapping - controls will have empty framework_mappings")
+        # Add empty framework fields so controls don't fail validation
+        for control in validated_controls:
+            if "framework_mappings" not in control:
+                control["framework_mappings"] = {}
+                control["primary_framework"] = None
+                control["primary_criterion_id"] = None
+                control["primary_confidence"] = 0.0
+                control["control_tsc_mappings"] = []
+                control["control_coso_mappings"] = []
+                control["control_closest_framework"] = "Undetermined"
+    
     # Step 6: Optionally map financial assertions (SOC1 only, if enabled)
     if enable_assertion_mapping and report_type == "SOC1":
         logging.info("Financial assertion mapping enabled for SOC1 report")

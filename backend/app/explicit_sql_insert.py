@@ -85,9 +85,23 @@ def _parse_datetime(val):
         return val
     return None
 
-def insert_extracted_data(json_path: str, pdf_path: str = None):
+def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = None):
     # Load environment variables from .env
     load_dotenv()
+    
+    # Create Redis client for phase_completion updates if job_id provided
+    redis_client = None
+    if job_id:
+        try:
+            import redis
+            redis_client = redis.Redis(
+                host=os.getenv('REDIS_HOST', 'localhost'),
+                port=int(os.getenv('REDIS_PORT', 6379)),
+                db=int(os.getenv('REDIS_DB', 0)),
+                decode_responses=True
+            )
+        except Exception as redis_err:
+            logging.warning(f"Could not create Redis client for job state updates: {redis_err}")
     DATABASE_URL = os.getenv("DATABASE_URL_SYNC")
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL_SYNC environment variable is not set. Please set it in your .env file.")
@@ -170,9 +184,21 @@ def insert_extracted_data(json_path: str, pdf_path: str = None):
             except Exception as e:
                 logging.error(f"Failed to read PDF file {pdf_path}: {e}")
         
+        # Read section_results.json for PDF metadata
+        sections_json = None
+        section_results_path = config.SECTION_JSON_PATH
+        if os.path.isfile(section_results_path):
+            try:
+                with open(section_results_path, 'r', encoding='utf-8') as f:
+                    sections_data = json.load(f)
+                    sections_json = json.dumps(sections_data, ensure_ascii=False)
+                    logging.info(f"Loaded section results: {len(sections_data)} sections")
+            except Exception as e:
+                logging.error(f"Failed to read section_results.json: {e}")
+        
         scan_fields = [
             "product", "report_date", "coverage_start", "coverage_end", "auditor", "result_json", "scan_date",
-            "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id", "report_type"
+            "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id", "report_type", "sections", "toc_page_offset", "detected_standards"
         ]
         # Filter out pdf_file bytes from data before JSON serialization
         data_for_json = {k: v for k, v in data.items() if k != 'pdf_file'}
@@ -182,6 +208,11 @@ def insert_extracted_data(json_path: str, pdf_path: str = None):
         # Get report_type from data (detected during analysis), default to SOC2 if not present
         report_type = sanitize_value(data.get("report_type", "SOC2"))
         logging.info(f"Inserting scan with report_type: {report_type}")
+        
+        # Get detected_standards from data and convert to JSON array for JSONB column
+        detected_standards = data.get("detected_standards", [])
+        detected_standards_json = json.dumps(detected_standards, ensure_ascii=False) if detected_standards else None
+        logging.info(f"Detected standards for scan: {detected_standards}")
         
         scan_values = [
             sanitize_value(product_name),
@@ -200,6 +231,9 @@ def insert_extracted_data(json_path: str, pdf_path: str = None):
             pdf_bytes,  # Pass bytes directly, psycopg2 handles BYTEA
             sanitize_value(data.get("company_id")),
             report_type,
+            sections_json,  # Store sections JSONB
+            sanitize_value(data.get("toc_page_offset")),  # Store TOC page offset for PDF navigation
+            detected_standards_json,  # Store detected standards as JSONB
         ]
         scan_sql = f"INSERT INTO scan ({', '.join(scan_fields)}) VALUES ({', '.join(['%s']*len(scan_fields))}) RETURNING id"
         logging.info(f"SQL: {scan_sql} | Values: {scan_values}")
@@ -398,6 +432,23 @@ def insert_extracted_data(json_path: str, pdf_path: str = None):
                         logging.info(f"[LOGO_SERVICE] No companies needing logos for scan {scan_id}")
                     
                     db_session.commit()
+                    
+                    # Update phase_completion.logo_fetched
+                    if redis_client and job_id:
+                        try:
+                            import json as _json
+                            job_key = f"job:{job_id}"
+                            job_data = redis_client.get(job_key)
+                            if job_data:
+                                job_dict = _json.loads(job_data)
+                                if "phase_completion" not in job_dict:
+                                    job_dict["phase_completion"] = {}
+                                job_dict["phase_completion"]["logo_fetched"] = True
+                                redis_client.setex(job_key, 86400, _json.dumps(job_dict))
+                                logging.info(f"[PHASE] Updated phase_completion.logo_fetched=True for job {job_id}")
+                        except Exception as phase_err:
+                            logging.warning(f"Could not update phase_completion.logo_fetched: {phase_err}")
+                    
                 sync_engine.dispose()
             except Exception as logo_fetch_error:
                 logging.error(f"[LOGO_SERVICE] Logo fetching failed (non-fatal): {logo_fetch_error}")
@@ -407,6 +458,23 @@ def insert_extracted_data(json_path: str, pdf_path: str = None):
             print(f"DEBUG: COMMIT FAILED: {commit_error}")
             logging.error(f"COMMIT FAILED: {commit_error}")
             raise
+            
+        # Update phase_completion.db_uploaded after successful commit
+        if redis_client and job_id:
+            try:
+                import json as _json
+                job_key = f"job:{job_id}"
+                job_data = redis_client.get(job_key)
+                if job_data:
+                    job_dict = _json.loads(job_data)
+                    if "phase_completion" not in job_dict:
+                        job_dict["phase_completion"] = {}
+                    job_dict["phase_completion"]["db_uploaded"] = True
+                    redis_client.setex(job_key, 86400, _json.dumps(job_dict))
+                    logging.info(f"[PHASE] Updated phase_completion.db_uploaded=True for job {job_id}")
+            except Exception as phase_err:
+                logging.warning(f"Could not update phase_completion.db_uploaded: {phase_err}")
+                
     except Exception as outer_error:
         print(f"DEBUG: Outer exception caught: {outer_error}")
         logging.error(f"Outer exception caught: {outer_error}")

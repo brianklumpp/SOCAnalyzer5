@@ -5,7 +5,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
 
-from app.extractors.control_extractor_unified import create_aware_chunks, extract_control_with_cot
+from app.extractors.control_extractor import create_aware_chunks, extract_control_with_cot
 from app import config
 import logging
 

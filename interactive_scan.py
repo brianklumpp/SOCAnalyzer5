@@ -803,7 +803,7 @@ def run_individual_extractors():
     from app.extractors.product import extract_product_from_report
     from app.extractors.report_date import extract_report_date
     from app.extractors.coverage_period import extract_coverage_period
-    from app.extractors.control_integration import extract_controls  # V2/V4 unified interface
+    from app.extractors.control_extractor import extract_controls  # Unified control extractor
     from app.extractors.cuec_extractor import extract_cuecs
     from app.extractors.subservice_orgs import extract_subservice_orgs
     from app import config

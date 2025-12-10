@@ -1,72 +1,95 @@
+# Run SOC2 Analysis - PowerShell Wrapper
+# This script provides an easy way to run PDF analysis without the API/threading overhead
+
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Position=0)]
     [string]$PdfPath,
-    [int]$PollSeconds = 300
+    
+    [Parameter()]
+    [switch]$ListReports,
+    
+    [Parameter()]
+    [switch]$Verbose,
+    
+    [Parameter()]
+    [switch]$NoDbInsert,
+    
+    [Parameter()]
+    [string]$OutputDir = "data/json"
 )
-$ErrorActionPreference = 'Stop'
-if (!(Test-Path $PdfPath)) { throw "PDF not found: $PdfPath" }
-Write-Host "Starting scan for: $PdfPath"
-# Start job using HttpClient with multipart/form-data (Windows PowerShell compatibility)
-Add-Type -AssemblyName System.Net.Http
-$client = New-Object System.Net.Http.HttpClient
-try {
-    $content = New-Object System.Net.Http.MultipartFormDataContent
-    $fs = [System.IO.File]::OpenRead($PdfPath)
-    try {
-        $streamContent = New-Object System.Net.Http.StreamContent($fs)
-        $streamContent.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('application/pdf')
-        $filename = [System.IO.Path]::GetFileName($PdfPath)
-        $content.Add($streamContent, 'file', $filename)
-        $respMsg = $client.PostAsync('http://127.0.0.1:8000/analyze/', $content).Result
-        $respText = $respMsg.Content.ReadAsStringAsync().Result
-        if (-not $respMsg.IsSuccessStatusCode) { throw "Analyze POST failed: $($respMsg.StatusCode) $respText" }
-        $resp = $respText | ConvertFrom-Json
-    } finally {
-        if ($fs) { $fs.Dispose() }
-    }
-} finally {
-    if ($content) { $content.Dispose() }
-    if ($client) { $client.Dispose() }
-}
-$job = $resp.job_id
-if (-not $job) { throw "No job_id returned from /analyze/" }
-Write-Host "JOB_ID=$job"
 
-# Poll loop
-$deadline = (Get-Date).AddSeconds($PollSeconds)
-$done = $false
-$status = $null
-$i = 0
-while ((Get-Date) -lt $deadline) {
-    try {
-        $status = Invoke-RestMethod -Uri ("http://127.0.0.1:8000/analyze/status_min/" + $job) -Method Get
-        $prog = if ($status.progress -ne $null) { [int]$status.progress } else { -1 }
-        $cnt = if ($status.counts) { $status.counts } else { @{} }
-        $ctrl = if ($cnt.control -ne $null) { $cnt.control } else { -1 }
-        Write-Host ("poll #$i progress=$prog% controls=$ctrl done=" + ($status.done -eq $true))
-        if ($status.error) {
-            if ($status.error -eq 'Job not found' -and $status.transient_unavailable) {
-                Start-Sleep -Seconds 2
-                continue
-            } else {
-                Write-Host ("Job error: " + $status.error)
-                break
-            }
+$ErrorActionPreference = "Stop"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# Find Python executable (prefer venv)
+function Get-PythonExe {
+    $candidates = @(
+        Join-Path $ScriptDir ".venv\Scripts\python.exe",
+        Join-Path $ScriptDir "venv\Scripts\python.exe",
+        Join-Path $ScriptDir "env\Scripts\python.exe",
+        "python"
+    )
+    
+    foreach ($exe in $candidates) {
+        if (Test-Path $exe -ErrorAction SilentlyContinue) {
+            return $exe
         }
-        if ($status.done) { $done = $true; break }
-    } catch {
-        Write-Host ("poll error: " + $_.Exception.Message)
     }
-    $i++
-    Start-Sleep -Seconds 5
+    
+    return "python"
 }
-if ($done) { Write-Host "Job completed" } else { Write-Host "Job not completed within time budget" }
 
-# Check combined_result.json
-$cr = Join-Path (Split-Path -Parent $PSScriptRoot) 'data\json\combined_result.json'
-if (Test-Path $cr) {
-    $len = (Get-Item $cr).Length
-    Write-Host ("combined_result.json bytes=" + $len)
-} else {
-    Write-Host 'combined_result.json missing'
+$PythonExe = Get-PythonExe
+$AnalysisScript = Join-Path $ScriptDir "run_analysis.py"
+
+# Check if analysis script exists
+if (-not (Test-Path $AnalysisScript)) {
+    Write-Error "Analysis script not found: $AnalysisScript"
+    exit 1
 }
+
+# Build command arguments
+$args = @($AnalysisScript)
+
+if ($ListReports) {
+    $args += "--list-reports"
+} elseif ($PdfPath) {
+    $args += $PdfPath
+} else {
+    Write-Host "SOC2 Analysis - Direct Execution (No API/Threading)"
+    Write-Host "=================================================="
+    Write-Host ""
+    Write-Host "Usage:"
+    Write-Host "  .\run_scan.ps1 <pdf-file>               # Analyze a PDF"
+    Write-Host "  .\run_scan.ps1 -ListReports             # List available reports"
+    Write-Host "  .\run_scan.ps1 Okta.pdf                 # Short form (looks in soc2_reports/)"
+    Write-Host "  .\run_scan.ps1 -Verbose                 # Enable debug logging"
+    Write-Host "  .\run_scan.ps1 -NoDbInsert              # Skip database insertion"
+    Write-Host ""
+    Write-Host "Examples:"
+    Write-Host "  .\run_scan.ps1 soc2_reports\Okta.pdf"
+    Write-Host "  .\run_scan.ps1 Okta.pdf -Verbose"
+    Write-Host "  .\run_scan.ps1 -ListReports"
+    Write-Host ""
+    exit 0
+}
+
+if ($Verbose) {
+    $args += "--verbose"
+}
+
+if ($NoDbInsert) {
+    $args += "--no-db-insert"
+}
+
+if ($OutputDir -ne "data/json") {
+    $args += "--output-dir", $OutputDir
+}
+
+# Run the analysis
+Write-Host "Running analysis with: $PythonExe $($args -join ' ')" -ForegroundColor Cyan
+Write-Host ""
+
+& $PythonExe @args
+
+exit $LASTEXITCODE

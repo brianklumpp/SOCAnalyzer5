@@ -1,0 +1,138 @@
+[
+  {
+    "id": "CC1",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "The entity demonstrates a commitment to integrity and ethical values",
+    "principle": "Commitment to Integrity and Ethical Values"
+  },
+  {
+    "id": "CC2",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "The board of directors demonstrates independence from management and exercises oversight",
+    "principle": "Board Independence and Oversight"
+  },
+  {
+    "id": "CC3",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Management establishes structures, reporting lines, and authorities and responsibilities",
+    "principle": "Organizational Structure and Authorities"
+  },
+  {
+    "id": "CC4",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "The entity demonstrates a commitment to attract, develop, and retain competent individuals",
+    "principle": "Commitment to Competence"
+  },
+  {
+    "id": "CC5",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "The entity holds individuals accountable for their internal control responsibilities",
+    "principle": "Accountability for Internal Control"
+  },
+  {
+    "id": "RA1",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "The entity specifies objectives with sufficient clarity to enable identification of risks",
+    "principle": "Specification of Suitable Objectives"
+  },
+  {
+    "id": "RA2",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "The entity identifies risks to achievement of its objectives and analyzes risks",
+    "principle": "Identification and Analysis of Risk"
+  },
+  {
+    "id": "RA3",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "The entity considers potential for fraud in assessing risks",
+    "principle": "Fraud Risk Assessment"
+  },
+  {
+    "id": "RA4",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "The entity identifies and assesses changes that could significantly impact internal control",
+    "principle": "Assessment of Significant Change"
+  },
+  {
+    "id": "CA1",
+    "section": "Control Activities",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "The entity selects and develops control activities that mitigate risks",
+    "principle": "Selection and Development of Control Activities"
+  },
+  {
+    "id": "CA2",
+    "section": "Control Activities",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "The entity selects and develops general control activities over technology",
+    "principle": "Technology Controls"
+  },
+  {
+    "id": "CA3",
+    "section": "Control Activities",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "The entity deploys control activities through policies and procedures",
+    "principle": "Deployment Through Policies"
+  },
+  {
+    "id": "IC1",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "The entity obtains or generates relevant quality information to support internal control",
+    "principle": "Use of Relevant Information"
+  },
+  {
+    "id": "IC2",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "The entity internally communicates information necessary to support internal control",
+    "principle": "Internal Communication"
+  },
+  {
+    "id": "IC3",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "The entity communicates with external parties regarding matters affecting internal control",
+    "principle": "External Communication"
+  },
+  {
+    "id": "MA1",
+    "section": "Monitoring Activities",
+    "category": "Monitoring Activities",
+    "component": "Monitoring Activities",
+    "description": "The entity selects, develops, and performs ongoing and/or separate evaluations",
+    "principle": "Ongoing and Separate Evaluations"
+  },
+  {
+    "id": "MA2",
+    "section": "Monitoring Activities",
+    "category": "Monitoring Activities",
+    "component": "Monitoring Activities",
+    "description": "The entity evaluates and communicates internal control deficiencies",
+    "principle": "Evaluation and Communication of Deficiencies"
+  }
+]

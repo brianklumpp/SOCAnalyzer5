@@ -1,0 +1,114 @@
+[
+  {
+    "id": "A.5",
+    "section": "A.5 Information Security Policies",
+    "category": "Information Security Policies",
+    "component": "Organizational Controls",
+    "description": "Information security policy",
+    "principle": "Policy for Information Security"
+  },
+  {
+    "id": "A.6",
+    "section": "A.6 Organization of Information Security",
+    "category": "Organization of Information Security",
+    "component": "Organizational Controls",
+    "description": "Internal organization, mobile devices and teleworking",
+    "principle": "Organization of Information Security"
+  },
+  {
+    "id": "A.7",
+    "section": "A.7 Human Resource Security",
+    "category": "Human Resource Security",
+    "component": "People Controls",
+    "description": "Prior to employment, during employment, and termination",
+    "principle": "Human Resource Security"
+  },
+  {
+    "id": "A.8",
+    "section": "A.8 Asset Management",
+    "category": "Asset Management",
+    "component": "Organizational Controls",
+    "description": "Responsibility for assets, information classification, media handling",
+    "principle": "Asset Management"
+  },
+  {
+    "id": "A.9",
+    "section": "A.9 Access Control",
+    "category": "Access Control",
+    "component": "Technological Controls",
+    "description": "Business requirements, user access management, system and application access",
+    "principle": "Access Control"
+  },
+  {
+    "id": "A.10",
+    "section": "A.10 Cryptography",
+    "category": "Cryptography",
+    "component": "Technological Controls",
+    "description": "Cryptographic controls",
+    "principle": "Cryptography"
+  },
+  {
+    "id": "A.11",
+    "section": "A.11 Physical and Environmental Security",
+    "category": "Physical and Environmental Security",
+    "component": "Physical Controls",
+    "description": "Secure areas, equipment security",
+    "principle": "Physical and Environmental Security"
+  },
+  {
+    "id": "A.12",
+    "section": "A.12 Operations Security",
+    "category": "Operations Security",
+    "component": "Technological Controls",
+    "description": "Operational procedures, protection from malware, backup, logging, control of operational software",
+    "principle": "Operations Security"
+  },
+  {
+    "id": "A.13",
+    "section": "A.13 Communications Security",
+    "category": "Communications Security",
+    "component": "Technological Controls",
+    "description": "Network security management, information transfer",
+    "principle": "Communications Security"
+  },
+  {
+    "id": "A.14",
+    "section": "A.14 System Acquisition, Development and Maintenance",
+    "category": "System Development",
+    "component": "Technological Controls",
+    "description": "Security requirements, security in development and support processes, test data",
+    "principle": "System Acquisition and Development"
+  },
+  {
+    "id": "A.15",
+    "section": "A.15 Supplier Relationships",
+    "category": "Supplier Relationships",
+    "component": "Organizational Controls",
+    "description": "Information security in supplier relationships, supplier service delivery management",
+    "principle": "Supplier Relationships"
+  },
+  {
+    "id": "A.16",
+    "section": "A.16 Information Security Incident Management",
+    "category": "Incident Management",
+    "component": "Organizational Controls",
+    "description": "Management of information security incidents and improvements",
+    "principle": "Information Security Incident Management"
+  },
+  {
+    "id": "A.17",
+    "section": "A.17 Business Continuity Management",
+    "category": "Business Continuity",
+    "component": "Organizational Controls",
+    "description": "Information security continuity, redundancies",
+    "principle": "Business Continuity Management"
+  },
+  {
+    "id": "A.18",
+    "section": "A.18 Compliance",
+    "category": "Compliance",
+    "component": "Organizational Controls",
+    "description": "Compliance with legal and contractual requirements, information security reviews",
+    "principle": "Compliance"
+  }
+]

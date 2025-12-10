@@ -760,6 +760,18 @@ def filter_third_parties_with_gpt():
     filtered = enhance_subservice_orgs(filtered)
     print("[Subservice Orgs Enhancement] ✓ Enhancement complete!\n", flush=True)
     
+    # Generate PDF snippets for PDF viewer search (if enabled)
+    if config.ENABLE_PDF_SNIPPETS:
+        for org in filtered:
+            text = org.get('name', '') or org.get('text', '')
+            if text:
+                # Simple 150-char truncation with whitespace cleanup
+                snippet = ' '.join(text.split())[:150]
+                if len(' '.join(text.split())) > 150:
+                    snippet += '...'
+                org['pdf_snippet'] = snippet
+        logging.info(f"Generated PDF snippets for {sum(1 for o in filtered if 'pdf_snippet' in o)} subservice orgs")
+    
     # Write filtered results
     filtered = ensure_confidence_justification_field(filtered)
     with open(str(OUTPUT_JSON_PATH), 'w', encoding='utf-8') as f:

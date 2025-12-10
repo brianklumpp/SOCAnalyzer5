@@ -1,6 +1,6 @@
 {
-  "version": "5.0.0",
-  "lastUpdated": "2025-12-03",
+  "version": "5.1.0",
+  "lastUpdated": "2025-12-08",
   "categories": [
     {
       "id": "getting-started",
@@ -130,6 +130,55 @@
           "title": "Performance Tips",
           "description": "Optimizing extraction and improving performance",
           "filePath": "troubleshooting/performance.md"
+        }
+      ]
+    },
+    {
+      "id": "developer",
+      "title": "Developer Guide",
+      "description": "Technical documentation for support teams",
+      "topics": [
+        {
+          "id": "v4-extraction",
+          "title": "V4 Extraction Architecture",
+          "description": "Control Extractor V4 with aware-chunk and chain-of-thought",
+          "filePath": "developer/v4-extraction.md"
+        },
+        {
+          "id": "direct-execution",
+          "title": "Direct Execution Guide",
+          "description": "Running analyses via scripts instead of API",
+          "filePath": "developer/direct-execution.md"
+        },
+        {
+          "id": "interactive-mode",
+          "title": "Interactive Mode",
+          "description": "Using the interactive TUI for guided analysis",
+          "filePath": "developer/interactive-mode.md"
+        },
+        {
+          "id": "gpt-configuration",
+          "title": "GPT Model Configuration",
+          "description": "Dataiku LLM setup, model mapping, and embedding refactor",
+          "filePath": "developer/gpt-configuration.md"
+        },
+        {
+          "id": "dns-configuration",
+          "title": "DNS Configuration",
+          "description": "DNS fallback setup for Dataiku DSS connectivity",
+          "filePath": "developer/dns-configuration.md"
+        },
+        {
+          "id": "database-migration",
+          "title": "Database Migration",
+          "description": "PostgreSQL Docker migration and database operations",
+          "filePath": "developer/database-migration.md"
+        },
+        {
+          "id": "duplicate-highlighting",
+          "title": "Duplicate Control Highlighting",
+          "description": "Visual detection and handling of duplicate control IDs",
+          "filePath": "developer/duplicate-highlighting.md"
         }
       ]
     },

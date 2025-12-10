@@ -12,6 +12,7 @@ from .models import Company
 logger = logging.getLogger(__name__)
 
 CLEARBIT_LOGO_API = "https://logo.clearbit.com/{domain}"
+GOOGLE_FAVICON_API = "https://www.google.com/s2/favicons?domain={domain}&sz=128"
 REQUEST_TIMEOUT = 5  # seconds
 
 
@@ -21,7 +22,7 @@ def fetch_and_cache_logo(
     db: Session
 ) -> Tuple[bool, Optional[str]]:
     """
-    Fetch company logo from Clearbit API and cache in database.
+    Fetch company logo from Clearbit API (with Google favicon fallback) and cache in database.
     
     Args:
         company_id: Database ID of the company
@@ -45,28 +46,41 @@ def fetch_and_cache_logo(
         logger.info(f"[LOGO_SERVICE] Logo already cached for {domain}: {company.logo_url}")
         return True, company.logo_url
     
-    # Fetch from Clearbit
-    logo_url = CLEARBIT_LOGO_API.format(domain=domain)
+    # Try Clearbit first
+    clearbit_url = CLEARBIT_LOGO_API.format(domain=domain)
     
     try:
-        logger.info(f"[LOGO_SERVICE] Fetching logo for {domain} from Clearbit...")
-        response = requests.head(logo_url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+        logger.info(f"[LOGO_SERVICE] Trying Clearbit for {domain}...")
+        response = requests.head(clearbit_url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
         
         if response.status_code == 200:
             # Logo found, cache it
-            company.logo_url = logo_url
+            company.logo_url = clearbit_url
             db.commit()
-            logger.info(f"[LOGO_SERVICE] Logo cached successfully: {logo_url}")
-            return True, logo_url
+            logger.info(f"[LOGO_SERVICE] ✓ Clearbit logo cached: {clearbit_url}")
+            return True, clearbit_url
         else:
-            logger.info(f"[LOGO_SERVICE] No logo found for {domain} (status={response.status_code})")
+            logger.info(f"[LOGO_SERVICE] Clearbit failed (status={response.status_code}), trying Google favicon...")
+            
+    except Exception as e:
+        logger.info(f"[LOGO_SERVICE] Clearbit error: {e}, trying Google favicon...")
+    
+    # Fallback to Google favicon
+    try:
+        google_url = GOOGLE_FAVICON_API.format(domain=domain)
+        response = requests.head(google_url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+        
+        if response.status_code == 200:
+            company.logo_url = google_url
+            db.commit()
+            logger.info(f"[LOGO_SERVICE] ✓ Google favicon cached: {google_url}")
+            return True, google_url
+        else:
+            logger.warning(f"[LOGO_SERVICE] ✗ Both services failed for {domain}")
             return False, None
             
-    except requests.exceptions.Timeout:
-        logger.warning(f"[LOGO_SERVICE] Timeout fetching logo for {domain}")
-        return False, None
     except Exception as e:
-        logger.error(f"[LOGO_SERVICE] Error fetching logo for {domain}: {e}", exc_info=True)
+        logger.error(f"[LOGO_SERVICE] Google favicon error for {domain}: {e}")
         return False, None
 
 
@@ -111,13 +125,13 @@ Company Name: {company_name}
 Domain: {domain or 'Unknown'}
 
 ## Common Logo URL Patterns
-1. Clearbit API: https://logo.clearbit.com/{{domain}}
-2. Google Favicon: https://www.google.com/s2/favicons?domain={{domain}}&sz=128
+1. Clearbit API: https://logo.clearbit.com/{{domain}} (high quality but may have access issues)
+2. Google Favicon: https://www.google.com/s2/favicons?domain={{domain}}&sz=128 (reliable fallback)
 
 ## Instructions
-1. If domain is provided, use Clearbit format: https://logo.clearbit.com/{{domain}}
+1. If domain is provided, prefer Google favicon for reliability: https://www.google.com/s2/favicons?domain={{domain}}&sz=128
 2. Return the single most likely URL
-3. If uncertain, return the Clearbit URL as fallback
+3. Google favicon is the recommended default due to better availability
 
 ## Output Format
 Return ONLY a JSON object (no markdown, no explanatory text):

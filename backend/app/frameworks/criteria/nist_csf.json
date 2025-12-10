@@ -1,0 +1,186 @@
+[
+  {
+    "id": "ID.AM",
+    "section": "Identify",
+    "category": "Asset Management",
+    "component": "Identify",
+    "description": "Physical devices and systems are inventoried and managed",
+    "principle": "Asset Management"
+  },
+  {
+    "id": "ID.BE",
+    "section": "Identify",
+    "category": "Business Environment",
+    "component": "Identify",
+    "description": "Organization's mission, objectives, stakeholders, and activities are understood",
+    "principle": "Business Environment"
+  },
+  {
+    "id": "ID.GV",
+    "section": "Identify",
+    "category": "Governance",
+    "component": "Identify",
+    "description": "Policies, procedures, and processes to manage cybersecurity risk are established",
+    "principle": "Governance"
+  },
+  {
+    "id": "ID.RA",
+    "section": "Identify",
+    "category": "Risk Assessment",
+    "component": "Identify",
+    "description": "Organization understands cybersecurity risk to operations and assets",
+    "principle": "Risk Assessment"
+  },
+  {
+    "id": "ID.RM",
+    "section": "Identify",
+    "category": "Risk Management Strategy",
+    "component": "Identify",
+    "description": "Organization's priorities, constraints, risk tolerances, and assumptions are established",
+    "principle": "Risk Management Strategy"
+  },
+  {
+    "id": "ID.SC",
+    "section": "Identify",
+    "category": "Supply Chain Risk Management",
+    "component": "Identify",
+    "description": "Organization's priorities, constraints, risk tolerances for supply chain are identified",
+    "principle": "Supply Chain Risk Management"
+  },
+  {
+    "id": "PR.AC",
+    "section": "Protect",
+    "category": "Identity Management and Access Control",
+    "component": "Protect",
+    "description": "Access to assets and associated facilities is limited to authorized users",
+    "principle": "Access Control"
+  },
+  {
+    "id": "PR.AT",
+    "section": "Protect",
+    "category": "Awareness and Training",
+    "component": "Protect",
+    "description": "Personnel are provided cybersecurity awareness education and training",
+    "principle": "Awareness and Training"
+  },
+  {
+    "id": "PR.DS",
+    "section": "Protect",
+    "category": "Data Security",
+    "component": "Protect",
+    "description": "Information and records are managed consistent with risk strategy",
+    "principle": "Data Security"
+  },
+  {
+    "id": "PR.IP",
+    "section": "Protect",
+    "category": "Information Protection Processes",
+    "component": "Protect",
+    "description": "Security policies, processes, and procedures are maintained",
+    "principle": "Information Protection"
+  },
+  {
+    "id": "PR.MA",
+    "section": "Protect",
+    "category": "Maintenance",
+    "component": "Protect",
+    "description": "Maintenance and repairs of assets are performed consistently",
+    "principle": "Maintenance"
+  },
+  {
+    "id": "PR.PT",
+    "section": "Protect",
+    "category": "Protective Technology",
+    "component": "Protect",
+    "description": "Technical security solutions are managed to ensure security",
+    "principle": "Protective Technology"
+  },
+  {
+    "id": "DE.AE",
+    "section": "Detect",
+    "category": "Anomalies and Events",
+    "component": "Detect",
+    "description": "Anomalous activity is detected and potential impact is understood",
+    "principle": "Anomalies and Events"
+  },
+  {
+    "id": "DE.CM",
+    "section": "Detect",
+    "category": "Security Continuous Monitoring",
+    "component": "Detect",
+    "description": "Information system and assets are monitored to identify cybersecurity events",
+    "principle": "Continuous Monitoring"
+  },
+  {
+    "id": "DE.DP",
+    "section": "Detect",
+    "category": "Detection Processes",
+    "component": "Detect",
+    "description": "Detection processes and procedures are maintained and tested",
+    "principle": "Detection Processes"
+  },
+  {
+    "id": "RS.RP",
+    "section": "Respond",
+    "category": "Response Planning",
+    "component": "Respond",
+    "description": "Response processes and procedures are executed and maintained",
+    "principle": "Response Planning"
+  },
+  {
+    "id": "RS.CO",
+    "section": "Respond",
+    "category": "Communications",
+    "component": "Respond",
+    "description": "Response activities are coordinated with internal and external stakeholders",
+    "principle": "Communications"
+  },
+  {
+    "id": "RS.AN",
+    "section": "Respond",
+    "category": "Analysis",
+    "component": "Respond",
+    "description": "Analysis is conducted to ensure effective response and recovery",
+    "principle": "Analysis"
+  },
+  {
+    "id": "RS.MI",
+    "section": "Respond",
+    "category": "Mitigation",
+    "component": "Respond",
+    "description": "Activities are performed to prevent expansion of an event and mitigate effects",
+    "principle": "Mitigation"
+  },
+  {
+    "id": "RS.IM",
+    "section": "Respond",
+    "category": "Improvements",
+    "component": "Respond",
+    "description": "Organizational response activities are improved by lessons learned",
+    "principle": "Improvements"
+  },
+  {
+    "id": "RC.RP",
+    "section": "Recover",
+    "category": "Recovery Planning",
+    "component": "Recover",
+    "description": "Recovery processes and procedures are executed and maintained",
+    "principle": "Recovery Planning"
+  },
+  {
+    "id": "RC.IM",
+    "section": "Recover",
+    "category": "Improvements",
+    "component": "Recover",
+    "description": "Recovery planning and processes are improved by lessons learned",
+    "principle": "Improvements"
+  },
+  {
+    "id": "RC.CO",
+    "section": "Recover",
+    "category": "Communications",
+    "component": "Recover",
+    "description": "Restoration activities are coordinated with internal and external parties",
+    "principle": "Communications"
+  }
+]

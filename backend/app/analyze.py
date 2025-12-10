@@ -5,10 +5,11 @@ import logging
 import traceback
 import argparse
 import time  # Added missing import for watchdog timing and progress tracking
+import threading  # For thread-safe job state management
 # ThreadPoolExecutor removed - now using sequential processing for stability
 from .extractors.auditor import extract_auditor_from_report
 from .extractors.company import extract_company_from_report
-from .extractors.control_integration import extract_controls  # V2/V4 unified interface
+from .extractors.control_extractor import extract_controls  # Unified control extractor
 # CUEC extractor routing (SOC1, SOC2, Combined)
 # Import will be done dynamically based on report_type
 from .extractors.subservice_orgs import extract_subservice_orgs, filter_third_parties_with_gpt
@@ -19,6 +20,66 @@ from .pdf_handler import extract_text_from_pdf, find_section_candidates
 from . import config
 from .models import ReportType
 import glob
+
+# Thread-safe job state management for multi-threading support
+_job_locks = {}  # Dictionary of job_id -> Lock
+_job_locks_lock = threading.Lock()  # Lock for managing the locks dictionary
+
+
+def _deep_merge(base_dict, update_dict):
+    """
+    Recursively merge update_dict into base_dict, preserving existing keys.
+    
+    Args:
+        base_dict: Base dictionary to merge into
+        update_dict: Dictionary with updates to apply
+        
+    Returns:
+        Merged dictionary
+    """
+    if not isinstance(base_dict, dict) or not isinstance(update_dict, dict):
+        return update_dict
+    
+    result = base_dict.copy()
+    for key, value in update_dict.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def _update_job_state(job_id, updates_dict, redis_client):
+    """
+    Thread-safe update of Redis job state with deep merge support.
+    
+    Args:
+        job_id: Job identifier
+        updates_dict: Dictionary of updates to merge into existing state
+        redis_client: Sync Redis client instance
+    """
+    import redis as sync_redis
+    
+    # Get or create per-job lock
+    with _job_locks_lock:
+        if job_id not in _job_locks:
+            _job_locks[job_id] = threading.Lock()
+        job_lock = _job_locks[job_id]
+    
+    # Perform atomic get-modify-set with per-job lock
+    with job_lock:
+        try:
+            job_json = redis_client.get(f"job:{job_id}")
+            if not job_json:
+                logging.warning(f"[_update_job_state] Job {job_id} not found in Redis, update skipped")
+                return
+            
+            current_state = json.loads(job_json)
+            merged_state = _deep_merge(current_state, updates_dict)
+            redis_client.set(f"job:{job_id}", json.dumps(merged_state), ex=86400)
+            
+        except Exception as e:
+            logging.error(f"[_update_job_state] Failed to update job {job_id}: {e}")
 
 
 def validate_report_type(report_type_str):
@@ -49,7 +110,7 @@ def validate_report_type(report_type_str):
 
 
 def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json', report_type='SOC2', 
-                      progress_callback=None, checklist_callback=None):
+                      progress_callback=None, checklist_callback=None, job_id=None):
     # Reset GPT tracking at start of analysis
     from .gpt_tracker import reset_tracking, get_usage_summary
     reset_tracking()
@@ -70,6 +131,15 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         raise
 
     # --- Reset logs and JSON outputs at the start of each run ---
+    # Clear checkpoint file for fresh scan state (unless resuming)
+    CHECKPOINT_PATH = str(config.JSON_DIR / '_extraction_checkpoint.json')
+    if os.path.isfile(CHECKPOINT_PATH):
+        try:
+            os.remove(CHECKPOINT_PATH)
+            logger.info(f"Cleared checkpoint file for fresh scan")
+        except Exception as e:
+            logger.warning(f"Failed to clear checkpoint: {e}")
+    
     # List of files to clear
     files_to_clear = [
         str(config.JSON_DIR / 'section_results.json'),
@@ -343,12 +413,12 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             """
             Run unified control extraction for all report types.
             
-            Uses control_extractor_unified.py which:
+            Uses unified control_extractor.py which:
             - Uses SOC2 prompt for ALL report types (proven, reliable)
             - Optionally maps financial assertions via batch GPT (SOC1 only, if enabled)
             - Gracefully degrades if assertion mapping fails
             """
-            from .extractors.control_extractor_unified import extract_controls as extract_controls_unified
+            from .extractors.control_extractor import extract_controls as extract_controls_unified
             
             logger.info(f"Using unified control extractor (report_type={validated_report_type.value})")
             
@@ -356,11 +426,16 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as f:
                 sections = json.load(f)
             
-            # Call unified extractor
+            # Call unified extractor with job_id and scan_id for progress tracking
+            # max_controls=None allows config.QUICK_TEST_MODE_ENABLED to take effect
             result = extract_controls_unified(
                 sections=sections,
                 report_type=validated_report_type.value,
-                enable_assertion_mapping=config.ENABLE_ASSERTION_MAPPING
+                enable_assertion_mapping=config.ENABLE_ASSERTION_MAPPING,
+                max_controls=None,  # None = use config.QUICK_TEST_MODE_ENABLED if set
+                scan_id=None,  # Checkpoint will still work, just without scan_id tracking
+                job_id=job_id,  # Pass job_id for real-time progress updates
+                redis_client=redis_client  # Pass Redis client for job state updates
             )
             
             # Return controls (already saved to config.CONTROL_JSON_PATH by extractor)
@@ -369,20 +444,12 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         # Wrapper for CUEC extraction - routes based on report_type
         def _run_cuec_extraction():
             """
-            Run CUEC extraction using report_type routing:
-            - SOC1 → cuec_extractor_soc1.py (financial reporting keywords)
-            - SOC2 → cuec_extractor.py (default)
-            - COMBINED → cuec_extractor.py (default to SOC 2 logic)
+            Run unified CUEC extraction with report type parameter.
+            Supports SOC1, SOC2, and COMBINED report types.
             """
-            if validated_report_type == ReportType.SOC1:
-                from .extractors.cuec_extractor_soc1 import extract_cuecs as extract_cuecs_soc1
-                logger.info(f"Routing to SOC 1 CUEC extractor (report_type={validated_report_type.value})")
-                return extract_cuecs_soc1()
-            else:
-                # Default: SOC 2 CUEC extractor
-                from .extractors.cuec_extractor import extract_cuecs
-                logger.info(f"Routing to SOC 2 CUEC extractor (report_type={validated_report_type.value})")
-                return extract_cuecs()
+            from .extractors.cuec_extractor import extract_cuecs
+            logger.info(f"Running unified CUEC extractor (report_type={validated_report_type.value})")
+            return extract_cuecs(report_type=validated_report_type.value)
         
         prereq_steps = [
             (3, "company_extraction", extract_company_from_report, "Running company extractor...", 30),
@@ -402,6 +469,104 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         CONTROL_WATCHDOG_MAX_MINUTES = getattr(config, 'CONTROL_WATCHDOG_MAX_MINUTES', 25)
         _ctrl_last_count = 0
         _ctrl_last_time = time.time()
+        # Create Redis client for job state updates
+        redis_client = None
+        if job_id:
+            try:
+                import redis as sync_redis
+                from . import config as cfg
+                redis_url = getattr(cfg, 'REDIS_URL', 'redis://localhost:6379/0')
+                redis_client = sync_redis.from_url(redis_url, decode_responses=True)
+            except Exception as redis_err:
+                logger.warning(f"Could not create Redis client: {redis_err}")
+        
+        # Predefine flatten map for building standardized results (also used for partial writes)
+        flatten_map = {
+            'control_extraction': ('controls', 'controls'),
+            'cuec_extraction': ('cuecs', 'cuecs'),
+            # The subservice extractor writes a top-level 'subservice_orgs' list
+            # so use that as the inner key here to ensure the analyzer treats
+            # it as a list and runs enhancement/deduplication consistently.
+            'subservice_orgs_extraction': ('subservice_orgs', 'subservice_orgs'),
+            'product_extraction': ('product', 'product'),
+            'auditor_extraction': ('auditor', 'auditor'),
+            # Company extraction returns a dict with company name, domain, etc.
+            # We want to preserve the entire dict, not just the 'company' string field
+            'company_extraction': ('company', None),  # None means use the whole result
+            'report_date_extraction': ('report_date', 'report_date'),
+            'coverage_period_extraction': ('coverage_period', 'coverage_period'),
+        }
+
+        def _write_partial_combined(current_results: dict):
+            """Write partial combined results with file locking and merge support."""
+            import tempfile
+            try:
+                # Import file locking with platform fallback
+                try:
+                    import fcntl
+                    has_fcntl = True
+                except ImportError:
+                    has_fcntl = False
+                    logger.debug("fcntl not available (Windows), skipping file lock")
+                
+                combined_result_path = data_path('data/json/combined_result.json')
+                
+                # Prepare standardized partial results
+                standardized_partial = {}
+                for ext_key, (short_key, inner_key) in flatten_map.items():
+                    val = current_results.get(ext_key)
+                    if val is None:
+                        continue
+                    # If inner_key is None, use the entire value (for company extraction dict)
+                    if inner_key is None:
+                        standardized_partial[short_key] = val
+                    elif isinstance(val, dict) and inner_key in val:
+                        if short_key == 'controls' and isinstance(val[inner_key], list):
+                            standardized_partial[short_key] = [dict(c) for c in val[inner_key]]
+                        else:
+                            standardized_partial[short_key] = val[inner_key]
+                    else:
+                        standardized_partial[short_key] = val
+                
+                if not standardized_partial:
+                    return
+                
+                standardized_partial['sections'] = results.get('sections', [])
+                
+                # Read existing file and merge if present
+                existing_data = {}
+                if os.path.isfile(combined_result_path):
+                    try:
+                        with open(combined_result_path, 'r', encoding='utf-8') as f:
+                            if has_fcntl:
+                                fcntl.flock(f.fileno(), fcntl.LOCK_SH)  # Shared lock for reading
+                            existing_data = json.load(f)
+                            if has_fcntl:
+                                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    except Exception as read_err:
+                        logger.warning(f"Could not read existing combined_result.json: {read_err}")
+                
+                # Deep merge existing with new data
+                merged_data = _deep_merge(existing_data, standardized_partial)
+                
+                # Write atomically with exclusive lock
+                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', 
+                                                  dir=os.path.dirname(combined_result_path),
+                                                  delete=False, suffix='.json') as temp_f:
+                    temp_path = temp_f.name
+                    if has_fcntl:
+                        fcntl.flock(temp_f.fileno(), fcntl.LOCK_EX)
+                    json.dump(merged_data, temp_f, indent=2, ensure_ascii=False)
+                    if has_fcntl:
+                        fcntl.flock(temp_f.fileno(), fcntl.LOCK_UN)
+                
+                # Atomic rename
+                os.replace(temp_path, combined_result_path)
+                logger.debug(f"Updated combined_result.json with {len(standardized_partial)} entities")
+                
+            except Exception as _p_err:
+                logger.error(f"Failed partial combined write: {_p_err}")
+        
         # Run prerequisites sequentially
         for idx, key, func, status, pct in prereq_steps:
             try:
@@ -426,50 +591,37 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     except Exception as e2:
                         logger.error(f"Failed to load partial result for {key}: {e2}")
                         results[key] = None
+            
+            # Update identified_entities in job state for company and auditor
+            if job_id and redis_client and results.get(key):
+                try:
+                    entity_updates = {}
+                    if key == 'company_extraction' and isinstance(results[key], dict):
+                        company_name = results[key].get('company', 'Unknown')
+                        entity_updates = {'identified_entities': {'company': company_name}}
+                        logger.info(f"[PROGRESS] Company identified: {company_name}")
+                    elif key == 'auditor_extraction':
+                        auditor_name = results[key].get('auditor') if isinstance(results[key], dict) else results[key]
+                        if auditor_name:
+                            entity_updates = {'identified_entities': {'auditor': str(auditor_name)}}
+                            logger.info(f"[PROGRESS] Auditor identified: {auditor_name}")
+                    
+                    if entity_updates:
+                        _update_job_state(job_id, entity_updates, redis_client)
+                except Exception as entity_err:
+                    logger.warning(f"Could not update identified_entities: {entity_err}")
+            
+            # Write checkpoint and update job state after each prerequisite extractor
+            _write_partial_combined(results)
+            if job_id and redis_client:
+                try:
+                    _update_job_state(job_id, {}, redis_client)
+                except Exception as update_err:
+                    logger.warning(f"Could not update job state: {update_err}")
+            
             # Update checklist in Redis after each sequential extractor
             update_checklist(checklist)
-        # Predefine flatten map for building standardized results (also used for partial writes)
-        flatten_map = {
-            'control_extraction': ('controls', 'controls'),
-            'cuec_extraction': ('cuecs', 'cuecs'),
-            # The subservice extractor writes a top-level 'subservice_orgs' list
-            # so use that as the inner key here to ensure the analyzer treats
-            # it as a list and runs enhancement/deduplication consistently.
-            'subservice_orgs_extraction': ('subservice_orgs', 'subservice_orgs'),
-            'product_extraction': ('product', 'product'),
-            'auditor_extraction': ('auditor', 'auditor'),
-            # Company extraction returns a dict with company name, domain, etc.
-            # We want to preserve the entire dict, not just the 'company' string field
-            'company_extraction': ('company', None),  # None means use the whole result
-            'report_date_extraction': ('report_date', 'report_date'),
-            'coverage_period_extraction': ('coverage_period', 'coverage_period'),
-        }
-
-        def _write_partial_combined(current_results: dict):
-            try:
-                standardized_partial = {}
-                for ext_key, (short_key, inner_key) in flatten_map.items():
-                    val = current_results.get(ext_key)
-                    if val is None:
-                        continue
-                    # If inner_key is None, use the entire value (for company extraction dict)
-                    if inner_key is None:
-                        standardized_partial[short_key] = val
-                    elif isinstance(val, dict) and inner_key in val:
-                        if short_key == 'controls' and isinstance(val[inner_key], list):
-                            standardized_partial[short_key] = [dict(c) for c in val[inner_key]]
-                        else:
-                            standardized_partial[short_key] = val[inner_key]
-                    else:
-                        standardized_partial[short_key] = val
-                if standardized_partial:
-                    standardized_partial['sections'] = results.get('sections', [])
-                    combined_result_path = data_path('data/json/combined_result.json')
-                    with open(combined_result_path, 'w', encoding='utf-8') as f:
-                        json.dump(standardized_partial, f, indent=2, ensure_ascii=False)
-            except Exception as _p_err:
-                logger.error(f"Failed partial combined write: {_p_err}")
-
+        
         # --- Run remaining extractors in parallel threads ---
         extractor_results = {}
         def run_extractor(idx, key, func, status, pct):
@@ -530,6 +682,19 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 return key, res
             except Exception as e:
                 logger.error(f"{key} extractor failed: {e}\n{traceback.format_exc()}")
+                
+                # Set extraction_partial flag in job state
+                if job_id and redis_client:
+                    try:
+                        error_msg = str(e)[:100]  # Truncate error message
+                        _update_job_state(job_id, {
+                            'extraction_partial': True,
+                            'status': f'Partial: {key} failed - {error_msg}'
+                        }, redis_client)
+                        logger.warning(f"[PROGRESS] Warning: {key} partially completed")
+                    except Exception as flag_err:
+                        logger.warning(f"Could not set extraction_partial flag: {flag_err}")
+                
                 # Attempt to load any partial JSON result if present
                 partial_path = None
                 if key == 'control_extraction':
@@ -624,8 +789,65 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 update_checklist(checklist)
                 
             finally:
-                # Write partial combined_result.json after each extractor
-                _write_partial_combined(extractor_results)
+                # Update identified_entities for product, dates, etc. AND counters for subservice orgs/CUECs
+                if job_id and redis_client and key in extractor_results and extractor_results[key]:
+                    try:
+                        entity_updates = {}
+                        counter_updates = {}
+                        
+                        if key == 'product_extraction':
+                            product = extractor_results[key].get('product') if isinstance(extractor_results[key], dict) else extractor_results[key]
+                            if product:
+                                entity_updates = {'identified_entities': {'product': str(product)}}
+                                logger.info(f"[PROGRESS] Product identified: {product}")
+                        elif key == 'report_date_extraction':
+                            report_date = extractor_results[key].get('report_date') if isinstance(extractor_results[key], dict) else extractor_results[key]
+                            if report_date:
+                                entity_updates = {'identified_entities': {'report_date': str(report_date)}}
+                                logger.info(f"[PROGRESS] Report date identified: {report_date}")
+                        elif key == 'coverage_period_extraction':
+                            coverage = extractor_results[key].get('coverage_period') if isinstance(extractor_results[key], dict) else extractor_results[key]
+                            if coverage:
+                                entity_updates = {'identified_entities': {'coverage_period': str(coverage)}}
+                                logger.info(f"[PROGRESS] Coverage period identified: {coverage}")
+                        elif key == 'subservice_orgs_extraction':
+                            # Extract subservice orgs count
+                            res = extractor_results[key]
+                            count = 0
+                            if isinstance(res, dict):
+                                count = len(res.get('subservice_orgs', []))
+                            elif isinstance(res, list):
+                                count = len(res)
+                            counter_updates = {'counters': {'subservice_orgs_count': count}}
+                            logger.info(f"[PROGRESS] Found {count} subservice organizations")
+                        elif key == 'cuec_extraction':
+                            # Extract CUECs count
+                            res = extractor_results[key]
+                            count = 0
+                            if isinstance(res, dict):
+                                count = len(res.get('cuecs', []))
+                            elif isinstance(res, list):
+                                count = len(res)
+                            counter_updates = {'counters': {'cuecs_count': count}}
+                            logger.info(f"[PROGRESS] Found {count} CUECs")
+                        
+                        # Apply entity updates
+                        if entity_updates:
+                            _update_job_state(job_id, entity_updates, redis_client)
+                        # Apply counter updates
+                        if counter_updates:
+                            _update_job_state(job_id, counter_updates, redis_client)
+                    except Exception as entity_err:
+                        logger.warning(f"Could not update progress for {key}: {entity_err}")
+                
+                # Write partial combined_result.json and update job state after each extractor
+                results.update(extractor_results)  # Merge extractor results into main results dict
+                _write_partial_combined(results)
+                if job_id and redis_client:
+                    try:
+                        _update_job_state(job_id, {}, redis_client)
+                    except Exception as update_err:
+                        logger.warning(f"Could not update job state: {update_err}")
             
         # --- Always load extractor outputs from JSON files if present ---
         extractor_json_map = {

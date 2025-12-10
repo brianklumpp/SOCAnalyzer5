@@ -109,6 +109,8 @@ services:
       CONTROL_EMBEDDING_MAPPING_ENABLED: "false"  # Temporarily disabled - GPT mapping overloads Dataiku
       SOCANALYZER_REDIS_URL: redis://redis:6379/0
       DOCKER_CONTROL_ENABLED: "true"
+      QUICK_TEST_MODE: ${QUICK_TEST_MODE:-false}
+      QUICK_TEST_MAX_CONTROLS: ${QUICK_TEST_MAX_CONTROLS:-10}
       PYTHONUNBUFFERED: "1"
       WATCHFILES_FORCE_POLLING: "true"  # Better file watching on Windows
     ports:
@@ -132,29 +134,16 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-      target: build  # Use the build stage which has Node.js
+      target: prod  # Use production stage with nginx
     container_name: socanalyzer-frontend
     restart: unless-stopped
     depends_on:
       - backend
-    environment:
-      CHOKIDAR_USEPOLLING: "true"  # Better file watching on Windows
-      NODE_OPTIONS: "--max-old-space-size=8192"  # Increase heap size for memory-intensive builds
-      TSC_COMPILE_ON_ERROR: "true"  # Continue even if type errors
-      SKIP_PREFLIGHT_CHECK: "true"
     ports:
-      - "3000:3000"  # Dev server port
+      - "3000:80"  # Map to nginx port
     volumes:
-      # Bind mount source code for live editing
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-      - ./frontend/tsconfig.json:/app/tsconfig.json:ro
-      - ./frontend/package.json:/app/package.json:ro
-      # Preserve node_modules in container
-      - /app/node_modules
-    command: npm start
-    stdin_open: true
-    tty: true
+      # Bind mount frontend build for live updates
+      - ./frontend/build:/usr/share/nginx/html
     networks:
       - socanalyzer-network
 

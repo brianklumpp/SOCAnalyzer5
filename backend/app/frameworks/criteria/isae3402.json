@@ -1,0 +1,138 @@
+[
+  {
+    "id": "CE1",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "The service organization demonstrates commitment to integrity and ethical values",
+    "principle": "Integrity and Ethical Values"
+  },
+  {
+    "id": "CE2",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "The service organization has appropriate oversight structure",
+    "principle": "Organizational Oversight"
+  },
+  {
+    "id": "CE3",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "The service organization establishes structures, authorities, and responsibilities",
+    "principle": "Organizational Structure"
+  },
+  {
+    "id": "CE4",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "The service organization demonstrates commitment to competence",
+    "principle": "Commitment to Competence"
+  },
+  {
+    "id": "CE5",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "The service organization holds individuals accountable",
+    "principle": "Accountability"
+  },
+  {
+    "id": "RA1",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "The service organization specifies suitable objectives",
+    "principle": "Specification of Objectives"
+  },
+  {
+    "id": "RA2",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "The service organization identifies and analyzes risks",
+    "principle": "Risk Identification and Analysis"
+  },
+  {
+    "id": "RA3",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "The service organization considers potential for fraud",
+    "principle": "Fraud Risk"
+  },
+  {
+    "id": "RA4",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "The service organization identifies and assesses changes",
+    "principle": "Change Assessment"
+  },
+  {
+    "id": "CA1",
+    "section": "Control Activities",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "The service organization selects and develops control activities",
+    "principle": "Control Activity Selection"
+  },
+  {
+    "id": "CA2",
+    "section": "Control Activities",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "The service organization selects and develops general controls over technology",
+    "principle": "Technology Controls"
+  },
+  {
+    "id": "CA3",
+    "section": "Control Activities",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "The service organization deploys control activities through policies",
+    "principle": "Policies and Procedures"
+  },
+  {
+    "id": "IC1",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "The service organization obtains or generates relevant information",
+    "principle": "Relevant Information"
+  },
+  {
+    "id": "IC2",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "The service organization communicates internally",
+    "principle": "Internal Communication"
+  },
+  {
+    "id": "IC3",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "The service organization communicates externally",
+    "principle": "External Communication"
+  },
+  {
+    "id": "MA1",
+    "section": "Monitoring Activities",
+    "category": "Monitoring Activities",
+    "component": "Monitoring Activities",
+    "description": "The service organization conducts ongoing and separate evaluations",
+    "principle": "Ongoing Evaluations"
+  },
+  {
+    "id": "MA2",
+    "section": "Monitoring Activities",
+    "category": "Monitoring Activities",
+    "component": "Monitoring Activities",
+    "description": "The service organization evaluates and communicates deficiencies",
+    "principle": "Communication of Deficiencies"
+  }
+]

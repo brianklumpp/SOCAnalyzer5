@@ -502,7 +502,7 @@ def find_section_candidates_legacy(text, model=DEFAULT_GPT_MODEL, temperature=DE
         if not found_next_page:
             search_start_line = 0  # Fallback: search from start if not found
         doc_page_offset = toc_page  # Keep doc_page_offset logic unchanged
-        results = {}
+        results = {'toc_page_offset': toc_page}  # Store for scan metadata
         # --- Section-specific logging for troubleshooting ---
         section_log_map = {
             'Management_Assertion': str(config.LOGS_DIR / 'management_assertion.log'),
@@ -1271,9 +1271,14 @@ def clean_toc_heading(heading):
     return heading.strip()
 
 def get_page_for_line(lines, line_num):
-    """Given a list of lines and a line number, return the page number (1-based) for that line, using the page break markers."""
+    """Given a list of lines and a line number, return the page number (1-based) for that line, using the page break markers.
+    
+    The page marker that PRECEDES the control line is the correct page reference.
+    For example, if line 100 has '=== PAGE 5 ===' and line 101 has the control, the control is on page 5.
+    """
     page = 1
-    for i in range(min(line_num, len(lines))):
+    # Iterate up to (but not including) the target line to find the preceding page marker
+    for i in range(min(line_num - 1, len(lines))):
         if lines[i].startswith('=== PAGE '):
             try:
                 page = int(lines[i].split()[2])

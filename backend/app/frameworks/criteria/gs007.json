@@ -1,0 +1,98 @@
+[
+  {
+    "id": "CE1",
+    "section": "Kontrollumgebung",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Die Unternehmensleitung fördert Integrität und ethische Werte",
+    "principle": "Integrity and Ethics"
+  },
+  {
+    "id": "CE2",
+    "section": "Kontrollumgebung",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Organisationsstruktur und Verantwortlichkeiten sind klar definiert",
+    "principle": "Organizational Structure"
+  },
+  {
+    "id": "CE3",
+    "section": "Kontrollumgebung",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Kompetenz und Qualifikation der Mitarbeiter wird sichergestellt",
+    "principle": "Personnel Competence"
+  },
+  {
+    "id": "RA1",
+    "section": "Risikobeurteilung",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "Risiken werden identifiziert und bewertet",
+    "principle": "Risk Identification"
+  },
+  {
+    "id": "RA2",
+    "section": "Risikobeurteilung",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "Risikomanagementprozesse sind etabliert",
+    "principle": "Risk Management"
+  },
+  {
+    "id": "CA1",
+    "section": "Kontrollaktivitäten",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "Kontrollmaßnahmen sind implementiert und wirksam",
+    "principle": "Control Implementation"
+  },
+  {
+    "id": "CA2",
+    "section": "Kontrollaktivitäten",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "IT-Kontrollen sind eingerichtet",
+    "principle": "IT Controls"
+  },
+  {
+    "id": "CA3",
+    "section": "Kontrollaktivitäten",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "Zugriffskontrollen schützen kritische Systeme und Daten",
+    "principle": "Access Controls"
+  },
+  {
+    "id": "IC1",
+    "section": "Information und Kommunikation",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "Relevante Informationen werden erfasst und kommuniziert",
+    "principle": "Information Communication"
+  },
+  {
+    "id": "IC2",
+    "section": "Information und Kommunikation",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "Kommunikationswege sind etabliert",
+    "principle": "Communication Channels"
+  },
+  {
+    "id": "MO1",
+    "section": "Überwachung",
+    "category": "Monitoring",
+    "component": "Monitoring",
+    "description": "Laufende Überwachungsaktivitäten werden durchgeführt",
+    "principle": "Ongoing Monitoring"
+  },
+  {
+    "id": "MO2",
+    "section": "Überwachung",
+    "category": "Monitoring",
+    "component": "Monitoring",
+    "description": "Kontrollmängel werden identifiziert und gemeldet",
+    "principle": "Deficiency Reporting"
+  }
+]

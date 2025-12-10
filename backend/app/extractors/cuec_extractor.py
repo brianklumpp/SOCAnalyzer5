@@ -1,3 +1,19 @@
+"""Unified CUEC Extractor for SOC1 and SOC2 Reports
+
+Extracts Complementary User Entity Controls (CUECs) from SOC reports.
+Supports both SOC1 and SOC2 report types with appropriate keyword sets
+and framework mappings.
+
+Usage:
+    from .cuec_extractor import extract_cuecs
+    
+    # SOC2 report
+    extract_cuecs(report_type="SOC2")
+    
+    # SOC1 report  
+    extract_cuecs(report_type="SOC1")
+"""
+
 # All imports at the top
 import os
 import json
@@ -32,7 +48,7 @@ os.makedirs(GPT_LOG_PATH.parent, exist_ok=True)
 with open(GPT_LOG_PATH, 'w', encoding='utf-8') as gptlog:
     gptlog.write('')
 
-CUEC_KEYWORDS = config.CUEC_KEYWORDS
+# Extraction prompt (same for all report types)
 CUEC_EXTRACTION_PROMPT = config.CUEC_EXTRACTION_PROMPT
 
 # Removed: numpy, _embedding_cache, OPENAI_EMBEDDING_MODEL, OPENAI_EMBEDDING_URL
@@ -115,7 +131,15 @@ def calculate_distance_from_cuec_keywords(desc):
                 min_dist = dist
     return min_dist
 
-def extract_cuecs():
+def extract_cuecs(report_type: str = "SOC2"):
+    """Unified CUEC extraction for SOC1 and SOC2 reports.
+    
+    Args:
+        report_type: Report type ("SOC1", "SOC2", or "COMBINED"), defaults to "SOC2"
+        
+    Returns:
+        None (writes results to config.CUEC_JSON_PATH)
+    """
     # Reset output file at the start of extraction
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
         f.write('[]\n')
@@ -160,8 +184,24 @@ def extract_cuecs():
     cuec_results = []
     bad_chunks = []
     seq = 1
-    tsc_criteria = getattr(config, 'TSC_CRITERIA', [])
-    coso_criteria = getattr(config, 'COSO_2013_CRITERIA', [])
+    
+    # Load frameworks dynamically based on report type
+    from ..frameworks import get_available_frameworks
+    
+    # Select appropriate CUEC keywords based on report type
+    cuec_keywords = config.CUEC_KEYWORDS_SOC1 if report_type == "SOC1" else config.CUEC_KEYWORDS
+    logging.info(f"Using CUEC keywords for {report_type}: {cuec_keywords[:5]}...")
+    
+    try:
+        available_frameworks = get_available_frameworks(report_type=report_type)
+        logging.info(f"Loaded {len(available_frameworks)} frameworks for {report_type} CUEC mapping: {list(available_frameworks.keys())}")
+    except Exception as e:
+        logging.error(f"Failed to load frameworks: {e}, falling back to config TSC/COSO")
+        available_frameworks = {
+            "TSC": {"criteria": getattr(config, 'TSC_CRITERIA', [])},
+            "COSO": {"criteria": getattr(config, 'COSO_2013_CRITERIA', [])}
+        }
+    
     # Load company names from company_result.json
     company_json_path = str(config.JSON_DIR / 'company_result.json')
     try:
@@ -218,7 +258,7 @@ def extract_cuecs():
     # Prepare company and parent company names for prompt
     company_names_str = ', '.join(company_names) if company_names else 'the company'
     parent_company_names_str = ', '.join(parent_company_names) if parent_company_names else 'the parent company'
-    def process_chunk(idx, chunk, chunk_line_refs, seq, tsc_criteria, coso_criteria):
+    def process_chunk(idx, chunk, chunk_line_refs, seq, available_frameworks):
         # This is the body of your current for idx, chunk in enumerate(chunks): loop
         # Returns filtered_data, seq
         logging.debug(f"[CUEC] Chunk {idx}: start_line={start_line}, end_line={end_line}, chunk_len={len(chunk)}, chunk_preview={chunk[:200]!r}")
@@ -375,60 +415,122 @@ def extract_cuecs():
             filtered_data = []
             for cuec in data:
                 desc = cuec.get('cuec_description', '')
+                desc_lower = (desc or '').lower()
+                
+                # Track if CUEC should be marked as low confidence (but still included)
+                should_set_zero_confidence = False
+                zero_conf_reasons = []
+                
+                # Filter 1: Company/parent company responsibilities
                 if refers_to_company(desc) or refers_to_parent_company(desc):
-                    cuec['cuec_confidence'] = 0
-                    cuec['cuec_confidence_justification'] = cuec.get('cuec_confidence_justification', []) + ["Filtered by heuristic/GPT: {reason}"]
-                else:
-                    filtered_data.append(cuec)
-                    cuec['cuec_seq'] = seq
-                    cuec['cuec_distance_from_cuec_keywords'] = calculate_distance_from_cuec_keywords(desc)
-                    desc_snippet = ' '.join(desc.split()[:10])
-                    chunk_lines = chunk.splitlines()
-                    found_line = None
-                    for i, line in enumerate(chunk_lines):
-                        if desc_snippet and desc_snippet.lower() in line.lower():
-                            found_line = i + 1
-                            break
-                    # Patch: Make line reference assignment non-fatal and index safe
-                    try:
-                        if found_line is not None and idx < len(chunk_line_refs) and chunk_line_refs[idx] is not None:
-                            cuec['cuec_line_ref'] = chunk_line_refs[idx] + found_line - 1
-                        elif idx < len(chunk_line_refs):
-                            cuec['cuec_line_ref'] = chunk_line_refs[idx]
-                        else:
-                            cuec['cuec_line_ref'] = None
-                    except Exception as e:
-                        logging.error(f"[PATCH] Error assigning cuec_line_ref in process_chunk: {e}")
+                    should_set_zero_confidence = True
+                    zero_conf_reasons.append("Refers to service organization, not user entity")
+                    logging.info(f"Low confidence CUEC (company reference): '{desc[:80]}...'")
+                
+                # Filter 2: Incomplete fragments (too short, no ending punctuation)
+                is_fragment = len(desc.strip()) < 30 or (
+                    not desc.strip().endswith('.') and 
+                    not desc.strip().endswith(';') and 
+                    len(desc.strip()) < 80
+                )
+                if is_fragment:
+                    should_set_zero_confidence = True
+                    zero_conf_reasons.append("Text fragment, not a complete CUEC statement")
+                    logging.info(f"Low confidence CUEC (fragment): '{desc[:80]}...'")
+                
+                # Filter 3: System description fragments (not user responsibilities)
+                system_desc_indicators = [
+                    'core capabilities', 'extends the power', 'configuration management',
+                    'chef –', 'utilized to provision', 'data is captured', 
+                    'maintained historically', 'internal audit function',
+                    'is assigned the responsibility for', 'section ', 'identity as a service',
+                    'the following:', 'includes the following'
+                ]
+                is_system_desc = any(indicator in desc_lower for indicator in system_desc_indicators)
+                if is_system_desc:
+                    should_set_zero_confidence = True
+                    zero_conf_reasons.append("System description fragment, not a user entity control")
+                    logging.info(f"Low confidence CUEC (system description): '{desc[:80]}...'")
+                
+                # Filter 4: Must have some CUEC indicators for low-base-confidence items
+                has_cuec_keywords = any(kw in desc_lower for kw in [
+                    'user entity', 'user entities', 'user organization', 'client', 'customer',
+                    'responsible for', 'must ', 'shall ', 'should ', 'ensure', 'required to'
+                ])
+                # Allow through if GPT says yes, otherwise require keywords
+                gpt_says_yes = cuec.get('cuec_gpt_opinion', '').lower() == 'yes'
+                if not has_cuec_keywords and not gpt_says_yes:
+                    should_set_zero_confidence = True
+                    zero_conf_reasons.append("Lacks CUEC responsibility indicators")
+                    logging.info(f"Low confidence CUEC (no indicators): '{desc[:80]}...'")
+                
+                # Passed all filters - add to results and process
+                cuec['cuec_seq'] = seq
+                cuec['cuec_distance_from_cuec_keywords'] = calculate_distance_from_cuec_keywords(desc)
+                desc_snippet = ' '.join(desc.split()[:10])
+                chunk_lines = chunk.splitlines()
+                found_line = None
+                for i, line in enumerate(chunk_lines):
+                    if desc_snippet and desc_snippet.lower() in line.lower():
+                        found_line = i + 1
+                        break
+                # Patch: Make line reference assignment non-fatal and index safe
+                try:
+                    if found_line is not None and idx < len(chunk_line_refs) and chunk_line_refs[idx] is not None:
+                        cuec['cuec_line_ref'] = chunk_line_refs[idx] + found_line - 1
+                    elif idx < len(chunk_line_refs):
+                        cuec['cuec_line_ref'] = chunk_line_refs[idx]
+                    else:
                         cuec['cuec_line_ref'] = None
-                    cuec.pop('cuec_page_ref', None)
-                    tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(cuec.get('cuec_description', ''), tsc_criteria, coso_criteria)
-                    # Always set both TSC and COSO IDs for output
-                    cuec['cuec_tsc_id'] = tsc_id
-                    cuec['cuec_coso_id'] = coso_id
-                    cuec['cuec_tsc_similarity'] = tsc_sim
-                    cuec['cuec_coso_similarity'] = coso_sim
-                    # Add closest framework field
-                    if tsc_sim > coso_sim:
-                        cuec['cuec_closest_framework'] = 'TSC'
-                    elif coso_sim > tsc_sim:
-                        cuec['cuec_closest_framework'] = 'COSO'
-                    elif tsc_sim == coso_sim and tsc_sim != -1:
-                        cuec['cuec_closest_framework'] = 'Equal'
-                    else:
-                        cuec['cuec_closest_framework'] = 'Undetermined'
-                    # Set framework_alignment fields to indicate the best match, but do not remove either ID
-                    if tsc_id and coso_id:
-                        cuec['cuec_framework_alignment'] = 'TSC'
-                        cuec['cuec_framework_alignment_id'] = tsc_id
-                    elif tsc_id:
-                        cuec['cuec_framework_alignment'] = 'TSC'
-                        cuec['cuec_framework_alignment_id'] = tsc_id
-                    elif coso_id:
-                        cuec['cuec_framework_alignment'] = 'COSO'
-                        cuec['cuec_framework_alignment_id'] = coso_id
-                    else:
-                        cuec['cuec_framework_alignment'] = 'Undetermined'
-                        cuec['cuec_framework_alignment_id'] = None
+                except Exception as e:
+                    logging.error(f"[PATCH] Error assigning cuec_line_ref in process_chunk: {e}")
+                    cuec['cuec_line_ref'] = None
+                cuec.pop('cuec_page_ref', None)
+                tsc_id, coso_id, tsc_sim, coso_sim, mapping_result = map_cuec_to_frameworks(cuec.get('cuec_description', ''), available_frameworks)
+                
+                # Store full framework mappings (new multi-framework support)
+                cuec['framework_mappings'] = mapping_result.get('framework_mappings', {})
+                cuec['primary_framework'] = mapping_result.get('primary_framework')
+                cuec['primary_criterion_id'] = mapping_result.get('primary_criterion_id')
+                cuec['primary_confidence'] = mapping_result.get('primary_confidence', 0.0)
+                
+                # Multi-match mapping arrays for backward compatibility
+                cuec['cuec_tsc_mappings'] = mapping_result.get('framework_mappings', {}).get('TSC', [])
+                cuec['cuec_coso_mappings'] = mapping_result.get('framework_mappings', {}).get('COSO', [])
+                
+                # Legacy single-match fields for backward compatibility
+                cuec['cuec_tsc_id'] = tsc_id
+                cuec['cuec_coso_id'] = coso_id
+                cuec['cuec_tsc_similarity'] = tsc_sim
+                cuec['cuec_coso_similarity'] = coso_sim
+                # Add closest framework field
+                if tsc_sim > coso_sim:
+                    cuec['cuec_closest_framework'] = 'TSC'
+                elif coso_sim > tsc_sim:
+                    cuec['cuec_closest_framework'] = 'COSO'
+                elif tsc_sim == coso_sim and tsc_sim != -1:
+                    cuec['cuec_closest_framework'] = 'Equal'
+                else:
+                    cuec['cuec_closest_framework'] = 'Undetermined'
+                # Set framework_alignment fields to indicate the best match, but do not remove either ID
+                if tsc_id and coso_id:
+                    cuec['cuec_framework_alignment'] = 'TSC'
+                    cuec['cuec_framework_alignment_id'] = tsc_id
+                elif tsc_id:
+                    cuec['cuec_framework_alignment'] = 'TSC'
+                    cuec['cuec_framework_alignment_id'] = tsc_id
+                elif coso_id:
+                    cuec['cuec_framework_alignment'] = 'COSO'
+                    cuec['cuec_framework_alignment_id'] = coso_id
+                else:
+                    cuec['cuec_framework_alignment'] = 'Undetermined'
+                    cuec['cuec_framework_alignment_id'] = None
+                # Check if CUEC should be marked as zero confidence
+                if should_set_zero_confidence:
+                    conf = 0.0
+                    justification = ["Confidence set to 0: " + "; ".join(zero_conf_reasons)]
+                else:
+                    # Normal confidence calculation
                     conf = 0.3
                     justification = [f"Base score: 0.3"]
                     gpt_opinion = cuec.get('cuec_gpt_opinion', '').lower()
@@ -442,7 +544,7 @@ def extract_cuecs():
                         conf += 0.2
                         justification.append(f"+0.2: cuec_distance_from_cuec_keywords < 5 (actual: {cuec['cuec_distance_from_cuec_keywords']})")
                     desc_lower = (cuec.get('cuec_description', '') or '').lower()
-                    if any(kw in desc_lower for kw in CUEC_KEYWORDS):
+                    if any(kw in desc_lower for kw in cuec_keywords):
                         conf += 0.2
                         justification.append("+0.2: CUEC keyword present in description")
                     # Framework alignment check now includes cuec_framework_alignment_id
@@ -452,12 +554,16 @@ def extract_cuecs():
                     else:
                         conf -= 0.2
                         justification.append("-0.2: Framework alignment undetermined")
-                    cuec['cuec_confidence'] = round(min(conf, 1.0), 3)
-                    cuec['cuec_confidence_justification'] = justification
-                    # Add percent confidence for TSC and COSO similarity
-                    cuec['cuec_tsc_confidence_pct'] = int(round(100 * (tsc_sim + 1) / 2)) if tsc_sim != -1 else None
-                    cuec['cuec_coso_confidence_pct'] = int(round(100 * (coso_sim + 1) / 2)) if coso_sim != -1 else None
-                    logging.info(f"CUEC seq={cuec['cuec_seq']} confidence scoring: {justification} final={cuec['cuec_confidence']} | GPT reasoning: {cuec.get('cuec_gpt_reasoning', None)}")
+                
+                cuec['cuec_confidence'] = round(min(conf, 1.0), 3)
+                cuec['cuec_confidence_justification'] = justification
+                # Add percent confidence for TSC and COSO similarity
+                cuec['cuec_tsc_confidence_pct'] = int(round(100 * (tsc_sim + 1) / 2)) if tsc_sim != -1 else None
+                cuec['cuec_coso_confidence_pct'] = int(round(100 * (coso_sim + 1) / 2)) if coso_sim != -1 else None
+                logging.info(f"CUEC seq={cuec['cuec_seq']} confidence scoring: {justification} final={cuec['cuec_confidence']} | GPT reasoning: {cuec.get('cuec_gpt_reasoning', None)}")
+                
+                # Finally add to filtered results
+                filtered_data.append(cuec)
             return filtered_data, seq
         except Exception as e:
             logging.error(f'Failed to parse GPT response for chunk {idx}: {response} | Error: {e}')
@@ -466,16 +572,27 @@ def extract_cuecs():
     cuec_results = []
     seq = 1
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(process_chunk, idx, chunk, chunk_line_refs, seq, tsc_criteria, coso_criteria) for idx, chunk in enumerate(chunks)]
+        futures = [executor.submit(process_chunk, idx, chunk, chunk_line_refs, seq, available_frameworks) for idx, chunk in enumerate(chunks)]
         for future in as_completed(futures):
             filtered_data, seq = future.result()
             for cuec in filtered_data:
+                # Extract page number from cuec_line_ref using get_page_for_line
+                try:
+                    from ..pdf_handler import get_page_for_line
+                    if cuec.get('cuec_line_ref') is not None:
+                        page_num = get_page_for_line(txt_lines, cuec['cuec_line_ref'])
+                        cuec['cuec_page_refs'] = [page_num] if page_num else []
+                    else:
+                        cuec['cuec_page_refs'] = []
+                except Exception as e:
+                    logging.warning(f"Failed to extract page ref for CUEC seq={cuec.get('cuec_seq')}: {e}")
+                    cuec['cuec_page_refs'] = []
                 # Patch: Make embedding failures non-fatal
                 try:
                     desc = cuec.get('cuec_description', '')
                     tsc_id, coso_id, tsc_sim, coso_sim = None, None, -1, -1
                     try:
-                        tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, tsc_criteria, coso_criteria)
+                        tsc_id, coso_id, tsc_sim, coso_sim, _ = map_cuec_to_frameworks(desc, available_frameworks)
                     except Exception as emb_err:
                         logging.error(f"[PATCH] Embedding error for CUEC: {desc[:80]}... | {emb_err}")
                     cuec['cuec_tsc_id'] = tsc_id
@@ -609,14 +726,52 @@ def extract_cuecs():
                         'matched_desc': output_txt_match,
                         'confidence_pct': int(round(output_txt_score * 100))
                     })
-                    # Add to recovered_cuecs if confidence > 90%
-                    if output_txt_score >= 0.9:
-                        recovered_cuecs.append({
-                            'cuec_description': output_txt_match,
-                            'cuec_source': 'recovered_from_output_txt',
-                            'cuec_confidence': round(output_txt_score, 3),
-                            'cuec_confidence_justification': ['Recovered from output.txt with confidence {:.1f}%'.format(output_txt_score*100)]
-                        })
+                    # STRICT VALIDATION: Only recover if it looks like a legitimate CUEC
+                    # Must be a complete sentence with CUEC-related keywords and reasonable length
+                    if output_txt_score >= 0.95:  # Require 95%+ match, not 90%
+                        matched_lower = (output_txt_match or '').lower()
+                        # Must contain CUEC responsibility indicators
+                        has_cuec_indicators = any(indicator in matched_lower for indicator in [
+                            'responsible for', 'must ', 'shall ', 'should ', 'ensure', 
+                            'required to', 'user entity', 'client ', 'customer ', 
+                            'organization should', 'user organization'
+                        ])
+                        # Must be reasonably complete (50+ chars, ends with period or meaningful punctuation)
+                        is_complete = len(output_txt_match) >= 50 and (
+                            output_txt_match.strip().endswith('.') or 
+                            output_txt_match.strip().endswith(';') or
+                            len(output_txt_match) >= 100
+                        )
+                        # Must NOT be a fragment describing the service provider's system
+                        is_system_description = any(fragment in matched_lower for fragment in [
+                            'configuration management', 'chef –', 'utilized to provision',
+                            'core capabilities', 'the system', 'internal audit function',
+                            'is assigned the responsibility', 'maintained historically'
+                        ])
+                        
+                        if has_cuec_indicators and is_complete and not is_system_description:
+                            # Assign conservative confidence based on match score and content
+                            base_conf = 0.3
+                            if has_cuec_indicators:
+                                base_conf += 0.2
+                            if is_complete:
+                                base_conf += 0.1
+                            # Cap at 0.7 max for recovered items (they need manual review)
+                            final_conf = min(base_conf, 0.7)
+                            
+                            recovered_cuecs.append({
+                                'cuec_description': output_txt_match,
+                                'cuec_source': 'recovered_from_output_txt',
+                                'cuec_confidence': round(final_conf, 3),
+                                'cuec_confidence_justification': [
+                                    f'Recovered from output.txt with {output_txt_score*100:.1f}% fuzzy match',
+                                    f'Base confidence: {final_conf:.1f} (capped at 0.7 for manual review)',
+                                    '+0.2: Contains CUEC responsibility indicators' if has_cuec_indicators else '',
+                                    '+0.1: Complete sentence structure' if is_complete else ''
+                                ]
+                            })
+                        else:
+                            logging.info(f"Rejected recovered CUEC fragment: '{output_txt_match[:80]}...' (indicators={has_cuec_indicators}, complete={is_complete}, system_desc={is_system_description})")
                 else:
                     rescue_report.append({
                         'bad_chunk_desc': bad_desc,
@@ -689,6 +844,18 @@ def extract_cuecs():
         except Exception as _e:
             logging.error(f"[FALLBACK] CUEC heuristic fallback failed: {_e}")
 
+    # Generate PDF snippets for PDF viewer search (if enabled)
+    if config.ENABLE_PDF_SNIPPETS:
+        for cuec in cuec_results:
+            text = cuec.get('cuec_description', '') or cuec.get('text', '')
+            if text:
+                # Simple 150-char truncation with whitespace cleanup
+                snippet = ' '.join(text.split())[:150]
+                if len(' '.join(text.split())) > 150:
+                    snippet += '...'
+                cuec['pdf_snippet'] = snippet
+        logging.info(f"Generated PDF snippets for {sum(1 for c in cuec_results if 'pdf_snippet' in c)} CUECs")
+    
     output_obj = {'cuecs': cuec_results}
     if bad_chunks:
         output_obj['bad_chunks'] = bad_chunks
@@ -886,74 +1053,50 @@ def consolidate_cuecs_with_gpt(cuec_list, min_batch_size=1, bad_chunks=None):
 # Previously: get_openai_embedding(), cosine_similarity(), _embedding_cache
 # Now using GPT direct reasoning for framework mapping
 
-def map_cuec_to_frameworks(cuec_desc, tsc_criteria, coso_criteria):
+def map_cuec_to_frameworks(cuec_desc, available_frameworks):
     """
-    Map a CUEC description to best-matching TSC and COSO criteria using GPT reasoning.
+    Map a CUEC description to best-matching framework criteria using new dynamic mapper.
     
-    Replaces previous OpenAI embedding + cosine similarity approach with direct GPT analysis.
-    This eliminates OpenAI API dependency and leverages GPT-5's superior reasoning capabilities.
-    
+    Args:
+        cuec_desc: CUEC description text
+        available_frameworks: Dict from get_available_frameworks()
+        
     Returns: (best_tsc_id, best_coso_id, confidence_tsc, confidence_coso)
+             Note: For backward compatibility, returns TSC/COSO as primary matches
     """
-    if not tsc_criteria or not coso_criteria:
-        logging.warning("TSC or COSO criteria missing for CUEC mapping")
+    from ..frameworks import map_cuec_to_frameworks_dynamic
+    
+    if not available_frameworks:
+        logging.warning("No frameworks available for CUEC mapping")
         return None, None, -1, -1
-    
-    # Use a simplified GPT prompt to select best matches
-    # Limit to top 10 candidates each to keep prompt manageable
-    tsc_subset = tsc_criteria[:10]
-    coso_subset = coso_criteria[:10]
-    
-    tsc_text = "\n".join([f"- {c['id']}: {c['description'][:150]}..." for c in tsc_subset])
-    coso_text = "\n".join([f"- {c['id']}: {c['description'][:150]}..." for c in coso_subset])
-    
-    prompt = f"""You are an expert SOC 2 auditor. For this Complementary User Entity Control (CUEC), select the best-matching TSC and COSO criteria.
-
-CUEC Description:
-{cuec_desc}
-
-Available TSC Criteria:
-{tsc_text}
-
-Available COSO Criteria:
-{coso_text}
-
-Respond ONLY with a JSON object:
-{{
-  "best_tsc_id": "ID or null",
-  "tsc_confidence": 0.0-1.0,
-  "best_coso_id": "ID or null",
-  "coso_confidence": 0.0-1.0,
-  "reasoning": "brief explanation"
-}}
-"""
     
     try:
-        raw = gpt_extract(prompt, "cuec_extractor")
-        result = json.loads(raw.strip())
+        # Use new dynamic mapper
+        result = map_cuec_to_frameworks_dynamic(
+            cuec_desc=cuec_desc,
+            cuec_id="CUEC",
+            available_frameworks=available_frameworks,
+            top_k=5
+        )
         
-        best_tsc_id = result.get('best_tsc_id')
-        best_coso_id = result.get('best_coso_id')
-        tsc_conf = float(result.get('tsc_confidence', 0.0))
-        coso_conf = float(result.get('coso_confidence', 0.0))
+        # Extract TSC and COSO matches for backward compatibility
+        tsc_matches = result.get("framework_mappings", {}).get("TSC", [])
+        coso_matches = result.get("framework_mappings", {}).get("COSO", [])
         
-        # Validate IDs
-        valid_tsc = [c['id'] for c in tsc_subset]
-        valid_coso = [c['id'] for c in coso_subset]
+        best_tsc_id = tsc_matches[0].get("id") if tsc_matches else None
+        tsc_conf = tsc_matches[0].get("confidence", 0.0) if tsc_matches else -1
         
-        if best_tsc_id and best_tsc_id not in valid_tsc:
-            logging.warning(f"GPT returned invalid TSC ID: {best_tsc_id}")
-            best_tsc_id, tsc_conf = None, -1
-        if best_coso_id and best_coso_id not in valid_coso:
-            logging.warning(f"GPT returned invalid COSO ID: {best_coso_id}")
-            best_coso_id, coso_conf = None, -1
+        best_coso_id = coso_matches[0].get("id") if coso_matches else None
+        coso_conf = coso_matches[0].get("confidence", 0.0) if coso_matches else -1
         
         logging.info(f"map_cuec_to_frameworks: desc='{cuec_desc[:80]}...' | best_tsc_id={best_tsc_id} (conf={tsc_conf}) | best_coso_id={best_coso_id} (conf={coso_conf})")
-        return best_tsc_id, best_coso_id, tsc_conf, coso_conf
+        
+        # Return full result plus legacy format
+        return best_tsc_id, best_coso_id, tsc_conf, coso_conf, result
         
     except Exception as e:
-        logging.error(f"GPT CUEC framework mapping failed: {e}")
-        return None, None, -1, -1
+        logging.error(f"Dynamic CUEC framework mapping failed: {e}", exc_info=True)
+        return None, None, -1, -1, {}
 
 def main():
     extract_cuecs()

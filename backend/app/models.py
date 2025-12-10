@@ -23,6 +23,7 @@ class Scan(Base):
     __tablename__ = "scan"
     id = Column(Integer, primary_key=True, autoincrement=True)
     company_id = Column(Integer)
+    company = Column(String(256))  # Audited organization name
     product = Column(String(256))
     scan_date = Column(DateTime, default=get_local_now)
     report_date = Column(DateTime)
@@ -46,6 +47,11 @@ class Scan(Base):
     as_of_date = Column(DateTime)  # Point-in-time date for SOC 1 reports
     progress_status = Column(String(128))  # Current extraction step for real-time progress tracking
     elapsed_seconds = Column(Float)  # Actual processing time for dynamic estimation
+    toc_page_offset = Column(Integer)  # Page offset for TOC - converts document page numbers to PDF page numbers
+    
+    # Multi-framework support (Phase 1)
+    detected_standards = Column(JSON)  # Standards detected in report: ["ISAE 3402", "SSAE 18", "CSAE 3416"]
+    active_frameworks = Column(JSON)  # Frameworks used for mapping: ["TSC", "COSO", "ISAE3402", "FINANCIAL_ASSERTIONS"]
 
 # --- Entity tables for extracted data ---
 class Company(Base):
@@ -102,6 +108,15 @@ class Control(Base):
     # any malformed string data to proper arrays before insertion.
     control_tsc_mappings = Column(JSON)  # [{"id": "CC7.2", "confidence": 0.95, "reasoning": "...", "deviation": "..."}]
     control_coso_mappings = Column(JSON)  # [{"id": "10", "confidence": 0.88, "reasoning": "...", "deviation": "..."}]
+    
+    # Multi-framework mapping support (Phase 1)
+    # Universal framework mappings - supports unlimited frameworks beyond TSC/COSO
+    # Schema: {"TSC": [{...}], "COSO": [{...}], "FINANCIAL_ASSERTIONS": [{...}], "ISAE3402": [{...}], ...}
+    framework_mappings = Column(JSON)  # All framework mappings in one unified structure
+    primary_framework = Column(String(64))  # Framework with highest confidence match (e.g., "TSC", "COSO")
+    primary_criterion_id = Column(String(128))  # Best matching criterion ID across all frameworks
+    primary_confidence = Column(Float)  # Confidence score of best match
+    
     control_status = Column(String(64))
     merged_to_control_id = Column(String(128))
     control_gpt_opinion = Column(Text)
@@ -110,6 +125,7 @@ class Control(Base):
     confidence_calc = Column(Text)
     scan_id = Column(Integer)
     annotation = Column(Text)
+    analyst_notes = Column(Text)  # Analyst notes for manual annotations
     # Verification and pattern scoring fields
     verification_status = Column(String(32))  # 'verified', 'pending', null
     verification_metadata = Column(JSON)  # Detailed scoring breakdown
@@ -119,6 +135,10 @@ class Control(Base):
     deviation_summary = Column(Text)  # GPT-generated summary (≤300 chars) for controls with deviation=true
     # Merge history - audit trail of all merge events
     merge_history = Column(JSON)  # [{"timestamp": "2025-01-07T12:34:56", "type": "auto|manual", "confidence": 0.85, "merged_from_ids": ["CTL-001", "CTL-002"], "reason": "..."}]
+    # Duplicate instance tracking - for controls that appear multiple times for different criteria
+    is_duplicate_instance = Column(Boolean, default=False)  # True if this is an intentional duplicate (same control, different TSC/COSO criteria or test procedures)
+    duplicate_group_id = Column(String(128))  # UUID linking all instances of the same control
+    instance_differentiator = Column(JSON)  # {"criteria": ["CC7.2"], "test_variance": "...", "deviation_variance": "...", "instance_number": 1, "total_instances": 3}
 
 class CUEC(Base):
     __tablename__ = "cuec"
@@ -127,6 +147,7 @@ class CUEC(Base):
     cuec_tsc_id = Column(String(128))  # Legacy: highest confidence TSC match
     cuec_description = Column(Text)
     cuec_line_ref = Column(Integer)
+    cuec_page_refs = Column(JSON)  # Array of page numbers where CUEC appears
     cuec_confidence = Column(Float)
     cuec_gpt_opinion = Column(String(32))
     cuec_distance_from_cuec_keywords = Column(Integer)
@@ -148,8 +169,17 @@ class CUEC(Base):
     # Backend validation in main.py ensures type safety before insertion
     cuec_tsc_mappings = Column(JSON)  # [{"id": "CC7.2", "confidence": 0.95, "reasoning": "...", "deviation": null}]
     cuec_coso_mappings = Column(JSON)  # [{"id": "10", "confidence": 0.88, "reasoning": "...", "deviation": null}]
+    
+    # Multi-framework mapping support (Phase 1)
+    # Universal framework mappings - supports unlimited frameworks beyond TSC/COSO
+    framework_mappings = Column(JSON)  # All framework mappings in one unified structure
+    primary_framework = Column(String(64))  # Framework with highest confidence match
+    primary_criterion_id = Column(String(128))  # Best matching criterion ID across all frameworks
+    primary_confidence = Column(Float)  # Confidence score of best match
+    
     scan_id = Column(Integer)
     annotation = Column(Text)
+    analyst_notes = Column(Text)  # Analyst notes for manual annotations
     control_strength = Column(String(32))  # High, Medium, Low
 
 class SubserviceOrg(Base):
@@ -168,6 +198,7 @@ class SubserviceOrg(Base):
     confidence_justification = Column(Text)
     third_party_controls = Column(JSON)
     annotation = Column(Text)
+    analyst_notes = Column(Text)  # Analyst notes for manual annotations
 
 class Product(Base):
     __tablename__ = "product"

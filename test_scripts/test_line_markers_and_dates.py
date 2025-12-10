@@ -15,7 +15,7 @@ from pathlib import Path
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "backend"))
 
-from app.extractors.control_extractor_unified import (
+from app.extractors.control_extractor import (
     strip_line_markers,
     validate_markers_stripped,
     create_aware_chunks
@@ -144,7 +144,7 @@ def test_marker_stripping_integration():
         print(f"  {key}: {repr(value)}")
     
     # Import validate_controls to test stripping
-    from app.extractors.control_extractor_unified import validate_controls
+    from app.extractors.control_extractor import validate_controls
     
     validated = validate_controls([sample_control])
     

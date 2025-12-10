@@ -23,29 +23,34 @@ Return a single JSON object:
 }
 
 Context from SOC report:
-and data analysis tool that provides comprehensive security monitoring, threat 
-detection, and incident response capabilities. Splunk collects logs, which contain events, from various technologies 
-that represent the IT environment. Logs are collected from Splunk Forwarding agents and/or collection servers 
-around the DLLP network. Splunk then uses threat detection rules to monitor, detect, and alert on unusual and 
-potentially malicious behavior. Once a Splunk alert is triggered, it is automatically fed into a ServiceNow ticket. 
-SolarWinds is a network performance monitoring tool that provides comprehensive monitoring of network devices, 
-including routers, switches, and firewalls. It provides monitoring capabilities for health and performance metrics.  
-Dynatrace is a comprehensive software intelligence platform that provides advanced availability monitoring and 
-performance management for the infrastructure, including servers and VMs. Dynatrace leverages artificial 
-intelligence (A
+ystems through file-based, 
+SWIFT-based solutions and API connectivity. 
+As illustrated in Figure 1.3 below, IT services, within Citi, supporting TTS are organized into the following 
+areas: Citigroup Technology Infrastructure (CTI), Chief Information Security Office (CISO), Services, 
+Markets, and Banking Technology (SMB Tech). 
+Citi also uses OpenText/GXS, Inc. for the implementation of CitiConnect®, as well as for transmission and 
+translation of files sent through CitiConnect®. Additionally, during the implementation phase, 
+OpenText/GXS, Inc. supports Citi in building the connectivity, security and routing infrastructure between 
+the user entity and Citi’s backend. The control objectives and related controls of OpenText/GXS, Inc. are 
+not included in this report. 
+ 
+Figure 1.3 Areas that Provide Support for the Applications 
+=== PAGE 16 ===
+Management of Citi Treasury and Trade Solutions’ Description of Its System Applicable to CitiDirect® and CitiConnect® Services – Section III 
+
 
 Entity to Evaluate:
-Name: Splunk
-Description: Security and data monitoring platform used for log collection, threat detection, and incident response.
+Name: OpenText/GXS, Inc.
+Description: Supports CitiConnect® implementation, including transmission, translation of files, and building connectivity, security, and routing infrastructure between the user entity and Citi’s backend.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "Splunk is a legitimate third-party service provider that offers a distinct platform for security monitoring, log management, and incident response. It operates as an external provider of these services and plays a key role in delivering critical functionality for IT environments.",
+    "reason": "OpenText/GXS, Inc. provides external services such as file transmission, translation, and building connectivity and security infrastructure between Citi's backend and user entities. These are distinct external services integral to the operation of CitiConnect®, positioning OpenText/GXS, Inc. as a valid subservice organization.",
     "entry": {
-        "Name": "Splunk",
-        "Description": "Security and data monitoring platform used for log collection, threat detection, and incident response."
+        "name": "OpenText/GXS, Inc.",
+        "description": "Supports CitiConnect® implementation, including transmission, translation of files, and building connectivity, security, and routing infrastructure between the user entity and Citi’s backend."
     }
 }
 ---
@@ -74,30 +79,58 @@ Return a single JSON object:
 }
 
 Context from SOC report:
-and data analysis tool that provides comprehensive security monitoring, threat 
-detection, and incident response capabilities. Splunk collects logs, which contain events, from various technologies 
-that represent the IT environment. Logs are collected from Splunk Forwarding agents and/or collection servers 
-around the DLLP network. Splunk then uses threat detection rules to monitor, detect, and alert on unusual and 
-potentially malicious behavior. Once a Splunk alert is triggered, it is automatically fed into a ServiceNow ticket. 
-SolarWinds is a network performance monitoring tool that provides comprehensive monitoring of network devices, 
-including routers, switches, and firewalls. It provides monitoring capabilities for health and performance metrics.  
-Dynatrace is a comprehensive software intelligence platform that provides advanced availability monitoring and 
-performance management for the infrastructure, including servers and VMs. Dynatrace leverages artificial 
-intelligence (A
+dification and disclosure. 
+In scope for this report  
+In scope for this 
+report 
+General IT Controls/ 
+Computer Operations 
+15 Controls provide reasonable 
+assurance that incidents and 
+problems are identified, recorded, 
+analyzed, and resolved for systems 
+and applications. 
+In scope for this report 
+In scope for this 
+report 
+Business Objectives – 
+Digital Servicing 
+16 Controls provide reasonable 
+assurance that notifications are only 
+sent to the authorized users. 
+In scope for this report 
+Not in scope for 
+this report 
+Business Objectives – 
+Digital Servicing 
+17 Controls provide reasonable 
+assurance that service cases can only 
+be opened by authorized 
+In scope for this report 
+Not in scope for 
+this report 
+Business Objectives – 
+Digital Servicing 
+18 Controls provide reasonable 
+assurance that CitiDirect Chats are 
+authorized and tracked. 
+In scope for this report 
+Not in scope for 
+this report 
+Table 1.0 Scope of this report, as described above. 
+=== PAGE 24 ===
+Management 
 
 Entity to Evaluate:
-Name: SolarWinds
-Description: Network performance monitoring tool used to monitor routers, switches, firewalls, and network performance metrics.
+Name: OpenText/GXS
+Description: Provides specific expertise to Citi Treasury and Trade Solutions, improving efficiency and achieving economies of scale.
 
 RESPONSE:
 {
     "keep": true,
     "type": "company",
-    "reason": "SolarWinds is a legitimate external service provider offering network performance monitoring tools and services. It qualifies as a subservice organization because it provides distinct external monitoring capabilities for IT infrastructure, including routers, switches, and firewalls.",
-    "entry": {
-        "name": "SolarWinds",
-        "description": "Network performance monitoring tool used to monitor routers, switches, firewalls, and network performance metrics."
-    }
+    "reason": "OpenText/GXS is a legitimate external service provider that offers expertise to Citi Treasury and Trade Solutions, which aligns with SOC 2 subservice organization criteria as it provides a distinct external service.",
+    "entry": "OpenText/GXS"
 }
 ---
 PROMPT:
@@ -125,29 +158,31 @@ Return a single JSON object:
 }
 
 Context from SOC report:
-and data analysis tool that provides comprehensive security monitoring, threat 
-detection, and incident response capabilities. Splunk collects logs, which contain events, from various technologies 
-that represent the IT environment. Logs are collected from Splunk Forwarding agents and/or collection servers 
-around the DLLP network. Splunk then uses threat detection rules to monitor, detect, and alert on unusual and 
-potentially malicious behavior. Once a Splunk alert is triggered, it is automatically fed into a ServiceNow ticket. 
-SolarWinds is a network performance monitoring tool that provides comprehensive monitoring of network devices, 
-including routers, switches, and firewalls. It provides monitoring capabilities for health and performance metrics.  
-Dynatrace is a comprehensive software intelligence platform that provides advanced availability monitoring and 
-performance management for the infrastructure, including servers and VMs. Dynatrace leverages artificial 
-intelligence (A
+echnology 
+Infrastructure (CTI), Chief Information Security Office (CISO), and OpenText/GXS, as sub-service 
+organizations, are subject to the Current Account Supplier Program (CASP) policies, procedures, and 
+reporting requirements. These procedures include ongoing performance review and monitoring. 
+OpenText/GXS is an integral part of the user entity implementation process and is subject to constant 
+monitoring and performance oversight. TTS obtains and reviews the SOC1® reports, issued by their 
+sub-services organizations, where available. The impact, to the CitiDirect® and CitiConnect®, of any 
+exceptions noted in the sub-service organizations’ SOC1® report is assessed by TTS Management. For 
+those services most closely integrated with the applications (e.g., DBA, SA) there are weekly review 
+meetings between TTS and CTI management. In addition, CitiDirect® technology leaders regularly meet 
+with the sub-service organizations’ management to discuss performance. 
+The description inc
 
 Entity to Evaluate:
-Name: Dynatrace
-Description: Software intelligence platform providing advanced availability monitoring, performance management, AI-based metrics, and root cause analysis.
+Name: Citi Technology Infrastructure (CTI)
+Description: Provides physical access to programs and data, system change management, network and firewall, and computer operations.
 
 RESPONSE:
 {
-    "keep": true,
-    "type": "company",
-    "reason": "Dynatrace is a legitimate external service provider that offers a distinct platform for software intelligence, availability monitoring, and performance management. It operates as a subservice organization providing services that can impact the organization's system of controls.",
+    "keep": false,
+    "type": "internal team",
+    "reason": "Citi Technology Infrastructure (CTI) is described as an internal team or department within Citi responsible for activities such as physical access, system change management, network operations, and computer operations. It does not represent an external service provider or platform.",
     "entry": {
-        "Name": "Dynatrace",
-        "Description": "Software intelligence platform providing advanced availability monitoring, performance management, AI-based metrics, and root cause analysis."
+        "name": "Citi Technology Infrastructure (CTI)",
+        "description": "Provides physical access to programs and data, system change management, network and firewall, and computer operations."
     }
 }
 ---

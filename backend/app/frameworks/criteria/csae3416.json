@@ -1,0 +1,138 @@
+[
+  {
+    "id": "CE1",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Management demonstrates commitment to integrity and ethical values",
+    "principle": "Integrity and Ethics"
+  },
+  {
+    "id": "CE2",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Governance structure provides oversight",
+    "principle": "Governance Oversight"
+  },
+  {
+    "id": "CE3",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Organizational structure defines roles and responsibilities",
+    "principle": "Organizational Structure"
+  },
+  {
+    "id": "CE4",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Organization attracts, develops, and retains competent individuals",
+    "principle": "Competence"
+  },
+  {
+    "id": "CE5",
+    "section": "Control Environment",
+    "category": "Control Environment",
+    "component": "Control Environment",
+    "description": "Individuals are held accountable for control responsibilities",
+    "principle": "Accountability"
+  },
+  {
+    "id": "RA1",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "Objectives are specified with sufficient clarity",
+    "principle": "Specification of Objectives"
+  },
+  {
+    "id": "RA2",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "Risks to objectives are identified and analyzed",
+    "principle": "Risk Identification"
+  },
+  {
+    "id": "RA3",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "Potential for fraud is considered in risk assessment",
+    "principle": "Fraud Risk"
+  },
+  {
+    "id": "RA4",
+    "section": "Risk Assessment",
+    "category": "Risk Assessment",
+    "component": "Risk Assessment",
+    "description": "Significant changes are identified and assessed",
+    "principle": "Change Assessment"
+  },
+  {
+    "id": "CA1",
+    "section": "Control Activities",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "Control activities are selected and developed to mitigate risks",
+    "principle": "Control Selection"
+  },
+  {
+    "id": "CA2",
+    "section": "Control Activities",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "General IT controls are selected and developed",
+    "principle": "IT Controls"
+  },
+  {
+    "id": "CA3",
+    "section": "Control Activities",
+    "category": "Control Activities",
+    "component": "Control Activities",
+    "description": "Control activities are deployed through policies and procedures",
+    "principle": "Policies and Procedures"
+  },
+  {
+    "id": "IC1",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "Relevant quality information is obtained or generated",
+    "principle": "Information Quality"
+  },
+  {
+    "id": "IC2",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "Information is internally communicated",
+    "principle": "Internal Communication"
+  },
+  {
+    "id": "IC3",
+    "section": "Information & Communication",
+    "category": "Information & Communication",
+    "component": "Information & Communication",
+    "description": "Information is externally communicated",
+    "principle": "External Communication"
+  },
+  {
+    "id": "MA1",
+    "section": "Monitoring",
+    "category": "Monitoring",
+    "component": "Monitoring",
+    "description": "Ongoing and separate evaluations are performed",
+    "principle": "Evaluations"
+  },
+  {
+    "id": "MA2",
+    "section": "Monitoring",
+    "category": "Monitoring",
+    "component": "Monitoring",
+    "description": "Control deficiencies are evaluated and communicated",
+    "principle": "Deficiency Communication"
+  }
+]
