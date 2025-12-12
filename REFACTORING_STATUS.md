@@ -39,27 +39,35 @@
 3. **Documentation**
    - Created `ROUTER_SPLIT_PLAN.md` tracking all endpoints and implementation phases
 
-### Commits (Week 2): 1
+### Phase 3 Complete:
+- ✅ Created `services/scan_service.py` (3 functions)
+- ✅ Created `services/merge_service.py` (~735 lines, 7 functions extracted)
+- **Service modules now handle all merge/scan business logic**
+
+### Commits (Week 2): 1 (ready for commit #2)
 - `refactor: Week 2 Phase 1-2 - Create directory structure and Redis helpers`
+- **Next commit**: `refactor: Week 2 Phase 3 - Extract scan and merge service modules`
 
 ---
 
 ## 📋 REMAINING WORK - WEEK 2
 
-### Phase 3: Extract Services (2-3 hours)
-**Files to create:**
-1. `services/merge_service.py`
-   - Extract `automated_cleanup()` from main.py:3971
-   - Extract `penalize_incomplete_controls()` from main.py:4175
-   - Extract `suggest_control_merges()` from main.py:4388
-   - Extract `merge_controls()` from main.py:4580
+### Phase 3: Extract Services ✅ COMPLETE
+**Files created:**
+1. ✅ `services/scan_service.py` (3 functions)
+   - `mark_executive_summary_stale()` - Mark summary stale when data changes
+   - `update_scan_gpt_fields()` - Update GPT cost/model/time fields
+   - `add_gpt_usage()` - Track GPT usage details array
 
-2. `services/scan_service.py`
-   - Extract `update_scan_gpt_fields()` from main.py:3235
-   - Extract `add_gpt_usage()` from main.py:3257
-   - Extract `mark_executive_summary_stale()` from main.py:125
+2. ✅ `services/merge_service.py` (~735 lines, 7 functions)
+   - `automated_cleanup()` - Auto-merge high-confidence duplicates, flag errors
+   - `penalize_incomplete_controls()` - Apply confidence penalty to missing fields
+   - `detect_duplicate_type()` - Classify duplicate relationships with confidence
+   - `suggest_control_merges()` - Generate merge suggestions with analysis
+   - `merge_controls_action()` - Execute manual merge with intelligent selection
+   - `split_control()` - Undo merge and restore original confidence
 
-3. Verify `post_processors/deviation_summarizer.py` (already exists)
+3. ✅ Verified `post_processors/deviation_summarizer.py` (already exists)
 
 ### Phase 4: Create Routers (6-8 hours)
 **9 router modules to create:**
@@ -115,18 +123,23 @@
 
 ## 🎯 ESTIMATED COMPLETION
 
-### Week 2 Remaining Work:
-- **Time:** 13-17 hours
-- **Completion:** End of Week 2 (as planned)
+### Week 2 Progress:
+- **Phases 1-3:** ✅ Complete (directory structure, Redis helpers, service modules)
+- **Remaining Time:** 10-14 hours (down from 13-17 hours)
+- **Target:** End of Week 2 (as planned)
 
 ### Recommended Approach:
-Given the scope, complete this work in focused sessions:
+Complete remaining work in focused sessions:
 
-**Session 1** (3 hours): Extract all service modules
-**Session 2** (4 hours): Create routers 1-4 (scan, report, control, cuec)
-**Session 3** (4 hours): Create routers 5-9 (suborg, deviation, baseline, config, executive_summary)
-**Session 4** (2 hours): Register routers and clean up main.py
-**Session 5** (3 hours): Update documentation and test
+**Session 1** (4 hours): Create routers 1-4 (scan, report, control, cuec)
+**Session 2** (4 hours): Create routers 5-9 (suborg, deviation, baseline, config, executive_summary)
+**Session 3** (2 hours): Register routers and clean up main.py
+**Session 4** (3 hours): Update documentation and test
+
+### Overall v2.0.0 Progress: ~30% Complete
+- ✅ Week 1: 100% (1,700 lines removed, performance optimizations)
+- ✅ Week 2 Phases 1-3: 100% (service extraction complete)
+- ⏳ Week 2 Phases 4-7: Router creation and testing (10-14 hours)
 
 ---
 
