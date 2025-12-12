@@ -44,13 +44,18 @@ if DATAIKU_DSS_HOST_IP and DATAIKU_DSS_HOST:
         _dns_fallback_hostname = urlparse(DATAIKU_DSS_HOST).hostname
         if _dns_fallback_hostname:
             _original_getaddrinfo = socket.getaddrinfo
+            # Exclude internal Docker hostnames from custom DNS to avoid breaking Redis/Postgres connections
+            _internal_hostnames = {'redis', 'postgres', 'dns-cache', 'backend', 'frontend', 'localhost', '127.0.0.1'}
             def _custom_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+                # Skip custom DNS for internal Docker services
+                if host and host.lower() in _internal_hostnames:
+                    return _original_getaddrinfo(host, port, family, type, proto, flags)
+                # Use hardcoded IP for Dataiku host
                 if host == _dns_fallback_hostname:
-                    # Use hardcoded IP for Dataiku host
                     return _original_getaddrinfo(DATAIKU_DSS_HOST_IP, port, family, type, proto, flags)
                 return _original_getaddrinfo(host, port, family, type, proto, flags)
             socket.getaddrinfo = _custom_getaddrinfo
-            logging.info(f"[DNS_FALLBACK] Globally installed DNS override: {_dns_fallback_hostname} -> {DATAIKU_DSS_HOST_IP}")
+            logging.info(f"[DNS_FALLBACK] Globally installed DNS override: {_dns_fallback_hostname} -> {DATAIKU_DSS_HOST_IP} (excluding internal services)")
     except Exception as dns_err:
         logging.warning(f"[DNS_FALLBACK] Failed to install global DNS resolver: {dns_err}")
 
