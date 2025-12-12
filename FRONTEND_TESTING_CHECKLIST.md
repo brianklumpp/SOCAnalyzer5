@@ -1,7 +1,7 @@
 # Frontend Integration Testing Checklist
 
 **Date:** December 12, 2025  
-**URL:** http://localhost:3000/report/8  
+**URL:** http://localhost:3000/app/report/8  
 **Scan:** Microsoft Corporation (168 controls, 6 deviations)
 
 ---
