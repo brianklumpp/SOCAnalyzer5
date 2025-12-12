@@ -3686,6 +3686,8 @@ Test 2: {test2[:400]}"""
     
     return ("AMBIGUOUS", min(ambiguity_confidence, 0.75), metadata)
 
+# REMOVED: @app.get("/report/{scan_id}/controls/suggest-merges") - Duplicate (~190 lines)
+# Now handled by backend/app/routers/control_router.py line 252
 @app.get("/report/{scan_id}/controls/suggest-merges")
 async def suggest_control_merges(scan_id: int, db=Depends(get_db)):
     """
