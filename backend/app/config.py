@@ -153,6 +153,25 @@ MERGE_SUGGESTION_MAX_RESULTS = int(os.getenv("MERGE_SUGGESTION_MAX_RESULTS", "50
 AUTO_MERGE_MIN_CONFIDENCE = float(os.getenv("AUTO_MERGE_MIN_CONFIDENCE", "0.70"))
 # Chunk boundary detection - characters near chunk boundary to flag
 CHUNK_BOUNDARY_BUFFER = int(os.getenv("CHUNK_BOUNDARY_BUFFER", "100"))
+
+# Performance Optimization Configuration (Non-Threading)
+# Defer deviation summary generation to on-demand (saves ~2-5 GPT calls per control with deviations)
+# Summaries can be generated later via /controls/{id}/generate_deviation_summary
+DEFER_DEVIATION_SUMMARY = os.getenv("DEFER_DEVIATION_SUMMARY", "true").lower() == "true"
+
+# Defer executive summary generation to on-demand (saves ~1-2 minutes per scan)
+# Summary can be generated later via /executive_summary/generate/{scan_id}
+DEFER_EXEC_SUMMARY = os.getenv("DEFER_EXEC_SUMMARY", "false").lower() == "true"
+
+# Control extraction batch size - extract N controls per GPT call instead of 1
+# Higher values = fewer API calls but less granular progress tracking
+# Recommended: 3-5 for optimal balance, 1 to disable batching
+CONTROL_BATCH_SIZE = int(os.getenv("CONTROL_BATCH_SIZE", "1"))
+
+# Enable framework mapping cache - reuse mappings for similar control descriptions
+# Significant speedup for reports with repetitive controls (e.g., "Review of X" controls)
+# Cache uses Redis with 24-hour TTL, keyed by control description hash
+ENABLE_FRAMEWORK_CACHE = os.getenv("ENABLE_FRAMEWORK_CACHE", "true").lower() == "true"
 # Page proximity scoring weight (0.05 = 5% bonus for adjacent pages)
 PAGE_PROXIMITY_WEIGHT = float(os.getenv("PAGE_PROXIMITY_WEIGHT", "0.05"))
 # Control completeness penalty - reduce confidence by this amount if missing required fields

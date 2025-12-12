@@ -113,6 +113,11 @@ services:
       DOCKER_CONTROL_ENABLED: "true"
       QUICK_TEST_MODE: ${QUICK_TEST_MODE:-false}
       QUICK_TEST_MAX_CONTROLS: ${QUICK_TEST_MAX_CONTROLS:-10}
+      # Performance Optimization Flags (Non-Threading)
+      DEFER_DEVIATION_SUMMARY: ${DEFER_DEVIATION_SUMMARY:-true}  # Skip deviation summaries during scan (generate on-demand)
+      DEFER_EXEC_SUMMARY: ${DEFER_EXEC_SUMMARY:-false}  # Skip exec summary during scan (already on-demand)
+      CONTROL_BATCH_SIZE: ${CONTROL_BATCH_SIZE:-1}  # Extract N controls per GPT call (1=disabled, 3-5=recommended)
+      ENABLE_FRAMEWORK_CACHE: ${ENABLE_FRAMEWORK_CACHE:-true}  # Cache framework mappings for similar controls
       PYTHONUNBUFFERED: "1"
       WATCHFILES_FORCE_POLLING: "true"  # Better file watching on Windows
     ports:

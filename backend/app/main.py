@@ -2498,24 +2498,27 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
                         except Exception as penalty_err:
                             logging.warning(f"[/analyze/finalize] Incomplete control penalties failed: {penalty_err}")
                         
-                        # Generate deviation summaries for high-confidence controls
-                        try:
-                            from .post_processors.deviation_summarizer import generate_summaries
-                            import redis.asyncio as aioredis
-                            
-                            redis_client_deviation = None
+                        # Generate deviation summaries for high-confidence controls (unless deferred)
+                        if not cfg.DEFER_DEVIATION_SUMMARY:
                             try:
-                                redis_client_deviation = aioredis.from_url("redis://socanalyzer-redis:6379", decode_responses=True)
-                            except Exception as redis_err:
-                                logging.warning(f"[/analyze/finalize] Redis not available for deviation summaries: {redis_err}")
-                            
-                            deviation_stats = await generate_summaries(scan_id_for_learning, db, redis_client_deviation)
-                            logging.info(f"[/analyze/finalize] Deviation summaries generated: {deviation_stats}")
-                            
-                            if redis_client_deviation:
-                                await redis_client_deviation.close()
-                        except Exception as deviation_err:
-                            logging.warning(f"[/analyze/finalize] Deviation summary generation failed: {deviation_err}")
+                                from .post_processors.deviation_summarizer import generate_summaries
+                                import redis.asyncio as aioredis
+                                
+                                redis_client_deviation = None
+                                try:
+                                    redis_client_deviation = aioredis.from_url("redis://socanalyzer-redis:6379", decode_responses=True)
+                                except Exception as redis_err:
+                                    logging.warning(f"[/analyze/finalize] Redis not available for deviation summaries: {redis_err}")
+                                
+                                deviation_stats = await generate_summaries(scan_id_for_learning, db, redis_client_deviation)
+                                logging.info(f"[/analyze/finalize] Deviation summaries generated: {deviation_stats}")
+                                
+                                if redis_client_deviation:
+                                    await redis_client_deviation.close()
+                            except Exception as deviation_err:
+                                logging.warning(f"[/analyze/finalize] Deviation summary generation failed: {deviation_err}")
+                        else:
+                            logging.info(f"[/analyze/finalize] Deviation summary generation deferred (DEFER_DEVIATION_SUMMARY=true)")
                         
                         # Then run pattern learning
                         from .services.verification_service import ControlVerificationService
