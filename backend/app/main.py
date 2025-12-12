@@ -479,9 +479,11 @@ async def get_scan_progress(scan_id: int, db=Depends(get_db)):
         
         progress_status = scan.progress_status or "Not started"
         
-        # Calculate elapsed time dynamically from created_at timestamp
-        if scan.created_at:
-            elapsed_seconds = (datetime.utcnow() - scan.created_at).total_seconds()
+        # Calculate elapsed time dynamically from scan_date timestamp
+        if scan.scan_date:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            scan_date_aware = scan.scan_date if scan.scan_date.tzinfo else scan.scan_date.replace(tzinfo=datetime.timezone.utc)
+            elapsed_seconds = (now - scan_date_aware).total_seconds()
         else:
             elapsed_seconds = scan.elapsed_seconds or 0.0
         
