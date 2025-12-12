@@ -55,7 +55,7 @@ from .routers import (
     suborg_router,
     deviation_router,
     executive_summary_router,
-    baseline_router,
+    # baseline_router,  # Disabled - models not yet implemented
     config_router,
 )
 
@@ -292,8 +292,8 @@ app.include_router(deviation_router.router, tags=["deviation"])
 # Executive summary operations
 app.include_router(executive_summary_router.router, tags=["executive_summary"])
 
-# Validation and baseline operations
-app.include_router(baseline_router.router, tags=["baseline"])
+# Validation and baseline operations (disabled - models not yet implemented)
+# app.include_router(baseline_router.router, tags=["baseline"])
 
 # Settings and configuration
 app.include_router(config_router.router, tags=["config"])

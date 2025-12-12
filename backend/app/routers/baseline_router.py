@@ -12,57 +12,23 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.future import select
 from sqlalchemy import and_, or_
 
-from ..models import Scan, Baseline, PatternReviewQueue, OrganizationPattern
+from ..models import Scan, PatternReviewQueue
 from ..database import get_db
 from ..services import scan_service
 from .. import config as cfg
 
 router = APIRouter()
 
+# Note: Baseline and OrganizationPattern models not yet created - placeholders for future implementation
+
 
 @router.post("/baseline/create")
 async def create_baseline(data: Dict[str, Any] = Body(...), db=Depends(get_db)):
-    """Create a new baseline from a scan."""
-    try:
-        scan_id = data.get("scan_id")
-        name = data.get("name", "").strip()
-        description = data.get("description", "")
-        
-        if not scan_id:
-            raise HTTPException(status_code=400, detail="scan_id required")
-        if not name:
-            raise HTTPException(status_code=400, detail="name required")
-        
-        # Verify scan exists
-        scan = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
-        if not scan:
-            raise HTTPException(status_code=404, detail="Scan not found")
-        
-        # Create baseline
-        baseline = Baseline(
-            scan_id=scan_id,
-            name=name,
-            description=description,
-            created_at=datetime.utcnow()
-        )
-        
-        db.add(baseline)
-        await db.commit()
-        await db.refresh(baseline)
-        
-        return {
-            "id": baseline.id,
-            "name": baseline.name,
-            "scan_id": baseline.scan_id,
-            "created_at": baseline.created_at.isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"Error creating baseline: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
+    """Create a new baseline from a scan (Not yet implemented - Baseline model TBD)."""
+    return JSONResponse(
+        {"error": "Baseline feature not yet implemented - Baseline model needs to be created"},
+        status_code=501
+    )
 
 
 @router.get("/baseline/list")
