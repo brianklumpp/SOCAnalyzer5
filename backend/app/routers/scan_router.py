@@ -68,7 +68,7 @@ async def analyze_pdf_bg(
     
     # Reset prior artifacts/logs
     try:
-        from ..analysis_runner import _reset_scan_state
+        from ..main import _reset_scan_state
         _reset_scan_state()
     except Exception:
         pass
@@ -106,7 +106,7 @@ async def analyze_pdf_bg(
     
     # Start background thread
     logging.error(f"[DEBUG /analyze/] Starting thread with args: job_id={job_id}, filename={filename}, report_type='{report_type}'")
-    from ..analysis_runner import run_analysis_job
+    from ..main import run_analysis_job
     thread = threading.Thread(
         target=run_analysis_job, 
         args=(job_id, temp_pdf_path, filename, report_type, db)
@@ -186,7 +186,7 @@ async def confirm_report_type(
         raise HTTPException(status_code=500, detail="Job missing required file information")
     
     logging.info(f"[CONFIRM_TYPE] Resuming analysis with report_type={confirmed_type}")
-    from ..analysis_runner import run_analysis_job
+    from ..main import run_analysis_job
     thread = threading.Thread(
         target=run_analysis_job,
         args=(job_id, temp_pdf_path, filename, confirmed_type, db, True)
@@ -219,7 +219,7 @@ async def get_job_status(job_id: str):
     artifacts = None
     counts = None
     if job.get("done"):
-        from ..analysis_runner import _artifact_presence, _result_counts_from_obj, _result_counts_from_disk
+        from ..main import _artifact_presence, _result_counts_from_obj, _result_counts_from_disk
         artifacts = _artifact_presence()
         result_obj = job.get("result") or {}
         counts = _result_counts_from_obj(result_obj) if result_obj else _result_counts_from_disk()
@@ -280,7 +280,7 @@ async def get_job_status_min(job_id: str, include_artifacts: bool = False):
         return {"error": "Job not found", "transient_unavailable": transient}
     
     # Lightweight counts
-    from ..analysis_runner import _result_counts_from_obj, _result_counts_from_disk, _artifact_presence
+    from ..main import _result_counts_from_obj, _result_counts_from_disk, _artifact_presence
     result_obj = job.get("result") or {}
     counts = _result_counts_from_obj(result_obj) if result_obj else _result_counts_from_disk()
     checklist = job.get("checklist", [])
@@ -405,7 +405,7 @@ async def get_job_result(
         return Response(content=text, media_type="text/plain; charset=utf-8")
 
     if wants_summary:
-        from ..analysis_runner import _result_counts_from_obj, _artifact_presence
+        from ..main import _result_counts_from_obj, _artifact_presence
         summary_payload = {
             "counts": _result_counts_from_obj(res_obj),
             "artifacts": _artifact_presence(),
@@ -421,7 +421,7 @@ async def get_job_result(
     default_response = {"results": res_obj}
     if insert_summary is not None:
         default_response["insert_summary"] = insert_summary
-        from ..analysis_runner import _result_counts_from_obj, _artifact_presence
+        from ..main import _result_counts_from_obj, _artifact_presence
         default_response["summary"] = {
             "counts": _result_counts_from_obj(res_obj),
             "artifacts": _artifact_presence(),
@@ -432,7 +432,7 @@ async def get_job_result(
 @router.post("/analyze/finalize/{job_id}")
 async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depends(get_db)):
     """Rebuild job results from extractor JSONs on disk and mark done."""
-    from ..analysis_runner import _build_combined_results_from_disk
+    from ..main import _build_combined_results_from_disk
     from ..import_json import insert_extracted_data
     import json as _json
     
