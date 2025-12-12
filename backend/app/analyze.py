@@ -19,7 +19,6 @@ from .extractors.coverage_period import extract_coverage_period
 from .pdf_handler import extract_text_from_pdf, find_section_candidates
 from . import config
 from .models import ReportType
-import glob
 
 # Thread-safe job state management for multi-threading support
 _job_locks = {}  # Dictionary of job_id -> Lock
@@ -58,7 +57,6 @@ def _update_job_state(job_id, updates_dict, redis_client):
         updates_dict: Dictionary of updates to merge into existing state
         redis_client: Sync Redis client instance
     """
-    import redis as sync_redis
     
     # Get or create per-job lock
     with _job_locks_lock:

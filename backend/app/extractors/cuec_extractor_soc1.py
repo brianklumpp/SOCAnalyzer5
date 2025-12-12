@@ -3,13 +3,10 @@ import os
 import json
 import logging
 import re
-import time
-import requests
-import math
 from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .. import config
-from ..gpt_client import gpt_extract, load_api_key
+from ..gpt_client import gpt_extract
 
 # Use centralized config paths
 SECTION_JSON_PATH = config.SECTION_JSON_PATH

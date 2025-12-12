@@ -713,7 +713,6 @@ def analyze_control_id_patterns(controls: List[Dict[str, Any]]) -> Dict[str, Dic
             }
         }
     """
-    import re
     from collections import Counter
     
     # SOC 1 reports typically use custom control IDs (not TSC patterns)

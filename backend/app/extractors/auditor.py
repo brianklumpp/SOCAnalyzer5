@@ -2,8 +2,7 @@
 import os
 import json
 import logging
-from typing import Dict, Any, List, Optional, Tuple
-from collections import Counter
+from typing import Any, List, Optional, Tuple
 from .. import config
 from ..gpt_client import gpt_extract
 

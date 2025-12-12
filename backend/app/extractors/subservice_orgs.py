@@ -3,7 +3,6 @@ import json
 import logging
 import time
 import re
-import sys
 from difflib import SequenceMatcher
 from .. import config
 from ..gpt_client import gpt_extract

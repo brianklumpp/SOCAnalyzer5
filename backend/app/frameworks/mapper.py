@@ -44,7 +44,7 @@ Usage:
 
 import json
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 
 # Import GPT client and config
 try:

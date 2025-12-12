@@ -8,8 +8,8 @@ into the new unified framework_mappings structure.
 import logging
 from typing import Dict, List, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
-from ..models import Control, CUEC, Scan
+from sqlalchemy import select
+from ..models import Control, CUEC
 
 
 def consolidate_framework_mappings(

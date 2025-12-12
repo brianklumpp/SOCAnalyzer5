@@ -10,7 +10,7 @@ Defines all supported attestation frameworks with their metadata, including:
 """
 
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from dataclasses import dataclass
 
 

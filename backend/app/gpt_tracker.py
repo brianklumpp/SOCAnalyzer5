@@ -3,7 +3,7 @@ GPT Usage Tracker - Centralized tracking of GPT API usage, costs, and timing
 """
 import time
 import threading
-from typing import Dict, List, Optional
+from typing import Dict, List
 from collections import defaultdict
 
 class GPTUsageTracker:

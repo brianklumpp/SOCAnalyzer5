@@ -1,8 +1,6 @@
 import os
 import sys
-import uuid
 import json as _json
-import shutil
 import threading
 import time
 import datetime
@@ -28,13 +26,10 @@ from typing import Optional, Dict, Any, Tuple
 logging.warning(f"[BOOT] Loaded backend.app.main from {__file__}")
 from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.exc import SQLAlchemyError
 from .models import Company, Control, CUEC, SubserviceOrg, Product, Setting, Base
-from .models import Scan, ConfidenceWeights, ConfidenceWeightAudit, ControlReview
-from .models import ControlPattern, PatternReviewQueue
+from .models import Scan, ConfidenceWeights, ConfidenceWeightAudit
 from .database import engine, get_db
 from .config import AUTO_CREATE_SCHEMA, RUN_MIGRATIONS_ON_START, ALEMBIC_INI_PATH, LOG_LEVEL, EXCLUDE_ACCESS_LOG_PATHS, DOCKER_CONTROL_ENABLED
-from .analyze import analyze_pdf_file
 from .config import REDIS_URL, TSC_CRITERIA, COSO_2013_CRITERIA, EXECUTIVE_SUMMARY_PROMPT
 from .frameworks.mapper import map_cuec_to_frameworks_dynamic as map_cuec_to_frameworks
 from . import config as cfg
@@ -49,7 +44,7 @@ from .config import (
 )
 from .explicit_sql_insert import insert_extracted_data
 import concurrent.futures
-from .gpt_client import gpt_extract, set_gpt_log_context, clear_gpt_log_context
+from .gpt_client import gpt_extract, set_gpt_log_context
 
 app = FastAPI()
 # Minimal direct diagnostic route (bypasses router) to ensure availability
@@ -435,7 +430,6 @@ async def get_scan_progress(scan_id: int, db=Depends(get_db)):
         }
     """
     try:
-        import time
         result = await db.execute(select(Scan).where(Scan.id == scan_id))
         scan = result.scalar_one_or_none()
         
@@ -1180,20 +1174,28 @@ async def del_job(job_id, redis_client=None):
         redis_client = _get_redis()
     await redis_client.delete(f"job:{job_id}")
 
+# Redis connection pool singleton for better performance
+_redis_pool = None
+
 def _get_redis():
-    # Harden Redis client with short connect/read timeouts so API endpoints don't hang on DNS/connection issues
-    try:
-        return redis.from_url(
-            REDIS_URL,
-            decode_responses=True,
-            socket_connect_timeout=0.5,  # fast-fail DNS/connect
-            socket_timeout=0.75,          # read/write timeout
-            health_check_interval=5,
-            retry_on_timeout=True,
-        )
-    except Exception:
-        # As a last resort, return a client without special options; callers still guard usage
-        return redis.from_url(REDIS_URL, decode_responses=True)
+    """Get Redis client with connection pooling for improved performance."""
+    global _redis_pool
+    if _redis_pool is None:
+        try:
+            _redis_pool = redis.ConnectionPool.from_url(
+                REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=0.5,  # fast-fail DNS/connect
+                socket_timeout=0.75,          # read/write timeout
+                health_check_interval=5,
+                retry_on_timeout=True,
+                max_connections=20
+            )
+        except Exception:
+            # Fallback pool without special options
+            _redis_pool = redis.ConnectionPool.from_url(REDIS_URL, decode_responses=True, max_connections=20)
+    
+    return redis.Redis(connection_pool=_redis_pool)
 
 # --- Helpers for artifact presence and lightweight counts ---
 def _project_root() -> pathlib.Path:
@@ -1830,17 +1832,14 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request, Depends, UploadFile, File
 from sqlalchemy.future import select
-from sqlalchemy.exc import SQLAlchemyError
 from .models import Setting, Base
 from .database import engine, get_db
-from .analyze import analyze_pdf_file
 import threading
 import time
 import sqlalchemy
 import sqlalchemy.dialects.postgresql as pg_dialect
 import asyncio
 import os
-import shutil
 import datetime
 import logging
 import traceback
@@ -2285,7 +2284,6 @@ def _build_combined_results_from_disk() -> dict:
     try:
         import json
         import os
-        from . import config as cfg
         PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
         def data_path(rel: str) -> str:
             return str((PROJECT_ROOT / rel).resolve())
@@ -3524,7 +3522,6 @@ async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=De
     print("=" * 80)
     
     # Also log to file for later review (reset file each time)
-    import os
     from pathlib import Path
     log_dir = Path(__file__).parent.parent.parent / "data" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -4256,7 +4253,6 @@ def detect_duplicate_type(ctrl1: Control, ctrl2: Control) -> Tuple[str, float, D
         - metadata: dict with detailed comparison info
     """
     from .gpt_client import gpt_extract
-    import json
     
     metadata = {}
     
@@ -4399,7 +4395,6 @@ async def suggest_control_merges(scan_id: int, db=Depends(get_db)):
     """
     try:
         from . import config as cfg
-        from .gpt_client import gpt_extract
         
         # Get all controls for this scan that haven't been merged away
         # (merged_to_control_id is NULL for standalone controls, 'DUPLICATE_INSTANCE' for linked variants)
@@ -4837,7 +4832,6 @@ async def link_control_instances(scan_id: int, data: Dict[str, Any] = Body(...),
     - Boosts confidence by +0.15 with audit trail
     - Creates merge_history entry
     """
-    import json
     import uuid
     from .gpt_client import gpt_extract
     

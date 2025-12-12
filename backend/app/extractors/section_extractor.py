@@ -1,4 +1,3 @@
-import os
 
 def reset_log_file(log_file_path):
     """Reset the log file to keep its size manageable."""

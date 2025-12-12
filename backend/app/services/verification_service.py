@@ -6,13 +6,11 @@ Runs only on-demand (not during extraction) to validate control extraction
 quality using pattern library scoring and multi-factor confidence analysis.
 """
 
-import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from backend.app.models import Control, Scan, Company
 from backend.app.utils.pattern_library import ControlPatternLibrary

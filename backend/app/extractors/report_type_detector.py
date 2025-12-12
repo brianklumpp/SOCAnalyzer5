@@ -11,8 +11,7 @@ If confidence is below threshold, user confirmation is required.
 
 import logging
 import hashlib
-from typing import Dict, Optional, Tuple
-from datetime import datetime
+from typing import Dict, Optional
 
 from ..gpt_client import gpt_extract
 from ..config import (

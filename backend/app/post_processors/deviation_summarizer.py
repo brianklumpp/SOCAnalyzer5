@@ -9,7 +9,7 @@ for controls where deviation=true.
 import logging
 import json
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

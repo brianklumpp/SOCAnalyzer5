@@ -9,7 +9,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import logging
 from . import config
-from .logo_service import fetch_and_cache_logo, fetch_logo_with_gpt
+from .logo_service import fetch_logo_with_gpt
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 

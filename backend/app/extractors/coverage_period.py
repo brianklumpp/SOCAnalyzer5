@@ -1,10 +1,7 @@
 # --- All imports at the top (PEP8 best practice) ---
-import os
 import json
 import logging
 import re
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
 from dateutil import parser as date_parser
 from collections import Counter
 from .. import config

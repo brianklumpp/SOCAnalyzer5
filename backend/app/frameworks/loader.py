@@ -13,7 +13,6 @@ from pathlib import Path
 
 from .registry import (
     FRAMEWORK_REGISTRY,
-    FrameworkInfo,
     ReportType,
     get_frameworks_by_report_type,
     get_frameworks_by_standard,

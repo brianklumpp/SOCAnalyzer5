@@ -1,7 +1,7 @@
 # SQLAlchemy async engine and session setup
 
 from .config import DATABASE_URL
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 engine = create_async_engine(DATABASE_URL, echo=True, future=True)
 

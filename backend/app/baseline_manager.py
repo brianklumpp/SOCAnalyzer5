@@ -6,13 +6,11 @@ Manages validation baselines for SOC report extraction accuracy testing.
 Handles creation, storage, comparison, and FIFO retention of baselines.
 """
 
-import os
 import json
 import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-import shutil
 
 logger = logging.getLogger(__name__)
 
