@@ -12,7 +12,7 @@ from sqlalchemy.future import select
 
 from ..models import Scan, Control, CUEC, SubserviceOrg, Company, Product
 from ..database import get_db
-from ..services.excel_export_service import ExcelExportService
+from ..services.excel_export import ExcelExportService
 
 router = APIRouter()
 
