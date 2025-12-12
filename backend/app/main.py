@@ -536,54 +536,11 @@ async def get_scan_progress(scan_id: int, db=Depends(get_db)):
 # Deviation Endpoints
 # ------------------------------
 
-# REMOVED: @app.get("/report/{scan_id}/deviations") - Duplicate endpoint
+# REMOVED: @app.get("/report/{scan_id}/deviations") - Duplicate endpoint (~50 lines)
 # Now handled by backend/app/routers/deviation_router.py line 18
-@app.get("/report/{scan_id}/deviations")
-async def get_deviations(scan_id: int, db=Depends(get_db)):
-    """
-    Get all deviation controls for a scan.
-    Returns controls where has_deviation=true with high confidence (>= HIGH_CONFIDENCE_THRESHOLD).
-    This automatically excludes merged controls (confidence=0) and low-quality extractions.
-    """
-    try:
-        from . import config as cfg
-        
-        result = await db.execute(
-            select(Control)
-            .where(Control.scan_id == scan_id)
-            .where(Control.has_deviation == True)
-            .where(Control.control_confidence >= cfg.HIGH_CONFIDENCE_THRESHOLD)
-            .order_by(Control.control_seq)
-        )
-        deviation_controls = result.scalars().all()
-        
-        # Serialize controls - map database columns to frontend field names
-        deviations = []
-        for ctrl in deviation_controls:
-            # Get first page ref from the JSON array if available
-            page_ref = None
-            if ctrl.control_page_refs and isinstance(ctrl.control_page_refs, list) and len(ctrl.control_page_refs) > 0:
-                page_ref = ctrl.control_page_refs[0]
-            
-            deviations.append({
-                "id": ctrl.id,
-                "control_id": ctrl.control_id,
-                "page_ref": page_ref,
-                "control_description": ctrl.control_desc,
-                "test_procedure": ctrl.control_test,
-                "test_result": ctrl.control_test_results,
-                "deviation": ctrl.has_deviation,
-                "deviation_summary": ctrl.deviation_summary,
-                "scan_id": ctrl.scan_id,
-            })
-        
-        return deviations
-        
-    except Exception as e:
-        logging.error(f"Error fetching deviations for scan {scan_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
-
+# REMOVED: @app.patch("/control/{control_id}/deviation-summary") - Duplicate endpoint
+# Now handled by backend/app/routers/deviation_router.py
 @app.patch("/control/{control_id}/deviation-summary")
 async def update_deviation_summary(control_id: int, data: dict, db=Depends(get_db)):
     """
