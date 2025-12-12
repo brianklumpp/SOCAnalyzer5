@@ -1,0 +1,363 @@
+# Updating SOCAnalyzer
+
+## Overview
+
+This guide explains how to update SOCAnalyzer to a new version while preserving your existing scan data.
+
+## Important Concepts
+
+**Docker Volumes = Your Data**
+- Your database lives in a Docker volume (`postgres_data`)
+- Volumes are separate from containers
+- Updating containers does NOT delete volumes
+- Your data is preserved unless you explicitly delete volumes with `-v` flag
+
+## Update Process (Step-by-Step)
+
+### Step 1: Backup Your Data (Recommended)
+
+**Always backup before updating:**
+
+```powershell
+# Run backup script
+.\BACKUP.ps1
+```
+
+This creates a timestamped backup in `.\backups\backup_YYYYMMDD_HHMMSS\`
+
+**What gets backed up:**
+- All scans and analysis results
+- All controls, CUECs, subservice organizations
+- Company data and logos
+- Framework mappings and patterns
+
+**Backup takes:** ~30 seconds for typical database (few hundred scans)
+
+### Step 2: Stop Current Version
+
+**Stop services without deleting data:**
+
+```powershell
+# IMPORTANT: No -v flag!
+docker compose down
+```
+
+**What this does:**
+- ✅ Stops all 5 containers (backend, frontend, postgres, redis, dns)
+- ✅ Removes containers
+- ✅ Preserves volumes (your data)
+- ✅ Preserves networks
+
+**DO NOT RUN:**
+```powershell
+# ❌ This deletes all your data!
+docker compose down -v
+```
+
+### Step 3: Extract New Version
+
+**Option A: Overwrite existing installation**
+
+```powershell
+# Extract new ZIP to same folder (e.g., C:\SOCAnalyzer)
+# When prompted, choose "Replace files"
+```
+
+**Option B: Fresh folder (recommended)**
+
+```powershell
+# Extract to new folder: C:\SOCAnalyzer-v1.1.0
+# Copy .env from old installation:
+Copy-Item C:\SOCAnalyzer\.env C:\SOCAnalyzer-v1.1.0\.env
+
+# Copy backups folder (optional):
+Copy-Item C:\SOCAnalyzer\backups C:\SOCAnalyzer-v1.1.0\backups -Recurse
+```
+
+### Step 4: Import New Images
+
+```powershell
+cd C:\SOCAnalyzer-v1.1.0
+.\IMPORT.ps1
+```
+
+**What this does:**
+- Loads new Docker images (postgres, redis, dns, backend, frontend)
+- Starts all services
+- **Reattaches to existing volume** (your data is still there!)
+- Runs any new database migrations automatically
+- Opens browser to http://localhost
+
+**Time:** ~5-7 minutes to load images and start services
+
+### Step 5: Verify Update
+
+**Check version:**
+```powershell
+# Look at VERSION.txt
+Get-Content .\VERSION.txt
+```
+
+**Check data:**
+1. Open http://localhost
+2. Go to History page
+3. Verify your previous scans are visible
+4. Open a scan and check controls loaded correctly
+
+**Check logs if issues:**
+```powershell
+docker compose logs backend --tail 50
+docker compose logs frontend --tail 50
+```
+
+## What Happens During Update
+
+### Container Lifecycle
+```
+Old Version (v1.0.9)          New Version (v1.1.0)
+┌─────────────────────┐       ┌─────────────────────┐
+│ Backend Container   │       │ Backend Container   │
+│ (deleted)           │       │ (new)               │
+└─────────────────────┘       └─────────────────────┘
+         │                             │
+         │                             │
+         └─────────────────────────────┘
+                    │
+            ┌───────▼────────┐
+            │ postgres_data  │ ◄── Volume persists!
+            │ (your scans)   │
+            └────────────────┘
+```
+
+### Database Migrations
+
+**Automatic schema updates:**
+
+1. Backend starts
+2. Checks current migration version (stored in `alembic_version` table)
+3. Compares to available migrations in `backend/alembic/versions/`
+4. Runs any new migrations (e.g., adds new columns, indexes)
+5. Updates existing data to match new schema
+
+**Example migration:**
+```sql
+-- Old schema (v1.0.9)
+scan table has 27 columns
+
+-- New migration runs
+ALTER TABLE scan ADD COLUMN new_field VARCHAR(256);
+
+-- New schema (v1.1.0)
+scan table has 28 columns, all old data preserved
+```
+
+### Environment Variables
+
+**If you extract over existing folder:**
+- `.env` is preserved (not in ZIP)
+- Settings maintained (database passwords, API keys)
+
+**If you extract to new folder:**
+- Copy `.env` from old installation
+- Or reconfigure `.env.dist` → `.env`
+
+## Rollback Process
+
+### If Update Has Issues
+
+**Option 1: Restore from backup**
+
+```powershell
+# Stop new version
+docker compose down
+
+# Restore database
+.\RESTORE.ps1 -BackupPath ".\backups\backup_20251211_143022\database.sql"
+
+# Restart services
+docker compose up -d
+```
+
+**Option 2: Go back to old version**
+
+```powershell
+# Stop new version
+docker compose down
+
+# Go to old installation folder
+cd C:\SOCAnalyzer
+
+# Start old version (uses same volume!)
+docker compose up -d
+```
+
+**Note:** If new version ran migrations, old version may have compatibility issues. Restore from backup is safer.
+
+## Update Scenarios
+
+### Scenario 1: Bug Fix Update (same schema)
+
+**Example:** v1.0.9 → v1.0.10 (UI fix, no database changes)
+
+```powershell
+.\BACKUP.ps1                  # Quick backup
+docker compose down           # Stop services
+# Extract v1.0.10
+.\IMPORT.ps1                  # Load new images
+# Done! Data unchanged, new code running
+```
+
+### Scenario 2: Feature Update (schema changes)
+
+**Example:** v1.0.9 → v1.1.0 (new column, new table)
+
+```powershell
+.\BACKUP.ps1                  # Important backup!
+docker compose down           # Stop services
+# Extract v1.1.0
+.\IMPORT.ps1                  # Load new images, migrations run automatically
+# Check logs to see migrations
+docker compose logs backend | Select-String "alembic"
+```
+
+### Scenario 3: Major Update (breaking changes)
+
+**Example:** v1.x → v2.0 (database restructure)
+
+```powershell
+.\BACKUP.ps1                  # Critical backup!
+docker compose down           # Stop services
+# Extract v2.0
+.\IMPORT.ps1                  # May take longer (data migration)
+# Carefully verify all data
+# Keep v1.x backup for 30 days
+```
+
+## Troubleshooting Updates
+
+### "Migration failed"
+
+```powershell
+# Check migration error
+docker compose logs backend | Select-String "alembic"
+
+# If migration failed, restore backup
+docker compose down
+.\RESTORE.ps1 -BackupPath ".\backups\backup_TIMESTAMP\database.sql"
+
+# Report issue to support with migration error
+```
+
+### "Data is missing"
+
+```powershell
+# Check if volume still exists
+docker volume ls | Select-String "postgres"
+
+# Should see: socanalyzer5_postgres_data
+
+# If volume exists but data missing, restore backup
+.\RESTORE.ps1 -BackupPath ".\backups\backup_TIMESTAMP\database.sql"
+```
+
+### "Services won't start"
+
+```powershell
+# Check all logs
+docker compose logs
+
+# Check specific service
+docker compose logs backend
+docker compose logs postgres
+
+# Try full restart
+docker compose down
+docker compose up -d
+```
+
+### "Old data with new code issues"
+
+```powershell
+# Restore to known good state
+docker compose down
+.\RESTORE.ps1 -BackupPath ".\backups\backup_TIMESTAMP\database.sql"
+
+# Or try migration repair
+docker exec -it socanalyzer-backend alembic current
+docker exec -it socanalyzer-backend alembic upgrade head
+```
+
+## Best Practices
+
+**Before Every Update:**
+1. ✅ Run `.\BACKUP.ps1`
+2. ✅ Note current version (`VERSION.txt`)
+3. ✅ Read changelog for breaking changes
+4. ✅ Plan 15-30 minutes for update
+
+**During Update:**
+1. ✅ Use `docker compose down` (no `-v`)
+2. ✅ Extract to new folder (not overwrite)
+3. ✅ Copy `.env` to new folder
+4. ✅ Run `.\IMPORT.ps1`
+
+**After Update:**
+1. ✅ Check `VERSION.txt` matches
+2. ✅ Verify data in history page
+3. ✅ Run test scan
+4. ✅ Keep backup for 30 days
+
+## FAQ
+
+**Q: How often should I update?**
+A: Update when:
+- Critical bug fixes released
+- New features you need
+- Security patches available
+
+**Q: Can I skip versions?**
+A: Generally yes - migrations run in order automatically. But test carefully and backup first.
+
+**Q: Will update break my current scans?**
+A: No - completed scans are stored in database and preserved during update.
+
+**Q: How much downtime during update?**
+A: ~5-10 minutes total:
+- 1 min: Backup
+- 1 min: Stop services
+- 5-7 min: Import new images
+- 1 min: Start services
+
+**Q: What if I accidentally used `docker compose down -v`?**
+A: You deleted all data. Restore from backup:
+```powershell
+docker compose up -d  # Recreate volume
+.\RESTORE.ps1 -BackupPath ".\backups\backup_TIMESTAMP\database.sql"
+```
+
+**Q: Can I update without backup?**
+A: Technically yes, but **strongly not recommended**. Backups are free insurance.
+
+## Support
+
+If you encounter issues during update:
+
+1. **Check logs first:**
+   ```powershell
+   docker compose logs --tail 100
+   ```
+
+2. **Try restore:**
+   ```powershell
+   .\RESTORE.ps1 -BackupPath ".\backups\backup_TIMESTAMP\database.sql"
+   ```
+
+3. **Contact support with:**
+   - Current version (VERSION.txt)
+   - Target version (new VERSION.txt)
+   - Error messages from logs
+   - Backup timestamp (so we can guide restore)
+
+---
+
+**Remember:** When in doubt, backup first! Storage is cheap, data is priceless.

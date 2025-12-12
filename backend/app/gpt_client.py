@@ -23,6 +23,20 @@ from .config import (
     DATAIKU_DSS_CALL_TIMEOUT, HTTP_REQUEST_TIMEOUT
 )
 
+# --- Certificate handling: Only use if file actually exists ---
+# Check early before any API calls - this must happen at module import time
+_ACTUAL_CA_BUNDLE = None
+if DATAIKU_CA_BUNDLE:
+    if os.path.isfile(DATAIKU_CA_BUNDLE):
+        _ACTUAL_CA_BUNDLE = DATAIKU_CA_BUNDLE
+        os.environ["REQUESTS_CA_BUNDLE"] = DATAIKU_CA_BUNDLE
+        logging.info(f"Using corporate CA bundle: {DATAIKU_CA_BUNDLE}")
+    else:
+        logging.warning(f"CA bundle specified but file not found: {DATAIKU_CA_BUNDLE} - will use system CAs")
+        _ACTUAL_CA_BUNDLE = DATAIKU_VERIFY_SSL  # Fall back to boolean True/False
+else:
+    _ACTUAL_CA_BUNDLE = DATAIKU_VERIFY_SSL
+
 # --- DNS Fallback (Global - applied once at module import) ---
 # Install DNS fallback BEFORE any threads start to ensure all workers use it
 if DATAIKU_DSS_HOST_IP and DATAIKU_DSS_HOST:
@@ -311,7 +325,7 @@ def _call_dataiku_apinode(messages, model, max_tokens, temperature, top_p) -> Tu
         headers = {"X-API-Key": DATAIKU_API_KEY, "Content-Type": "application/json"}
         # Try common API Node function endpoint path
         url = f"{DATAIKU_API_BASE}/services/{DATAIKU_SERVICE_ID}/endpoints/{DATAIKU_ENDPOINT_ID}/run"
-        verify_arg = DATAIKU_CA_BUNDLE if DATAIKU_CA_BUNDLE else DATAIKU_VERIFY_SSL
+        verify_arg = _ACTUAL_CA_BUNDLE  # Use the validated CA bundle or fallback
         t0 = time.time()
         def _retry_cb2(attempt, delay, exc):
             _maybe_log_event({
@@ -357,12 +371,9 @@ def _call_dataiku_apinode(messages, model, max_tokens, temperature, top_p) -> Tu
 def _call_dataiku_dss(messages, model, max_tokens, temperature, top_p) -> Tuple[str, Optional[Dict[str, Any]]]:
     # Use Dataiku DSS Python client, LLM catalog, with connection caching
     from dataikuapi import DSSClient
-    # Honor corporate CA bundle if provided (used by requests under the hood)
-    if DATAIKU_CA_BUNDLE:
-        os.environ["REQUESTS_CA_BUNDLE"] = DATAIKU_CA_BUNDLE
+    # CA bundle and DNS fallback applied globally at module import time (see top of file)
     
-    # DNS fallback was applied globally at module import time (see top of file)
-    # Log that we're using it for this call
+    # Log that we're using DNS fallback for this call if configured
     if DATAIKU_DSS_HOST_IP and DATAIKU_DSS_HOST:
         _maybe_log_event({
             "ts": time.time(),

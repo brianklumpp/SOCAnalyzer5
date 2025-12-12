@@ -18,9 +18,21 @@ depends_on = None
 
 def upgrade():
     """Add elapsed_seconds column to scan table for historical progress tracking."""
-    op.add_column('scan', sa.Column('elapsed_seconds', sa.Float(), nullable=True))
+    # Check if column already exists to handle cases where it was manually added
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('scan')]
+    
+    if 'elapsed_seconds' not in columns:
+        op.add_column('scan', sa.Column('elapsed_seconds', sa.Float(), nullable=True))
 
 
 def downgrade():
     """Remove elapsed_seconds column from scan table."""
-    op.drop_column('scan', 'elapsed_seconds')
+    # Check if column exists before trying to drop it
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('scan')]
+    
+    if 'elapsed_seconds' in columns:
+        op.drop_column('scan', 'elapsed_seconds')

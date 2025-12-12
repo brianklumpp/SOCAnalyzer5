@@ -30,6 +30,12 @@ env/
 .mypy_cache/
 .ruff_cache/
 
+### Distribution Package ###
+manager/build/
+manager/dist/
+.env.dist
+*.spec.swp
+
 ### Data / Outputs (not source) ###
 data/tmp/
 data/logs/

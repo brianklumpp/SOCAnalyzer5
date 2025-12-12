@@ -42,6 +42,48 @@ else
     echo "  ⚠ Internal DNS resolution failed, but continuing..."
 fi
 
+# Wait for postgres to be ready
+if [ ! -z "$DATABASE_URL_SYNC" ]; then
+    echo "Waiting for database to be ready..."
+    RETRIES=30
+    until nc -z postgres 5432 2>/dev/null || [ $RETRIES -eq 0 ]; do
+        echo "  Waiting for postgres... ($RETRIES retries left)"
+        RETRIES=$((RETRIES - 1))
+        sleep 1
+    done
+    
+    if [ $RETRIES -eq 0 ]; then
+        echo "  ⚠ Database not ready after 30 seconds, starting anyway..."
+    else
+        echo "  ✓ Database is ready"
+        
+        # Run database migrations
+        echo "Running database migrations..."
+        cd /app/backend
+        alembic upgrade head
+        MIGRATION_EXIT_CODE=$?
+        cd /app
+        
+        if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
+            echo "  ✓ Database migrations completed successfully"
+        else
+            echo ""
+            echo "========================================" 
+            echo "  ✗ DATABASE MIGRATION FAILED"
+            echo "========================================" 
+            echo "Exit code: $MIGRATION_EXIT_CODE"
+            echo ""
+            echo "Cannot start application with incompatible database schema."
+            echo "Check the migration errors above."
+            echo ""
+            echo "To fix manually:"
+            echo "  docker compose exec backend sh -c 'cd /app/backend && alembic upgrade head'"
+            echo ""
+            exit 1
+        fi
+    fi
+fi
+
 # Execute the main command (passed as arguments to this script)
 echo "Starting application..."
 exec "$@"

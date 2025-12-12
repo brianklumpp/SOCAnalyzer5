@@ -143,6 +143,8 @@ TSC_ANOMALY_ADAPTIVE_ENABLED = os.getenv("TSC_ANOMALY_ADAPTIVE_ENABLED", "true")
 TSC_ANOMALY_MIN_THRESHOLD = int(os.getenv("TSC_ANOMALY_MIN_THRESHOLD", "5"))
 
 # Control Merge Suggestions Configuration
+# Enable/disable automated merging after extraction (set to "false" to disable)
+ENABLE_AUTO_MERGE = os.getenv("ENABLE_AUTO_MERGE", "true").lower() == "true"
 # Minimum confidence score (0.0-1.0) to suggest merging duplicate controls
 MERGE_SUGGESTION_MIN_CONFIDENCE = float(os.getenv("MERGE_SUGGESTION_MIN_CONFIDENCE", "0.50"))
 # Maximum number of merge suggestions to return per request
@@ -2494,6 +2496,92 @@ GPT_PROMPTS = {
     'cuec_extraction': CUEC_EXTRACTION_PROMPT,
     'cuec_consolidation': CUEC_CONSOLIDATION_PROMPT,
     'executive_summary': EXECUTIVE_SUMMARY_PROMPT,
+    
+    # Excel Export Prompts - Descriptive content generation for Basic Procedures tab
+    'excel_export_service_description': """You are analyzing a SOC {report_type} report for {company} regarding their {product} service.
+
+Based on the following information, write a clear 1-sentence description of the service/product being evaluated:
+
+Company: {company}
+Product/Service: {product}
+Report Type: {report_type}
+Coverage Period: {coverage_start} to {coverage_end}
+
+Write a professional, concise description (max 150 characters) suitable for an executive summary.
+Return ONLY the description text, no JSON or additional formatting.""",
+
+    'excel_export_transaction_materiality': """You are analyzing a SOC {report_type} report for {company}.
+
+Based on the report type and service description, write a 1-sentence statement about transaction materiality to the audit:
+
+Report Type: {report_type}
+Service: {product}
+Number of Controls: {control_count}
+
+Write a professional statement (max 150 characters) explaining the materiality of transactions.
+Return ONLY the statement text, no JSON or additional formatting.""",
+
+    'excel_export_interaction': """You are analyzing a SOC report for {company} regarding {product}.
+
+Write a 1-sentence description of how Solidigm interacts with this service provider:
+
+Company: {company}
+Service: {product}
+Report Type: {report_type}
+
+Write a professional, concise description (max 150 characters).
+Return ONLY the description text, no JSON or additional formatting.""",
+
+    'excel_export_appropriateness': """You are evaluating the appropriateness of control objectives for a SOC {report_type} report.
+
+Based on the following information, write a 2-3 sentence evaluation of whether the control objectives are appropriate:
+
+Company: {company}
+Service: {product}
+Number of Controls: {control_count}
+Number with Deviations: {deviation_count}
+High Confidence Controls: {high_confidence_count}
+
+Write a professional evaluation (max 300 characters) for an audit working paper.
+Return ONLY the evaluation text, no JSON or additional formatting.""",
+
+    'excel_export_sufficiency': """You are evaluating control sufficiency for a SOC {report_type} report.
+
+Based on the following information, write a 2-3 sentence evaluation of whether the controls are sufficient:
+
+Company: {company}
+Service: {product}
+Total Controls: {control_count}
+High Confidence Controls: {high_confidence_count}
+Controls with Deviations: {deviation_count}
+Control Coverage: {coverage_summary}
+
+Write a professional evaluation (max 300 characters) for an audit working paper.
+Return ONLY the evaluation text, no JSON or additional formatting.""",
+
+    'excel_export_exceptions_summary': """You are summarizing control exceptions for a SOC {report_type} report.
+
+Based on the following exceptions, write a clear summary statement:
+
+Total Controls: {control_count}
+Controls with Deviations: {deviation_count}
+
+Exceptions:
+{exceptions_list}
+
+Write a professional summary (2-3 sentences, max 300 characters).
+Return ONLY the summary text, no JSON or additional formatting.""",
+
+    'excel_export_further_evaluation': """You are identifying items requiring further evaluation in a SOC {report_type} audit.
+
+Based on the following information, list 2-4 specific items that require further evaluation:
+
+Controls with Deviations: {deviation_count}
+Low Confidence Controls: {low_confidence_count}
+Missing Data Items: {missing_data_summary}
+
+Write a brief bulleted list (max 250 characters) of items requiring attention.
+Return ONLY the list text, no JSON or additional formatting.""",
 }
 
 # --- Entity Extraction from Context Prompt ---

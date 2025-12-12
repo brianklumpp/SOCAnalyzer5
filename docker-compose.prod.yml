@@ -48,6 +48,7 @@ services:
         ipv4_address: 172.20.0.3  # Fixed IP for postgres
     ports:
       - "5433:5432"  # Expose to localhost:5433 to avoid conflict with local PostgreSQL
+
   redis:
     image: redis:7-alpine
     container_name: socanalyzer-redis
@@ -60,14 +61,8 @@ services:
 
   backend:
     image: socanalyzer-backend:${VERSION:-latest}
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
     container_name: socanalyzer-backend
     restart: unless-stopped
-    dns:
-      - 172.20.0.2  # Use our local DNS cache first (fixed IP)
-      - 8.8.8.8     # Fallback to Google DNS
     depends_on:
       dns-cache:
         condition: service_healthy
@@ -75,6 +70,9 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
+    dns:
+      - 172.20.0.2  # Use dns-cache first
+      - 8.8.8.8     # Fallback to Google DNS
     environment:
       RUN_MIGRATIONS_ON_START: "true"
       POSTGRES_DB: ${POSTGRES_DB:-soc2analyzer}
@@ -108,49 +106,33 @@ services:
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-ada-002}
-      CONTROL_EMBEDDING_MAPPING_ENABLED: "false"  # Temporarily disabled - GPT mapping overloads Dataiku
-      SOCANALYZER_REDIS_URL: redis://redis:6379/0
+      CONTROL_EMBEDDING_MAPPING_ENABLED: "false"
+      SOCANALYZER_REDIS_URL: redis://172.20.0.4:6379/0
       DOCKER_CONTROL_ENABLED: "true"
       QUICK_TEST_MODE: ${QUICK_TEST_MODE:-false}
       QUICK_TEST_MAX_CONTROLS: ${QUICK_TEST_MAX_CONTROLS:-10}
       PYTHONUNBUFFERED: "1"
-      WATCHFILES_FORCE_POLLING: "true"  # Better file watching on Windows
     ports:
       - "8000:8000"
     volumes:
-      # Bind mount source code for live editing
-      - ./backend/app:/app/backend/app
-      - ./backend/alembic:/app/backend/alembic
-      - ./backend/alembic.ini:/app/backend/alembic.ini:ro
-      # Data, docs, and certs
+      # Only mount data directory for persistent storage
       - ./data:/app/data
-      - ./docs:/app/docs:ro
       - ./certs:/certs:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend/app
     networks:
       socanalyzer-network:
         ipv4_address: 172.20.0.5  # Fixed IP for backend
 
   frontend:
     image: socanalyzer-frontend:${VERSION:-latest}
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-      target: prod  # Use production stage with nginx
     container_name: socanalyzer-frontend
     restart: unless-stopped
     depends_on:
       - backend
     ports:
-      - "3000:80"  # Map to nginx port
-    volumes:
-      # Bind mount frontend build for live updates
-      - ./frontend/build:/usr/share/nginx/html
+      - "3000:80"
     networks:
       - socanalyzer-network
 
 volumes:
   postgres_data:
-
-

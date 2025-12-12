@@ -156,9 +156,10 @@ def map_control_to_frameworks_dynamic(
                 for c in criteria
             ])
             
-            # Build prompt (template keys vary by framework, use both for compatibility)
+            # Build prompt (template keys vary by framework, use all for compatibility)
             framework_prompt = framework_prompt_template.format(
                 control_desc=control_desc,
+                criteria_list=criteria_list_text,
                 tsc_criteria_list=criteria_list_text,
                 coso_criteria_list=criteria_list_text,
                 deviation_context=deviation_context

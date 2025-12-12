@@ -19,3 +19,4 @@ pymupdf
 rapidfuzz
 certifi
 pdfminer.six
+openpyxl>=3.1.0

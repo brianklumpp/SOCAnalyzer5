@@ -38,6 +38,7 @@ from .analyze import analyze_pdf_file
 from .config import REDIS_URL, TSC_CRITERIA, COSO_2013_CRITERIA, EXECUTIVE_SUMMARY_PROMPT
 from .frameworks.mapper import map_cuec_to_frameworks_dynamic as map_cuec_to_frameworks
 from . import config as cfg
+from .services.excel_export import ExcelExportService
 from .config import (
     EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS,
     EXEC_SUMMARY_PER_CONTROL_MAX_CHARS,
@@ -767,6 +768,53 @@ async def get_pdf(scan_id: int, db=Depends(get_db)):
     except Exception as e:
         logging.error(f"/pdf/{scan_id} failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/export/excel/{scan_id}")
+async def export_excel(scan_id: int, db=Depends(get_db)):
+    """
+    Export SOC analysis data to Excel template for a scan.
+    Returns Excel file with populated control objectives, exceptions, CUECs, and subservice orgs.
+    """
+    try:
+        logging.info(f"Excel export requested for scan {scan_id}")
+        
+        # Generate Excel report
+        service = ExcelExportService()
+        excel_file = await service.generate_report(scan_id, db)
+        
+        # Get scan for filename
+        result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan = result.scalar_one_or_none()
+        
+        if not scan:
+            raise HTTPException(status_code=404, detail=f"Scan {scan_id} not found")
+        
+        # Generate filename
+        company_safe = (scan.company or "Unknown").replace(" ", "_").replace("/", "-")
+        report_type = scan.report_type.value if scan.report_type else "SOC2"
+        filename = f"SOC_Analysis_{company_safe}_{report_type}_Scan{scan_id}.xlsx"
+        
+        logging.info(f"Excel export completed for scan {scan_id}: {filename}")
+        
+        return Response(
+            content=excel_file.read(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "no-cache"
+            }
+        )
+        
+    except FileNotFoundError as e:
+        logging.error(f"Excel export failed - template not found: {e}")
+        raise HTTPException(status_code=500, detail=f"Export template not found: {str(e)}")
+    except ValueError as e:
+        logging.error(f"Excel export failed - validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.error(f"Excel export failed for scan {scan_id}: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 
 @app.get("/report/{scan_id}/pdf")
@@ -2393,13 +2441,16 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
                     if latest_scan:
                         scan_id_for_learning = latest_scan.id
                         
-                        # Run automated cleanup first
-                        try:
-                            cleanup_stats = await automated_cleanup(scan_id_for_learning, db)
-                            if cleanup_stats:
-                                logging.info(f"[/analyze/finalize] Automated cleanup complete: {cleanup_stats}")
-                        except Exception as cleanup_err:
-                            logging.warning(f"[/analyze/finalize] Automated cleanup failed: {cleanup_err}")
+                        # Run automated cleanup first (if enabled)
+                        if config.ENABLE_AUTO_MERGE:
+                            try:
+                                cleanup_stats = await automated_cleanup(scan_id_for_learning, db)
+                                if cleanup_stats:
+                                    logging.info(f"[/analyze/finalize] Automated cleanup complete: {cleanup_stats}")
+                            except Exception as cleanup_err:
+                                logging.warning(f"[/analyze/finalize] Automated cleanup failed: {cleanup_err}")
+                        else:
+                            logging.info(f"[/analyze/finalize] Automated cleanup disabled (ENABLE_AUTO_MERGE=false)")
                         
                         # Apply incomplete control penalties
                         try:
@@ -3776,6 +3827,9 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             ctrl.confidence_calc = data["confidence_calc"]
         if "annotation" in data:
             ctrl.annotation = data["annotation"]
+        # Allow editing control_id
+        if "control_id" in data:
+            ctrl.control_id = data["control_id"]
         # New: allow editing control text fields
         if "control_desc" in data:
             ctrl.control_desc = data["control_desc"]
@@ -3825,8 +3879,8 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
 @app.patch("/report/{scan_id}/controls/id/{control_db_id}")
 async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     """Update a control by its numeric database ID to avoid duplicate control_id ambiguity."""
-    logging.error(f"[PATCH CONTROL] scan_id={scan_id}, control_id={control_db_id}, payload keys: {list(data.keys())}")
-    logging.error(f"[PATCH CONTROL] Full payload: {data}")
+    logging.debug(f"[PATCH CONTROL] scan_id={scan_id}, control_id={control_db_id}, payload keys: {list(data.keys())}")
+    logging.debug(f"[PATCH CONTROL] Full payload: {data}")
     logging.debug(f"/report/{scan_id}/controls/{control_db_id} payload: {data}")
     try:
         ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id))).scalar_one_or_none()
@@ -3865,6 +3919,9 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, 
             ctrl.confidence_calc = data["confidence_calc"]
         if "annotation" in data:
             ctrl.annotation = data["annotation"]
+        # Allow editing control_id
+        if "control_id" in data:
+            ctrl.control_id = data["control_id"]
         # New: allow editing control text fields
         if "control_desc" in data:
             ctrl.control_desc = data["control_desc"]
@@ -5486,7 +5543,7 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
     - Legacy columns: control_tsc_mappings, control_coso_mappings (backward compatibility)
     - Legacy single-match: control_tsc_id, control_coso_id, etc.
     """
-    from .extractors.control_extractor_v4 import map_control_to_frameworks_multi, map_control_to_frameworks_dynamic
+    from .frameworks.mapper import map_control_to_frameworks_dynamic
     from .frameworks import get_available_frameworks
     
     logging.info(f"[RECOMPUTE] Starting framework recompute for scan_id={scan_id}, control_db_id={control_db_id}")
@@ -5588,80 +5645,10 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
             except Exception as e:
                 logging.error(f"[RECOMPUTE] Dynamic multi-framework mapping failed: {e}", exc_info=True)
                 return JSONResponse({"error": f"Multi-framework mapping failed: {str(e)}"}, status_code=503)
-        elif cfg.ENABLE_MULTI_MATCH_MAPPING:
-            # Fallback to old multi-match if no frameworks available
-            logging.warning(f"[RECOMPUTE] No frameworks available, falling back to legacy TSC/COSO mapping")
-            try:
-                if not TSC_CRITERIA or not COSO_2013_CRITERIA:
-                    return JSONResponse({"error": "Framework criteria not available"}, status_code=500)
-                    
-                tsc_matches, coso_matches = map_control_to_frameworks_multi(
-                    control_desc=desc,
-                    control_id=ctrl.control_id or f"Control_{ctrl.id}",
-                    has_deviation=ctrl.has_deviation or False,
-                    deviation_desc=ctrl.deviation_desc or "",
-                    tsc_criteria=TSC_CRITERIA,
-                    coso_criteria=COSO_2013_CRITERIA,
-                    top_k=3
-                )
-                
-                ctrl.control_tsc_mappings = tsc_matches if isinstance(tsc_matches, list) else []
-                ctrl.control_coso_mappings = coso_matches if isinstance(coso_matches, list) else []
-                
-                # Continue with same logic as dynamic mapping for legacy columns...
-                if tsc_matches:
-                    top_tsc = tsc_matches[0]
-                    ctrl.control_tsc_id = top_tsc.get("id")
-                    ctrl.control_tsc_similarity = top_tsc.get("confidence")
-                    ctrl.control_tsc_confidence_pct = int(round(top_tsc.get("confidence", 0) * 100))
-                
-                if coso_matches:
-                    top_coso = coso_matches[0]
-                    ctrl.control_coso_id = top_coso.get("id")
-                    ctrl.control_coso_similarity = top_coso.get("confidence")
-                    ctrl.control_coso_confidence_pct = int(round(top_coso.get("confidence", 0) * 100))
-                
-                if tsc_matches and coso_matches:
-                    if tsc_matches[0].get("confidence", 0) > coso_matches[0].get("confidence", 0):
-                        ctrl.control_closest_framework = "TSC"
-                    elif coso_matches[0].get("confidence", 0) > tsc_matches[0].get("confidence", 0):
-                        ctrl.control_closest_framework = "COSO"
-                    else:
-                        ctrl.control_closest_framework = "Equal"
-                elif tsc_matches:
-                    ctrl.control_closest_framework = "TSC"
-                elif coso_matches:
-                    ctrl.control_closest_framework = "COSO"
-                else:
-                    ctrl.control_closest_framework = "Undetermined"
-                    
-            except Exception as e:
-                logging.error(f"[RECOMPUTE] Legacy multi-match mapping failed: {e}", exc_info=True)
-                return JSONResponse({"error": f"Multi-match mapping failed: {str(e)}"}, status_code=503)
         else:
-            # Legacy single-match fallback
-            try:
-                tsc_id, coso_id, tsc_sim, coso_sim = map_cuec_to_frameworks(desc, TSC_CRITERIA, COSO_2013_CRITERIA)
-            except Exception as e:
-                return JSONResponse({"error": f"Mapping failed: {e}"}, status_code=503)
-
-            ctrl.control_tsc_id = tsc_id
-            ctrl.control_coso_id = coso_id
-            ctrl.control_tsc_similarity = tsc_sim
-            ctrl.control_coso_similarity = coso_sim
-            ctrl.control_tsc_confidence_pct = int(round(100 * (tsc_sim + 1) / 2)) if isinstance(tsc_sim, (int, float)) and tsc_sim != -1 else None
-            ctrl.control_coso_confidence_pct = int(round(100 * (coso_sim + 1) / 2)) if isinstance(coso_sim, (int, float)) and coso_sim != -1 else None
-            if (isinstance(tsc_sim, (int, float)) and isinstance(coso_sim, (int, float))):
-                if tsc_sim > coso_sim:
-                    ctrl.control_closest_framework = 'TSC'
-                elif coso_sim > tsc_sim:
-                    ctrl.control_closest_framework = 'COSO'
-                elif tsc_sim == coso_sim and tsc_sim != -1:
-                    ctrl.control_closest_framework = 'Equal'
-                else:
-                    ctrl.control_closest_framework = 'Undetermined'
-            else:
-                ctrl.control_closest_framework = 'Undetermined'
+            # No frameworks available - error
+            logging.error(f"[RECOMPUTE] No frameworks available for report type {report_type}")
+            return JSONResponse({"error": "No frameworks available for this report type"}, status_code=500)
 
         # Mark executive summary stale
         scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
@@ -5731,7 +5718,8 @@ async def preview_framework_mappings(
     """
     try:
         from . import config as cfg
-        from .extractors.control_extractor_v4 import map_control_to_frameworks_multi
+        from .frameworks.mapper import map_control_to_frameworks_dynamic
+        from .frameworks import get_available_frameworks
         import redis
         
         # Rate limiting using Redis
@@ -5780,27 +5768,40 @@ async def preview_framework_mappings(
         # Call mapping function (same as used during extraction)
         logging.info(f"[PREVIEW] Computing frameworks for control_id={control_id}, desc_len={len(control_desc)}")
         
-        tsc_matches, coso_matches = map_control_to_frameworks_multi(
+        # Get scan to determine report type
+        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if not scan_row:
+            return JSONResponse({"error": "Scan not found"}, status_code=404)
+        
+        report_type = scan_row.report_type.value if scan_row.report_type else "SOC2"
+        detected_standards = scan_row.detected_standards if scan_row.detected_standards else None
+        available_frameworks = get_available_frameworks(report_type, detected_standards)
+        
+        # Use dynamic mapper
+        result = map_control_to_frameworks_dynamic(
             control_desc=control_desc,
             control_id=control_id,
+            available_frameworks=available_frameworks,
             has_deviation=has_deviation
         )
         
-        # Format response
+        framework_mappings = result.get("framework_mappings", {})
+        
+        # Format response (legacy format for compatibility)
         tsc_formatted = []
-        for match in tsc_matches:
+        for match in framework_mappings.get("TSC", []):
             tsc_formatted.append({
-                "tsc_id": match.get("tsc_id"),
-                "score": match.get("score"),
-                "rationale": match.get("rationale", "")[:200]  # Truncate rationale
+                "tsc_id": match.get("id"),
+                "score": int(match.get("confidence", 0) * 100),
+                "rationale": match.get("reasoning", "")[:200]
             })
         
         coso_formatted = []
-        for match in coso_matches:
+        for match in framework_mappings.get("COSO", []):
             coso_formatted.append({
-                "principle": match.get("principle"),
-                "score": match.get("score"),
-                "rationale": match.get("rationale", "")[:200]
+                "principle": match.get("id"),
+                "score": int(match.get("confidence", 0) * 100),
+                "rationale": match.get("reasoning", "")[:200]
             })
         
         logging.info(f"[PREVIEW] Found {len(tsc_formatted)} TSC matches, {len(coso_formatted)} COSO matches")
@@ -5808,6 +5809,8 @@ async def preview_framework_mappings(
         return {
             "tsc_matches": tsc_formatted,
             "coso_matches": coso_formatted,
+            "framework_mappings": framework_mappings,
+            "primary_framework": result.get("primary_framework"),
             "rate_limit_remaining": rate_limit_remaining,
             "note": "These mappings are NOT saved. Use 'Save' to commit to database."
         }
