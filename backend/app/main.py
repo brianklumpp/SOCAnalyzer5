@@ -3264,100 +3264,12 @@ async def patch_control_annotation(scan_id: int, control_id: str, data: Dict[str
     await db.commit()
     return {"status": "ok"}
 
-# REMOVED: @app.patch("/report/{scan_id}/controls/{control_id}") - Duplicate endpoint (~95 lines)
-# Now handled by backend/app/routers/control_router.py line 54
+# REMOVED: Control Router duplicates (2 endpoints, ~185 lines)
+# - @app.patch("/report/{scan_id}/controls/{control_id}") 
+# - @app.patch("/report/{scan_id}/controls/id/{control_db_id}")
+# Now handled by backend/app/routers/control_router.py
 
-@app.patch("/report/{scan_id}/controls/id/{control_db_id}")
-async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
-    """Update a control by its numeric database ID to avoid duplicate control_id ambiguity."""
-    logging.debug(f"[PATCH CONTROL] scan_id={scan_id}, control_id={control_db_id}, payload keys: {list(data.keys())}")
-    logging.debug(f"[PATCH CONTROL] Full payload: {data}")
-    logging.debug(f"/report/{scan_id}/controls/{control_db_id} payload: {data}")
-    try:
-        ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id))).scalar_one_or_none()
-        if not ctrl:
-            return JSONResponse({"error": "Control not found"}, status_code=404)
-        justification_note = None
-        if "control_confidence" in data:
-            old = getattr(ctrl, "control_confidence", None)
-            new_val = None
-            try:
-                val = data["control_confidence"]
-                if isinstance(val, str):
-                    s = val.strip()
-                    if s.endswith('%'):
-                        n = float(s[:-1])
-                        new_val = n / 100.0
-                    else:
-                        n = float(s)
-                        new_val = (n / 100.0) if n > 1 else n
-                elif isinstance(val, (int, float)):
-                    f = float(val)
-                    new_val = (f / 100.0) if f > 1 else f
-            except Exception:
-                new_val = None
-            if new_val is not None:
-                ctrl.control_confidence = new_val
-            justification_note = f"UI edit: control_confidence {old} -> {ctrl.control_confidence}"
-        if "analyst_notes" in data:
-            ctrl.analyst_notes = data["analyst_notes"]
-            from datetime import datetime
-            now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
-            existing = ctrl.confidence_calc or ""
-            separator = "\n" if existing and not existing.endswith("\n") else ""
-            ctrl.confidence_calc = f"{existing}{separator}Analyst notes updated {now}"
-        elif "confidence_calc" in data:
-            ctrl.confidence_calc = data["confidence_calc"]
-        if "annotation" in data:
-            ctrl.annotation = data["annotation"]
-        # Allow editing control_id
-        if "control_id" in data:
-            ctrl.control_id = data["control_id"]
-        # New: allow editing control text fields
-        if "control_desc" in data:
-            ctrl.control_desc = data["control_desc"]
-        if "control_test" in data:
-            ctrl.control_test = data["control_test"]
-        if "control_test_results" in data:
-            ctrl.control_test_results = data["control_test_results"]
-        if "control_page_refs" in data or "control_page_ref" in data:
-            ctrl.control_page_refs = _parse_page_refs(data.get("control_page_refs") or data.get("control_page_ref"))
-        # New: allow editing deviation fields via API
-        if "has_deviation" in data:
-            ctrl.has_deviation = data["has_deviation"]
-        if "deviation_desc" in data:
-            ctrl.deviation_desc = data["deviation_desc"]
-        if justification_note:
-            prev = getattr(ctrl, "confidence_calc", "") or ""
-            sep = "\n" if prev else ""
-            ctrl.confidence_calc = f"{prev}{sep}{justification_note}"
-        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
-        if scan_row:
-            scan_row.executive_summary_stale = True
-            db.add(scan_row)
-        db.add(ctrl)
-        await db.commit()
-        await db.refresh(ctrl)
-        return {
-            "id": ctrl.id,
-            "control_id": ctrl.control_id,
-            "control_desc": ctrl.control_desc,
-            "control_confidence": ctrl.control_confidence,
-            "confidence_calc": ctrl.confidence_calc,
-            "analyst_notes": ctrl.analyst_notes,
-            "annotation": ctrl.annotation,
-            "control_tsc_id": ctrl.control_tsc_id,
-            "control_coso_id": ctrl.control_coso_id,
-            "control_page_refs": ctrl.control_page_refs,
-            "has_deviation": ctrl.has_deviation,
-            "deviation_desc": ctrl.deviation_desc
-        }
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"/report/{scan_id}/controls/{control_db_id} DB error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-    # NOTE: Keep normalization inline in handlers to avoid import scope issues
+# NOTE: Keep normalization inline in handlers to avoid import scope issues
 
 async def automated_cleanup(scan_id: int, db):
     """
