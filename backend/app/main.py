@@ -46,6 +46,19 @@ from .explicit_sql_insert import insert_extracted_data
 import concurrent.futures
 from .gpt_client import gpt_extract, set_gpt_log_context
 
+# Import routers
+from .routers import (
+    scan_router,
+    report_router,
+    control_router,
+    cuec_router,
+    suborg_router,
+    deviation_router,
+    executive_summary_router,
+    baseline_router,
+    config_router,
+)
+
 app = FastAPI()
 # Minimal direct diagnostic route (bypasses router) to ensure availability
 @app.get("/diag/gpt_logging", tags=["diag"], include_in_schema=True)
@@ -256,6 +269,34 @@ async def diag_gpt_logging():
         return {"ok": False, "error": str(e)}
 
 app.include_router(diag_router)
+
+# --- Register modular routers (v2.0.0 refactoring) ---
+# Analysis and scan operations
+app.include_router(scan_router.router, tags=["scan"])
+
+# Report operations
+app.include_router(report_router.router, tags=["report"])
+
+# Control operations
+app.include_router(control_router.router, tags=["control"])
+
+# CUEC operations
+app.include_router(cuec_router.router, tags=["cuec"])
+
+# Subservice organization operations
+app.include_router(suborg_router.router, tags=["suborg"])
+
+# Deviation operations
+app.include_router(deviation_router.router, tags=["deviation"])
+
+# Executive summary operations
+app.include_router(executive_summary_router.router, tags=["executive_summary"])
+
+# Validation and baseline operations
+app.include_router(baseline_router.router, tags=["baseline"])
+
+# Settings and configuration
+app.include_router(config_router.router, tags=["config"])
 
 if __name__ == "__main__" and sys.argv[-1] == "test_insert_combined_result":
     async def _main():
