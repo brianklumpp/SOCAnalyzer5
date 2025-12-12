@@ -1,4 +1,5 @@
 {
+  "version": "2.0.0",
   "dependencies": {
     "@mui/icons-material": "^7.2.0",
     "@mui/lab": "^7.0.0-beta.14",
