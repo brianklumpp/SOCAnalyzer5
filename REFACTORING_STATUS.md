@@ -23,7 +23,7 @@
 
 ---
 
-## 🚧 WEEK 2 IN PROGRESS
+## ✅ WEEK 2 PHASE 4 COMPLETE
 
 ### Phase 1-2 Complete:
 1. **Directory structure created**
@@ -44,9 +44,29 @@
 - ✅ Created `services/merge_service.py` (~735 lines, 7 functions extracted)
 - **Service modules now handle all merge/scan business logic**
 
-### Commits (Week 2): 1 (ready for commit #2)
-- `refactor: Week 2 Phase 1-2 - Create directory structure and Redis helpers`
-- **Next commit**: `refactor: Week 2 Phase 3 - Extract scan and merge service modules`
+### Phase 4 Complete:
+- ✅ Created ALL 9 router modules (~3,000 lines extracted)
+  1. ✅ `suborg_router.py` (97 lines, 2 endpoints)
+  2. ✅ `deviation_router.py` (227 lines, 6 endpoints)
+  3. ✅ `executive_summary_router.py` (117 lines, 3 endpoints)
+  4. ✅ `cuec_router.py` (215 lines, 4 endpoints)
+  5. ✅ `report_router.py` (412 lines, 7 endpoints)
+  6. ✅ `control_router.py` (615 lines, 14 endpoints)
+  7. ✅ `scan_router.py` (650 lines, 10 endpoints + WebSocket)
+  8. ✅ `baseline_router.py` (361 lines, 12 endpoints)
+  9. ✅ `config_router.py` (326 lines, 16 endpoints)
+- ✅ Updated `routers/__init__.py` with all exports
+
+### Commits (Week 2): 9 total
+1. `refactor: Week 2 Phase 1-2 - Create directory structure and Redis helpers`
+2. `refactor: Week 2 Phase 3 - Extract scan and merge service modules`
+3. `refactor: Week 2 Phase 4 (Part 1) - Create 4 smaller routers`
+4. `refactor: Week 2 Phase 4 (Part 2) - Create report_router.py`
+5. `refactor: Week 2 Phase 4 (Part 3) - Create control_router.py`
+6. `refactor: Week 2 Phase 4 (Part 4) - Create scan_router.py`
+7. `refactor: Week 2 Phase 4 (Part 5) - Create baseline_router.py`
+8. `refactor: Week 2 Phase 4 (Part 6) - Create config_router.py`
+9. `refactor: Add routers __init__.py with all 9 router exports`
 
 ---
 
@@ -55,48 +75,20 @@
 ### Phase 3: Extract Services ✅ COMPLETE
 **Files created:**
 1. ✅ `services/scan_service.py` (3 functions)
-   - `mark_executive_summary_stale()` - Mark summary stale when data changes
-   - `update_scan_gpt_fields()` - Update GPT cost/model/time fields
-   - `add_gpt_usage()` - Track GPT usage details array
-
 2. ✅ `services/merge_service.py` (~735 lines, 7 functions)
-   - `automated_cleanup()` - Auto-merge high-confidence duplicates, flag errors
-   - `penalize_incomplete_controls()` - Apply confidence penalty to missing fields
-   - `detect_duplicate_type()` - Classify duplicate relationships with confidence
-   - `suggest_control_merges()` - Generate merge suggestions with analysis
-   - `merge_controls_action()` - Execute manual merge with intelligent selection
-   - `split_control()` - Undo merge and restore original confidence
-
 3. ✅ Verified `post_processors/deviation_summarizer.py` (already exists)
 
-### Phase 4: Create Routers (6-8 hours)
-**9 router modules to create:**
-
-1. **scan_router.py** (~1,000 lines)
-   - 10 endpoints for analysis operations
-   - WebSocket endpoint for progress
-
-2. **report_router.py** (~400 lines)
-   - 7 endpoints for report CRUD operations
-
-3. **control_router.py** (~1,400 lines)
-   - 14 endpoints for control operations
-   - Merge, split, link operations
-
-4. **cuec_router.py** (~200 lines)
-   - 4 endpoints for CUEC operations
-
-5. **suborg_router.py** (~100 lines)
-   - 2 endpoints for subservice org operations
-
-6. **deviation_router.py** (~200 lines)
-   - 5 endpoints for deviation operations
-
-7. **baseline_router.py** (~500 lines)
-   - 12 endpoints for validation/baseline operations
-
-8. **config_router.py** (~400 lines)
-   - 16 endpoints for settings/config/utility operations
+### Phase 4: Create Routers ✅ COMPLETE
+**All 9 router modules created (~3,000 lines):**
+1. ✅ `scan_router.py` (650 lines, 10 endpoints + WebSocket)
+2. ✅ `report_router.py` (412 lines, 7 endpoints)
+3. ✅ `control_router.py` (615 lines, 14 endpoints)
+4. ✅ `cuec_router.py` (215 lines, 4 endpoints)
+5. ✅ `suborg_router.py` (97 lines, 2 endpoints)
+6. ✅ `deviation_router.py` (227 lines, 6 endpoints)
+7. ✅ `executive_summary_router.py` (117 lines, 3 endpoints)
+8. ✅ `baseline_router.py` (361 lines, 12 endpoints)
+9. ✅ `config_router.py` (326 lines, 16 endpoints)
 
 9. **executive_summary_router.py** (~350 lines)
    - 3 endpoints for executive summary operations
