@@ -54,7 +54,7 @@ from .routers import (
     cuec_router,
     suborg_router,
     deviation_router,
-    executive_summary_router,
+    # executive_summary_router,  # Temporarily disabled - endpoints exist in main.py
     # baseline_router,  # Disabled - models not yet implemented
     config_router,
 )
@@ -290,7 +290,7 @@ app.include_router(suborg_router.router, tags=["suborg"])
 app.include_router(deviation_router.router, tags=["deviation"])
 
 # Executive summary operations
-app.include_router(executive_summary_router.router, tags=["executive_summary"])
+# app.include_router(executive_summary_router.router, tags=["executive_summary"])  # Temporarily disabled - endpoints exist in main.py
 
 # Validation and baseline operations (disabled - models not yet implemented)
 # app.include_router(baseline_router.router, tags=["baseline"])
