@@ -159,14 +159,37 @@ SOCAnalyzer5 automates the extraction and normalization of data from SOC 2 PDF r
 
 ## Backend
 
+### Architecture (v2.0.0)
+
+The backend has been refactored into a **modular architecture** with 9 specialized routers and 3 service modules:
+
+**Router Modules** (`backend/app/routers/`):
+- `scan_router.py` - PDF upload, analysis orchestration, job management, WebSocket progress
+- `report_router.py` - Report CRUD, PDF/Excel export, full report payloads
+- `control_router.py` - Control operations, merge/split, duplicate management, framework mapping
+- `cuec_router.py` - CUEC operations and framework mapping
+- `suborg_router.py` - Subservice organization updates
+- `deviation_router.py` - Deviation management and AI summarization
+- `executive_summary_router.py` - Summary generation and updates
+- `baseline_router.py` - Validation, baseline management, pattern learning
+- `config_router.py` - Settings, runtime config, help system, Docker controls
+
+**Service Modules** (`backend/app/services/`):
+- `scan_service.py` - Scan lifecycle management and GPT tracking
+- `merge_service.py` - Control merging, deduplication, and cleanup logic (~735 lines)
+- `excel_export.py` - Excel template generation
+
+**Utility Modules** (`backend/app/utils/`):
+- `redis_helpers.py` - Redis job management with connection pooling
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed endpoint documentation.
+
 ### Key Python Files
-- `main.py`: FastAPI app, API endpoints, normalization logic, orchestrates extraction and DB operations.
-- `models.py`: SQLAlchemy ORM models for all entities (Scan, Company, Control, CUEC, etc.).
-- `pdf_handler.py`: PDF parsing and text extraction utilities.
+- `main.py`: FastAPI app, router registration, middleware configuration
+- `models.py`: SQLAlchemy ORM models for all entities (Scan, Company, Control, CUEC, etc.)
+- `pdf_handler.py`: PDF parsing and text extraction utilities
 - `extractors/`: Modular extractors for company, product, auditor, controls, CUECs, coverage period, subservice orgs, etc.
-- `sync_schema.py`: Utility for syncing DB schema.
-- `scan_model.py`: Alternate/legacy scan model (for compatibility).
-- `config.py`, `gpt_client.py`: Configuration and GPT/OpenAI integration (if used).
+- `config.py`, `gpt_client.py`: Configuration and GPT/OpenAI integration
 
 ### Function Documentation
 - **Normalization Functions:**
