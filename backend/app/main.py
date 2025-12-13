@@ -35,6 +35,7 @@ from .frameworks.mapper import map_cuec_to_frameworks_dynamic as map_cuec_to_fra
 from . import config as cfg
 from .services.excel_export import ExcelExportService
 from .services import redis_service
+from .services import utils
 from .config import (
     EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS,
     EXEC_SUMMARY_PER_CONTROL_MAX_CHARS,
@@ -188,49 +189,8 @@ def get_section_logger(section_name):
     return logger
 
 # Helper function to parse page references
-def _parse_page_refs(value):
-    """
-    Parse page references from various input formats to JSON array.
-    
-    Accepts:
-    - Array: [51, 52, 89]
-    - Comma-separated string: "51, 52, 89"
-    - Single integer: 51
-    - None/empty: returns []
-    
-    Returns: Sorted list of unique integers
-    """
-    if value is None:
-        return []
-    
-    # Already an array
-    if isinstance(value, list):
-        # Filter and convert to integers
-        result = []
-        for item in value:
-            try:
-                result.append(int(item))
-            except (ValueError, TypeError):
-                continue
-        return sorted(list(set(result)))
-    
-    # Single integer
-    if isinstance(value, (int, float)):
-        return [int(value)]
-    
-    # Comma-separated string
-    if isinstance(value, str):
-        result = []
-        for part in value.split(','):
-            part = part.strip()
-            if part:
-                try:
-                    result.append(int(part))
-                except ValueError:
-                    continue
-        return sorted(list(set(result)))
-    
-    return []
+# Utility functions moved to services/utils.py
+_parse_page_refs = utils.parse_page_refs
 
 # Example usage
 management_assertion_logger = get_section_logger('Management_Assertion')
@@ -604,79 +564,12 @@ def _get_redis():
     return redis_service.get_redis_client(REDIS_URL)
 
 # --- Helpers for artifact presence and lightweight counts ---
-def _project_root() -> pathlib.Path:
-    return pathlib.Path(__file__).resolve().parents[2]
+# Utility functions moved to services/utils.py
+_project_root = utils.get_project_root
+_artifact_presence = utils.get_artifact_presence
 
-def _artifact_presence() -> Dict[str, bool]:
-    base = _project_root()
-    files = {
-        "controls": base / "data/json/control_result.json",
-        "cuecs": base / "data/json/cuec_result.json",
-        "subservice_orgs": base / "data/json/subservice_orgs_result.json",
-        "product": base / "data/json/product_result.json",
-        "auditor": base / "data/json/auditor_result.json",
-        "company": base / "data/json/company_result.json",
-        "report_date": base / "data/json/report_date_result.json",
-        "coverage_period": base / "data/json/coverage_period_result.json",
-        "combined": base / "data/json/combined_result.json",
-        "sections": base / "data/json/section_results.json",
-        "extracted_text": base / "data/output/output.txt",
-    }
-    return {k: p.is_file() for k, p in files.items()}
-
-def _reset_scan_state():
-    """Remove prior JSON artifacts and truncate logs to ensure a clean run for a new scan.
-
-    This clears only analyzer-generated outputs under data/json and data/output, and truncates
-    files under data/logs. It does not touch the database or user-uploaded PDFs.
-    """
-    try:
-        base = _project_root()
-        # JSON artifacts to remove
-        json_rel_paths = [
-            'data/json/control_result.json',
-            'data/json/cuec_result.json',
-            'data/json/subservice_orgs_result.json',
-            'data/json/subservice_orgs_result_postprocessed.json',
-            'data/json/product_result.json',
-            'data/json/auditor_result.json',
-            'data/json/company_result.json',
-            'data/json/report_date_result.json',
-            'data/json/coverage_period_result.json',
-            'data/json/combined_result.json',
-            'data/json/section_results.json',
-        ]
-        for rel in json_rel_paths:
-            try:
-                p = base / rel
-                if p.is_file():
-                    p.unlink()
-            except Exception:
-                pass
-        # Output text (legacy extracted text)
-        try:
-            out_txt = base / 'data/output/output.txt'
-            if out_txt.is_file():
-                out_txt.unlink()
-        except Exception:
-            pass
-        # Truncate logs
-        try:
-            logs_dir = base / 'data/logs'
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            for entry in logs_dir.iterdir():
-                try:
-                    if entry.is_file():
-                        # Truncate file
-                        with open(str(entry), 'w', encoding='utf-8'):
-                            pass
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        logging.info("[RESET] Cleared prior JSON artifacts and truncated logs for new scan")
-    except Exception as e:
-        logging.error(f"[RESET] Unexpected error during cleanup: {e}")
+# Utility function moved to services/utils.py
+_reset_scan_state = utils.reset_scan_state
 
 def _safe_len(val) -> int:
     try:
@@ -4436,29 +4329,9 @@ async def get_confidence_weights_audit_log(
 
 # ---- Create endpoints: allow adding rows missed by extraction ----
 
-def _norm_pct_like(val):
-    try:
-        if isinstance(val, str):
-            s = val.strip()
-            if not s:
-                return None
-            if s.endswith('%'):
-                n = float(s[:-1])
-                return n / 100.0
-            n = float(s)
-            return (n / 100.0) if n > 1 else n
-        if isinstance(val, (int, float)):
-            f = float(val)
-            return (f / 100.0) if f > 1 else f
-    except Exception:
-        return None
-    return None
-
-def _as_float_or_none(v):
-    try:
-        return None if v is None or v == '' else float(v)
-    except Exception:
-        return None
+# Utility functions moved to services/utils.py
+_norm_pct_like = utils.normalize_percent_like
+_as_float_or_none = utils.as_float_or_none
 
 # REMOVED: POST /report/{scan_id}/suborgs
 # Now handled by backend/app/routers/suborg_router.py
