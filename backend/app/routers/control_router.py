@@ -323,6 +323,7 @@ async def split_control(scan_id: int, control_db_id: int, db=Depends(get_db)):
 
 
 @router.post("/report/{scan_id}/controls/link")
+@router.post("/report/{scan_id}/controls/link_instances")  # Alias for frontend compatibility
 async def link_control_instances(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     """
     Link controls as instances of the same control (for CRITERIA_VARIANT or TEST_VARIANT).
@@ -410,6 +411,7 @@ async def unlink_control_instance(scan_id: int, control_id: int, db=Depends(get_
 
 
 @router.post("/report/{scan_id}/controls/dismiss-merge")
+@router.post("/report/{scan_id}/controls/dismiss_merge_suggestion")  # Alias for frontend compatibility
 async def dismiss_merge_suggestion(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
     """Mark a merge suggestion as dismissed (user reviewed and rejected)."""
     try:

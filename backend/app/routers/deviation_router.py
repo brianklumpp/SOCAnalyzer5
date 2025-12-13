@@ -111,6 +111,7 @@ async def regenerate_deviation_summary(scan_id: int, control_id: int, db=Depends
 
 
 @router.post("/report/{scan_id}/deviations/regenerate_all")
+@router.post("/report/{scan_id}/deviations/regenerate-all")  # Alias for frontend compatibility
 async def regenerate_all_deviation_summaries(scan_id: int, background_tasks: BackgroundTasks, db=Depends(get_db)):
     """
     Start background task to regenerate all deviation summaries for a scan.
@@ -150,6 +151,7 @@ async def regenerate_all_deviation_summaries(scan_id: int, background_tasks: Bac
 
 
 @router.get("/report/{scan_id}/deviations/regenerate_progress")
+@router.get("/report/{scan_id}/deviations/regenerate-progress")  # Alias for frontend compatibility
 async def get_regenerate_progress(scan_id: int):
     """
     Get progress of deviation summary regeneration.
