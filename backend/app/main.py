@@ -34,6 +34,7 @@ from .config import REDIS_URL, TSC_CRITERIA, COSO_2013_CRITERIA, EXECUTIVE_SUMMA
 from .frameworks.mapper import map_cuec_to_frameworks_dynamic as map_cuec_to_frameworks
 from . import config as cfg
 from .services.excel_export import ExcelExportService
+from .services import redis_service
 from .config import (
     EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS,
     EXEC_SUMMARY_PER_CONTROL_MAX_CHARS,
@@ -592,53 +593,15 @@ def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
 # Now handled by backend/app/routers/suborg_router.py
 
 
-async def get_job(job_id, redis_client=None):
-    if redis_client is None:
-        redis_client = _get_redis()
-        try:
-            job_json = await redis_client.get(f"job:{job_id}")
-        except Exception as e:
-            logging.warning(f"[get_job] Redis access failed: {e}")
-            return None
-        if job_json:
-            try:
-                return _json.loads(job_json)
-            except Exception:
-                return None
-        return None
+# Redis job management functions moved to services/redis_service.py
+get_job = redis_service.get_job
+set_job = redis_service.set_job
+del_job = redis_service.del_job
 
-async def set_job(job_id, job_dict, redis_client=None):
-    if redis_client is None:
-        redis_client = _get_redis()
-    await redis_client.set(f"job:{job_id}", _json.dumps(job_dict), ex=60*60*24)  # 24h expiry
-
-async def del_job(job_id, redis_client=None):
-    if redis_client is None:
-        redis_client = _get_redis()
-    await redis_client.delete(f"job:{job_id}")
-
-# Redis connection pool singleton for better performance
-_redis_pool = None
-
+# Redis client management moved to services/redis_service.py
 def _get_redis():
-    """Get Redis client with connection pooling for improved performance."""
-    global _redis_pool
-    if _redis_pool is None:
-        try:
-            _redis_pool = redis.ConnectionPool.from_url(
-                REDIS_URL,
-                decode_responses=True,
-                socket_connect_timeout=0.5,  # fast-fail DNS/connect
-                socket_timeout=0.75,          # read/write timeout
-                health_check_interval=5,
-                retry_on_timeout=True,
-                max_connections=20
-            )
-        except Exception:
-            # Fallback pool without special options
-            _redis_pool = redis.ConnectionPool.from_url(REDIS_URL, decode_responses=True, max_connections=20)
-    
-    return redis.Redis(connection_pool=_redis_pool)
+    """Get Redis client - wrapper for backward compatibility."""
+    return redis_service.get_redis_client(REDIS_URL)
 
 # --- Helpers for artifact presence and lightweight counts ---
 def _project_root() -> pathlib.Path:
