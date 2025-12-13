@@ -2666,15 +2666,8 @@ import sys
 if __name__ == "__main__" and sys.argv[0].endswith("main.py") and sys.argv[-1] != "test_insert_combined_result":
     asyncio.get_event_loop().run_until_complete(init_models())
 
-@app.post("/analyze/cancel/{job_id}")
-async def cancel_job(job_id: str):
-    redis_client = _get_redis()
-    job_json = await get_job(job_id, redis_client)
-    if not job_json:
-        return JSONResponse({"error": "Job not found"}, status_code=404)
-    job_json["cancelled"] = True
-    await set_job(job_id, job_json, redis_client)
-    return {"status": "cancelled"}
+# REMOVED: @app.post("/analyze/cancel/{job_id}") - Duplicate endpoint (12 lines)
+# Now handled by existing cancel_analysis_job function at line 1378
 
 async def update_scan_gpt_fields(scan_id, gpt_cost=None, gpt_model=None, estimated_time_seconds=None, db=None):
     if db is None:
