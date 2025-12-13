@@ -5909,140 +5909,14 @@ async def get_confidence_weights_audit_log(
 # END VERIFICATION ENDPOINTS
 # ============================================================================
 
-@app.patch("/report/{scan_id}/suborgs/{suborg_id}/annotation")
-async def patch_suborg_annotation(scan_id: int, suborg_id: int, data: dict, db=Depends(get_db)):
-    suborg = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.id == suborg_id))).scalar_one_or_none()
-    if not suborg:
-        raise HTTPException(status_code=404, detail="SubserviceOrg not found")
-    suborg.annotation = data.get("annotation", "")
-    db.add(suborg)
-    await db.commit()
-    return {"status": "ok"}
+# REMOVED: PATCH /report/{scan_id}/suborgs/{suborg_id}/annotation
+# Now handled by backend/app/routers/suborg_router.py
 
-@app.patch("/report/{scan_id}/suborgs/id/{suborg_id}")
-async def patch_suborg_by_id(scan_id: int, suborg_id: int, data: dict, db=Depends(get_db)):
-    """Update a subservice org by its numeric ID. Prefer this over name to avoid duplicate-name ambiguity."""
-    logging.debug(f"/report/{scan_id}/suborgs/{suborg_id} payload: {data}")
-    try:
-        suborg = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.id == suborg_id))).scalar_one_or_none()
-        if not suborg:
-            return JSONResponse({"error": "SubserviceOrg not found"}, status_code=404)
-        justification_note = None
-        if "confidence" in data:
-            old = getattr(suborg, "confidence", None)
-            new_val = None
-            try:
-                val = data["confidence"]
-                if isinstance(val, str):
-                    s = val.strip()
-                    if s.endswith('%'):
-                        n = float(s[:-1])
-                        new_val = n / 100.0
-                    else:
-                        n = float(s)
-                        new_val = (n / 100.0) if n > 1 else n
-                elif isinstance(val, (int, float)):
-                    f = float(val)
-                    new_val = (f / 100.0) if f > 1 else f
-            except Exception:
-                new_val = None
-            if new_val is not None:
-                suborg.confidence = new_val
-            justification_note = f"UI edit: confidence {old} -> {suborg.confidence}"
-        if "confidence_justification" in data:
-            prev = getattr(suborg, "confidence_justification", "") or ""
-            sep = "\n" if prev else ""
-            suborg.confidence_justification = f"{prev}{sep}{data['confidence_justification']}"
-        if "annotation" in data:
-            suborg.annotation = data["annotation"]
-        if "analyst_notes" in data:
-            suborg.analyst_notes = data["analyst_notes"]
-        # New: allow editing suborg text fields
-        if "third_party_description" in data:
-            suborg.third_party_description = data["third_party_description"]
-        if "third_party_page_ref" in data:
-            suborg.third_party_page_ref = data["third_party_page_ref"]
-        if justification_note:
-            prev = getattr(suborg, "confidence_justification", "") or ""
-            sep = "\n" if prev else ""
-            suborg.confidence_justification = f"{prev}{sep}{justification_note}"
-        # Mark executive summary stale
-        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
-        if scan_row:
-            scan_row.executive_summary_stale = True
-            db.add(scan_row)
-        db.add(suborg)
-        await db.commit()
-        return {"status": "ok"}
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"/report/{scan_id}/suborgs/{suborg_id} DB error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+# REMOVED: PATCH /report/{scan_id}/suborgs/id/{suborg_id}
+# Now handled by backend/app/routers/suborg_router.py
 
-@app.patch("/report/{scan_id}/suborgs/{suborg_name}")
-async def patch_suborg(scan_id: int, suborg_name: str, data: dict, db=Depends(get_db)):
-    logging.debug(f"/report/{scan_id}/suborgs/{suborg_name} payload: {data}")
-    try:
-        # Name-based update maintained for backward compatibility. Return 409 if duplicates exist.
-        try:
-            suborg = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.name == suborg_name))).scalar_one_or_none()
-        except MultipleResultsFound:
-            return JSONResponse({
-                "error": "Multiple subservice orgs matched name. Use ID endpoint /report/{scan_id}/suborgs/id/{suborg_id}"
-            }, status_code=409)
-        if not suborg:
-            return JSONResponse({"error": "SubserviceOrg not found"}, status_code=404)
-        justification_note = None
-        if "confidence" in data:
-            old = getattr(suborg, "confidence", None)
-            new_val = None
-            try:
-                val = data["confidence"]
-                if isinstance(val, str):
-                    s = val.strip()
-                    if s.endswith('%'):
-                        n = float(s[:-1])
-                        new_val = n / 100.0
-                    else:
-                        n = float(s)
-                        new_val = (n / 100.0) if n > 1 else n
-                elif isinstance(val, (int, float)):
-                    f = float(val)
-                    new_val = (f / 100.0) if f > 1 else f
-            except Exception:
-                new_val = None
-            if new_val is not None:
-                suborg.confidence = new_val
-            justification_note = f"UI edit: confidence {old} -> {suborg.confidence}"
-        if "confidence_justification" in data:
-            prev = getattr(suborg, "confidence_justification", "") or ""
-            sep = "\n" if prev else ""
-            suborg.confidence_justification = f"{prev}{sep}{data['confidence_justification']}"
-        if "annotation" in data:
-            suborg.annotation = data["annotation"]
-        if "analyst_notes" in data:
-            suborg.analyst_notes = data["analyst_notes"]
-        # New: allow editing suborg text fields
-        if "third_party_description" in data:
-            suborg.third_party_description = data["third_party_description"]
-        if "third_party_page_ref" in data:
-            suborg.third_party_page_ref = data["third_party_page_ref"]
-        if justification_note:
-            prev = getattr(suborg, "confidence_justification", "") or ""
-            sep = "\n" if prev else ""
-            suborg.confidence_justification = f"{prev}{sep}{justification_note}"
-        # Mark executive summary stale
-        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
-        if scan_row:
-            scan_row.executive_summary_stale = True
-            db.add(scan_row)
-        db.add(suborg)
-        await db.commit()
-        return {"status": "ok"}
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"/report/{scan_id}/suborgs/{suborg_name} DB error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+# REMOVED: PATCH /report/{scan_id}/suborgs/{suborg_name}
+# Now handled by backend/app/routers/suborg_router.py
 
 # ---- Create endpoints: allow adding rows missed by extraction ----
 
@@ -6070,104 +5944,11 @@ def _as_float_or_none(v):
     except Exception:
         return None
 
-@app.post("/report/{scan_id}/suborgs")
-async def create_suborg(scan_id: int, data: dict, db=Depends(get_db)):
-    """Create a new Subservice Organization row for a scan."""
-    try:
-        name = str(data.get("name", "")).strip()
-        if not name:
-            raise HTTPException(status_code=400, detail="name is required")
-        confidence = _norm_pct_like(data.get("confidence"))
-        suborg = SubserviceOrg(
-            scan_id=scan_id,
-            name=name,
-            confidence=confidence,
-            third_party_description=data.get("third_party_description"),
-            third_party_page_ref=data.get("third_party_page_ref"),
-            third_party_confidence=_as_float_or_none(data.get("third_party_confidence")),
-            distance_from_so_keywords=_as_float_or_none(data.get("distance_from_so_keywords")),
-            likely_so=data.get("likely_so"),
-            common_so=data.get("common_so"),
-            source_context=data.get("source_context"),
-            confidence_justification=data.get("confidence_justification"),
-            third_party_controls=data.get("third_party_controls"),
-            annotation=data.get("annotation"),
-        )
-        db.add(suborg)
-        # Mark exec summary stale
-        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
-        if scan_row:
-            scan_row.executive_summary_stale = True
-            db.add(scan_row)
-        await db.commit()
-        await db.refresh(suborg)
-        return {
-            "id": suborg.id,
-            "name": suborg.name,
-            "confidence": suborg.confidence,
-            "third_party_description": suborg.third_party_description,
-            "third_party_page_ref": suborg.third_party_page_ref,
-            "third_party_confidence": suborg.third_party_confidence,
-            "distance_from_so_keywords": suborg.distance_from_so_keywords,
-            "likely_so": suborg.likely_so,
-            "common_so": suborg.common_so,
-            "source_context": suborg.source_context,
-            "confidence_justification": suborg.confidence_justification,
-            "third_party_controls": suborg.third_party_controls,
-            "annotation": suborg.annotation,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"create_suborg error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+# REMOVED: POST /report/{scan_id}/suborgs
+# Now handled by backend/app/routers/suborg_router.py
 
-@app.post("/report/{scan_id}/cuecs")
-async def create_cuec(scan_id: int, data: dict, db=Depends(get_db)):
-    """Create a new CUEC row for a scan."""
-    try:
-        desc = str(data.get("cuec_description", "")).strip()
-        if not desc:
-            raise HTTPException(status_code=400, detail="cuec_description is required")
-        conf = _norm_pct_like(data.get("cuec_confidence"))
-        cuec = CUEC(
-            scan_id=scan_id,
-            cuec_description=desc,
-            cuec_tsc_id=str(data.get("cuec_tsc_id") or "") or None,
-            cuec_coso_id=str(data.get("cuec_coso_id") or "") or None,
-            cuec_confidence=conf,
-            control_strength=(data.get("control_strength") or None),
-            cuec_confidence_justification=data.get("cuec_confidence_justification"),
-            cuec_gpt_reasoning=data.get("cuec_gpt_reasoning"),
-            cuec_justification=data.get("cuec_justification"),
-            annotation=data.get("annotation"),
-        )
-        db.add(cuec)
-        scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
-        if scan_row:
-            scan_row.executive_summary_stale = True
-            db.add(scan_row)
-        await db.commit()
-        await db.refresh(cuec)
-        return {
-            "id": cuec.id,
-            "cuec_description": cuec.cuec_description,
-            "cuec_tsc_id": cuec.cuec_tsc_id,
-            "cuec_coso_id": cuec.cuec_coso_id,
-            "cuec_confidence": cuec.cuec_confidence,
-            "control_strength": cuec.control_strength,
-            "cuec_confidence_justification": cuec.cuec_confidence_justification,
-            "cuec_gpt_reasoning": cuec.cuec_gpt_reasoning,
-            "cuec_justification": cuec.cuec_justification,
-            "annotation": cuec.annotation,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"create_cuec error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+# REMOVED: POST /report/{scan_id}/cuecs
+# Now handled by backend/app/routers/cuec_router.py
 
 @app.post("/report/{scan_id}/controls")
 async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
