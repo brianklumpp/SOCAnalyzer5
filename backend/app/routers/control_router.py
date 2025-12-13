@@ -335,7 +335,8 @@ async def link_control_instances(scan_id: int, data: Dict[str, Any] = Body(...),
     }
     """
     try:
-        control_ids = data.get("control_db_ids", [])
+        # Accept both control_ids and control_db_ids for frontend compatibility
+        control_ids = data.get("control_db_ids") or data.get("control_ids", [])
         differentiator = data.get("instance_differentiator", "")
         
         if len(control_ids) < 2:
