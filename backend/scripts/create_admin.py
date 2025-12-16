@@ -109,6 +109,12 @@ async def main():
     email = get_input_with_env("Email: ", "ADMIN_EMAIL")
     password = get_input_with_env("Password: ", "ADMIN_PASSWORD", secret=True)
     
+    # Validate password length (bcrypt has 72-byte limit)
+    if len(password.encode('utf-8')) > 72:
+        print("❌ Password is too long! Maximum 72 bytes allowed.")
+        print("   Please use a shorter password.")
+        return 1
+    
     if not non_interactive:
         password_confirm = getpass.getpass("Confirm Password: ")
         
