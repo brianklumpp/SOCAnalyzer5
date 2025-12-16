@@ -26,8 +26,9 @@ from typing import Optional, Dict, Any, Tuple
 logging.warning(f"[BOOT] Loaded backend.app.main from {__file__}")
 from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
-from .models import Company, Control, CUEC, SubserviceOrg, Product, Setting, Base
+from .models import Company, Control, CUEC, SubserviceOrg, Product, Setting
 from .models import Scan, ConfidenceWeights, ConfidenceWeightAudit
+from .base import Base
 from .database import engine, get_db
 from .config import AUTO_CREATE_SCHEMA, RUN_MIGRATIONS_ON_START, ALEMBIC_INI_PATH, LOG_LEVEL, EXCLUDE_ACCESS_LOG_PATHS, DOCKER_CONTROL_ENABLED
 from .config import REDIS_URL, TSC_CRITERIA, COSO_2013_CRITERIA, EXECUTIVE_SUMMARY_PROMPT
@@ -1380,7 +1381,8 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request, Depends, UploadFile, File
 from sqlalchemy.future import select
-from .models import Setting, Base
+from .models import Setting
+from .base import Base
 from .database import engine, get_db
 import threading
 import time

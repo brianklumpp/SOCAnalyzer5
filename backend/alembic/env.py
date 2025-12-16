@@ -21,13 +21,15 @@ except Exception:
     pass
 
 from backend.app import models  # noqa: E402
+from backend.app.base import Base  # noqa: E402
+from backend.app.models import user, refresh_token  # Import new models to register with metadata
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = models.Base.metadata
+target_metadata = Base.metadata
 
 
 def _get_database_url() -> str:

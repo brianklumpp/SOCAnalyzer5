@@ -1,10 +1,8 @@
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, LargeBinary, Boolean, Enum
 import datetime
 from datetime import timezone
 import enum
-
-Base = declarative_base()
+from backend.app.base import Base
 
 # Helper function for timezone-aware current time
 def get_local_now():

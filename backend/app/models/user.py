@@ -1,7 +1,7 @@
 """User model for authentication and authorization."""
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
-from backend.app.database import Base
+from backend.app.base import Base
 
 
 class User(Base):
