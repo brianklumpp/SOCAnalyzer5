@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Body, HTTPException
 from sqlalchemy.future import select
 
 from ..models import SubserviceOrg
-from ..models.user import User
+from ..models import User
 from ..database import get_db
 from ..services.scan_service import mark_executive_summary_stale
 from ..auth.dependencies import get_current_active_user

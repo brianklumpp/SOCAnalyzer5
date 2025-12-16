@@ -11,7 +11,7 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
 
 from ..models import CUEC, Scan
-from ..models.user import User
+from ..models import User
 from ..database import get_db
 from ..services.scan_service import mark_executive_summary_stale
 from ..auth.dependencies import get_current_active_user

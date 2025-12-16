@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.future import select
 
 from ..models import Scan
-from ..models.user import User
+from ..models import User
 from ..database import get_db
 from ..gpt_client import gpt_extract
 from ..auth.dependencies import get_current_active_user

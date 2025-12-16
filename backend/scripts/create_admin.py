@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from sqlalchemy import select
 from backend.app.database import AsyncSessionLocal
-from backend.app.models.user import User
+from backend.app.models import User
 from backend.app.auth.security import get_password_hash
 
 

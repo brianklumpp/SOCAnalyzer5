@@ -13,7 +13,7 @@ from sqlalchemy.future import select
 from sqlalchemy import and_, or_
 
 from ..models import Scan, PatternReviewQueue, Baseline, OrganizationPattern
-from ..models.user import User
+from ..models import User
 from ..database import get_db
 from ..services import scan_service
 from ..auth.dependencies import get_current_active_user

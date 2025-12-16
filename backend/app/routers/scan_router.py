@@ -19,7 +19,7 @@ from sqlalchemy.future import select
 from pydantic import BaseModel
 
 from ..models import Scan
-from ..models.user import User
+from ..models import User
 from ..database import get_db
 from ..utils.redis_helpers import get_job, set_job, del_job
 from .. import config as cfg

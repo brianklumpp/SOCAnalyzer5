@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.future import select
 
 from ..models import Control
-from ..models.user import User
+from ..models import User
 from ..database import get_db, AsyncSessionLocal
 from ..auth.dependencies import get_current_active_user
 from .. import config as cfg

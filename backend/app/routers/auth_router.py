@@ -8,8 +8,7 @@ from sqlalchemy import select
 from pydantic import BaseModel, EmailStr
 
 from backend.app.database import get_db
-from backend.app.models.user import User
-from backend.app.models.refresh_token import RefreshToken
+from backend.app.models import User, RefreshToken
 from backend.app.auth.security import (
     verify_password,
     get_password_hash,

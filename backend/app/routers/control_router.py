@@ -13,7 +13,7 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
 
 from ..models import Control, Scan
-from ..models.user import User
+from ..models import User
 from ..database import get_db
 from ..services import merge_service
 from ..services.scan_service import mark_executive_summary_stale

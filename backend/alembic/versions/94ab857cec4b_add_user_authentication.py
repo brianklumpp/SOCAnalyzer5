@@ -61,8 +61,7 @@ def upgrade() -> None:
     op.create_foreign_key('fk_confidence_weight_audit_user', 'confidence_weight_audit', 'users', ['changed_by_user_id_new'], ['id'])
     # Note: Migration of data from changed_by_user_id to changed_by_user_id_new will be handled separately
     
-    # Add user_id to control_review table
-    op.add_column('control_review', sa.Column('reviewed_by_user_id', sa.Integer(), nullable=True))
+    # Add foreign key to control_review table (column already exists from previous migration)
     op.create_foreign_key('fk_control_review_user', 'control_review', 'users', ['reviewed_by_user_id'], ['id'])
     
     # Add user_id to baselines table
@@ -95,8 +94,8 @@ def downgrade() -> None:
     op.drop_constraint('fk_baselines_user', 'baselines', type_='foreignkey')
     op.drop_column('baselines', 'user_id')
     
+    # Only drop foreign key, not column (column existed before this migration)
     op.drop_constraint('fk_control_review_user', 'control_review', type_='foreignkey')
-    op.drop_column('control_review', 'reviewed_by_user_id')
     
     op.drop_constraint('fk_confidence_weight_audit_user', 'confidence_weight_audit', type_='foreignkey')
     op.drop_column('confidence_weight_audit', 'changed_by_user_id_new')

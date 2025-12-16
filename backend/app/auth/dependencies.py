@@ -5,7 +5,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.database import get_db
-from backend.app.models.user import User
+from backend.app.models import User
 from backend.app.auth.security import verify_access_token
 
 # HTTP Bearer token scheme

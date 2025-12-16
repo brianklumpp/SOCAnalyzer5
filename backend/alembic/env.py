@@ -22,7 +22,7 @@ except Exception:
 
 from backend.app import models  # noqa: E402
 from backend.app.base import Base  # noqa: E402
-from backend.app.models import user, refresh_token  # Import new models to register with metadata
+# User and RefreshToken models are now in models.py, so they're already imported above
 
 config = context.config
 

@@ -11,7 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.future import select
 
 from ..models import Scan, Control, CUEC, SubserviceOrg, Company, Product
-from ..models.user import User
+from ..models import User
 from ..database import get_db
 from ..services.excel_export import ExcelExportService
 from ..auth.dependencies import get_current_active_user

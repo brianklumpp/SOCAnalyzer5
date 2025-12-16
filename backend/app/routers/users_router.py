@@ -9,8 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.future import select
 from pydantic import BaseModel, EmailStr
 
-from ..models.user import User
-from ..models.refresh_token import RefreshToken
+from ..models import User, RefreshToken
 from ..database import get_db
 from ..auth.dependencies import require_admin
 from ..auth.security import get_password_hash

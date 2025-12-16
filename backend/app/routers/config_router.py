@@ -15,7 +15,7 @@ from sqlalchemy.future import select
 from sqlalchemy.dialects import postgresql as pg_dialect
 
 from ..models import Setting
-from ..models.user import User
+from ..models import User
 from ..database import get_db
 from ..auth.dependencies import require_admin
 from .. import config as cfg

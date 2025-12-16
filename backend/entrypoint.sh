@@ -74,7 +74,7 @@ if [ ! -z "$DATABASE_URL_SYNC" ]; then
 import asyncio
 from sqlalchemy import select, func
 from backend.app.database import AsyncSessionLocal
-from backend.app.models.user import User
+from backend.app.models import User
 
 async def check_users():
     async with AsyncSessionLocal() as db:
