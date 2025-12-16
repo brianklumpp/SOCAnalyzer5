@@ -61,6 +61,7 @@ from .routers import (
     executive_summary_router,
     baseline_router,
     config_router,
+    auth_router,
 )
 
 app = FastAPI()
@@ -296,6 +297,9 @@ app.include_router(baseline_router.router, tags=["baseline"])
 
 # Settings and configuration
 app.include_router(config_router.router, tags=["config"])
+
+# Authentication
+app.include_router(auth_router.router)
 
 if __name__ == "__main__" and sys.argv[-1] == "test_insert_combined_result":
     async def _main():

@@ -18,6 +18,7 @@ from . import (
     executive_summary_router,
     baseline_router,
     config_router,
+    auth_router,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "executive_summary_router",
     "baseline_router",
     "config_router",
+    "auth_router",
 ]
