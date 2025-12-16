@@ -11,8 +11,10 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
 
 from ..models import CUEC, Scan
+from ..models.user import User
 from ..database import get_db
 from ..services.scan_service import mark_executive_summary_stale
+from ..auth.dependencies import get_current_active_user
 
 router = APIRouter()
 
@@ -37,7 +39,7 @@ def _norm_pct_like(val):
 
 
 @router.post("/report/{scan_id}/cuecs")
-async def create_cuec(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def create_cuec(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Create a new CUEC row for a scan."""
     try:
         desc = str(data.get("cuec_description", "")).strip()
@@ -95,7 +97,7 @@ async def create_cuec(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends
 
 
 @router.patch("/report/{scan_id}/cuecs/{cuec_id}/annotation")
-async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update CUEC annotation by TSC ID (legacy endpoint)."""
     cuec = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id, CUEC.cuec_tsc_id == cuec_id))).scalar_one_or_none()
     if not cuec:
@@ -107,7 +109,7 @@ async def patch_cuec_annotation(scan_id: int, cuec_id: str, data: Dict[str, Any]
 
 
 @router.patch("/report/{scan_id}/cuecs/{cuec_id}")
-async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update CUEC by database ID."""
     logging.debug(f"/report/{scan_id}/cuecs/{cuec_id} payload: {data}")
     try:
@@ -187,7 +189,7 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...
 
 
 @router.patch("/report/{scan_id}/cuecs/tsc/{cuec_tsc_id}")
-async def patch_cuec_by_tsc(scan_id: int, cuec_tsc_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def patch_cuec_by_tsc(scan_id: int, cuec_tsc_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Legacy-compatible route to update a CUEC by its TSC ID.
     If multiple rows share the TSC ID within a scan, returns 409 to avoid ambiguity.
     Prefer the numeric ID route: /report/{scan_id}/cuecs/{id}
@@ -273,7 +275,7 @@ async def patch_cuec_by_tsc(scan_id: int, cuec_tsc_id: str, data: Dict[str, Any]
 
 
 @router.post("/report/{scan_id}/cuecs/recompute_all_high_confidence")
-async def recompute_all_high_confidence_cuecs(scan_id: int, db=Depends(get_db)):
+async def recompute_all_high_confidence_cuecs(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Recompute framework mappings for all high confidence CUECs (confidence > 70%)."""
     try:
         # Get all high confidence CUECs for this scan
@@ -328,7 +330,7 @@ async def recompute_all_high_confidence_cuecs(scan_id: int, db=Depends(get_db)):
 
 
 @router.post("/report/{scan_id}/cuecs/{cuec_id}/recompute_frameworks")
-async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_db)):
+async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Recompute framework mappings for a CUEC using dynamic multi-framework system.
     
     Phase 2: Now supports unlimited frameworks beyond TSC/COSO based on report type.

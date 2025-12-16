@@ -19,6 +19,7 @@ from . import (
     baseline_router,
     config_router,
     auth_router,
+    users_router,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "baseline_router",
     "config_router",
     "auth_router",
+    "users_router",
 ]

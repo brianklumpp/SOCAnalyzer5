@@ -9,8 +9,10 @@ from fastapi import APIRouter, Depends, Body, HTTPException
 from sqlalchemy.future import select
 
 from ..models import SubserviceOrg
+from ..models.user import User
 from ..database import get_db
 from ..services.scan_service import mark_executive_summary_stale
+from ..auth.dependencies import get_current_active_user
 
 router = APIRouter()
 
@@ -83,7 +85,7 @@ def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
 
 
 @router.patch("/report/{scan_id}/suborgs/id/{suborg_id}")
-async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update subservice org by database ID."""
     try:
         logging.info(f"PATCH suborg by id: scan_id={scan_id}, suborg_id={suborg_id}, payload={payload}")
@@ -118,7 +120,7 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, An
 
 
 @router.patch("/report/{scan_id}/suborgs/{suborg_name}")
-async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update subservice org by name (legacy endpoint, prefer ID-based endpoint)."""
     try:
         logging.info(f"PATCH suborg by name: scan_id={scan_id}, name={suborg_name}, payload={payload}")

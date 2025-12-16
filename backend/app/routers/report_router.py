@@ -11,14 +11,16 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.future import select
 
 from ..models import Scan, Control, CUEC, SubserviceOrg, Company, Product
+from ..models.user import User
 from ..database import get_db
 from ..services.excel_export import ExcelExportService
+from ..auth.dependencies import get_current_active_user
 
 router = APIRouter()
 
 
 @router.get("/report/{scan_id}")
-async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
+async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Get full report data for a scan including all controls, CUECs, and subservice orgs.
     
@@ -348,7 +350,7 @@ async def get_report_pdf(scan_id: int, db=Depends(get_db)):
 
 
 @router.patch("/report/{scan_id}/overview")
-async def patch_report_overview(scan_id: int, data: dict = Body(...), db=Depends(get_db)):
+async def patch_report_overview(scan_id: int, data: dict = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update scan overview fields (company, product, dates, etc.)."""
     try:
         result = await db.execute(select(Scan).where(Scan.id == scan_id))

@@ -15,7 +15,9 @@ from sqlalchemy.future import select
 from sqlalchemy.dialects import postgresql as pg_dialect
 
 from ..models import Setting
+from ..models.user import User
 from ..database import get_db
+from ..auth.dependencies import require_admin
 from .. import config as cfg
 
 router = APIRouter()
@@ -43,7 +45,7 @@ async def get_settings(request: Request, db=Depends(get_db)):
 
 
 @router.post("/settings")
-async def update_settings(request: Request, db=Depends(get_db)):
+async def update_settings(request: Request, db=Depends(get_db), current_user: User = Depends(require_admin)):
     """Update settings with upsert logic."""
     data = await request.json()
     logging.debug(f"/settings payload: {data}")
@@ -145,7 +147,7 @@ async def get_budget_snapshot():
 
 
 @router.post("/config/quick-test-mode")
-async def toggle_quick_test_mode(request: Request):
+async def toggle_quick_test_mode(request: Request, current_user: User = Depends(require_admin)):
     """Toggle quick test mode by updating .env file."""
     import os
     import re
@@ -288,7 +290,7 @@ async def docker_status():
 
 
 @router.post("/docker/stop/{container}")
-async def docker_stop(container: str):
+async def docker_stop(container: str, current_user: User = Depends(require_admin)):
     """Stop a Docker container."""
     if not DOCKER_CONTROL_ENABLED:
         return JSONResponse({"error": "Docker control disabled"}, status_code=403)
@@ -301,7 +303,7 @@ async def docker_stop(container: str):
 
 
 @router.post("/docker/restart/{container}")
-async def docker_restart(container: str):
+async def docker_restart(container: str, current_user: User = Depends(require_admin)):
     """Restart a Docker container."""
     if not DOCKER_CONTROL_ENABLED:
         return JSONResponse({"error": "Docker control disabled"}, status_code=403)
@@ -314,7 +316,7 @@ async def docker_restart(container: str):
 
 
 @router.post("/docker/start/{container}")
-async def docker_start(container: str):
+async def docker_start(container: str, current_user: User = Depends(require_admin)):
     """Start a Docker container."""
     if not DOCKER_CONTROL_ENABLED:
         return JSONResponse({"error": "Docker control disabled"}, status_code=403)

@@ -13,15 +13,17 @@ from sqlalchemy.future import select
 from sqlalchemy import and_, or_
 
 from ..models import Scan, PatternReviewQueue, Baseline, OrganizationPattern
+from ..models.user import User
 from ..database import get_db
 from ..services import scan_service
+from ..auth.dependencies import get_current_active_user
 from .. import config as cfg
 
 router = APIRouter()
 
 
 @router.post("/baseline/create")
-async def create_baseline(data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def create_baseline(data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Create a new baseline from a scan."""
     try:
         scan_id = data.get("scan_id")
@@ -123,7 +125,7 @@ async def get_baseline(baseline_id: int, db=Depends(get_db)):
 
 
 @router.post("/baseline/compare")
-async def compare_to_baseline(data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def compare_to_baseline(data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Compare a scan against a baseline."""
     try:
         scan_id = data.get("scan_id")
@@ -159,7 +161,7 @@ async def compare_to_baseline(data: Dict[str, Any] = Body(...), db=Depends(get_d
 
 
 @router.delete("/baseline/{baseline_id}")
-async def delete_baseline(baseline_id: int, db=Depends(get_db)):
+async def delete_baseline(baseline_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Delete a baseline."""
     try:
         baseline = (await db.execute(
@@ -183,7 +185,7 @@ async def delete_baseline(baseline_id: int, db=Depends(get_db)):
 
 
 @router.post("/verify/{scan_id}")
-async def trigger_verification(scan_id: int, db=Depends(get_db)):
+async def trigger_verification(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Trigger verification workflow for a scan."""
     try:
         scan = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
@@ -234,7 +236,7 @@ async def get_verification_status(scan_id: int, db=Depends(get_db)):
 
 
 @router.post("/verify/{scan_id}/learn_patterns")
-async def learn_patterns(scan_id: int, db=Depends(get_db)):
+async def learn_patterns(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Learn patterns from a verified scan."""
     try:
         scan = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
@@ -283,7 +285,7 @@ async def get_pattern_review_queue(db=Depends(get_db)):
 
 
 @router.post("/patterns/approve-merge/{review_id}")
-async def approve_pattern_merge(review_id: int, db=Depends(get_db)):
+async def approve_pattern_merge(review_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Approve a pattern merge suggestion."""
     try:
         review = (await db.execute(
@@ -314,7 +316,7 @@ async def approve_pattern_merge(review_id: int, db=Depends(get_db)):
 
 
 @router.post("/patterns/reject-merge/{review_id}")
-async def reject_pattern_merge(review_id: int, db=Depends(get_db)):
+async def reject_pattern_merge(review_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Reject a pattern merge suggestion."""
     try:
         review = (await db.execute(

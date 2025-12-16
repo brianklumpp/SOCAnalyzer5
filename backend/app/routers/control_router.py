@@ -13,9 +13,11 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
 
 from ..models import Control, Scan
+from ..models.user import User
 from ..database import get_db
 from ..services import merge_service
 from ..services.scan_service import mark_executive_summary_stale
+from ..auth.dependencies import get_current_active_user
 from .. import config as cfg
 
 router = APIRouter()
@@ -35,7 +37,7 @@ def _parse_page_refs(value):
 
 
 @router.patch("/report/{scan_id}/controls/annotation/{control_id}")
-async def patch_control_annotation(scan_id: int, control_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def patch_control_annotation(scan_id: int, control_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update control annotation by control_id (legacy endpoint, may match multiple)."""
     try:
         ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.control_id == control_id))).scalar_one_or_none()
@@ -52,7 +54,7 @@ async def patch_control_annotation(scan_id: int, control_id: str, data: Dict[str
 
 
 @router.patch("/report/{scan_id}/controls/{control_id}")
-async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update control by control_id (legacy endpoint, prefer ID-based endpoint)."""
     logging.debug(f"/report/{scan_id}/controls/{control_id} payload: {data}")
     try:
@@ -152,7 +154,7 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
 
 
 @router.patch("/report/{scan_id}/controls/id/{control_db_id}")
-async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update a control by its numeric database ID to avoid duplicate control_id ambiguity."""
     logging.debug(f"[PATCH CONTROL] scan_id={scan_id}, control_id={control_db_id}, payload keys: {list(data.keys())}")
     try:
@@ -244,7 +246,7 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, 
 
 
 @router.post("/report/{scan_id}/cleanup")
-async def trigger_cleanup(scan_id: int, db=Depends(get_db)):
+async def trigger_cleanup(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Manually trigger automated cleanup for a scan."""
     try:
         cleanup_stats = await merge_service.automated_cleanup(scan_id, db)
@@ -279,7 +281,7 @@ async def suggest_control_merges(scan_id: int, db=Depends(get_db)):
 
 
 @router.post("/report/{scan_id}/controls/merge")
-async def merge_controls(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def merge_controls(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Merge duplicate controls into a primary control with intelligent selection.
     
@@ -312,7 +314,7 @@ async def merge_controls(scan_id: int, data: Dict[str, Any] = Body(...), db=Depe
 
 
 @router.post("/report/{scan_id}/controls/{control_db_id}/split")
-async def split_control(scan_id: int, control_db_id: int, db=Depends(get_db)):
+async def split_control(scan_id: int, control_db_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Undo a control merge by restoring merged controls.
     """
@@ -332,7 +334,7 @@ async def split_control(scan_id: int, control_db_id: int, db=Depends(get_db)):
 
 @router.post("/report/{scan_id}/controls/link")
 @router.post("/report/{scan_id}/controls/link_instances")  # Alias for frontend compatibility
-async def link_control_instances(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def link_control_instances(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Link controls as instances of the same control (for CRITERIA_VARIANT or TEST_VARIANT).
     
@@ -390,7 +392,7 @@ async def link_control_instances(scan_id: int, data: Dict[str, Any] = Body(...),
 
 
 @router.delete("/report/{scan_id}/controls/{control_id}/unlink")
-async def unlink_control_instance(scan_id: int, control_id: int, db=Depends(get_db)):
+async def unlink_control_instance(scan_id: int, control_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Remove a control from its duplicate instance group."""
     try:
         ctrl = (await db.execute(
@@ -421,7 +423,7 @@ async def unlink_control_instance(scan_id: int, control_id: int, db=Depends(get_
 
 @router.post("/report/{scan_id}/controls/dismiss-merge")
 @router.post("/report/{scan_id}/controls/dismiss_merge_suggestion")  # Alias for frontend compatibility
-async def dismiss_merge_suggestion(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def dismiss_merge_suggestion(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Mark a merge suggestion as dismissed (user reviewed and rejected)."""
     try:
         # This is a no-op endpoint for frontend workflow
@@ -481,7 +483,7 @@ async def get_duplicate_groups(scan_id: int, db=Depends(get_db)):
 
 @router.post("/report/{scan_id}/controls/{control_db_id}/recompute_frameworks")
 @router.post("/report/{scan_id}/controls/id/{control_db_id}/recompute_frameworks")  # Alias for frontend
-async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depends(get_db)):
+async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Recompute framework mappings for a control using dynamic multi-framework system."""
     try:
         from ..services.framework_mapping_service import recompute_control_framework_mappings
@@ -499,7 +501,7 @@ async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depe
 
 
 @router.post("/report/{scan_id}/controls/batch_recompute")
-async def batch_recompute_control_frameworks(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def batch_recompute_control_frameworks(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Batch recompute framework mappings for multiple controls."""
     try:
         control_ids = data.get("control_ids", [])
@@ -536,7 +538,7 @@ async def batch_recompute_control_frameworks(scan_id: int, data: Dict[str, Any] 
 
 
 @router.post("/report/{scan_id}/controls/recompute_all_high_confidence")
-async def recompute_all_high_confidence_controls(scan_id: int, db=Depends(get_db)):
+async def recompute_all_high_confidence_controls(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Recompute framework mappings for all high confidence controls (confidence > 70%)."""
     try:
         # Get all high confidence controls for this scan
@@ -591,7 +593,7 @@ async def recompute_all_high_confidence_controls(scan_id: int, db=Depends(get_db
 
 
 @router.post("/report/{scan_id}/controls/preview_mappings")
-async def preview_framework_mappings(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
+async def preview_framework_mappings(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Preview framework mappings without persisting (for testing/debugging)."""
     try:
         control_desc = data.get("control_desc", "")

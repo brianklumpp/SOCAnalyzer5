@@ -19,9 +19,11 @@ from sqlalchemy.future import select
 from pydantic import BaseModel
 
 from ..models import Scan
+from ..models.user import User
 from ..database import get_db
 from ..utils.redis_helpers import get_job, set_job, del_job
 from .. import config as cfg
+from ..auth.dependencies import get_current_active_user, require_admin
 
 router = APIRouter()
 
@@ -46,7 +48,8 @@ async def broadcast_queue_update():
 async def analyze_pdf_bg(
     file: UploadFile = File(...), 
     report_type: str = Form(None),
-    db=Depends(get_db)
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     Upload and analyze a SOC report PDF.
@@ -169,7 +172,7 @@ async def analyze_pdf_bg(
 
 
 @router.post("/analyze/cancel/{job_id}")
-async def cancel_analysis_job(job_id: str):
+async def cancel_analysis_job(job_id: str, current_user: User = Depends(get_current_active_user)):
     """Cancel an in-progress analysis job."""
     job = get_job(job_id)
     if not job:
@@ -187,7 +190,8 @@ async def confirm_report_type(
     job_id: str,
     confirmed_type: str = Form(...),
     confirmed_subtype: str = Form(...),
-    db=Depends(get_db)
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """User confirmation of detected report type."""
     from ..models import ReportTypeDetection
@@ -528,7 +532,7 @@ async def get_job_result(
 
 
 @router.post("/analyze/finalize/{job_id}")
-async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depends(get_db)):
+async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Rebuild job results from extractor JSONs on disk and mark done."""
     from ..main import _build_combined_results_from_disk
     from ..explicit_sql_insert import insert_extracted_data
@@ -628,7 +632,7 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
 
 
 @router.post("/analyze/resume/{job_id}")
-async def resume_extractors(job_id: str, payload: dict, db=Depends(get_db)):
+async def resume_extractors(job_id: str, payload: dict, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Rerun one or more extractors and refresh combined results."""
     # Implementation similar to main.py - omitted for brevity
     # This endpoint would call individual extractors and rebuild results
@@ -768,7 +772,8 @@ async def batch_upload_scans(
     files: list[UploadFile] = File(...),
     report_types: Optional[str] = Form(None),  # Comma-separated list
     priorities: Optional[str] = Form(None),  # Comma-separated list of ints
-    db=Depends(get_db)
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     Batch upload multiple PDFs and queue for analysis.
@@ -972,7 +977,7 @@ async def get_queue_status():
 
 
 @router.post("/analyze/queue/pause")
-async def pause_queue():
+async def pause_queue(current_user: User = Depends(require_admin)):
     """
     Pause the scan queue.
     
@@ -1000,7 +1005,7 @@ async def pause_queue():
 
 
 @router.post("/analyze/queue/resume")
-async def resume_queue():
+async def resume_queue(current_user: User = Depends(require_admin)):
     """
     Resume the scan queue.
     
@@ -1080,7 +1085,7 @@ async def reprioritize_scan(job_id: str, request: PrioritizeRequest):
 
 
 @router.post("/analyze/queue/{job_id}/pause")
-async def pause_scan(job_id: str):
+async def pause_scan(job_id: str, current_user: User = Depends(get_current_active_user)):
     """
     Pause a running scan.
     
@@ -1123,7 +1128,7 @@ async def pause_scan(job_id: str):
 
 
 @router.post("/analyze/queue/{job_id}/resume")
-async def resume_scan(job_id: str):
+async def resume_scan(job_id: str, current_user: User = Depends(get_current_active_user)):
     """
     Resume a paused scan.
     
@@ -1166,7 +1171,7 @@ async def resume_scan(job_id: str):
 
 
 @router.delete("/analyze/queue/{job_id}")
-async def cancel_queued_scan(job_id: str):
+async def cancel_queued_scan(job_id: str, current_user: User = Depends(get_current_active_user)):
     """
     Cancel a queued or running scan.
     
@@ -1302,7 +1307,7 @@ async def get_active_scans():
 
 
 @router.post("/scans/{scan_id}/refresh-logo")
-async def refresh_company_logo(scan_id: int, db=Depends(get_db)):
+async def refresh_company_logo(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Refresh company logo for a scan by forcing re-fetch from GPT.
     Clears cached logo and generates new one.

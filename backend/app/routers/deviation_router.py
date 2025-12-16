@@ -9,7 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.future import select
 
 from ..models import Control
+from ..models.user import User
 from ..database import get_db, AsyncSessionLocal
+from ..auth.dependencies import get_current_active_user
 from .. import config as cfg
 
 router = APIRouter()
@@ -89,7 +91,7 @@ async def update_deviation_summary(scan_id: int, control_id: int, data: dict, db
 
 
 @router.post("/report/{scan_id}/deviations/{control_id}/regenerate")
-async def regenerate_deviation_summary(scan_id: int, control_id: int, db=Depends(get_db)):
+async def regenerate_deviation_summary(scan_id: int, control_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Regenerate AI summary for a single deviation control.
     """
@@ -112,7 +114,7 @@ async def regenerate_deviation_summary(scan_id: int, control_id: int, db=Depends
 
 @router.post("/report/{scan_id}/deviations/regenerate_all")
 @router.post("/report/{scan_id}/deviations/regenerate-all")  # Alias for frontend compatibility
-async def regenerate_all_deviation_summaries(scan_id: int, background_tasks: BackgroundTasks, db=Depends(get_db)):
+async def regenerate_all_deviation_summaries(scan_id: int, background_tasks: BackgroundTasks, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Start background task to regenerate all deviation summaries for a scan.
     Returns immediately with status.
@@ -183,7 +185,7 @@ async def get_regenerate_progress(scan_id: int):
 
 
 @router.post("/report/{scan_id}/deviations/create")
-async def create_deviation(scan_id: int, data: dict, db=Depends(get_db)):
+async def create_deviation(scan_id: int, data: dict, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Create a new deviation control manually.
     Requires control_id reference for consistency.

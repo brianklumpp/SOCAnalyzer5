@@ -8,8 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.future import select
 
 from ..models import Scan
+from ..models.user import User
 from ..database import get_db
 from ..gpt_client import gpt_extract
+from ..auth.dependencies import get_current_active_user
 
 router = APIRouter()
 
@@ -57,7 +59,7 @@ async def get_executive_summary(scan_id: int, force_regenerate: bool = False, db
 
 
 @router.post("/report/{scan_id}/executive_summary/regenerate")
-async def regenerate_executive_summary(scan_id: int, db=Depends(get_db)):
+async def regenerate_executive_summary(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Force regeneration of executive summary for a scan.
     """
@@ -88,7 +90,7 @@ async def regenerate_executive_summary(scan_id: int, db=Depends(get_db)):
 
 
 @router.patch("/report/{scan_id}/executive_summary")
-async def update_executive_summary(scan_id: int, data: dict, db=Depends(get_db)):
+async def update_executive_summary(scan_id: int, data: dict, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Manually update executive summary text.
     """

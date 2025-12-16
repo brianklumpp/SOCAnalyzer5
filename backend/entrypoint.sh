@@ -66,6 +66,38 @@ if [ ! -z "$DATABASE_URL_SYNC" ]; then
         
         if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
             echo "  ✓ Database migrations completed successfully"
+            
+            # Check if users table is empty and create default admin if needed
+            if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+                echo "Checking for existing users..."
+                python3 -c "
+import asyncio
+from sqlalchemy import select, func
+from backend.app.database import AsyncSessionLocal
+from backend.app.models.user import User
+
+async def check_users():
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(func.count(User.id)))
+        count = result.scalar()
+        return count
+
+count = asyncio.run(check_users())
+exit(0 if count == 0 else 1)
+" 2>/dev/null
+                
+                if [ $? -eq 0 ]; then
+                    echo "  No users found, creating default admin user..."
+                    python3 -m backend.scripts.create_admin
+                    if [ $? -eq 0 ]; then
+                        echo "  ✓ Default admin user created"
+                    else
+                        echo "  ⚠ Failed to create default admin user (will need to create manually)"
+                    fi
+                else
+                    echo "  ✓ Users exist, skipping admin creation"
+                fi
+            fi
         else
             echo ""
             echo "========================================" 
