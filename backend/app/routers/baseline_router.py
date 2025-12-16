@@ -12,23 +12,65 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.future import select
 from sqlalchemy import and_, or_
 
-from ..models import Scan, PatternReviewQueue
+from ..models import Scan, PatternReviewQueue, Baseline, OrganizationPattern
 from ..database import get_db
 from ..services import scan_service
 from .. import config as cfg
 
 router = APIRouter()
 
-# Note: Baseline and OrganizationPattern models not yet created - placeholders for future implementation
-
 
 @router.post("/baseline/create")
 async def create_baseline(data: Dict[str, Any] = Body(...), db=Depends(get_db)):
-    """Create a new baseline from a scan (Not yet implemented - Baseline model TBD)."""
-    return JSONResponse(
-        {"error": "Baseline feature not yet implemented - Baseline model needs to be created"},
-        status_code=501
-    )
+    """Create a new baseline from a scan."""
+    try:
+        scan_id = data.get("scan_id")
+        name = data.get("name")
+        description = data.get("description", "")
+        reviewer_notes = data.get("reviewer_notes", "")
+        
+        if not scan_id or not name:
+            raise HTTPException(status_code=400, detail="scan_id and name are required")
+        
+        # Verify scan exists
+        scan = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        # Create baseline snapshot (store minimal data for now)
+        snapshot = {
+            "scan_id": scan_id,
+            "company": scan.company,
+            "product": scan.product,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        baseline = Baseline(
+            name=name,
+            scan_id=scan_id,
+            description=description,
+            reviewer_notes=reviewer_notes,
+            snapshot_data=snapshot,
+            created_by=data.get("created_by", "system")
+        )
+        
+        db.add(baseline)
+        await db.commit()
+        await db.refresh(baseline)
+        
+        return {
+            "id": baseline.id,
+            "name": baseline.name,
+            "scan_id": baseline.scan_id,
+            "message": "Baseline created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error creating baseline: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @router.get("/baseline/list")

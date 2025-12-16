@@ -1,0 +1,3261 @@
+CHUNK 2 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ president of software and executive vice president at eFax.com, where he 
+was part of the executive team that took the company public. 
+Michael received his bachelor’s degree from Stanford University and completed graduate studies at 
+Harvard University. He began his career as a software engineer, self-taught, coding in assembly language. 
+Kyle Spearrin, Founder and Chief Technology Officer 
+Kyle is the founder and chief technology officer of Bitwarden and currently leads all engineering and 
+product efforts. 
+Before Bitwarden, Kyle was a software architect and engineering lead at iMobile3, a payment solutions 
+company, where he focused on cloud infrastructure, mobile applications, and security for credit card 
+processing. 
+Kyle previously founded companies in hosting and web services and has been a builder of online tools 
+since he started organizing gaming communities in high school. 
+Kyle holds a bachelor’s degree in Computer Science from the University of Florida. 
+
+=== PAGE 14 ==
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Michael received his bachelor’s degree from Stanford University and completed graduate studies at Harvard University.",
+            "excluded_reason": "Biographical information, not a control."
+        },
+        {
+            "excluded_description": "He began his career as a software engineer, self-taught, coding in assembly language.",
+            "excluded_reason": "Biographical information, not a control."
+        },
+        {
+            "excluded_description": "Kyle is the founder and chief technology officer of Bitwarden and currently leads all engineering and product efforts.",
+            "excluded_reason": "Biographical information, not a control."
+        },
+        {
+            "excluded_description": "Before Bitwarden, Kyle was a software architect and engineering lead at iMobile3, a payment solutions company, where he focused on cloud infrastructure, mobile applications, and security for credit card processing.",
+            "excluded_reason": "Biographical information, not a control."
+        },
+        {
+            "excluded_description": "Kyle previously founded companies in hosting and web services and has been a builder of online tools since he started organizing gaming communities in high school.",
+            "excluded_reason": "Biographical information, not a control."
+        },
+        {
+            "excluded_description": "Kyle holds a bachelor’s degree in Computer Science from the University of Florida.",
+            "excluded_reason": "Biographical information, not a control."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+CHUNK 3 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ has been a builder of online tools 
+since he started organizing gaming communities in high school. 
+Kyle holds a bachelor’s degree in Computer Science from the University of Florida. 
+
+=== PAGE 14 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    11 
+
+Gary Orenstein, Chief Customer Officer 
+Gary is the chief customer officer at Bitwarden leading the go to market efforts across customer success, 
+marketing, and sales. 
+Before Bitwarden, Gary served in executive marketing and product roles at enterprise infrastructure 
+companies Yellowbrick Data and MemSQL, and flash memory pioneer Fusion-io which went public 
+during his tenure there. Earlier in his career he led marketing at Compellent which after its IPO was 
+acquired by Dell. 
+Gary holds a bachelor’s degree from Dartmouth College and a master’s in business administration from 
+Th
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Kyle holds a bachelor’s degree in Computer Science from the University of Florida.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Gary is the chief customer officer at Bitwarden leading the go to market efforts across customer success, marketing, and sales.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Before Bitwarden, Gary served in executive marketing and product roles at enterprise infrastructure companies Yellowbrick Data and MemSQL, and flash memory pioneer Fusion-io which went public during his tenure there.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Earlier in his career he led marketing at Compellent which after its IPO was acquired by Dell.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Gary holds a bachelor’s degree from Dartmouth College and a master’s in business administration.",
+            "excluded_reason": "Biographical information, not a control statement."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 4 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+arlier in his career he led marketing at Compellent which after its IPO was 
+acquired by Dell. 
+Gary holds a bachelor’s degree from Dartmouth College and a master’s in business administration from 
+The Wharton School at the University of Pennsylvania. 
+Matt Cillis, Chief Sales Ofﬁcer 
+Matt is the chief sales officer at Bitwarden leading the sales team. 
+Before Bitwarden, Matt served in executive sales roles at Splunk, CloudBees, and Instana. Earlier in his 
+career he led teams at Dell focused on government and global accounts. 
+Matt holds a bachelor’s degree from Clarkson University and a master’s in engineering from Cornell. 
+Stephen Morrison, Chief Financial Officer 
+Steve joined Bitwarden in 2019 and leads the accounting, finance, legal and human resources functions.  
+Previously, Steve was CFO at RightScale, Inc. where he led the strategic sale of the company to Flexera, 
+Inc. Before that, Steve was CFO at Butler America, LLC, a leading outsourcing firm, where he led the 
+strategic
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Earlier in his career he led marketing at Compellent which after its IPO was acquired by Dell.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Gary holds a bachelor’s degree from Dartmouth College and a master’s in business administration from The Wharton School at the University of Pennsylvania.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Matt is the chief sales officer at Bitwarden leading the sales team.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Before Bitwarden, Matt served in executive sales roles at Splunk, CloudBees, and Instana.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Earlier in his career he led teams at Dell focused on government and global accounts.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Matt holds a bachelor’s degree from Clarkson University and a master’s in engineering from Cornell.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Steve joined Bitwarden in 2019 and leads the accounting, finance, legal and human resources functions.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Previously, Steve was CFO at RightScale, Inc. where he led the strategic sale of the company to Flexera, Inc.",
+            "excluded_reason": "Biographical information, not a control statement."
+        },
+        {
+            "excluded_description": "Before that, Steve was CFO at Butler America, LLC, a leading outsourcing firm, where he led the strategic",
+            "excluded_reason": "Biographical information, not a control statement."
+        }
+    ]
+}
+---
+CHUNK 0 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+1 
+
+Section III – Bitwarden Inc. Description of its 
+Password Management System Throughout the 
+Period July 1, 2023, to June 30, 2024 
+
+=== PAGE 13 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    10 
+
+Bitwarden Inc. Description of its Password Management System Throughout 
+the Period July 1, 2023, to June 30, 2024 
+ 
+Company Background 
+Bitwarden is an open source password management solution for individuals, teams, and business 
+organizations available in both free and paid plans. Bitwarden was created by Kyle Spearrin in 2016. 
+Today the company is headquartered in Santa Barbara, California with a global distributed team. 
+Bitwarden serves large and small companies around the world as well as our 
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Bitwarden is an open source password management solution for individuals, teams, and business organizations available in both free and paid plans.",
+            "excluded_reason": "Product description; no explicit assignment of user entity responsibility."
+        },
+        {
+            "excluded_description": "Bitwarden was created by Kyle Spearrin in 2016.",
+            "excluded_reason": "Historical background; no control language or user entity responsibility assigned."
+        },
+        {
+            "excluded_description": "Today the company is headquartered in Santa Barbara, California with a global distributed team.",
+            "excluded_reason": "General company fact; no CUEC responsibility indicated."
+        },
+        {
+            "excluded_description": "Bitwarden serves large and small companies around the world as well as our",
+            "excluded_reason": "Incomplete sentence without a clear CUEC statement or user entity responsibility."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 1 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ by Kyle Spearrin in 2016. 
+Today the company is headquartered in Santa Barbara, California with a global distributed team. 
+Bitwarden serves large and small companies around the world as well as our base of individual users. 
+Company Management 
+Michael Crandell, Chief Executive Officer 
+Michael is the chief executive officer at Bitwarden driving overall company strategy and growth. 
+Before Bitwarden, Michael was the CEO and co-founder of RightScale where he led the vision and 
+direction for the company as a cloud management platform during the first decade of cloud computing. 
+He grew the company to 250 employees and a successful exit to Flexera in 2018. 
+Prior to RightScale, Michael served as chief executive officer at several Internet software-as-a-service 
+(SaaS) companies and as vice president of software and executive vice president at eFax.com, where he 
+was part of the executive team that took the company public. 
+Michael received his bachelor’s degree from Stanford University
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Bitwarden serves large and small companies around the world as well as our base of individual users.",
+            "excluded_reason": "General information about the organization, not assigning responsibility to the user entity."
+        },
+        {
+            "excluded_description": "Michael Crandell, Chief Executive Officer.",
+            "excluded_reason": "Biographical information about the management team, not a control statement."
+        },
+        {
+            "excluded_description": "Michael is the chief executive officer at Bitwarden driving overall company strategy and growth.",
+            "excluded_reason": "Biographical information about the management team, not a control statement."
+        },
+        {
+            "excluded_description": "Before Bitwarden, Michael was the CEO and co-founder of RightScale where he led the vision and direction for the company as a cloud management platform during the first decade of cloud computing.",
+            "excluded_reason": "Historical information about the executive team, not related to user entity responsibilities."
+        },
+        {
+            "excluded_description": "He grew the company to 250 employees and a successful exit to Flexera in 2018.",
+            "excluded_reason": "Historical accomplishment, not a control statement."
+        },
+        {
+            "excluded_description": "Prior to RightScale, Michael served as chief executive officer at several Internet software-as-a-service (SaaS) companies and as vice president of software and executive vice president at eFax.com, where he was part of the executive team that took the company public.",
+            "excluded_reason": "Biographical and historical information about the management team, not a control statement."
+        },
+        {
+            "excluded_description": "Michael received his bachelor’s degree from Stanford University.",
+            "excluded_reason": "Educational background, not related to assigning responsibility to user entities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 5 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ was CFO at RightScale, Inc. where he led the strategic sale of the company to Flexera, 
+Inc. Before that, Steve was CFO at Butler America, LLC, a leading outsourcing firm, where he led the 
+strategic sale of the aerospace engineering and defense division and the financial sale of the company’s 
+healthcare unit. He has held CFO roles at several other technology firms including ValenTx in medical 
+technology, SmartReceipt in SaaS marketing, and 724 Solutions focused on mobile technology. 
+Originally from Canada, Steve moved to Santa Barbara 2003 after spending two years in Hong Kong while 
+at 724 Solutions. He holds a BA from Western University in London, Ontario and an MBA from the 
+Richard Ivey School of Business at Western. 
+
+=== PAGE 15 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    12 
+
+Services Provided 
+Bitwarden provides 
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "was CFO at RightScale, Inc. where he led the strategic sale of the company to Flexera, Inc. Before that, Steve was CFO at Butler America, LLC, a leading outsourcing firm, where he led the strategic sale of the aerospace engineering and defense division and the financial sale of the company’s healthcare unit. He has held CFO roles at several other technology firms including ValenTx in medical technology, SmartReceipt in SaaS marketing, and 724 Solutions focused on mobile technology. Originally from Canada, Steve moved to Santa Barbara 2003 after spending two years in Hong Kong while at 724 Solutions. He holds a BA from Western University in London, Ontario and an MBA from the Richard Ivey School of Business at Western.",
+            "excluded_reason": "Biographical information irrelevant to CUECs."
+        },
+        {
+            "excluded_description": "Section III – Bitwarden Inc. Description of its Password Management System Throughout the Period July 1, 2023, to June 30, 2024",
+            "excluded_reason": "Description header, not a control or CUEC."
+        },
+        {
+            "excluded_description": "Proprietary and Confidential Information ©2024 Bitwarden Inc.",
+            "excluded_reason": "General copyright and confidentiality notice, not a user responsibility."
+        },
+        {
+            "excluded_description": "Bitwarden provides",
+            "excluded_reason": "Incomplete statement, does not assign responsibility to user entity."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 8 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+directory services such as 
+• 
+Active Directory 
+• 
+Any LDAP-based directory 
+• 
+Azure Active Directory 
+• 
+G Suite (Google) 
+• 
+Okta 
+• 
+A RESTful API is available at docs.bitwarden.com 
+
+=== PAGE 16 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    13 
+
+Bitwarden Cloud 
+Bitwarden Cloud is available to all Bitwarden users as a means to synchronize devices. Bitwarden Cloud 
+runs on Microsoft Azure. 
+Self-hosted Installation 
+Bitwarden is also available for self-hosted installation through a simplified Docker deployment. 
+Company Differentiators 
+Bitwarden is the only password management solution that is available as open source software and can be 
+deployed as a service in the cloud, or self-hosted wherever customers choose, such as behind their 
+firewall. 
+
+=== PAGE 17 ===
+ 
+Section III – Bitwarden Inc. Description of its Password
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "directory services such as Active Directory, Any LDAP-based directory, Azure Active Directory, G Suite (Google), Okta, A RESTful API is available at docs.bitwarden.com",
+            "excluded_reason": "Description of available services and features, not an assignment of customer responsibility."
+        },
+        {
+            "excluded_description": "Bitwarden Cloud is available to all Bitwarden users as a means to synchronize devices.",
+            "excluded_reason": "Product feature description, not a user entity responsibility."
+        },
+        {
+            "excluded_description": "Bitwarden Cloud runs on Microsoft Azure.",
+            "excluded_reason": "Implementation detail about the service provider's responsibility."
+        },
+        {
+            "excluded_description": "Bitwarden is also available for self-hosted installation through a simplified Docker deployment.",
+            "excluded_reason": "Feature offering for optional self-hosted deployment, not a CUEC."
+        },
+        {
+            "excluded_description": "Bitwarden is the only password management solution that is available as open source software and can be deployed as a service in the cloud, or self-hosted wherever customers choose, such as behind their firewall.",
+            "excluded_reason": "Statement about company differentiator, not a user entity responsibility."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 6 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    12 
+
+Services Provided 
+Bitwarden provides a comprehensive solution for password management. 
+User view 
+Users primarily interact with Bitwarden through our client applications. In order to access Bitwarden 
+client applications, users must create a login and master password. This information is used both for 
+authenticating into Bitwarden, as well as to create a unique encryption key for each individual user. The 
+encryption key is used to encrypt passwords, files, and other sensitive data the user selects to store in the 
+Bitwarden Vault. 
+When interacting with Bitwarden applications, all Vault data is encrypted locally as it is stored, and Vault 
+data remains encrypted for syncing. Thus, Bitwarden utilizes end-to-end encryption in the transmission 
+and storage of all sensitive user data. 
+Bitwarden Client Applications 
+Bitwarden 
+
+RESPONSE:
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": null,
+            "cuec_description": "Users must create a login and master password. This information is used both for authenticating into Bitwarden, as well as to create a unique encryption key for each individual user.",
+            "cuec_line_ref": 14,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "Users must",
+            "cuec_gpt_reasoning": "The statement explicitly assigns responsibility for creating a login and master password to users, making it a CUEC.",
+            "cuec_framework_alignment": "Undetermined",
+            "cuec_framework_alignment_id": null,
+            "cuec_justification": "Relates to authentication and encryption, but specific framework alignment is not given."
+        }
+    ],
+    "excluded": [
+        {
+            "excluded_description": "Bitwarden provides a comprehensive solution for password management.",
+            "excluded_reason": "Describes vendor services rather than assigning responsibility to user entities."
+        },
+        {
+            "excluded_description": "Users primarily interact with Bitwarden through our client applications.",
+            "excluded_reason": "Describes user interaction but does not assign responsibility."
+        },
+        {
+            "excluded_description": "The encryption key is used to encrypt passwords, files, and other sensitive data the user selects to store in the Bitwarden Vault.",
+            "excluded_reason": "Describes encryption functionality but does not assign responsibility to user entities."
+        },
+        {
+            "excluded_description": "When interacting with Bitwarden applications, all Vault data is encrypted locally as it is stored, and Vault data remains encrypted for syncing.",
+            "excluded_reason": "Describes vendor encryption processes and functionality rather than assigning responsibility to user entities."
+        },
+        {
+            "excluded_description": "Thus, Bitwarden utilizes end-to-end encryption in the transmission and storage of all sensitive user data.",
+            "excluded_reason": "Describes Bitwarden's encryption processes and not a user entity responsibility."
+        }
+    ]
+}
+---
+CHUNK 9 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+e and can be 
+deployed as a service in the cloud, or self-hosted wherever customers choose, such as behind their 
+firewall. 
+
+=== PAGE 17 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    14 
+
+Components of the System 
+Management Controls 
+Control Environment 
+Board of Directors and Executive Oversight: The Company’s board of directors conducts quarterly 
+meetings. In addition, processes are in place to ensure that any sensitive information, investigations, and 
+improper acts by or within the Company are reported to the board of directors in a timely manner. 
+Organizational Structure: The responsibilities of key positions within the Company are clearly defined and 
+communicated. The Company has a hierarchical organizational structure that supports the open and 
+continuous communication of information between leadership and its supp
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Board of Directors and Executive Oversight: The Company’s board of directors conducts quarterly meetings. In addition, processes are in place to ensure that any sensitive information, investigations, and improper acts by or within the Company are reported to the board of directors in a timely manner.",
+            "excluded_reason": "Describes internal organizational oversight, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "Organizational Structure: The responsibilities of key positions within the Company are clearly defined and communicated. The Company has a hierarchical organizational structure that supports the open and continuous communication of information between leadership and its support.",
+            "excluded_reason": "Describes internal organizational controls, not user entity responsibilities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 7 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+d, and Vault 
+data remains encrypted for syncing. Thus, Bitwarden utilizes end-to-end encryption in the transmission 
+and storage of all sensitive user data. 
+Bitwarden Client Applications 
+Bitwarden client applications span virtually all endpoint devices: 
+• 
+Mobile for iOS and Android devices 
+• 
+Desktop for Windows, MacOS, and Linux operating systems 
+• 
+Browser Extensions for Chrome, Safari, Firefox, Edge, Brave, Opera and other web browsers 
+• 
+Command Line Interface 
+• 
+Web Application 
+All Vault data is encrypted and decrypted in the client applications with access granted via the user email 
+and master password.  Bitwarden as a company has no access to unencrypted Vault user data. 
+Bitwarden Extensions 
+Bitwarden also includes extensions such as: 
+• 
+Directory Sync with a range of directory services such as 
+• 
+Active Directory 
+• 
+Any LDAP-based directory 
+• 
+Azure Active Directory 
+• 
+G Suite (Google) 
+• 
+Okta 
+• 
+A RESTful API is available at docs.bitwarden.com 
+
+=== PAGE 16
+
+RESPONSE:
+{
+  "cuecs": [],
+  "excluded": [
+    {
+      "excluded_description": "Bitwarden utilizes end-to-end encryption in the transmission and storage of all sensitive user data.",
+      "excluded_reason": "Statement describes a vendor responsibility, not customer responsibility."
+    },
+    {
+      "excluded_description": "Bitwarden client applications span virtually all endpoint devices: Mobile for iOS and Android devices, Desktop for Windows, MacOS, and Linux operating systems, Browser Extensions for Chrome, Safari, Firefox, Edge, Brave, Opera and other web browsers, Command Line Interface, Web Application.",
+      "excluded_reason": "This is a product description, not a user responsibility statement."
+    },
+    {
+      "excluded_description": "All Vault data is encrypted and decrypted in the client applications with access granted via the user email and master password.",
+      "excluded_reason": "Statement describes data handling functionality, not a user responsibility."
+    },
+    {
+      "excluded_description": "Bitwarden as a company has no access to unencrypted Vault user data.",
+      "excluded_reason": "Statement describes a vendor control, not a user responsibility."
+    },
+    {
+      "excluded_description": "Bitwarden also includes extensions such as: Directory Sync with a range of directory services such as Active Directory, Any LDAP-based directory, Azure Active Directory, G Suite (Google), Okta. A RESTful API is available at docs.bitwarden.com.",
+      "excluded_reason": "This is a product description, not a statement assigning responsibility to the user."
+    }
+  ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 10 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+mpany are clearly defined and 
+communicated. The Company has a hierarchical organizational structure that supports the open and 
+continuous communication of information between leadership and its support staff. The hierarchy allows 
+for clear direction to be communicated from executive management throughout the Company to support 
+the overall objectives and direction of the Company.  
+Management Philosophy: Management’s policies and communications are directed at ensuring that the 
+company’s personnel (i) understand the company’s objectives; (ii) know how their individual actions 
+interrelate and contribute to those objectives; and (iii) recognize how and for what they will be held 
+accountable. 
+Management instills a philosophy that enables employees to share in the success and growth of the 
+Company. A highly skilled and diverse group of employees comprises the organization’s management 
+team, individuals who are ultimately responsible for the vision and direction of the Company. 
+Ma
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "The Company has a hierarchical organizational structure that supports the open and continuous communication of information between leadership and its support staff. The hierarchy allows for clear direction to be communicated from executive management throughout the Company to support the overall objectives and direction of the Company.",
+            "excluded_reason": "Vendor-specific control, does not assign responsibility to user entities."
+        },
+        {
+            "excluded_description": "Management Philosophy: Management’s policies and communications are directed at ensuring that the company’s personnel (i) understand the company’s objectives; (ii) know how their individual actions interrelate and contribute to those objectives; and (iii) recognize how and for what they will be held accountable.",
+            "excluded_reason": "General company policy statement, does not assign responsibility to user entities."
+        },
+        {
+            "excluded_description": "Management instills a philosophy that enables employees to share in the success and growth of the Company.",
+            "excluded_reason": "Describes internal organizational philosophy, not user responsibilities."
+        },
+        {
+            "excluded_description": "A highly skilled and diverse group of employees comprises the organization’s management team, individuals who are ultimately responsible for the vision and direction of the Company.",
+            "excluded_reason": "Vendor-specific description of management, unrelated to user responsibilities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 13 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ed disciplinary procedures, and grounds for 
+termination. Documented policies include: 
+• 
+At-will employment policy 
+• 
+Code of ethics 
+• 
+Acceptable use 
+• 
+Information/data security 
+• 
+Confidentiality/non-disclosure of Company and client information 
+• 
+Possession and use of company property 
+• 
+Internet, email, and phone use 
+• 
+Safety standards 
+Employee Training 
+Business Development: The sales staff is responsible for actively pursuing new business opportunities to 
+help grow the organization. The team communicates openly and frequently with other members of the 
+management team regarding business development and market penetration, and also discusses labor, 
+capacity, productivity measures, and short-term and long-term planning when applicable. The Company 
+actively assesses the risks of a potential decline or growth in sales and how it may affect the organization 
+as a whole. 
+Financial Management: Finance and accounting employees are responsible for payments of organizationa
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Documented policies include: • At-will employment policy • Code of ethics • Acceptable use • Information/data security • Confidentiality/non-disclosure of Company and client information • Possession and use of company property • Internet, email, and phone use • Safety standards",
+            "excluded_reason": "Describes internal vendor policies, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "The sales staff is responsible for actively pursuing new business opportunities to help grow the organization.",
+            "excluded_reason": "Describes internal vendor roles, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "The team communicates openly and frequently with other members of the management team regarding business development and market penetration, and also discusses labor, capacity, productivity measures, and short-term and long-term planning when applicable.",
+            "excluded_reason": "Describes internal vendor activities, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "The Company actively assesses the risks of a potential decline or growth in sales and how it may affect the organization as a whole.",
+            "excluded_reason": "Describes internal vendor activities, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "Finance and accounting employees are responsible for payments of organizationa",
+            "excluded_reason": "Incomplete statement but appears related to internal vendor responsibility, not user entity responsibilities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 11 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+the 
+Company. A highly skilled and diverse group of employees comprises the organization’s management 
+team, individuals who are ultimately responsible for the vision and direction of the Company. 
+Management members meet on a structured, routine basis to discuss a range of topics and are also 
+responsible for establishing policies and addressing operational, financial, and social aspects of the 
+organization. 
+Human Resource Management: The Company’s management understands that a secure, quality operation 
+requires an ethical, responsible, and competent staff. The Company maintains a thorough set of policies 
+and practices to meet this objective including: 
+• 
+Comprehensive employee background checks 
+• 
+Hiring standards are established with emphasis on prior work experience, qualifications, and past 
+accomplishments 
+• 
+New hire orientation with training sessions addressing all essential organizational elements and 
+department level orientation specific to respective roles 
+• 
+Employ
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "The Company. A highly skilled and diverse group of employees comprises the organization’s management team, individuals who are ultimately responsible for the vision and direction of the Company.",
+            "excluded_reason": "Responsibility is assigned to the service organization, not the user entity."
+        },
+        {
+            "excluded_description": "Management members meet on a structured, routine basis to discuss a range of topics and are also responsible for establishing policies and addressing operational, financial, and social aspects of the organization.",
+            "excluded_reason": "Responsibility is assigned to the service organization, not the user entity."
+        },
+        {
+            "excluded_description": "The Company’s management understands that a secure, quality operation requires an ethical, responsible, and competent staff.",
+            "excluded_reason": "Responsibility is assigned to the service organization, not the user entity."
+        },
+        {
+            "excluded_description": "The Company maintains a thorough set of policies and practices to meet this objective including: Comprehensive employee background checks; Hiring standards are established with emphasis on prior work experience, qualifications, and past accomplishments; New hire orientation with training sessions addressing all essential organizational elements and department level orientation specific to respective roles.",
+            "excluded_reason": "Responsibility is assigned to the service organization, not the user entity."
+        }
+    ]
+}
+---
+CHUNK 12 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ns, and past 
+accomplishments 
+• 
+New hire orientation with training sessions addressing all essential organizational elements and 
+department level orientation specific to respective roles 
+• 
+Employee performance management process includes periodic assessments and real-time 
+feedback 
+• 
+Annual compliance training 
+
+=== PAGE 18 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    15 
+
+Company policies and standards are clearly communicated to employees through formal documentation, 
+close supervision, and training. Employees are provided a comprehensive employee handbook that covers 
+a wide range of control considerations, clearly stated disciplinary procedures, and grounds for 
+termination. Documented policies include: 
+• 
+At-will employment policy 
+• 
+Code of ethics 
+• 
+Acceptable use 
+• 
+Information/data security 
+• 
+Confidentia
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "New hire orientation with training sessions addressing all essential organizational elements and department level orientation specific to respective roles",
+            "excluded_reason": "Describes an internal process applicable to the service organization, not user entities."
+        },
+        {
+            "excluded_description": "Employee performance management process includes periodic assessments and real-time feedback",
+            "excluded_reason": "Pertains to internal performance management, not user entities."
+        },
+        {
+            "excluded_description": "Annual compliance training",
+            "excluded_reason": "Internal vendor responsibility, not a requirement for user entities."
+        },
+        {
+            "excluded_description": "Company policies and standards are clearly communicated to employees through formal documentation, close supervision, and training.",
+            "excluded_reason": "Describes a process implemented by the service organization for its internal operations."
+        },
+        {
+            "excluded_description": "Employees are provided a comprehensive employee handbook that covers a wide range of control considerations, clearly stated disciplinary procedures, and grounds for termination.",
+            "excluded_reason": "Details internal documentation and disciplinary processes for the service organization, not user entities."
+        },
+        {
+            "excluded_description": "Documented policies include: • At-will employment policy • Code of ethics • Acceptable use • Information/data security • Confidentia",
+            "excluded_reason": "Lists internal policies of the service organization, not requirements for user entities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 14 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+isks of a potential decline or growth in sales and how it may affect the organization 
+as a whole. 
+Financial Management: Finance and accounting employees are responsible for payments of organizational 
+fixed and variable costs, tracking and reporting on key financial metrics, building cash flow projection 
+models, budgeting, and financial regulatory compliance, collecting payments from clients, and 
+maintaining all other financial activities. This team continually monitors and evaluates risk assessment 
+concerning cash flows and the ability to meet mandatory expenses. Senior management also routinely 
+addresses issues such as lines of credit, cash reserves, and other financial requirements. Annual budgets 
+are created each fiscal year and reviewed on an ongoing basis. 
+Budgetary Process: The budgetary process encompasses all aspects of the financial reporting, including 
+the creation of a budget book that details each division’s budgeted monthly client revenue; a headcount 
+report, in
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Finance and accounting employees are responsible for payments of organizational fixed and variable costs, tracking and reporting on key financial metrics, building cash flow projection models, budgeting, and financial regulatory compliance, collecting payments from clients, and maintaining all other financial activities.",
+            "excluded_reason": "Responsibility is assigned to internal finance and accounting employees, not the user entity."
+        },
+        {
+            "excluded_description": "This team continually monitors and evaluates risk assessment concerning cash flows and the ability to meet mandatory expenses.",
+            "excluded_reason": "Responsibility is assigned to internal teams, not the user entity."
+        },
+        {
+            "excluded_description": "Senior management also routinely addresses issues such as lines of credit, cash reserves, and other financial requirements.",
+            "excluded_reason": "Responsibility is assigned to internal senior management, not the user entity."
+        },
+        {
+            "excluded_description": "Annual budgets are created each fiscal year and reviewed on an ongoing basis.",
+            "excluded_reason": "Describes internal processes, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "The budgetary process encompasses all aspects of the financial reporting, including the creation of a budget book that details each division’s budgeted monthly client revenue; a headcount report, in",
+            "excluded_reason": "Describes internal organizational processes, not user entity responsibilities."
+        }
+    ]
+}
+---
+CHUNK 16 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+itwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    16 
+
+Communication: The Company conducts recurring meetings to identify and address significant issues 
+affecting the Company’s operations. As business and development plans are established, meetings are 
+held throughout the Company to report results achieved and communicate defined goals. Informal 
+meetings provide the vehicle for management to communicate and respond to operational tasks and 
+issues. At all corporate levels, the Company has established communication channels to promote and 
+distribute information up and down the defined management structure. The Company embraces a belief 
+that information should flow in an open environment, allowing discussion on a wide range of topics and 
+subject matter by all employees.  
+Mission and Values: The Company has engaged in a Company-wide process of defi
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "The Company conducts recurring meetings to identify and address significant issues affecting the Company’s operations.",
+            "excluded_reason": "Responsibility assigned to the service organization, not the user entity."
+        },
+        {
+            "excluded_description": "As business and development plans are established, meetings are held throughout the Company to report results achieved and communicate defined goals.",
+            "excluded_reason": "Responsibility assigned to the service organization, not the user entity."
+        },
+        {
+            "excluded_description": "Informal meetings provide the vehicle for management to communicate and respond to operational tasks and issues.",
+            "excluded_reason": "Responsibility assigned to the service organization, not the user entity."
+        },
+        {
+            "excluded_description": "At all corporate levels, the Company has established communication channels to promote and distribute information up and down the defined management structure.",
+            "excluded_reason": "Responsibility assigned to the service organization, not the user entity."
+        },
+        {
+            "excluded_description": "The Company embraces a belief that information should flow in an open environment, allowing discussion on a wide range of topics and subject matter by all employees.",
+            "excluded_reason": "Responsibility assigned to the service organization, not the user entity."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 15 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+The budgetary process encompasses all aspects of the financial reporting, including 
+the creation of a budget book that details each division’s budgeted monthly client revenue; a headcount 
+report, including additions and deletions; balance sheet; cash flow; capital expenditures; roll-forward 
+from prior year, including explanations of variances; and comparison to prior year actual, budget, and 
+forecast. The Finance team works with each individual department manager to develop their respective 
+budget then completes a review with the department manager to finalize the plan. The budget is then 
+reviewed at the senior management level with the CEO. Upon completion, the budget is presented to the 
+executive board by the leadership team for final approval.  
+
+=== PAGE 19 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    16 
+
+Communica
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "The budgetary process encompasses all aspects of the financial reporting, including the creation of a budget book that details each division’s budgeted monthly client revenue; a headcount report, including additions and deletions; balance sheet; cash flow; capital expenditures; roll-forward from prior year, including explanations of variances; and comparison to prior year actual, budget, and forecast.",
+            "excluded_reason": "General financial process description, no explicit responsibility assigned to user entity."
+        },
+        {
+            "excluded_description": "The Finance team works with each individual department manager to develop their respective budget then completes a review with the department manager to finalize the plan.",
+            "excluded_reason": "Describes internal vendor responsibilities, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "The budget is then reviewed at the senior management level with the CEO.",
+            "excluded_reason": "Describes internal review process at the organization level, no user entity responsibility."
+        },
+        {
+            "excluded_description": "Upon completion, the budget is presented to the executive board by the leadership team for final approval.",
+            "excluded_reason": "Describes internal board review process, not user entity responsibility."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 19 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+risk 
+assessment; and 2) ongoing quality control, quality assurance, and departmental monitoring. 
+The Company monitors internal control systems by conducting monitoring activities across the 
+organization. Internal control deficiencies are immediately reported upstream to management where 
+corrective action is applied. More serious matters are escalated to top-level management and immediate 
+action is taken. Monitoring activities over internal controls are included in the following functional areas: 
+• 
+Sales and Marketing 
+• 
+Information Technology 
+• 
+Finance and Accounting 
+• 
+Daily Operations and Transaction Processing Environment 
+
+=== PAGE 20 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    17 
+
+Security Controls: 
+Bitwarden security controls include but are not limited to: 
+• 
+Logical access controls 
+• 
+Data Security / Da
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "The Company monitors internal control systems by conducting monitoring activities across the organization.",
+            "excluded_reason": "Responsibility assigned to the service organization, not user entity."
+        },
+        {
+            "excluded_description": "Internal control deficiencies are immediately reported upstream to management where corrective action is applied.",
+            "excluded_reason": "Responsibility assigned to the service organization, not user entity."
+        },
+        {
+            "excluded_description": "More serious matters are escalated to top-level management and immediate action is taken.",
+            "excluded_reason": "Responsibility assigned to the service organization, not user entity."
+        },
+        {
+            "excluded_description": "Monitoring activities over internal controls are included in the following functional areas: Sales and Marketing, Information Technology, Finance and Accounting, Daily Operations and Transaction Processing Environment.",
+            "excluded_reason": "Responsibility assigned to the service organization, not user entity."
+        },
+        {
+            "excluded_description": "Bitwarden security controls include but are not limited to: Logical access controls, Data Security / Da.",
+            "excluded_reason": "Describes vendor security controls, not user entity responsibilities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 17 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ should flow in an open environment, allowing discussion on a wide range of topics and 
+subject matter by all employees.  
+Mission and Values: The Company has engaged in a Company-wide process of defining the mission and 
+values statements of the Company and reviews those statements on a regular basis with existing and new 
+employees. 
+Policy Management: Policy and procedure documents inform employees of their responsibility within the 
+workplace environment and professional conduct expectations. Each department has access to work 
+instruction documents pertaining to their respective roles and duties and how they should be performed. 
+Revisions to corporate policies and procedures are readily available through the Company Google Docs 
+and are distributed to relevant employees in a timely manner. Each policy and procedure is subject to an 
+annual review and must be approved by respective managers. 
+Monitoring Controls: The Company maintains internal reporting, monitoring, and evaluation
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "should flow in an open environment, allowing discussion on a wide range of topics and subject matter by all employees.",
+            "excluded_reason": "No responsibility is explicitly assigned to user entities."
+        },
+        {
+            "excluded_description": "Mission and Values: The Company has engaged in a Company-wide process of defining the mission and values statements of the Company and reviews those statements on a regular basis with existing and new employees.",
+            "excluded_reason": "Responsibility is assigned to the company, not to user entities."
+        },
+        {
+            "excluded_description": "Policy Management: Policy and procedure documents inform employees of their responsibility within the workplace environment and professional conduct expectations.",
+            "excluded_reason": "Internal policy management responsibility assigned to the company, not user entities."
+        },
+        {
+            "excluded_description": "Each department has access to work instruction documents pertaining to their respective roles and duties and how they should be performed.",
+            "excluded_reason": "Responsibility and roles are internal to the company, not user entities."
+        },
+        {
+            "excluded_description": "Revisions to corporate policies and procedures are readily available through the Company Google Docs and are distributed to relevant employees in a timely manner.",
+            "excluded_reason": "Internal responsibility related to company operations, not user entities."
+        },
+        {
+            "excluded_description": "Each policy and procedure is subject to an annual review and must be approved by respective managers.",
+            "excluded_reason": "Internal control process; not assigning responsibility to user entities."
+        },
+        {
+            "excluded_description": "Monitoring Controls: The Company maintains internal reporting, monitoring, and evaluation.",
+            "excluded_reason": "Responsibility is assigned to the company, not user entities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 18 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+anner. Each policy and procedure is subject to an 
+annual review and must be approved by respective managers. 
+Monitoring Controls: The Company maintains internal reporting, monitoring, and evaluation procedures 
+to identify deviations from internal controls; and maintains a process to effectively report these 
+deficiencies to the appropriate departments. The Company’s monitoring procedures include: 
+• 
+Goal setting and periodic review meetings with all employees 
+• 
+Analysis of and appropriate follow-up on operating reports or metrics that might identify 
+anomalies indicative of a control failure 
+• 
+Supervisory reviews of controls, such as reconciliation reviews, as a normal part of processing 
+The assessment of compliance risk and ongoing corrective actions established by an: 1) annual risk 
+assessment; and 2) ongoing quality control, quality assurance, and departmental monitoring. 
+The Company monitors internal control systems by conducting monitoring activities across the 
+organiz
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Each policy and procedure is subject to an annual review and must be approved by respective managers.",
+            "excluded_reason": "This statement pertains to internal vendor responsibilities, not user entities."
+        },
+        {
+            "excluded_description": "The Company maintains internal reporting, monitoring, and evaluation procedures to identify deviations from internal controls; and maintains a process to effectively report these deficiencies to the appropriate departments.",
+            "excluded_reason": "Responsibilities are assigned to the Company and do not involve user entities."
+        },
+        {
+            "excluded_description": "The Company’s monitoring procedures include: Goal setting and periodic review meetings with all employees.",
+            "excluded_reason": "Details vendor internal procedures, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "Analysis of and appropriate follow-up on operating reports or metrics that might identify anomalies indicative of a control failure.",
+            "excluded_reason": "Describes internal analysis and follow-up by the vendor, not user entities."
+        },
+        {
+            "excluded_description": "Supervisory reviews of controls, such as reconciliation reviews, as a normal part of processing.",
+            "excluded_reason": "Describes vendor supervisory responsibilities, not responsibilities of user entities."
+        },
+        {
+            "excluded_description": "The assessment of compliance risk and ongoing corrective actions established by an: 1) annual risk assessment; and 2) ongoing quality control, quality assurance, and departmental monitoring.",
+            "excluded_reason": "Responsibilities assigned to the vendor (Company), not user entities."
+        },
+        {
+            "excluded_description": "The Company monitors internal control systems by conducting monitoring activities across the organization.",
+            "excluded_reason": "The responsibility is assigned to the Company rather than the user entities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 20 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+prietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    17 
+
+Security Controls: 
+Bitwarden security controls include but are not limited to: 
+• 
+Logical access controls 
+• 
+Data Security / Data Encryption 
+• 
+Data Protection / Data Privacy 
+• 
+Data Protection in Transit 
+• 
+Data Protection at Rest 
+• 
+Password hashing / Key derivation / Key Management and Key Storage 
+Please refer to the Bitwarden Security page for additional information  
+https://bitwarden.com/help/security/ 
+Business Continuity and Disaster Recovery Program 
+Bitwarden employs a full range of disaster recovery and business continuity practices from Microsoft 
+Azure that are built into the Bitwarden Cloud. This includes high availability and backup services for our 
+application and database tiers. A combination of manual and automated monitoring of the Bitwarden 
+Cloud infrastructure provides a comprehensive and detailed view of system health as well as proactive 
+alerts on areas of concern. Issues are surface
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Bitwarden security controls include but are not limited to: • Logical access controls • Data Security / Data Encryption • Data Protection / Data Privacy • Data Protection in Transit • Data Protection at Rest • Password hashing / Key derivation / Key Management and Key Storage",
+            "excluded_reason": "General description of vendor security controls, not assigning responsibility to the user entity."
+        },
+        {
+            "excluded_description": "Please refer to the Bitwarden Security page for additional information https://bitwarden.com/help/security/",
+            "excluded_reason": "Reference to external documentation, not a statement assigning responsibility to the user entity."
+        },
+        {
+            "excluded_description": "Bitwarden employs a full range of disaster recovery and business continuity practices from Microsoft Azure that are built into the Bitwarden Cloud. This includes high availability and backup services for our application and database tiers.",
+            "excluded_reason": "Describes vendor responsibilities and practices, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "A combination of manual and automated monitoring of the Bitwarden Cloud infrastructure provides a comprehensive and detailed view of system health as well as proactive alerts on areas of concern.",
+            "excluded_reason": "Describes service organization’s monitoring practices, not user entity responsibilities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 22 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    18 
+
+Principal Service Commitments and System Requirements  
+Bitwarden designs its processes and procedures related to the system to meet its objectives for its 
+password management services. Those objectives are based on the service commitments that Bitwarden 
+makes to user entities, the laws and regulations that govern the provision of the password management 
+services, and the financial, operational, and compliance requirements that Bitwarden has established for 
+the services. The password management services of Bitwarden are subject to the relevant regulatory and 
+industry information and data security requirements in which Bitwarden operates 
+The security and confidentiality commitments to user entities are documented and communicated in 
+customer agreements, sales and website documentation, and company policies. The principal security and 
+confiden
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Bitwarden designs its processes and procedures related to the system to meet its objectives for its password management services.",
+            "excluded_reason": "This statement describes the vendor's responsibility, not user entity responsibility."
+        },
+        {
+            "excluded_description": "Those objectives are based on the service commitments that Bitwarden makes to user entities, the laws and regulations that govern the provision of the password management services, and the financial, operational, and compliance requirements that Bitwarden has established for the services.",
+            "excluded_reason": "This statement discusses Bitwarden’s commitments and regulatory compliance, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "The password management services of Bitwarden are subject to the relevant regulatory and industry information and data security requirements in which Bitwarden operates.",
+            "excluded_reason": "This statement describes regulatory requirements for Bitwarden, not user entities."
+        },
+        {
+            "excluded_description": "The security and confidentiality commitments to user entities are documented and communicated in customer agreements, sales and website documentation, and company policies.",
+            "excluded_reason": "This statement discusses security commitments made by Bitwarden, not responsibilities assigned to user entities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 23 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ty and confidentiality commitments to user entities are documented and communicated in 
+customer agreements, sales and website documentation, and company policies. The principal security and 
+confidentiality commitments are standardized and include, but are not limited to, the following: 
+• 
+Security: Bitwarden maintains a robust information security program that includes: 
+o 
+Background checks conducted as part of the hiring process for employees and contractors 
+o 
+Security awareness training, and relevant compliance training provided at time of hire 
+and renewed annually for all employees and contractors 
+o 
+Policies and procedures governing the security program reviewed and updated on an 
+annual basis 
+o 
+Operational and technical controls in place to ensure confidential data is protected from 
+unauthorized disclosure, use, modification, or destruction.  
+o 
+Independent third party security risk assessments performed on an annual basis 
+• 
+Confidentiality: Bitwarden considers and c
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Security: Bitwarden maintains a robust information security program that includes:",
+            "excluded_reason": "Vendor responsibility, not user entity."
+        },
+        {
+            "excluded_description": "Background checks conducted as part of the hiring process for employees and contractors",
+            "excluded_reason": "Internal vendor control, not a user entity responsibility."
+        },
+        {
+            "excluded_description": "Security awareness training, and relevant compliance training provided at time of hire and renewed annually for all employees and contractors",
+            "excluded_reason": "Internal vendor control, not a user entity responsibility."
+        },
+        {
+            "excluded_description": "Policies and procedures governing the security program reviewed and updated on an annual basis",
+            "excluded_reason": "Internal vendor control, not a user entity responsibility."
+        },
+        {
+            "excluded_description": "Operational and technical controls in place to ensure confidential data is protected from unauthorized disclosure, use, modification, or destruction.",
+            "excluded_reason": "Internal vendor control, not a user entity responsibility."
+        },
+        {
+            "excluded_description": "Independent third party security risk assessments performed on an annual basis",
+            "excluded_reason": "Internal vendor control, not a user entity responsibility."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 25 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+signed and developed, how the system is 
+operated, how the internal business systems and networks are managed and how employees are hired and 
+trained. In addition to these policies, standard operating procedures have been documented on how to 
+carry out specific manual and automated processes required in the operation and development of the 
+password management system. 
+
+=== PAGE 22 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    19 
+
+System Incident Disclosures 
+No system incidents occurred that were the result of controls that were not suitably designed or otherwise 
+resulted in a significant failure of the achievement of one or more of the service commitments  
+Significant Changes During the Review Period 
+There were no significant changes that are likely to affect users' understanding of how the in-scope 
+systems are used to
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "signed and developed, how the system is operated, how the internal business systems and networks are managed and how employees are hired and trained.",
+            "excluded_reason": "Describes internal vendor controls, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "In addition to these policies, standard operating procedures have been documented on how to carry out specific manual and automated processes required in the operation and development of the password management system.",
+            "excluded_reason": "Internal control description for the vendor, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "No system incidents occurred that were the result of controls that were not suitably designed or otherwise resulted in a significant failure of the achievement of one or more of the service commitments.",
+            "excluded_reason": "Statement of system incident status and control suitability, not a user entity responsibility."
+        },
+        {
+            "excluded_description": "There were no significant changes that are likely to affect users' understanding of how the in-scope systems are used.",
+            "excluded_reason": "Discusses system changes affecting understanding, not an explicit assignment of user entity responsibility."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 24 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ted from 
+unauthorized disclosure, use, modification, or destruction.  
+o 
+Independent third party security risk assessments performed on an annual basis 
+• 
+Confidentiality: Bitwarden considers and classifies all personally identifiable customer/client data 
+that is processed on its production information systems as Confidential.  
+Bitwarden establishes operational requirements that support the achievement of security commitments, 
+relevant laws and regulations, and other system requirements. Such requirements are communicated in 
+Bitwarden’s system policies and procedures, system design documentation, and contracts with customers. 
+Information security policies define an organization-wide approach to how systems and data are 
+protected. These include policies around how the service is designed and developed, how the system is 
+operated, how the internal business systems and networks are managed and how employees are hired and 
+trained. In addition to these policies, standard operatin
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Independent third party security risk assessments performed on an annual basis.",
+            "excluded_reason": "Responsibility assigned to vendor, not user entity."
+        },
+        {
+            "excluded_description": "Bitwarden considers and classifies all personally identifiable customer/client data that is processed on its production information systems as Confidential.",
+            "excluded_reason": "Describes vendor practices, not user entity responsibilities."
+        },
+        {
+            "excluded_description": "Bitwarden establishes operational requirements that support the achievement of security commitments, relevant laws and regulations, and other system requirements.",
+            "excluded_reason": "Responsibility assigned to vendor, not user entity."
+        },
+        {
+            "excluded_description": "Such requirements are communicated in Bitwarden’s system policies and procedures, system design documentation, and contracts with customers.",
+            "excluded_reason": "Describes communication of requirements, but does not explicitly assign responsibility to user entities."
+        },
+        {
+            "excluded_description": "Information security policies define an organization-wide approach to how systems and data are protected.",
+            "excluded_reason": "General control statement about policies, not explicit user entity responsibility."
+        },
+        {
+            "excluded_description": "These include policies around how the service is designed and developed, how the system is operated, how the internal business systems and networks are managed and how employees are hired and trained.",
+            "excluded_reason": "Describes vendor policies, not user entity responsibilities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 21 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ manual and automated monitoring of the Bitwarden 
+Cloud infrastructure provides a comprehensive and detailed view of system health as well as proactive 
+alerts on areas of concern. Issues are surfaced quickly so that our infrastructure team can effectively 
+respond and mitigate problems with minimal disruption. 
+Customer / Client Support 
+Escalation Procedures are invoked to address any production processing issues. Clients are contacted if 
+there are any quality issues or production delays that may affect agreed upon service levels. 
+Service Level Management: The Customer Support Manager monitors and reports on the achievement of 
+specified performance criteria and takes corrective action when needed. 
+
+=== PAGE 21 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    18 
+
+Principal Service Commitments and System Requirements  
+Bitwa
+
+RESPONSE:
+{
+    "cuecs": [],
+    "excluded": [
+        {
+            "excluded_description": "Manual and automated monitoring of the Bitwarden Cloud infrastructure provides a comprehensive and detailed view of system health as well as proactive alerts on areas of concern. Issues are surfaced quickly so that our infrastructure team can effectively respond and mitigate problems with minimal disruption.",
+            "excluded_reason": "Vendor responsibility, not user entity."
+        },
+        {
+            "excluded_description": "Escalation Procedures are invoked to address any production processing issues. Clients are contacted if there are any quality issues or production delays that may affect agreed upon service levels.",
+            "excluded_reason": "Does not explicitly assign responsibility to the user entity; largely descriptive of vendor processes."
+        },
+        {
+            "excluded_description": "The Customer Support Manager monitors and reports on the achievement of specified performance criteria and takes corrective action when needed.",
+            "excluded_reason": "Vendor responsibility, not user entity."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 26 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ore of the service commitments  
+Significant Changes During the Review Period 
+There were no significant changes that are likely to affect users' understanding of how the in-scope 
+systems are used to provide the services covered by this examination during the review period. 
+=== PAGE 23 ===
+ 
+Section III – Bitwarden Inc. Description of its Password Management  
+System Throughout the Period July 1, 2023, to June 30, 2024 
+ 
+Proprietary and Confidential Information 
+©2024 Bitwarden Inc. 
+    20 
+
+Complementary User Entity Controls 
+The Bitwarden Password Management System was designed with the assumption that certain policies, 
+processes, and controls would be implemented by user entities. In certain situations, the implementation 
+of specific controls by the user entity is necessary to achieve certain criteria included in this report. 
+This section describes additional policies, processes, and controls, that should be in operation at the user 
+entity to complement the controls performe
+
+RESPONSE:
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": null,
+            "cuec_description": "The Bitwarden Password Management System was designed with the assumption that certain policies, processes, and controls would be implemented by user entities.",
+            "cuec_line_ref": 8,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "policies, processes, and controls would be implemented by user entities",
+            "cuec_gpt_reasoning": "Clearly assigns responsibility to user entities to implement certain controls.",
+            "cuec_framework_alignment": "Undetermined",
+            "cuec_framework_alignment_id": null,
+            "cuec_justification": "No explicit alignment to COSO or AICPA TSC provided."
+        },
+        {
+            "cuec_tsc_id": null,
+            "cuec_description": "In certain situations, the implementation of specific controls by the user entity is necessary to achieve certain criteria included in this report.",
+            "cuec_line_ref": 9,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "implementation of specific controls by the user entity is necessary",
+            "cuec_gpt_reasoning": "Directly assigns responsibility to user entities to implement specific controls.",
+            "cuec_framework_alignment": "Undetermined",
+            "cuec_framework_alignment_id": null,
+            "cuec_justification": "No explicit alignment to COSO or AICPA TSC provided."
+        },
+        {
+            "cuec_tsc_id": null,
+            "cuec_description": "This section describes additional policies, processes, and controls, that should be in operation at the user entity to complement the controls performed.",
+            "cuec_line_ref": 10,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "should be in operation at the user entity",
+            "cuec_gpt_reasoning": "Dictates that user entities must have additional policies and processes to complement Bitwarden's controls.",
+            "cuec_framework_alignment": "Undetermined",
+            "cuec_framework_alignment_id": null,
+            "cuec_justification": "No explicit alignment to COSO or AICPA TSC provided."
+        }
+    ],
+    "excluded": [
+        {
+            "excluded_description": "There were no significant changes that are likely to affect users' understanding of how the in-scope systems are used to provide the services covered by this examination during the review period.",
+            "excluded_reason": "General statement; does not assign responsibility to user entities."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+CHUNK 27 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+ieve certain criteria included in this report. 
+This section describes additional policies, processes, and controls, that should be in operation at the user 
+entity to complement the controls performed by Bitwarden. However, there may be control objectives or 
+related controls not identified in this report, which may be appropriate for a specific user entity’s 
+operation. The complementary user entity control considerations listed below should not be considered a 
+complete or comprehensive list that should be employed by user entities.  
+Independent auditors or user entities should consider whether the following controls have been placed in 
+operation by the user entity: 
+• 
+User entities should comply with all Bitwarden terms and conditions documented here 
+https://bitwarden.com/terms/ (CC 2.2) 
+• 
+User entities should review functionality changes, product level changes and enhancements and 
+report if there are any incidents impacting Security and Confidentiality due to changes made b
+
+RESPONSE:
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC2.2",
+            "cuec_description": "User entities should comply with all Bitwarden terms and conditions documented here https://bitwarden.com/terms/.",
+            "cuec_line_ref": 8,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities should",
+            "cuec_gpt_reasoning": "The statement assigns responsibility explicitly to user entities regarding compliance with Bitwarden's terms.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC2.2",
+            "cuec_justification": "Relates to commitments and responsibilities under the TSC framework for compliance."
+        },
+        {
+            "cuec_tsc_id": null,
+            "cuec_description": "User entities should review functionality changes, product level changes and enhancements and report if there are any incidents impacting Security and Confidentiality due to changes made.",
+            "cuec_line_ref": 9,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities should",
+            "cuec_gpt_reasoning": "The statement assigns responsibility to user entities to monitor and report incidents related to security and confidentiality.",
+            "cuec_framework_alignment": "COSO or AICPA_TSC",
+            "cuec_framework_alignment_id": null,
+            "cuec_justification": "Addresses monitoring and incident management, which aligns generically to COSO and AICPA TSC frameworks."
+        }
+    ],
+    "excluded": [
+        {
+            "excluded_description": "This section describes additional policies, processes, and controls, that should be in operation at the user entity to complement the controls performed by Bitwarden.",
+            "excluded_reason": "General description of purpose, not a specific control assignment."
+        },
+        {
+            "excluded_description": "However, there may be control objectives or related controls not identified in this report, which may be appropriate for a specific user entity’s operation.",
+            "excluded_reason": "General note about control scope, not a specific responsibility assigned."
+        },
+        {
+            "excluded_description": "The complementary user entity control considerations listed below should not be considered a complete or comprehensive list that should be employed by user entities.",
+            "excluded_reason": "General disclaimer, not a specific responsibility assigned."
+        },
+        {
+            "excluded_description": "Independent auditors or user entities should consider whether the following controls have been placed in operation by the user entity.",
+            "excluded_reason": "General instruction or advisory, not a specific control assignment."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+GPT EXCLUDED: desc= reason=
+CHUNK 28 ATTEMPT 1 PROMPT:
+
+You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+
+## Key Responsibility Phrases (High Confidence Indicators)
+When you see these phrases, **increase confidence** that the statement is a CUEC:
+- "Customer is responsible for", "Customer are responsible for"
+- "Entity is responsible for", "Entity are responsible for"
+- "User entity is responsible for", "User entities are responsible for"
+- "Client is responsible for", "Clients are responsible for"
+- "Customer must", "Customers must"
+- "Entity must", "Entities must"
+- "User entity must", "User entities must"
+- "[Organization/Company] should", "[Organization/Company] is expected to"
+
+## Rules
+1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
+2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
+3. Ignore any statement where responsibility is assigned to Bitwarden Inc., the Company, the service organization, service organization or the parent company.
+4. For each valid CUEC, extract:
+     - cuec_tsc_id: TSC ID if present, else null.
+     - cuec_description: full CUEC statement.
+     - cuec_line_ref: integer line number where found.
+     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
+     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
+     - cuec_gpt_reasoning: concise reasoning for inclusion.
+     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
+     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
+     - cuec_justification: brief rationale for framework alignment.
+5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
+     - excluded_description: the statement.
+     - excluded_reason: short reason why it is not a CUEC.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object containing two arrays: "cuecs" and "excluded".
+8. No markdown, commentary, or text outside JSON.
+
+## Output Example
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC6.1",
+            "cuec_description": "User entities must restrict access to their own credentials.",
+            "cuec_line_ref": 1254,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities must",
+            "cuec_gpt_reasoning": "Explicit customer responsibility language.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.1",
+            "cuec_justification": "Relates to access control under TSC Security."
+        }
+    ],
+    "excluded": [
+        {"excluded_description": "The service provider maintains backups daily.", "excluded_reason": "Vendor responsibility, not user entity."}
+    ]
+}
+
+SOC report Text:
+C 2.2) 
+• 
+User entities should review functionality changes, product level changes and enhancements and 
+report if there are any incidents impacting Security and Confidentiality due to changes made by 
+Bitwarden. (CC 7.3, CC 7.4, CC 7.5) 
+• 
+User entities should use secure SSL/TLS v1.2 encrypted mechanisms to transfer data to 
+Bitwarden. (CC 6.7) 
+• 
+Controls are in place to ensure consistent data file delivery (CC 6.7) 
+• 
+Controls are in place to ensure that, once client administrator accounts are enabled, clients are 
+responsible for administering access and additional user accounts for their own employees  
+(CC 6.8) 
+
+
+
+RESPONSE:
+{
+    "cuecs": [
+        {
+            "cuec_tsc_id": "CC 7.3, CC 7.4, CC 7.5",
+            "cuec_description": "User entities should review functionality changes, product level changes and enhancements and report if there are any incidents impacting Security and Confidentiality due to changes made by Bitwarden.",
+            "cuec_line_ref": 2,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities should",
+            "cuec_gpt_reasoning": "Explicitly assigns responsibility to user entities to review changes and report incidents.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC 7.3, CC 7.4, CC 7.5",
+            "cuec_justification": "Aligns with TSC goals related to monitoring system changes and incident reporting."
+        },
+        {
+            "cuec_tsc_id": "CC 6.7",
+            "cuec_description": "User entities should use secure SSL/TLS v1.2 encrypted mechanisms to transfer data to Bitwarden.",
+            "cuec_line_ref": 4,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities should",
+            "cuec_gpt_reasoning": "Clear directive for user entities to use secure encryption methods when transferring data.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC 6.7",
+            "cuec_justification": "Relates to securing data transmission, consistent with TSC confidentiality requirements."
+        },
+        {
+            "cuec_tsc_id": "CC 6.8",
+            "cuec_description": "Clients are responsible for administering access and additional user accounts for their own employees once client administrator accounts are enabled.",
+            "cuec_line_ref": 8,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "Clients are responsible for",
+            "cuec_gpt_reasoning": "Specifically assigns clients administrative control over user access and account management.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC 6.8",
+            "cuec_justification": "Relates to access control, consistent with TSC security criteria."
+        }
+    ],
+    "excluded": [
+        {
+            "excluded_description": "Controls are in place to ensure consistent data file delivery (CC 6.7)",
+            "excluded_reason": "Responsibility is on the service organization, not on the user entity."
+        }
+    ]
+}
+---
+GPT EXCLUDED: desc= reason=

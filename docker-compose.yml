@@ -108,6 +108,8 @@ services:
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-ada-002}
+      DEFAULT_GPT_MODEL: ${DEFAULT_GPT_MODEL:-gpt-4o}
+      FRAMEWORK_MAPPING_MODEL: ${FRAMEWORK_MAPPING_MODEL:-gpt-4o-mini}
       CONTROL_EMBEDDING_MAPPING_ENABLED: "false"  # Temporarily disabled - GPT mapping overloads Dataiku
       SOCANALYZER_REDIS_URL: redis://redis:6379/0
       DOCKER_CONTROL_ENABLED: "true"
@@ -142,16 +144,23 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-      target: prod  # Use production stage with nginx
+      target: ${FRONTEND_TARGET:-dev}  # Use dev for hot reload, prod for production
     container_name: socanalyzer-frontend
     restart: unless-stopped
     depends_on:
       - backend
     ports:
-      - "3000:80"  # Map to nginx port
+      - "3000:3000"  # Vite dev server port (use 80 for prod)
     volumes:
-      # Bind mount frontend build for live updates
-      - ./frontend/build:/usr/share/nginx/html
+      # Bind mount source code for live editing (dev mode)
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/tsconfig.node.json:/app/tsconfig.node.json
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # Better file watching on Windows
     networks:
       - socanalyzer-network
 

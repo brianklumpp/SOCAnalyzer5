@@ -1,6 +1,8 @@
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import pathlib
+import json as _json
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -102,6 +104,8 @@ DATAIKU_DSS_PROJECT = os.getenv("DATAIKU_DSS_PROJECT", "SOLIDIGM_GPT_API_ACCESS"
 DATAIKU_CATALOG_MAP = {
     # High-quality model mapping
     "gpt-4o": os.getenv("DATAIKU_LLM_GPT4O", "azureopenai:Azure-OpenAI-Prod:gpt-4o"),
+    # Cost-effective model for framework mapping and other simple tasks
+    "gpt-4o-mini": os.getenv("DATAIKU_LLM_GPT4O_MINI", "azureopenai:Azure-OpenAI-Prod:gpt-4o-mini"),
     # Cost-effective/default fallback for 3.5 usage
     "gpt-3.5-turbo": os.getenv("DATAIKU_LLM_GPT35", "azureopenai:Azure-OpenAI-Prod:gpt-4o-mini"),
     # Optional additional mappings (available in catalog)
@@ -172,6 +176,105 @@ CONTROL_BATCH_SIZE = int(os.getenv("CONTROL_BATCH_SIZE", "1"))
 # Significant speedup for reports with repetitive controls (e.g., "Review of X" controls)
 # Cache uses Redis with 24-hour TTL, keyed by control description hash
 ENABLE_FRAMEWORK_CACHE = os.getenv("ENABLE_FRAMEWORK_CACHE", "true").lower() == "true"
+
+# ============================================================================
+# MULTI-THREADING CONFIGURATION (v2.1.0)
+# ============================================================================
+# Enable parallel control extraction (processes multiple chunks concurrently)
+# When enabled, uses IntelligentTaskExecutor to extract controls from 4 chunks at once
+# Expected speedup: 3-4x faster for control extraction phase
+ENABLE_PARALLEL_EXTRACTION = os.getenv("ENABLE_PARALLEL_EXTRACTION", "true").lower() == "true"
+
+# Enable parallel metadata extraction (product, dates, cuec, subservice orgs)
+# When enabled, uses IntelligentTaskExecutor to run 5 metadata extractors concurrently
+# Expected speedup: 4-5x faster for metadata extraction phase
+ENABLE_PARALLEL_METADATA_EXTRACTION = os.getenv("ENABLE_PARALLEL_METADATA_EXTRACTION", "true").lower() == "true"
+
+# Enable parallel framework mapping (maps multiple controls and frameworks concurrently)
+# When enabled, uses nested parallelism: 4 controls × N frameworks = 12-20 concurrent calls
+# Expected speedup: 2-3x faster for framework mapping phase
+ENABLE_PARALLEL_MAPPING = os.getenv("ENABLE_PARALLEL_MAPPING", "true").lower() == "true"
+
+# Control framework mapping batch size (number of controls mapped concurrently)
+# Determines how many controls are mapped to frameworks in parallel
+# Recommended: 15 for optimal performance with batched mode (3x increase from 5)
+# Can adjust to 10 for conservative systems or 20 for high-end servers
+# Note: Higher values may hit API rate limits (but less likely with batched mode)
+CONTROL_FRAMEWORK_MAPPING_BATCH_SIZE = int(os.getenv("CONTROL_FRAMEWORK_MAPPING_BATCH_SIZE", "15"))
+
+# --- NEW: Batched Framework Mapping Optimization (20-30x speedup) ---
+# Enable batched framework mapping: Maps control to ALL frameworks in single API call
+# When True: 1 API call per control (all 7 frameworks at once) = 6-7x faster
+# When False: Falls back to sequential mapping (7 API calls per control)
+BATCH_ALL_FRAMEWORKS_IN_ONE_CALL = os.getenv("BATCH_ALL_FRAMEWORKS_IN_ONE_CALL", "true").lower() == "true"
+
+# GPT model for framework mapping (independent of DEFAULT_GPT_MODEL)
+# Recommended: "gpt-4o-mini" for 2x speedup + 97% cost savings (simple pattern matching)
+# Alternative: "gpt-4o" for highest accuracy (but slower and 30x more expensive)
+# Cost comparison: gpt-4o-mini ($0.15/1M) vs gpt-4o ($5/1M input tokens)
+FRAMEWORK_MAPPING_MODEL = os.getenv("FRAMEWORK_MAPPING_MODEL", "gpt-4o-mini")
+
+# Timeout for batched framework mapping API calls (seconds)
+# Batched calls take longer since they map to 7 frameworks at once
+# Recommended: 45 seconds (conservative), 30 for faster timeout, 60 for very large controls
+FRAMEWORK_MAPPING_TIMEOUT_SECONDS = int(os.getenv("FRAMEWORK_MAPPING_TIMEOUT_SECONDS", "45"))
+# --- END: Batched Framework Mapping Settings ---
+
+# Maximum worker threads for parallel execution
+# Controls outer parallelism (number of controls/chunks processed at once)
+# Recommended: 4 for most systems, 2-3 for lower-spec machines, 6-8 for high-end servers
+# Note: Inner parallelism (frameworks per control) uses separate thread pool
+MAX_WORKER_THREADS = int(os.getenv("MAX_WORKER_THREADS", "7"))
+
+# Parallel control batch size (number of controls processed per batch)
+# Higher values = better throughput but less frequent progress updates
+# Recommended: 1 for best progress visibility, 2-3 for maximum throughput
+PARALLEL_CONTROL_BATCH_SIZE = int(os.getenv("PARALLEL_CONTROL_BATCH_SIZE", "1"))
+
+# Parallel framework batch size (max frameworks mapped concurrently per control)
+# Typically matches number of available frameworks (TSC, COSO, ISAE3402, etc.)
+# Set to 0 for unlimited (maps all frameworks in parallel)
+PARALLEL_FRAMEWORK_BATCH_SIZE = int(os.getenv("PARALLEL_FRAMEWORK_BATCH_SIZE", "0"))
+
+# CPU usage threshold for adaptive throttling (0-100%)
+# If CPU exceeds this threshold, parallel tasks will back off exponentially
+# Recommended: 70% for shared servers, 85% for dedicated machines
+CPU_THRESHOLD = int(os.getenv("CPU_THRESHOLD", "70"))
+
+# Memory usage threshold for adaptive throttling (0-100%)
+# If memory exceeds this threshold, parallel tasks will back off exponentially
+# Recommended: 80% for most systems, 70% for memory-constrained environments
+MEMORY_THRESHOLD = int(os.getenv("MEMORY_THRESHOLD", "80"))
+
+# Circuit breaker failure threshold
+# After this many consecutive failures, executor enters OPEN state (stops accepting tasks)
+# Tasks resume after timeout period (CIRCUIT_BREAKER_TIMEOUT)
+CIRCUIT_BREAKER_THRESHOLD = int(os.getenv("CIRCUIT_BREAKER_THRESHOLD", "5"))
+
+# Circuit breaker timeout in seconds
+# How long to wait in OPEN state before testing recovery (HALF_OPEN state)
+CIRCUIT_BREAKER_TIMEOUT = int(os.getenv("CIRCUIT_BREAKER_TIMEOUT", "30"))
+
+# Task timeout in seconds
+# Maximum time allowed for a single task (control extraction or framework mapping)
+# Tasks exceeding this timeout will be cancelled
+TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT", "300"))
+
+# Adaptive throttle check interval in seconds
+# How frequently to check CPU/memory usage for throttling decisions
+THROTTLE_CHECK_INTERVAL = float(os.getenv("THROTTLE_CHECK_INTERVAL", "2.0"))
+
+# Maximum throttle delay in milliseconds
+# Upper bound for exponential backoff when CPU/memory is high
+MAX_THROTTLE_DELAY_MS = int(os.getenv("MAX_THROTTLE_DELAY_MS", "5000"))
+
+# Scan queue configuration
+# Maximum number of scans that can be queued at once
+MAX_QUEUED_SCANS = int(os.getenv("MAX_QUEUED_SCANS", "50"))
+
+# Scan queue TTL in seconds (default 7 days)
+# How long completed/failed scan records remain in Redis before expiring
+SCAN_QUEUE_TTL = int(os.getenv("SCAN_QUEUE_TTL", "604800"))
 # Page proximity scoring weight (0.05 = 5% bonus for adjacent pages)
 PAGE_PROXIMITY_WEIGHT = float(os.getenv("PAGE_PROXIMITY_WEIGHT", "0.05"))
 # Control completeness penalty - reduce confidence by this amount if missing required fields
@@ -759,6 +862,62 @@ Return ONLY a JSON object with this exact structure:
 If you cannot confidently identify the auditor, set auditor=null and confidence=0.0.
 """
 
+AUDITOR_CONTROL_SECTION_PROMPT = """
+Analyze this text from a SOC report's control testing section. Look for the auditor firm name in section headings or titles.
+
+## Common Patterns
+- "<Auditor Name> Test of Controls"
+- "Tests of Controls Performed by <Auditor Name>"
+- "<Auditor Name>'s Testing Procedures"
+- Firm name in section headers/titles
+
+## Text from Control Testing Section
+{text}
+
+## Output Format (JSON only)
+{{
+  "auditor": "Firm Name" or null,
+  "confidence": 0.0-1.0,
+  "reasoning": "Explanation"
+}}
+
+Only extract if you find a clear CPA firm name in a heading/title. Return null if no firm name found.
+"""
+
+AUDITOR_CONTEXT_INFERENCE_PROMPT = """
+You are an expert in SOC audit reports and CPA firms. The auditor firm's name is missing from the extracted text (likely because it appears as a logo/image in the PDF), but we have context clues.
+
+Analyze the following text excerpt from the report and infer which CPA firm performed the audit:
+
+## Text Excerpt
+{text}
+
+## Context Clues to Consider
+1. **Letterhead/Header**: Look for service line descriptions (e.g., "Assurance | Tax | Advisory")
+2. **Location**: City/state mentioned in headers or signature blocks
+3. **Professional Language**: Phrasing and structure typical of specific firms
+4. **Format**: Report layout and section organization
+
+## Known Major SOC Audit Firms by City
+- **Minneapolis**: CliftonLarsonAllen LLP, RSM US LLP, BDO USA P.C.
+- **New York**: Deloitte, PwC, KPMG, EY, BDO
+- **Atlanta**: Schellman & Company, Aprio LLP
+- **Denver**: Moss Adams LLP, BDO USA P.C.
+- **Chicago**: RSM US LLP, Grant Thornton LLP, BDO USA P.C.
+
+## Your Task
+Based on the context clues above, make your BEST EDUCATED GUESS about which firm performed this audit.
+
+## Output Format (JSON only)
+{{
+  "auditor": "Firm Name" or null,
+  "confidence": 0.0-1.0,
+  "reasoning": "Explanation of inference"
+}}
+
+If you cannot make a reasonable inference, return {{"auditor": null, "confidence": 0.0, "reasoning": "Insufficient context clues"}}
+"""
+
 # Prompt for extracting the company being audited and any parent company
 COMPANY_EXTRACTION_PROMPT = """
 You are an expert SOC report analyst. Extract the company (legal entity) being audited, and any parent or owner company mentioned.
@@ -894,12 +1053,14 @@ CHARS_PER_TOKEN = float(os.getenv('CHARS_PER_TOKEN', '4.0'))
 # Model-aware context window sizes with env overrides
 _CTX_GPT5 = int(os.getenv('GPT5_CONTEXT_TOKENS', '128000'))
 _CTX_GPT4O = int(os.getenv('GPT4O_CONTEXT_TOKENS', '128000'))
+_CTX_GPT4O_MINI = int(os.getenv('GPT4O_MINI_CONTEXT_TOKENS', '128000'))  # NEW: gpt-4o-mini support
 _CTX_GPT41 = int(os.getenv('GPT41_CONTEXT_TOKENS', '128000'))
 _CTX_GPT35 = int(os.getenv('GPT35_CONTEXT_TOKENS', '16000'))
 
 LOGICAL_MODEL_CONTEXT = {
     'gpt-5': _CTX_GPT5,
     'gpt-4o': _CTX_GPT4O,
+    'gpt-4o-mini': _CTX_GPT4O_MINI,  # NEW: gpt-4o-mini (2x faster, 97% cheaper)
     'gpt-4.1': _CTX_GPT41,
     'gpt-3.5-turbo': _CTX_GPT35,
 }
@@ -953,7 +1114,182 @@ GPT_MODELS = {
     'subservice_orgs_extractor': DEFAULT_GPT_MODEL,
     'subservice_orgs_gpt_verify': DEFAULT_GPT_MODEL,
     'executive_summary': DEFAULT_GPT_MODEL,
+    'framework_mapping': FRAMEWORK_MAPPING_MODEL,
 }
+
+# Bulk test throttle delay (milliseconds) to avoid API rate limits during model testing
+BULK_TEST_THROTTLE_MS = int(os.getenv('BULK_TEST_THROTTLE_MS', '500'))
+
+# Runtime model configuration helpers with dual-layer persistence (Redis + Database)
+def get_runtime_model_config(extractor_name: str) -> str:
+    """
+    Get runtime model configuration for an extractor.
+    Uses fallback chain: Redis (instant) → Database (persistence) → GPT_MODELS (default).
+    
+    Args:
+        extractor_name: Name of the extractor (e.g., 'control_extractor_v2', 'framework_mapping')
+    
+    Returns:
+        Model name to use (e.g., 'gpt-4o', 'gpt-4o-mini')
+    """
+    import logging
+    from typing import Optional
+    
+    logger = logging.getLogger(__name__)
+    
+    # Try Redis first for instant access
+    try:
+        from .utils.redis_helpers import _get_redis
+        redis_client = _get_redis()
+        redis_key = f"model_config:{extractor_name}"
+        model_name = redis_client.get(redis_key)
+        if model_name:
+            logger.debug(f"Model config from Redis: {extractor_name} → {model_name}")
+            return model_name
+    except Exception as e:
+        logger.warning(f"Redis lookup failed for {extractor_name}: {e}")
+    
+    # Try database for persistence across restarts
+    try:
+        import asyncio
+        from sqlalchemy import text
+        from .database import engine
+        
+        # Use sync connection for config access
+        with engine.sync_engine.connect() as conn:
+            result = conn.execute(
+                text("SELECT model_name FROM model_config WHERE extractor_name = :name"),
+                {"name": extractor_name}
+            )
+            row = result.fetchone()
+            if row:
+                model_name = row[0]
+                logger.debug(f"Model config from DB: {extractor_name} → {model_name}")
+                
+                # Update Redis cache
+                try:
+                    from .utils.redis_helpers import _get_redis
+                    redis_client = _get_redis()
+                    redis_client.set(f"model_config:{extractor_name}", model_name, ex=86400)  # 24h TTL
+                except Exception:
+                    pass
+                
+                return model_name
+    except Exception as e:
+        logger.warning(f"Database lookup failed for {extractor_name}: {e}")
+    
+    # Fallback to default configuration
+    default_model = GPT_MODELS.get(extractor_name, DEFAULT_GPT_MODEL)
+    logger.debug(f"Model config from default: {extractor_name} → {default_model}")
+    return default_model
+
+
+def set_runtime_model_config(extractor_name: str, model_name: str, changed_by: Optional[str] = None) -> None:
+    """
+    Set runtime model configuration for an extractor.
+    Persists to both Redis (instant updates) and Database (restart resilience).
+    Logs changes to audit trail.
+    
+    Args:
+        extractor_name: Name of the extractor
+        model_name: Model name to assign
+        changed_by: Username or identifier of who made the change (for audit trail)
+    """
+    import logging
+    from datetime import datetime, timezone
+    
+    logger = logging.getLogger(__name__)
+    old_model = get_runtime_model_config(extractor_name)
+    
+    # Update Redis for instant access
+    try:
+        from .utils.redis_helpers import _get_redis
+        redis_client = _get_redis()
+        redis_key = f"model_config:{extractor_name}"
+        redis_client.set(redis_key, model_name, ex=86400)  # 24h TTL
+        logger.info(f"Updated Redis model config: {extractor_name} → {model_name}")
+    except Exception as e:
+        logger.error(f"Failed to update Redis for {extractor_name}: {e}")
+    
+    # Update database for persistence
+    try:
+        from sqlalchemy import text
+        from .database import engine
+        
+        with engine.sync_engine.connect() as conn:
+            # Upsert: insert or update on conflict
+            conn.execute(
+                text("""
+                    INSERT INTO model_config (extractor_name, model_name, updated_at, changed_by)
+                    VALUES (:name, :model, :updated, :user)
+                    ON CONFLICT (extractor_name) 
+                    DO UPDATE SET model_name = :model, updated_at = :updated, changed_by = :user
+                """),
+                {
+                    "name": extractor_name,
+                    "model": model_name,
+                    "updated": datetime.now(timezone.utc),
+                    "user": changed_by
+                }
+            )
+            conn.commit()
+            logger.info(f"Updated DB model config: {extractor_name} → {model_name}")
+    except Exception as e:
+        logger.error(f"Failed to update database for {extractor_name}: {e}")
+    
+    # Audit log
+    try:
+        audit_log_path = LOGS_DIR / "model_config_audit.log"
+        audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(audit_log_path, 'a', encoding='utf-8') as f:
+            timestamp = datetime.now(timezone.utc).isoformat()
+            log_entry = {
+                "timestamp": timestamp,
+                "extractor": extractor_name,
+                "old_model": old_model,
+                "new_model": model_name,
+                "changed_by": changed_by or "system"
+            }
+            f.write(_json.dumps(log_entry) + "\n")
+        logger.info(f"Audit log: {extractor_name}: {old_model} → {model_name}")
+    except Exception as e:
+        logger.warning(f"Failed to write audit log: {e}")
+
+
+def validate_model_assignments() -> list[dict]:
+    """
+    Validate all model assignments on startup.
+    Checks if assigned models exist in DATAIKU_CATALOG_MAP.
+    
+    Returns:
+        List of warnings for unavailable models
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    warnings = []
+    
+    # Get all configured extractors
+    for extractor_name in GPT_MODELS.keys():
+        try:
+            assigned_model = get_runtime_model_config(extractor_name)
+            if assigned_model not in DATAIKU_CATALOG_MAP:
+                warning = {
+                    "extractor": extractor_name,
+                    "model": assigned_model,
+                    "message": f"Model '{assigned_model}' not found in DATAIKU_CATALOG_MAP"
+                }
+                warnings.append(warning)
+                logger.warning(f"⚠️ {extractor_name} assigned to unavailable model: {assigned_model}")
+        except Exception as e:
+            logger.error(f"Failed to validate {extractor_name}: {e}")
+    
+    if warnings:
+        logger.warning(f"Found {len(warnings)} model assignment issues")
+    else:
+        logger.info("✅ All model assignments validated successfully")
+    
+    return warnings
 
 SECTION_TOPICS = {
     "Management_Assertion": [
@@ -2189,25 +2525,23 @@ Analyze this text (first line is line {start_line}). Extract ALL control blocks 
 # These are regex patterns (case-insensitive). Customize as needed.
 ## Removed: deviation regex patterns (heuristics no longer used)
 
+# ⚠️ CRITICAL: DO NOT add control_tsc_id, control_coso_id, etc. - they were REMOVED in v2.1.0
+# ✅ USE: framework_mappings (JSON), primary_framework, primary_criterion_id instead
+# See DEPRECATED_FEATURES.md for details
 TABLE_FIELD_MAP = {
     "company": ["name", "parent_company", "confidence", "scan_id", "company_domain", "logo_url"],
     "control": [
         "control_id", "control_desc", "control_test", "control_test_results", "has_deviation", "deviation_desc", "control_page_refs", "control_line_ref", "control_seq",
-        "control_tsc_id", "control_coso_id", "control_tsc_similarity", "control_coso_similarity", "control_tsc_confidence_pct",
-        "control_coso_confidence_pct", "control_closest_framework", "control_tsc_section", "control_coso_section", "control_soc_domain",
+        "control_soc_domain",
         "financial_assertions", "framework_category",
-        "control_tsc_mappings", "control_coso_mappings",
         "framework_mappings", "primary_framework", "primary_criterion_id", "primary_confidence",
         "control_status", "merged_to_control_id", "control_gpt_opinion", "control_gpt_reasoning", "control_confidence", "confidence_calc", "pdf_snippet", "scan_id"
     ],
     "cuec": [
-        "cuec_seq", "cuec_tsc_id", "cuec_description", "cuec_line_ref", "cuec_page_refs", "cuec_confidence", "cuec_gpt_opinion",
-        "cuec_distance_from_cuec_keywords", "cuec_gpt_reasoning", "cuec_framework_alignment", "cuec_framework_alignment_id",
-        "cuec_justification", "cuec_coso_id", "cuec_tsc_similarity", "cuec_coso_similarity", "cuec_tsc_confidence_pct",
-        "cuec_coso_confidence_pct", "cuec_closest_framework", "cuec_confidence_justification",
-        "cuec_tsc_mappings", "cuec_coso_mappings",
+        "cuec_seq", "cuec_description", "cuec_line_ref", "cuec_page_refs", "cuec_confidence", "cuec_gpt_opinion",
+        "cuec_distance_from_cuec_keywords", "cuec_gpt_reasoning", "cuec_justification", "cuec_confidence_justification",
         "framework_mappings", "primary_framework", "primary_criterion_id", "primary_confidence",
-        "annotation", "control_strength", "pdf_snippet", "scan_id"
+        "annotation", "control_strength", "scan_id"
     ],
     "subservice_org": ["name", "confidence", "pdf_snippet", "scan_id"],
     "product": ["name", "scan_id"]

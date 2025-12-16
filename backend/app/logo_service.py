@@ -161,7 +161,7 @@ Return ONLY a JSON object (no markdown, no explanatory text):
         if logo_url and confidence >= 0.5:
             # Validate URL is reachable
             try:
-                r = requests.head(logo_url, timeout=5, allow_redirects=True)
+                r = requests.head(logo_url, timeout=10, allow_redirects=True)
                 if r.status_code == 200:
                     company.logo_url = logo_url
                     db.commit()
@@ -170,7 +170,7 @@ Return ONLY a JSON object (no markdown, no explanatory text):
                 else:
                     logger.warning(f"[LOGO_SERVICE_GPT] URL not reachable ({r.status_code}): {logo_url}")
                     # Cache anyway if high confidence (Strategy A)
-                    if confidence >= 0.8:
+                    if confidence >= 0.7:
                         company.logo_url = logo_url
                         db.commit()
                         logger.info(f"[LOGO_SERVICE_GPT] ✓ Cached high-confidence URL despite validation failure")
@@ -179,7 +179,7 @@ Return ONLY a JSON object (no markdown, no explanatory text):
             except Exception as req_err:
                 logger.warning(f"[LOGO_SERVICE_GPT] Failed to validate URL: {req_err}")
                 # Cache anyway if high confidence (Strategy A)
-                if confidence >= 0.8:
+                if confidence >= 0.7:
                     company.logo_url = logo_url
                     db.commit()
                     logger.info(f"[LOGO_SERVICE_GPT] ✓ Cached high-confidence URL despite validation error")

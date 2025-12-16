@@ -39,7 +39,7 @@ def get_redis_client(redis_url: str):
     return redis.Redis(connection_pool=_redis_pool)
 
 
-async def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
+def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
     """
     Get job data from Redis.
     
@@ -55,7 +55,7 @@ async def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
         redis_client = get_redis_client(REDIS_URL)
         
     try:
-        job_json = await redis_client.get(f"job:{job_id}")
+        job_json = redis_client.get(f"job:{job_id}")
     except Exception as e:
         logger.warning(f"[get_job] Redis access failed: {e}")
         return None
@@ -68,7 +68,7 @@ async def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
     return None
 
 
-async def set_job(
+def set_job(
     job_id: str, 
     job_dict: Dict[str, Any], 
     redis_client=None,
@@ -87,14 +87,14 @@ async def set_job(
         from ..config import REDIS_URL
         redis_client = get_redis_client(REDIS_URL)
         
-    await redis_client.set(
+    redis_client.set(
         f"job:{job_id}", 
         json.dumps(job_dict), 
         ex=expiry_seconds
     )
 
 
-async def del_job(job_id: str, redis_client=None) -> None:
+def del_job(job_id: str, redis_client=None) -> None:
     """
     Delete job data from Redis.
     
@@ -106,4 +106,4 @@ async def del_job(job_id: str, redis_client=None) -> None:
         from ..config import REDIS_URL
         redis_client = get_redis_client(REDIS_URL)
         
-    await redis_client.delete(f"job:{job_id}")
+    redis_client.delete(f"job:{job_id}")

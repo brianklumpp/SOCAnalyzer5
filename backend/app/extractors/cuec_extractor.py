@@ -21,6 +21,7 @@ import logging
 import re
 from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional, Any
 from .. import config
 from ..gpt_client import gpt_extract
 
@@ -113,11 +114,11 @@ def levenshtein_distance(a, b):
         v0, v1 = v1, v0
     return v0[len(b)]
 
-def calculate_distance_from_cuec_keywords(desc):
+def calculate_distance_from_cuec_keywords(desc, cuec_keywords):
     desc = (desc or '').lower()
     min_dist = 999
     desc_words = desc.split()
-    for kw in CUEC_KEYWORDS:
+    for kw in cuec_keywords:
         kw_words = kw.split()
         n = len(kw_words)
         # Slide a window of length n over the description words
@@ -128,7 +129,7 @@ def calculate_distance_from_cuec_keywords(desc):
                 min_dist = dist
     return min_dist
 
-def extract_cuecs(report_type: str = "SOC2"):
+def extract_cuecs(report_type: str = "SOC2", job_id: Optional[str] = None, redis_client: Optional[Any] = None):
     """Unified CUEC extraction for SOC1 and SOC2 reports.
     
     Args:
@@ -139,7 +140,7 @@ def extract_cuecs(report_type: str = "SOC2"):
     """
     # Reset output file at the start of extraction
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
-        f.write('[]\n')
+        f.write('[]')
     section_results = load_json(SECTION_JSON_PATH)
     desc_section = next((s for s in section_results if s.get('topic') == 'Description_of_System'), None)
     if not desc_section:
@@ -255,7 +256,7 @@ def extract_cuecs(report_type: str = "SOC2"):
     # Prepare company and parent company names for prompt
     company_names_str = ', '.join(company_names) if company_names else 'the company'
     parent_company_names_str = ', '.join(parent_company_names) if parent_company_names else 'the parent company'
-    def process_chunk(idx, chunk, chunk_line_refs, seq, available_frameworks):
+    def process_chunk(idx, chunk, chunk_line_refs, seq, available_frameworks, cuec_keywords):
         # This is the body of your current for idx, chunk in enumerate(chunks): loop
         # Returns filtered_data, seq
         logging.debug(f"[CUEC] Chunk {idx}: start_line={start_line}, end_line={end_line}, chunk_len={len(chunk)}, chunk_preview={chunk[:200]!r}")
@@ -463,7 +464,7 @@ def extract_cuecs(report_type: str = "SOC2"):
                 
                 # Passed all filters - add to results and process
                 cuec['cuec_seq'] = seq
-                cuec['cuec_distance_from_cuec_keywords'] = calculate_distance_from_cuec_keywords(desc)
+                cuec['cuec_distance_from_cuec_keywords'] = calculate_distance_from_cuec_keywords(desc, cuec_keywords)
                 desc_snippet = ' '.join(desc.split()[:10])
                 chunk_lines = chunk.splitlines()
                 found_line = None
@@ -569,7 +570,7 @@ def extract_cuecs(report_type: str = "SOC2"):
     cuec_results = []
     seq = 1
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(process_chunk, idx, chunk, chunk_line_refs, seq, available_frameworks) for idx, chunk in enumerate(chunks)]
+        futures = [executor.submit(process_chunk, idx, chunk, chunk_line_refs, seq, available_frameworks, cuec_keywords) for idx, chunk in enumerate(chunks)]
         for future in as_completed(futures):
             filtered_data, seq = future.result()
             for cuec in filtered_data:
@@ -623,6 +624,27 @@ def extract_cuecs(report_type: str = "SOC2"):
                     logging.error(f"[PATCH] Error assigning cuec_line_ref: {e}")
                     cuec['cuec_line_ref'] = None
                 cuec_results.append(cuec)
+                
+                # Update Redis progress every 5 CUECs
+                if job_id and redis_client and len(cuec_results) % 5 == 0:
+                    try:
+                        cuecs_count = len(cuec_results)
+                        job_json = redis_client.get(f"job:{job_id}")
+                        if job_json:
+                            job_data = json.loads(job_json)
+                            if "counters" not in job_data:
+                                job_data["counters"] = {}
+                            job_data["counters"]["cuecs_count"] = cuecs_count
+                            
+                            # Update status every 5 CUECs
+                            if cuecs_count % 5 == 0:
+                                job_data["status"] = f"Extracting CUECs: {cuecs_count} found..."
+                            
+                            redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=86400)
+                            logging.info(f"[PROGRESS] {cuecs_count} CUECs identified...")
+                    except Exception as progress_err:
+                        logging.warning(f"Could not update CUEC progress: {progress_err}")
+                
                 # Streaming write to JSON file
                 with open(OUTPUT_JSON_PATH, 'a', encoding='utf-8') as f:
                     json.dump(cuec, f, ensure_ascii=False, indent=2)

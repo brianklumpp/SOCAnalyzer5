@@ -132,6 +132,17 @@ def extract_subservice_orgs():
     print(f"\n[Subservice Orgs] Found {total_chunks} chunks to process", flush=True)
     print(f"[Subservice Orgs] Starting extraction...\n", flush=True)
     
+    # Update Redis status if job_id provided
+    if job_id and redis_client:
+        try:
+            job_json = redis_client.get(f"job:{job_id}")
+            if job_json:
+                job_data = json.loads(job_json)
+                job_data["status"] = "Analyzing subservice organizations..."
+                redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=86400)
+        except Exception:
+            pass  # Fail silently
+    
     for idx, chunk in enumerate(chunks):
         # Show progress in console with immediate flush
         progress_msg = f"[Subservice Orgs] Processing chunk {idx + 1}/{total_chunks}..."

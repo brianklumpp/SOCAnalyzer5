@@ -288,25 +288,63 @@ def extract_auditor_with_validation(text: str, company_line: str) -> Tuple[Optio
             logging.error(f'Stage 2: Failed to parse GPT response: {stage2_response} | Error: {e}')
             debug_log.write(f"Stage 2 Parse Error: {e}\n")
             debug_log.write(f"Raw response: {stage2_response}\n")
-            # Try regex fallback
+            
+            # Try fallback sequence on parse error
+            debug_log.write("Parse error - attempting fallback sequence...\n")
+            
+            # Fallback 1: Regex search
             fallback_auditor = _regex_fallback_search(text)
             if fallback_auditor:
                 debug_log.write(f"Regex fallback found: {fallback_auditor}\n")
                 return fallback_auditor, 0.65, [stage2_response], "Regex fallback (Stage 2 parse error)"
-            return None, 0, [stage2_response], f"Stage 2 parse error: {e}"
+            
+            # Fallback 2: Control section
+            control_auditor = _extract_from_control_section(debug_log)
+            if control_auditor:
+                debug_log.write(f"Control section fallback found: {control_auditor}\n")
+                return control_auditor, 0.60, [stage2_response], "Found in control section (Stage 2 parse error)"
+            
+            # Fallback 3: Context inference
+            inferred_auditor = _infer_auditor_from_context(text, debug_log)
+            if inferred_auditor:
+                debug_log.write(f"Context inference found: {inferred_auditor}\n")
+                return inferred_auditor, 0.55, [stage2_response], "Context inference (Stage 2 parse error)"
+            
+            # All fallbacks failed
+            return "Auditor Could Not Be Identified", 0, [stage2_response], f"Stage 2 parse error: {e}"
         
-        # If no auditor identified, try regex fallback
+        # If no auditor identified, try fallback sequence: regex -> control section -> context inference
         if not auditor:
-            logging.warning("Stage 2: GPT did not identify an auditor - trying regex fallback")
-            debug_log.write("\nNo auditor identified - attempting regex fallback...\n")
+            logging.warning("Stage 2: GPT did not identify an auditor - trying fallback sequence")
+            debug_log.write("\nNo auditor identified - attempting fallback sequence...\n")
+            
+            # Fallback 1: Regex search
+            debug_log.write("Fallback 1: Regex search...\n")
             fallback_auditor = _regex_fallback_search(text)
             if fallback_auditor:
                 debug_log.write(f"Regex fallback found: {fallback_auditor}\n")
                 debug_log.write(f"Final confidence: 0.65 (regex fallback)\n")
                 return fallback_auditor, 0.65, [stage2_response], "Regex fallback (Stage 2 found no auditor)"
-            else:
-                debug_log.write("Regex fallback found nothing\n")
-                return None, 0, [stage2_response], "Stage 2 identified no auditor, regex fallback unsuccessful"
+            
+            # Fallback 2: Control section headings
+            debug_log.write("Fallback 2: Control section headings...\n")
+            control_auditor = _extract_from_control_section(debug_log)
+            if control_auditor:
+                debug_log.write(f"Control section fallback found: {control_auditor}\n")
+                debug_log.write(f"Final confidence: 0.60 (control section)\n")
+                return control_auditor, 0.60, [stage2_response], "Found in control section headings"
+            
+            # Fallback 3: Context inference from letterhead/location
+            debug_log.write("Fallback 3: Context inference...\n")
+            inferred_auditor = _infer_auditor_from_context(text, debug_log)
+            if inferred_auditor:
+                debug_log.write(f"Context inference found: {inferred_auditor}\n")
+                debug_log.write(f"Final confidence: 0.55 (context inference)\n")
+                return inferred_auditor, 0.55, [stage2_response], "Inferred from letterhead/location context"
+            
+            # All fallbacks failed
+            debug_log.write("All fallback methods failed\n")
+            return "Auditor Could Not Be Identified", 0, [stage2_response], "All extraction methods unsuccessful"
         
         # ============================================================
         # CONFIDENCE ADJUSTMENTS
@@ -400,6 +438,107 @@ def _regex_fallback_search(text: str) -> Optional[str]:
     
     logging.warning("Regex fallback: No known audit firms found in text")
     return None
+
+def _extract_from_control_section(debug_log) -> Optional[str]:
+    """
+    Fallback: Search control testing section for auditor name in headings.
+    Common pattern: "<Auditor Name> Test of Controls" or "Tests of Controls Performed by <Auditor Name>"
+    
+    Returns: Auditor firm name if found, else None
+    """
+    try:
+        # Load section results to find control testing section
+        section_results = load_json(SECTION_JSON_PATH)
+        
+        # Find Control_Descriptions section
+        control_section = None
+        for s in section_results:
+            topic = s.get('topic', '')
+            if topic == 'Control_Descriptions':
+                control_section = s
+                break
+        
+        if not control_section:
+            debug_log.write("Control section fallback: No Control_Descriptions section found\n")
+            return None
+        
+        # Extract first 2-3 pages of control section
+        with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
+            txt_lines = f.readlines()
+        
+        start_line = control_section.get('start_line')
+        end_line = control_section.get('end_line')
+        
+        if not start_line or not end_line:
+            debug_log.write("Control section fallback: Missing line references\n")
+            return None
+        
+        # Extract first 2-3 pages (approximately 100-150 lines)
+        max_lines = min(150, end_line - start_line + 1)
+        control_text = extract_text_for_lines(txt_lines, start_line, start_line + max_lines - 1)
+        
+        debug_log.write(f"Control section fallback: Extracted {len(control_text)} chars from control section\n")
+        
+        # Use GPT prompt from config to find auditor in control section headings
+        prompt = config.AUDITOR_CONTROL_SECTION_PROMPT.format(text=control_text[:1500])
+        response = gpt_extract(prompt, 'auditor_extractor')
+        debug_log.write(f"Control section GPT response: {response}\n")
+        
+        data = json.loads(response)
+        auditor = data.get('auditor')
+        confidence = float(data.get('confidence', 0))
+        reasoning = data.get('reasoning', '')
+        
+        if auditor and confidence > 0.5:
+            logging.info(f"Control section fallback: Found '{auditor}' with confidence {confidence:.3f}")
+            logging.info(f"Control section reasoning: {reasoning}")
+            return auditor
+        else:
+            debug_log.write(f"Control section fallback: Low confidence or no firm (confidence={confidence:.3f})\n")
+            return None
+            
+    except Exception as e:
+        logging.error(f"Control section fallback failed: {e}")
+        debug_log.write(f"Control section fallback error: {e}\n")
+        return None
+
+def _infer_auditor_from_context(text: str, debug_log) -> Optional[str]:
+    """
+    Infer auditor firm from context clues when the firm name is missing from extracted text.
+    Common scenario: Firm name appears as logo/image on PDF and isn't extracted as text.
+    
+    Uses GPT to infer the firm based on:
+    - Service lines mentioned in letterhead (e.g., "Assurance | Tax | Advisory")
+    - City/location mentioned
+    - Professional language patterns
+    - Report structure and format
+    
+    Returns: Inferred firm name or None
+    """
+    # Use GPT prompt from config for context-based inference
+    inference_prompt = config.AUDITOR_CONTEXT_INFERENCE_PROMPT.format(text=text[:2000])
+    
+    try:
+        response = gpt_extract(inference_prompt, 'auditor_extractor')
+        debug_log.write(f"Context inference GPT response: {response}\n")
+        
+        data = json.loads(response)
+        inferred_firm = data.get('auditor')
+        confidence = float(data.get('confidence', 0))
+        reasoning = data.get('reasoning', '')
+        
+        if inferred_firm and confidence > 0.4:  # Only accept if reasonably confident
+            logging.info(f"Context inference: Inferred '{inferred_firm}' with confidence {confidence:.3f}")
+            logging.info(f"Context inference reasoning: {reasoning}")
+            return inferred_firm
+        else:
+            logging.warning(f"Context inference: Low confidence or no firm identified (confidence={confidence:.3f})")
+            return None
+            
+    except Exception as e:
+        logging.error(f"Context inference failed: {e}")
+        debug_log.write(f"Context inference error: {e}\n")
+        return None
 
 def extract_auditor_from_report():
     # Reset output file at the start of extraction
@@ -500,7 +639,7 @@ def extract_auditor_from_report():
     }
     
     # Apply header/footer confidence boost if detected
-    if header_footer_auditor and auditor:
+    if header_footer_auditor and auditor and auditor != "Auditor Could Not Be Identified":
         if header_footer_auditor.lower() == auditor.lower():
             # Match found - boost confidence (capped at 1.0)
             original_confidence = confidence
@@ -513,13 +652,13 @@ def extract_auditor_from_report():
             result['header_footer_mismatch'] = True
             result['header_footer_auditor'] = header_footer_auditor
             logging.warning(f"Header/footer detected different auditor: '{header_footer_auditor}' vs GPT: '{auditor}'. Keeping GPT result.")
-    elif header_footer_auditor and not auditor:
-        # No GPT result but header/footer found - use it with moderate confidence
+    elif header_footer_auditor and (not auditor or auditor == "Auditor Could Not Be Identified"):
+        # No GPT result (or identification failed) but header/footer found - use it with moderate confidence
         result['auditor'] = header_footer_auditor
         result['confidence'] = 0.70
-        result['validation_note'] = 'Detected from header/footer patterns (no GPT result)'
+        result['validation_note'] = 'Detected from header/footer patterns (GPT extraction unsuccessful)'
         result['header_footer_only'] = True
-        logging.info(f"Using header/footer detected auditor: {header_footer_auditor} (no GPT result)")
+        logging.info(f"Using header/footer detected auditor: {header_footer_auditor} (GPT extraction unsuccessful)")
     
     # GPT-only approach: if GPT didn't return an auditor, leave it as None
     save_json(result, AUDITOR_JSON_PATH)

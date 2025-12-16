@@ -106,15 +106,10 @@ Description 2: {desc2[:500]}"""
                         else:
                             confidence_score += 0.39
                 
-                # TSC/COSO mapping match
-                if primary.control_tsc_id and candidate.control_tsc_id:
-                    if primary.control_tsc_id == candidate.control_tsc_id:
+                # Framework mapping match
+                if primary.primary_criterion_id and candidate.primary_criterion_id:
+                    if primary.primary_criterion_id == candidate.primary_criterion_id:
                         confidence_score += 0.15
-                
-                if primary.control_coso_id and candidate.control_coso_id:
-                    if primary.control_coso_id == candidate.control_coso_id:
-                        if not (primary.control_tsc_id and candidate.control_tsc_id and primary.control_tsc_id == candidate.control_tsc_id):
-                            confidence_score += 0.15
                 
                 # Test procedure similarity
                 test1 = (primary.control_test or "").strip()
@@ -331,30 +326,23 @@ Description 2: {desc2[:500]}"""
                 confidence_score += 0.42
                 metadata["description_similarity"] = 0.6
     
-    # 2. TSC/COSO mapping analysis (15% weight)
-    tsc1 = (ctrl1.control_tsc_id or "").strip()
-    tsc2 = (ctrl2.control_tsc_id or "").strip()
-    coso1 = (ctrl1.control_coso_id or "").strip()
-    coso2 = (ctrl2.control_coso_id or "").strip()
+    # 2. Framework mapping analysis (15% weight)
+    criterion1 = (ctrl1.primary_criterion_id or "").strip()
+    criterion2 = (ctrl2.primary_criterion_id or "").strip()
+    framework1 = (ctrl1.primary_framework or "").strip()
+    framework2 = (ctrl2.primary_framework or "").strip()
     
     criteria_match = False
     criteria_differ = False
     
-    # Compare TSC mappings
-    if tsc1 and tsc2:
-        metadata["tsc1_primary"] = tsc1
-        metadata["tsc2_primary"] = tsc2
-        if tsc1 == tsc2:
-            confidence_score += 0.15
-            criteria_match = True
-        else:
-            criteria_differ = True
-    
-    # Compare COSO mappings (if no TSC match already)
-    if coso1 and coso2 and not criteria_match:
-        metadata["coso1_primary"] = coso1
-        metadata["coso2_primary"] = coso2
-        if coso1 == coso2:
+    # Compare primary framework mappings
+    if criterion1 and criterion2:
+        metadata["criterion1_primary"] = criterion1
+        metadata["criterion1_primary"] = criterion1
+        metadata["criterion2_primary"] = criterion2
+        metadata["framework1"] = framework1
+        metadata["framework2"] = framework2
+        if criterion1 == criterion2:
             confidence_score += 0.15
             criteria_match = True
         else:

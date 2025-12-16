@@ -92,11 +92,12 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
         if "analyst_notes" in data:
             ctrl.analyst_notes = data["analyst_notes"]
             now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
-            existing = ctrl.confidence_calc or ""
+            existing = ctrl.edit_log or ""
             separator = "\n" if existing and not existing.endswith("\n") else ""
-            ctrl.confidence_calc = f"{existing}{separator}Analyst notes updated {now}"
+            ctrl.edit_log = f"{existing}{separator}Analyst notes updated {now}"
         elif "confidence_calc" in data:
             ctrl.confidence_calc = data["confidence_calc"]
+        # Note: edit_log is auto-generated only, skip if sent from frontend
         
         if "annotation" in data:
             ctrl.annotation = data["annotation"]
@@ -115,11 +116,11 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
         if "deviation_desc" in data:
             ctrl.deviation_desc = data["deviation_desc"]
         
-        # Append audit note
+        # Append audit note to edit_log
         if justification_note:
-            prev = getattr(ctrl, "confidence_calc", "") or ""
+            prev = getattr(ctrl, "edit_log", "") or ""
             sep = "\n" if prev else ""
-            ctrl.confidence_calc = f"{prev}{sep}{justification_note}"
+            ctrl.edit_log = f"{prev}{sep}{justification_note}"
         
         # Mark executive summary stale
         await mark_executive_summary_stale(scan_id, db)
@@ -133,10 +134,13 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             "control_desc": ctrl.control_desc,
             "control_confidence": ctrl.control_confidence,
             "confidence_calc": ctrl.confidence_calc,
+            "edit_log": ctrl.edit_log,
             "analyst_notes": ctrl.analyst_notes,
             "annotation": ctrl.annotation,
-            "control_tsc_id": ctrl.control_tsc_id,
-            "control_coso_id": ctrl.control_coso_id,
+            "framework_mappings": ctrl.framework_mappings,
+            "primary_framework": ctrl.primary_framework,
+            "primary_criterion_id": ctrl.primary_criterion_id,
+            "primary_confidence": ctrl.primary_confidence,
             "control_page_refs": ctrl.control_page_refs,
             "has_deviation": ctrl.has_deviation,
             "deviation_desc": ctrl.deviation_desc
@@ -182,11 +186,12 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, 
         if "analyst_notes" in data:
             ctrl.analyst_notes = data["analyst_notes"]
             now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
-            existing = ctrl.confidence_calc or ""
+            existing = ctrl.edit_log or ""
             separator = "\n" if existing and not existing.endswith("\n") else ""
-            ctrl.confidence_calc = f"{existing}{separator}Analyst notes updated {now}"
+            ctrl.edit_log = f"{existing}{separator}Analyst notes updated {now}"
         elif "confidence_calc" in data:
             ctrl.confidence_calc = data["confidence_calc"]
+        # Note: edit_log is auto-generated only, skip if sent from frontend
         
         if "annotation" in data:
             ctrl.annotation = data["annotation"]
@@ -206,9 +211,9 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, 
             ctrl.deviation_desc = data["deviation_desc"]
         
         if justification_note:
-            prev = getattr(ctrl, "confidence_calc", "") or ""
+            prev = getattr(ctrl, "edit_log", "") or ""
             sep = "\n" if prev else ""
-            ctrl.confidence_calc = f"{prev}{sep}{justification_note}"
+            ctrl.edit_log = f"{prev}{sep}{justification_note}"
         
         await mark_executive_summary_stale(scan_id, db)
         db.add(ctrl)
@@ -221,10 +226,13 @@ async def patch_control_by_id(scan_id: int, control_db_id: int, data: Dict[str, 
             "control_desc": ctrl.control_desc,
             "control_confidence": ctrl.control_confidence,
             "confidence_calc": ctrl.confidence_calc,
+            "edit_log": ctrl.edit_log,
             "analyst_notes": ctrl.analyst_notes,
             "annotation": ctrl.annotation,
-            "control_tsc_id": ctrl.control_tsc_id,
-            "control_coso_id": ctrl.control_coso_id,
+            "framework_mappings": ctrl.framework_mappings,
+            "primary_framework": ctrl.primary_framework,
+            "primary_criterion_id": ctrl.primary_criterion_id,
+            "primary_confidence": ctrl.primary_confidence,
             "control_page_refs": ctrl.control_page_refs,
             "has_deviation": ctrl.has_deviation,
             "deviation_desc": ctrl.deviation_desc
@@ -453,8 +461,9 @@ async def get_duplicate_groups(scan_id: int, db=Depends(get_db)):
                 "control_seq": ctrl.control_seq,
                 "control_desc": ctrl.control_desc,
                 "control_test": ctrl.control_test,
-                "tsc_criteria": ctrl.control_tsc_id,
-                "coso_criteria": ctrl.control_coso_id,
+                "framework_mappings": ctrl.framework_mappings,
+                "primary_framework": ctrl.primary_framework,
+                "primary_criterion_id": ctrl.primary_criterion_id,
                 "control_confidence": ctrl.control_confidence,
                 "instance_differentiator": ctrl.instance_differentiator
             })
@@ -471,6 +480,7 @@ async def get_duplicate_groups(scan_id: int, db=Depends(get_db)):
 
 
 @router.post("/report/{scan_id}/controls/{control_db_id}/recompute_frameworks")
+@router.post("/report/{scan_id}/controls/id/{control_db_id}/recompute_frameworks")  # Alias for frontend
 async def recompute_control_frameworks(scan_id: int, control_db_id: int, db=Depends(get_db)):
     """Recompute framework mappings for a control using dynamic multi-framework system."""
     try:
@@ -522,6 +532,61 @@ async def batch_recompute_control_frameworks(scan_id: int, data: Dict[str, Any] 
         raise
     except Exception as e:
         logging.error(f"Error in batch recompute: {e}")
+        return JSONResponse({"error": str(e), "success": False}, status_code=500)
+
+
+@router.post("/report/{scan_id}/controls/recompute_all_high_confidence")
+async def recompute_all_high_confidence_controls(scan_id: int, db=Depends(get_db)):
+    """Recompute framework mappings for all high confidence controls (confidence > 70%)."""
+    try:
+        # Get all high confidence controls for this scan
+        result = await db.execute(
+            select(Control).where(
+                Control.scan_id == scan_id,
+                Control.control_confidence > 0.7
+            )
+        )
+        high_conf_controls = result.scalars().all()
+        
+        if not high_conf_controls:
+            return {
+                "success": True,
+                "total": 0,
+                "success_count": 0,
+                "failed_count": 0,
+                "message": "No high confidence controls found (confidence > 70%)"
+            }
+        
+        from ..services.framework_mapping_service import recompute_control_framework_mappings
+        
+        results = []
+        success_count = 0
+        failed_count = 0
+        
+        for control in high_conf_controls:
+            try:
+                result = await recompute_control_framework_mappings(scan_id, control.id, db)
+                results.append(result)
+                if result.get("success"):
+                    success_count += 1
+                else:
+                    failed_count += 1
+            except Exception as e:
+                logging.error(f"Error recomputing frameworks for control {control.id}: {e}")
+                results.append({"success": False, "control_id": control.id, "error": str(e)})
+                failed_count += 1
+        
+        return {
+            "success": True,
+            "total": len(high_conf_controls),
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "message": f"Recomputed {success_count} of {len(high_conf_controls)} high confidence controls",
+            "results": results
+        }
+        
+    except Exception as e:
+        logging.error(f"Error in bulk recompute for high confidence controls: {e}")
         return JSONResponse({"error": str(e), "success": False}, status_code=500)
 
 

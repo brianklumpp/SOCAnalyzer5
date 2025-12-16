@@ -9,9 +9,9 @@ from typing import Optional, Dict, Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Scan, Control, CUEC, SubserviceOrg
-from ..criteria import TSC_CRITERIA, COSO_2013_CRITERIA
-from ..gpt import ask_gpt_streaming
+from ..models import Scan, Control, CUEC, SubserviceOrg, Company, Product
+from ..config import TSC_CRITERIA, COSO_2013_CRITERIA
+from ..gpt_client import gpt_extract
 
 logger = logging.getLogger(__name__)
 
@@ -98,9 +98,19 @@ async def generate_executive_summary(scan_id: int, db: AsyncSession) -> Dict[str
     cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
     suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
     
-    # Build framework coverage tables
-    tsc_ids_found = set([getattr(ctrl, "control_tsc_id", None) for ctrl in controls if getattr(ctrl, "control_tsc_id", None)])
-    coso_ids_found = set([getattr(ctrl, "control_coso_id", None) for ctrl in controls if getattr(ctrl, "control_coso_id", None)])
+    # Build framework coverage tables from framework_mappings
+    tsc_ids_found = set()
+    coso_ids_found = set()
+    for ctrl in controls:
+        if ctrl.framework_mappings:
+            if "TSC" in ctrl.framework_mappings:
+                for mapping in ctrl.framework_mappings["TSC"]:
+                    if mapping.get("id"):
+                        tsc_ids_found.add(mapping["id"])
+            if "COSO" in ctrl.framework_mappings:
+                for mapping in ctrl.framework_mappings["COSO"]:
+                    if mapping.get("id"):
+                        coso_ids_found.add(mapping["id"])
     
     tsc_table = [
         {
@@ -199,9 +209,7 @@ Format your response as JSON with this structure:
 """
     
     # Call GPT
-    response_text = ""
-    async for chunk in ask_gpt_streaming(prompt, model="gpt-4", temperature=0.3):
-        response_text += chunk
+    response_text = gpt_extract(prompt, "executive_summary")
     
     # Parse JSON response
     try:

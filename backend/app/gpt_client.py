@@ -203,8 +203,8 @@ def run_gpt_inquiry(prompt_key, input_file=OUTPUT_TEXT_FILE, model=DEFAULT_GPT_M
                                           override_temperature=temperature, override_top_p=top_p))
     return "\n\n---\n\n".join(responses)
 
-def gpt_extract(prompt, extractor_name):
-    return _chat_completion(prompt, extractor_name)
+def gpt_extract(prompt, extractor_name, override_model=None):
+    return _chat_completion(prompt, extractor_name, override_model=override_model)
 
 
 # --- Provider implementations ---
@@ -448,7 +448,8 @@ def _call_dataiku_dss(messages, model, max_tokens, temperature, top_p) -> Tuple[
 def _chat_completion(prompt: str, extractor_name: str, *, override_model: Optional[str] = None,
                      override_temperature: Optional[float] = None, override_top_p: Optional[float] = None) -> str:
     from .gpt_tracker import track_gpt_call
-    model = override_model or GPT_MODELS.get(extractor_name, DEFAULT_GPT_MODEL)
+    from .config import get_runtime_model_config
+    model = override_model or get_runtime_model_config(extractor_name)
     # Use values from .env via config constants
     max_tokens = MAX_OUTPUT_TOKENS
     temperature = override_temperature if override_temperature is not None else DEFAULT_TEMPERATURE

@@ -133,9 +133,11 @@ if (Test-Path $envSource) {
     Write-Host "[WARN] .env not found, .env.dist not created" -ForegroundColor Yellow
 }
 
-# Create distribution directory
-Write-Host "[4/9] Creating distribution folder..." -ForegroundColor Yellow
+# Build and export Docker images
+Write-Host "[4/9] Building and exporting Docker images..." -ForegroundColor Yellow
+Write-Host "  This may take 5-10 minutes..." -ForegroundColor Gray
 
+# Create distribution directory first
 $distRoot = Join-Path $ScriptRoot "dist"
 $distFolder = Join-Path $distRoot "SOCAnalyzer-v$Version"
 
@@ -146,7 +148,17 @@ if (Test-Path $distFolder) {
 
 New-Item -ItemType Directory -Path $distFolder -Force | Out-Null
 
-# Copy manager executable
+# Run Docker image export
+& (Join-Path $ScriptRoot "export_docker_images.ps1") -Version $Version -OutputDir $distFolder
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Docker image export failed!" -ForegroundColor Red
+    exit 1
+}
+Write-Host "[OK] Docker images exported" -ForegroundColor Green
+
+# Copy manager executable and essential files
+Write-Host "[5/9] Copying essential files..." -ForegroundColor Yellow
+
 $managerExe = Join-Path $ScriptRoot "manager\dist\SOCAnalyzerManager.exe"
 if (Test-Path $managerExe) {
     Copy-Item $managerExe $distFolder
@@ -158,8 +170,9 @@ if (Test-Path $managerExe) {
 # Copy essential files
 $filesToCopy = @(
     "SETUP.ps1",
+    "IMPORT.ps1",
     ".env.dist",
-    "docker-compose.yml",
+    "docker-compose.prod.yml",
     "VERSION.txt"
 )
 
@@ -171,10 +184,8 @@ foreach ($file in $filesToCopy) {
     }
 }
 
-# Copy directories
+# Copy directories (ONLY runtime config, not source code)
 $dirsToCopy = @(
-    @{Name="backend"; Exclude=@("__pycache__", "*.pyc", ".pytest_cache", "venv", ".venv")},
-    @{Name="frontend"; Exclude=@("node_modules", "dist", ".next")},  # Keep build folder for production
     @{Name="certs"; Exclude=@()},
     @{Name="dns"; Exclude=@()},
     @{Name="data\template"; Exclude=@()}
@@ -208,10 +219,10 @@ foreach ($dirInfo in $dirsToCopy) {
     }
 }
 
-Write-Host "[OK] Distribution folder created" -ForegroundColor Green
+Write-Host "[OK] Essential files copied" -ForegroundColor Green
 
 # Create documentation files
-Write-Host "[5/9] Creating documentation..." -ForegroundColor Yellow
+Write-Host "[6/9] Creating documentation..." -ForegroundColor Yellow
 
 $readmeText = "SOCAnalyzer - Quick Start Guide`n" +
 "================================`n`n" +
@@ -311,7 +322,7 @@ $troubleshootText | Out-File -FilePath (Join-Path $distFolder "TROUBLESHOOTING.t
 Write-Host "[OK] Documentation files created" -ForegroundColor Green
 
 # Create CHANGELOG.txt
-Write-Host "[6/9] Creating changelog..." -ForegroundColor Yellow
+Write-Host "[7/9] Creating changelog..." -ForegroundColor Yellow
 
 $changelogText = "SOCAnalyzer v$Version`n" +
 "Released: $(Get-Date -Format 'yyyy-MM-dd')`n`n" +
@@ -320,33 +331,31 @@ $changelogText = "SOCAnalyzer v$Version`n" +
 $changelogText | Out-File -FilePath (Join-Path $distFolder "CHANGELOG.txt") -Encoding utf8
 Write-Host "[OK] CHANGELOG.txt created" -ForegroundColor Green
 
-# Create ZIP file
-Write-Host "[7/9] Creating distribution ZIP..." -ForegroundColor Yellow
+# Skip ZIP (too large for Compress-Archive)
+Write-Host "[8/9] Calculating distribution size..." -ForegroundColor Yellow
+$folderSize = [math]::Round((Get-ChildItem $distFolder -Recurse | Measure-Object -Property Length -Sum).Sum / 1024, 2)
+Write-Host "[OK] Distribution folder: $folderSize GB" -ForegroundColor Green
+Write-Host "     Share folder directly via OneDrive/SharePoint (too large to ZIP)" -ForegroundColor Gray
 
-$zipPath = Join-Path $distRoot "SOCAnalyzer-v$Version.zip"
-if (Test-Path $zipPath) {
-    Remove-Item $zipPath -Force
+# Generate SHA256 checksums for Docker images
+Write-Host "[9/9] Generating checksums..." -ForegroundColor Yellow
+
+$checksumText = "SHA256 Checksums for SOCAnalyzer v$Version`n" +
+"Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n`n"
+
+# Calculate checksums for all .tar files
+Get-ChildItem $distFolder -Filter "*.tar" | ForEach-Object {
+    $hash = Get-FileHash -Path $_.FullName -Algorithm SHA256
+    $checksumText += "$($_.Name)`n$($hash.Hash)`n`n"
 }
 
-Compress-Archive -Path $distFolder -DestinationPath $zipPath -CompressionLevel Optimal
-$zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
-Write-Host "[OK] ZIP created: $zipSize MB" -ForegroundColor Green
-
-# Generate SHA256 checksums
-Write-Host "[8/9] Generating checksums..." -ForegroundColor Yellow
-
-$sha256 = Get-FileHash -Path $zipPath -Algorithm SHA256
-$checksumText = "SHA256 Checksums for SOCAnalyzer v$Version`n" +
-"Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n`n" +
-"SOCAnalyzer-v$Version.zip`n$($sha256.Hash)"
-
-$checksumPath = Join-Path $distRoot "SHA256SUMS.txt"
+$checksumPath = Join-Path $distFolder "SHA256SUMS.txt"
 $checksumText | Out-File -FilePath $checksumPath -Encoding utf8
-Write-Host "[OK] Checksums generated" -ForegroundColor Green
+Write-Host "[OK] Checksums generated for Docker images" -ForegroundColor Green
 
 # Upload to SharePoint
 if (-not $SkipUpload) {
-    Write-Host "[9/9] Uploading to SharePoint..." -ForegroundColor Yellow
+    Write-Host "[10/10] Uploading to SharePoint..." -ForegroundColor Yellow
     Write-Host "[INFO] SharePoint upload feature requires manual implementation" -ForegroundColor Yellow
     Write-Host "       Please manually upload files to SharePoint" -ForegroundColor Gray
 } else {

@@ -996,13 +996,23 @@ def validate_controls(
         try:
             from ..pdf_handler import get_page_for_line
             # Extract page number from === PAGE X === markers if source_start_line is available
+            has_source = "source_start_line" in control
+            has_text_lines = "text_lines" in control
+            
+            if not has_text_lines and i == 0:
+                logging.error(f"[PAGE EXTRACTION BUG] Control {i}: text_lines NOT FOUND in control dict. Keys: {list(control.keys())[:10]}")
+            
             if "source_start_line" in control and "text_lines" in control:
                 page_num = get_page_for_line(control["text_lines"], control["source_start_line"])
                 # Store as array for multi-page support
                 control["control_page_refs"] = [page_num] if page_num else []
                 control["control_line_ref"] = control["source_start_line"]
+                if i == 0:
+                    logging.info(f"[PAGE EXTRACTION] Control 0: Extracted page {page_num} for line {control['source_start_line']}")
             elif "source_start_line" in control:
                 control["control_line_ref"] = control["source_start_line"]
+                if i == 0:
+                    logging.warning(f"[PAGE EXTRACTION] Control 0: Has source_start_line ({control['source_start_line']}) but missing text_lines")
         except Exception as e:
             logging.warning(f"Failed to extract page/line refs for control {i}: {e}")
         
@@ -1148,31 +1158,27 @@ def validate_controls(
                     top_k=3
                 )
                 
-                # Store arrays
-                control["control_tsc_mappings"] = tsc_matches
-                control["control_coso_mappings"] = coso_matches
-                
-                # Populate legacy columns with highest confidence match (backward compatibility)
+                # Build unified framework_mappings structure
+                framework_mappings = {}
                 if tsc_matches:
-                    top_tsc = tsc_matches[0]
-                    control["control_tsc_id"] = top_tsc.get("id")
-                    control["control_tsc_similarity"] = top_tsc.get("confidence")
-                    control["control_tsc_confidence_pct"] = int(round(top_tsc.get("confidence", 0) * 100))
-                
+                    framework_mappings["TSC"] = tsc_matches
                 if coso_matches:
-                    top_coso = coso_matches[0]
-                    control["control_coso_id"] = top_coso.get("id")
-                    control["control_coso_similarity"] = top_coso.get("confidence")
-                    control["control_coso_confidence_pct"] = int(round(top_coso.get("confidence", 0) * 100))
+                    framework_mappings["COSO"] = coso_matches
                 
-                # Determine closest framework
-                if tsc_matches and coso_matches:
-                    if tsc_matches[0].get("confidence", 0) > coso_matches[0].get("confidence", 0):
-                        control["control_closest_framework"] = "TSC"
-                    elif coso_matches[0].get("confidence", 0) > tsc_matches[0].get("confidence", 0):
-                        control["control_closest_framework"] = "COSO"
-                    else:
-                        control["control_closest_framework"] = "Equal"
+                control["framework_mappings"] = framework_mappings
+                
+                # Set primary framework (highest confidence)
+                all_matches = []
+                if tsc_matches:
+                    all_matches.append(("TSC", tsc_matches[0]))
+                if coso_matches:
+                    all_matches.append(("COSO", coso_matches[0]))
+                
+                if all_matches:
+                    primary = max(all_matches, key=lambda x: x[1].get("confidence", 0))
+                    control["primary_framework"] = primary[0]
+                    control["primary_criterion_id"] = primary[1].get("id")
+                    control["primary_confidence"] = primary[1].get("confidence")
                 elif tsc_matches:
                     control["control_closest_framework"] = "TSC"
                 elif coso_matches:
@@ -1521,6 +1527,8 @@ def extract_controls_v4(
     # Add text_lines context to controls for page number extraction
     for control in accepted_controls:
         control["text_lines"] = text_lines
+    
+    logging.info(f"[PAGE EXTRACTION DEBUG] Added text_lines to {len(accepted_controls)} controls. First control has text_lines: {'text_lines' in accepted_controls[0] if accepted_controls else 'N/A'}, text_lines length: {len(accepted_controls[0].get('text_lines', [])) if accepted_controls else 0}")
     
     # Step 5: Validate with 6-factor confidence scoring
     validated_controls, pattern_analysis = validate_controls(

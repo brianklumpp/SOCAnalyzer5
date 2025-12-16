@@ -58,8 +58,8 @@ from .routers import (
     cuec_router,
     suborg_router,
     deviation_router,
-    # executive_summary_router,  # Temporarily disabled - endpoints exist in main.py
-    # baseline_router,  # Disabled - models not yet implemented
+    executive_summary_router,
+    baseline_router,
     config_router,
 )
 
@@ -105,6 +105,8 @@ app.add_middleware(
 # Ensure tables exist on startup (useful for dev/docker-compose)
 @app.on_event("startup")
 async def _init_db_on_startup():
+    print("[DEBUG] _init_db_on_startup() called")
+    logging.info("[DEBUG] _init_db_on_startup() called")
     try:
         if RUN_MIGRATIONS_ON_START:
             import subprocess, os
@@ -132,6 +134,40 @@ async def _init_db_on_startup():
             log_gpt_event("startup_check", {"message": "backend startup", "service": "backend"})
     except Exception as _gpt_init_err:
         logging.warning(f"[STARTUP] GPT logging status check failed: {_gpt_init_err}")
+    
+    # Initialize scan queue for multi-threading (v2.1.0)
+    try:
+        print("[STARTUP] Initializing scan queue...")
+        import redis as sync_redis
+        from .threading.scan_queue import initialize_scan_queue
+        from . import config as cfg
+        
+        logging.info("[STARTUP] Initializing scan queue...")
+        
+        # Create Redis client for queue
+        redis_url = getattr(cfg, 'REDIS_URL', 'redis://redis:6379/0')
+        print(f"[STARTUP] Connecting to Redis at {redis_url}")
+        logging.info(f"[STARTUP] Connecting to Redis at {redis_url}")
+        redis_client = sync_redis.from_url(redis_url, decode_responses=True)
+        
+        # Clean up any stale queue pause state from previous runs
+        if redis_client.exists("scan_queue:paused"):
+            redis_client.delete("scan_queue:paused")
+            print("[STARTUP] Cleared stale scan_queue:paused key")
+            logging.info("[STARTUP] Cleared stale scan_queue:paused key")
+        
+        # Initialize scan queue
+        print("[STARTUP] Creating scan queue instance...")
+        logging.info("[STARTUP] Creating scan queue instance...")
+        initialize_scan_queue(redis_client, max_concurrent=1)
+        print("[STARTUP] Scan queue initialized successfully!")
+        logging.info("[STARTUP] Scan queue initialized successfully")
+    except Exception as queue_err:
+        import traceback
+        print(f"[STARTUP] FAILED to initialize scan queue: {queue_err}")
+        print(f"[STARTUP] Traceback: {traceback.format_exc()}")
+        logging.error(f"[STARTUP] Failed to initialize scan queue: {queue_err}")
+        logging.error(f"[STARTUP] Traceback: {traceback.format_exc()}")
 
 # Helper function to mark executive summary as stale
 async def mark_executive_summary_stale(scan_id: int, db):
@@ -253,10 +289,10 @@ app.include_router(suborg_router.router, tags=["suborg"])
 app.include_router(deviation_router.router, tags=["deviation"])
 
 # Executive summary operations
-# app.include_router(executive_summary_router.router, tags=["executive_summary"])  # Temporarily disabled - endpoints exist in main.py
+app.include_router(executive_summary_router.router, tags=["executive_summary"])
 
-# Validation and baseline operations (disabled - models not yet implemented)
-# app.include_router(baseline_router.router, tags=["baseline"])
+# Validation and baseline operations
+app.include_router(baseline_router.router, tags=["baseline"])
 
 # Settings and configuration
 app.include_router(config_router.router, tags=["config"])
@@ -415,6 +451,118 @@ async def estimate_processing_time(report_type: str = "SOC2", db=Depends(get_db)
         raise
     except Exception as e:
         logging.error(f"Error estimating time: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Scan Queue API Endpoints (v2.1.0)
+# ============================================================================
+
+@app.get("/scan_queue/")
+async def get_scan_queue():
+    """Get all scans in the queue with their status"""
+    try:
+        from .threading.scan_queue import get_scan_queue
+        queue = get_scan_queue()
+        status = queue.get_status()
+        return {
+            "scans": status.get("scans", []),
+            "is_paused": status.get("paused", False),
+            "queue_length": status.get("queue_length", 0),
+            "current_job_id": status.get("current_job_id")
+        }
+    except RuntimeError:
+        # Queue not initialized yet
+        return {"scans": [], "is_paused": False, "queue_length": 0, "current_job_id": None}
+    except Exception as e:
+        logging.error(f"Error getting scan queue: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/scan_queue/stats")
+async def get_scan_queue_stats():
+    """Get queue statistics"""
+    try:
+        from .threading.scan_queue import get_scan_queue
+        queue = get_scan_queue()
+        status = queue.get_status()
+        return status.get("stats", {
+            "total_queued": 0,
+            "total_completed": 0,
+            "total_failed": 0,
+            "total_cancelled": 0
+        })
+    except RuntimeError:
+        # Queue not initialized yet
+        return {
+            "total_queued": 0,
+            "total_completed": 0,
+            "total_failed": 0,
+            "total_cancelled": 0
+        }
+    except Exception as e:
+        logging.error(f"Error getting scan queue stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/scan_queue/{job_id}/cancel")
+async def cancel_scan_in_queue(job_id: str):
+    """Cancel a scan in the queue"""
+    try:
+        from .threading.scan_queue import get_scan_queue
+        queue = get_scan_queue()
+        queue.cancel(job_id)
+        return {"status": "cancelled", "job_id": job_id}
+    except RuntimeError:
+        raise HTTPException(status_code=404, detail="Queue manager not initialized")
+    except Exception as e:
+        logging.error(f"Error cancelling scan {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/scan_queue/pause")
+async def pause_scan_queue():
+    """Pause the scan queue"""
+    try:
+        from .threading.scan_queue import get_scan_queue
+        queue = get_scan_queue()
+        queue.pause()
+        return {"status": "paused"}
+    except RuntimeError:
+        raise HTTPException(status_code=404, detail="Queue manager not initialized")
+    except Exception as e:
+        logging.error(f"Error pausing scan queue: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/scan_queue/resume")
+async def resume_scan_queue():
+    """Resume the scan queue"""
+    try:
+        from .threading.scan_queue import get_scan_queue
+        queue = get_scan_queue()
+        queue.resume()
+        return {"status": "resumed"}
+    except RuntimeError:
+        raise HTTPException(status_code=404, detail="Queue manager not initialized")
+    except Exception as e:
+        logging.error(f"Error resuming scan queue: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/scan_queue/clear_completed")
+async def clear_completed_scans():
+    """Clear completed scans from queue history"""
+    try:
+        from .threading.scan_queue import get_scan_queue
+        queue = get_scan_queue()
+        # Note: clear_completed method needs to be added to ScanQueue class
+        # For now, return 0
+        return {"cleared": 0}
+    except RuntimeError:
+        raise HTTPException(status_code=404, detail="Queue manager not initialized")
+    except Exception as e:
+        logging.error(f"Error clearing completed scans: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -657,6 +805,20 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
     logging.error(f"[DEBUG run_analysis_job] ENTRY - Thread: {threading.current_thread().name}, job_id={job_id}, report_type='{report_type}', type={type(report_type)}, resume={resume}")
     logging.error(f"[DEBUG run_analysis_job] Condition check - not resume: {not resume}, not report_type: {not report_type}, cfg.REPORT_TYPE_AUTO_DETECT: {cfg.REPORT_TYPE_AUTO_DETECT}")
     
+    # Mark scan as running in queue
+    try:
+        from .threading.scan_queue import get_scan_queue
+        from .threading.scan_queue import ScanQueueStatus
+        queue = get_scan_queue()
+        scan = queue._load_scan(job_id)
+        if scan:
+            scan.status = ScanQueueStatus.RUNNING
+            scan.started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+            queue._save_scan(scan)
+            logging.info(f"[QUEUE] Marked scan as RUNNING: job_id={job_id}")
+    except Exception as queue_err:
+        logging.warning(f"[QUEUE] Failed to update scan status: {queue_err}")
+    
     # Auto-detect report type if not provided or if auto-detection is enabled
     if not resume and (not report_type or cfg.REPORT_TYPE_AUTO_DETECT):
         try:
@@ -884,7 +1046,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                             # Ensure combined_result.json exists (writer inside helper is guarded)
                             async def _update_final():
                                 rc = _get_redis()
-                                job = await get_job(job_id, rc) or {}
+                                job = get_job(job_id, rc) or {}
                                 # Filter out pdf_file bytes before storing in Redis
                                 results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
                                 job["result"] = results_for_redis
@@ -894,7 +1056,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                                 job["progress"] = 100
                                 job["status"] = "Finalized from disk (watchdog)"
                                 job["finalized"] = True
-                                await set_job(job_id, job, rc)
+                                set_job(job_id, job, rc)
                             loop = getattr(app.state, 'loop', None)
                             if loop and loop.is_running():
                                 asyncio.run_coroutine_threadsafe(_update_final(), loop)
@@ -929,6 +1091,39 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
             job = _json.loads(job_json)
             if job.get("cancelled"):
                 raise Exception("Scan cancelled by user")
+        
+        # Initialize IntelligentTaskExecutor and ProgressTracker for parallel execution (v2.1.0)
+        executor = None
+        progress_tracker = None
+        
+        if cfg.ENABLE_PARALLEL_EXTRACTION or cfg.ENABLE_PARALLEL_MAPPING:
+            try:
+                from .threading.intelligent_executor import IntelligentTaskExecutor
+                from .threading.progress_tracker import ProgressTracker
+                
+                # Create executor with configuration
+                executor = IntelligentTaskExecutor(
+                    max_workers=cfg.MAX_WORKER_THREADS,
+                    enable_throttling=True,
+                    enable_circuit_breaker=True,
+                    task_timeout_seconds=cfg.TASK_TIMEOUT,
+                    target_cpu_percent=cfg.CPU_THRESHOLD,
+                    target_memory_percent=cfg.MEMORY_THRESHOLD
+                )
+                
+                # Create progress tracker
+                progress_tracker = ProgressTracker(
+                    job_id=job_id,
+                    redis_client=redis_client
+                )
+                
+                logging.info(f"[PARALLEL_EXEC] Initialized executor (max_workers={cfg.MAX_WORKER_THREADS}) and progress tracker")
+            except Exception as init_err:
+                logging.error(f"[PARALLEL_EXEC] Failed to initialize executor/tracker: {init_err}")
+                # Continue with sequential execution
+                executor = None
+                progress_tracker = None
+        
         # Run the analysis, but check for cancellation after each major step
         logging.error(f"[DEBUG] Calling analyze_pdf_file with report_type={report_type}, type={type(report_type)}")
         results = analyze_pdf_file(
@@ -936,7 +1131,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
             progress_callback=progress_callback,
             checklist_callback=checklist_callback,
             report_type=report_type,
-            job_id=job_id
+            job_id=job_id,
+            executor=executor,
+            progress_tracker=progress_tracker
         )
         
     # Add timing, filename, and report_type metadata to results
@@ -1044,7 +1241,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
             redis_client = _get_redis()
             logging.error(f"[DEBUG] [result_update:_update] Thread: {threading.current_thread().name}, job_id={job_id}, redis_client={id(redis_client)}")
             # Merge latest job state to preserve progress, status, checklist
-            job = await get_job(job_id, redis_client) or {}
+            job = get_job(job_id, redis_client) or {}
             # Filter out pdf_file bytes before storing in Redis
             results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
             job["result"] = results_for_redis
@@ -1056,7 +1253,34 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
             job["progress"] = job.get("progress", 100)
             job["status"] = job.get("status", "Complete")
             job["checklist"] = job.get("checklist", [])
-            await set_job(job_id, job, redis_client)
+            set_job(job_id, job, redis_client)
+            
+            # Mark scan as completed in queue
+            try:
+                from .threading.scan_queue import get_scan_queue
+                from .threading.scan_queue import ScanQueueStatus
+                queue = get_scan_queue()
+                scan = queue._load_scan(job_id)
+                if scan:
+                    scan.status = ScanQueueStatus.COMPLETED
+                    scan.completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+                    queue._save_scan(scan)
+                    # Clear from current job slot
+                    queue.redis.delete(queue.KEY_CURRENT)
+                    # Update stats
+                    queue.redis.hincrby(queue.KEY_STATS, "total_completed", 1)
+                    logging.info(f"[QUEUE] Marked scan as COMPLETED: job_id={job_id}")
+                    
+                    # Broadcast queue update to WebSocket clients
+                    try:
+                        from .routers.scan_router import broadcast_queue_update
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(broadcast_queue_update())
+                        logging.info(f"[QUEUE] Broadcasted queue update to WebSocket clients")
+                    except Exception as broadcast_err:
+                        logging.debug(f"Failed to broadcast queue update: {broadcast_err}")
+            except Exception as queue_err:
+                logging.warning(f"[QUEUE] Failed to mark scan complete: {queue_err}")
         try:
             loop = asyncio.get_running_loop()
             if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -1088,14 +1312,33 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
             redis_client = _get_redis()
             logging.error(f"[DEBUG] [error_update:_update] Thread: {threading.current_thread().name}, job_id={job_id}, redis_client={id(redis_client)}")
             # Merge latest job state to preserve progress, status, checklist
-            job = await get_job(job_id, redis_client) or {}
+            job = get_job(job_id, redis_client) or {}
             job["error"] = str(e)
             job["done"] = True
             # Preserve progress, status, checklist if present
             job["progress"] = job.get("progress", 100)
             job["status"] = job.get("status", "Error")
             job["checklist"] = job.get("checklist", [])
-            await set_job(job_id, job, redis_client)
+            set_job(job_id, job, redis_client)
+            
+            # Mark scan as failed in queue
+            try:
+                from .threading.scan_queue import get_scan_queue
+                from .threading.scan_queue import ScanQueueStatus
+                queue = get_scan_queue()
+                scan = queue._load_scan(job_id)
+                if scan:
+                    scan.status = ScanQueueStatus.FAILED
+                    scan.completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+                    scan.error = str(e)[:200] if 'e' in locals() else "Unknown error"
+                    queue._save_scan(scan)
+                    # Clear from current job slot
+                    queue.redis.delete(queue.KEY_CURRENT)
+                    # Update stats
+                    queue.redis.hincrby(queue.KEY_STATS, "total_failed", 1)
+                    logging.info(f"[QUEUE] Marked scan as FAILED: job_id={job_id}")
+            except Exception as queue_err:
+                logging.warning(f"[QUEUE] Failed to mark scan failed: {queue_err}")
         try:
             loop = asyncio.get_running_loop()
             if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -1195,7 +1438,7 @@ async def analyze_pdf_bg(
     
     job_id = str(uuid.uuid4())
     logging.error(f"[DEBUG /analyze/] Creating job {job_id} with report_type='{report_type}'")
-    await set_job(job_id, {
+    set_job(job_id, {
         "status": "Queued",
         "progress": 0,
         "done": False,
@@ -1223,13 +1466,51 @@ async def analyze_pdf_bg(
         "extraction_partial": False
     })
     
-    # Start background thread with report_type parameter
-    logging.error(f"[DEBUG /analyze/] Starting thread with args: job_id={job_id}, filename={filename}, report_type='{report_type}'")
-    thread = threading.Thread(
-        target=run_analysis_job, 
-        args=(job_id, temp_pdf_path, filename, report_type, db)
-    )
-    thread.start()
+    # Add scan to queue (v2.1.0)
+    try:
+        logging.error(f"[DEBUG /analyze/] About to enqueue scan: job_id={job_id}")
+        from .threading.scan_queue import get_scan_queue
+        logging.error(f"[DEBUG /analyze/] Import successful")
+        queue = get_scan_queue()
+        logging.error(f"[DEBUG /analyze/] Got queue instance: {queue}")
+        position = queue.enqueue(
+            job_id=job_id,
+            filename=filename,
+            pdf_path=temp_pdf_path,
+            report_type=report_type,
+            priority=10  # Normal priority
+        )
+        logging.error(f"[DEBUG /analyze/] Enqueue succeeded, position={position}")
+        logging.info(f"[QUEUE] Added scan to queue: job_id={job_id}, position={position}")
+        
+        # Start background thread to process queue
+        # (In future, this will be a worker pool that auto-processes)
+        logging.error(f"[DEBUG /analyze/] Starting thread with args: job_id={job_id}, filename={filename}, report_type='{report_type}'")
+        thread = threading.Thread(
+            target=run_analysis_job, 
+            args=(job_id, temp_pdf_path, filename, report_type, db)
+        )
+        thread.start()
+    except RuntimeError as e:
+        # Queue not initialized, fall back to direct execution
+        logging.error(f"[DEBUG /analyze/] RuntimeError in queue operations: {e}")
+        logging.warning(f"[QUEUE] Queue not initialized, using direct execution")
+        thread = threading.Thread(
+            target=run_analysis_job, 
+            args=(job_id, temp_pdf_path, filename, report_type, db)
+        )
+        thread.start()
+    except Exception as e:
+        # Unexpected error, log and fall back
+        import traceback
+        logging.error(f"[DEBUG /analyze/] Unexpected error in queue operations: {e}")
+        logging.error(f"[DEBUG /analyze/] Traceback: {traceback.format_exc()}")
+        logging.warning(f"[QUEUE] Error enqueueing, using direct execution")
+        thread = threading.Thread(
+            target=run_analysis_job, 
+            args=(job_id, temp_pdf_path, filename, report_type, db)
+        )
+        thread.start()
     
     return {"job_id": job_id}
 
@@ -1240,14 +1521,14 @@ async def cancel_analysis_job(job_id: str):
     Sets the 'cancelled' flag in Redis, which will be checked by run_analysis_job.
     """
     # Load current job status from Redis
-    job = await get_job(job_id)
+    job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
     # Set cancelled flag
     job["cancelled"] = True
     job["status"] = "Cancelled"
-    await set_job(job_id, job)
+    set_job(job_id, job)
     
     return {"message": f"Job {job_id} has been cancelled", "job_id": job_id}
 
@@ -1274,7 +1555,7 @@ async def confirm_report_type(
     logging.info(f"[CONFIRM_TYPE] job_id={job_id}, confirmed_type={confirmed_type}, confirmed_subtype={confirmed_subtype}")
     
     # Load job from Redis
-    job = await get_job(job_id)
+    job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
@@ -1305,7 +1586,7 @@ async def confirm_report_type(
     job["report_subtype"] = confirmed_subtype
     job["status"] = "Resuming analysis..."
     job["awaiting_confirmation"] = False
-    await set_job(job_id, job)
+    set_job(job_id, job)
     
     # Start background thread to continue analysis
     temp_pdf_path = job.get("temp_pdf_path")
@@ -1335,12 +1616,12 @@ async def get_job_status(job_id: str):
     # Remove or downgrade excessive logging for status checks
     # print(f"[PRINT] get_job_status called for job_id={job_id}")
     logging.info(f"[INFO] get_job_status: called for job_id={job_id}")
-    job = await get_job(job_id)
+    job = get_job(job_id)
     if not job:
         # Distinguish true miss vs transient Redis issue by a second quick guarded fetch
         transient = False
         try:
-            _ = await get_job(job_id)
+            _ = get_job(job_id)
         except Exception:
             transient = True
         logging.error(f"[ERROR] get_job_status: job_id={job_id} NOT FOUND (transient={transient})")
@@ -1412,12 +1693,12 @@ async def get_job_status_min(job_id: str, include_artifacts: bool = False):
     needing the heavier /analyze/status endpoint. Disk counts are inexpensive small file loads.
     Artifacts presence is optional (include_artifacts=true) or automatically included when done.
     """
-    job = await get_job(job_id)
+    job = get_job(job_id)
     if not job:
         # best-effort transient flag on redis access race
         transient = False
         try:
-            _ = await get_job(job_id)
+            _ = get_job(job_id)
         except Exception:
             transient = True
         return {"error": "Job not found", "transient_unavailable": transient}
@@ -1518,7 +1799,7 @@ async def get_job_result(job_id: str, force_save: bool = False, format: Optional
     - format=summary => compact JSON: counts, artifacts, keys, finalized (+ optional insert_summary if just saved)
     - default => full results JSON.
     """
-    job = await get_job(job_id)
+    job = get_job(job_id)
     if not job:
         return {"error": "Job not found"}
     if not job.get("done"):
@@ -1542,7 +1823,7 @@ async def get_job_result(job_id: str, force_save: bool = False, format: Optional
         with concurrent.futures.ThreadPoolExecutor() as pool:
             insert_summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
         job["db_saved"] = True
-        await set_job(job_id, job)
+        set_job(job_id, job)
 
     # If there was an error, return it along with any partial result
     if job.get("error"):
@@ -1680,7 +1961,7 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
 
     # Update job in Redis and broadcast done
     redis_client = _get_redis()
-    job = await get_job(job_id, redis_client) or {}
+    job = get_job(job_id, redis_client) or {}
     # Filter out pdf_file bytes before storing in Redis
     results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
     job["result"] = results_for_redis
@@ -1690,7 +1971,7 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
     job["progress"] = 100
     job["status"] = "Finalized from disk"
     job["finalized"] = True
-    await set_job(job_id, job, redis_client)
+    set_job(job_id, job, redis_client)
     try:
         await broadcast_progress(100, "Finalized from disk")
         await broadcast_done()
@@ -1731,13 +2012,13 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
     # Persist granular resume hints in job for downstream extractor usage
     try:
         redis_client = _get_redis()
-        job = await get_job(job_id, redis_client) or {}
+        job = get_job(job_id, redis_client) or {}
         if payload.start_at_control is not None:
             job['resume_start_at_control'] = int(payload.start_at_control)
         if payload.start_at_line is not None:
             job['resume_start_at_line'] = int(payload.start_at_line)
         if payload.start_at_control is not None or payload.start_at_line is not None:
-            await set_job(job_id, job, redis_client)
+            set_job(job_id, job, redis_client)
     except Exception as _gran_err:
         logging.warning(f"[resume] Failed to persist granular resume params: {_gran_err}")
     if not requested:
@@ -1745,7 +2026,7 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
         try:
             results = _build_combined_results_from_disk()
             redis_client = _get_redis()
-            job = await get_job(job_id, redis_client) or {}
+            job = get_job(job_id, redis_client) or {}
             # Filter out pdf_file bytes before storing in Redis
             results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
             job["result"] = results_for_redis
@@ -1767,12 +2048,12 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
                     with concurrent.futures.ThreadPoolExecutor() as pool:
                         insert_summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
                     job["db_saved"] = True
-                    await set_job(job_id, job, redis_client)
+                    set_job(job_id, job, redis_client)
                     await broadcast_progress(100, job["status"])
                     return {"status": "ok", "results": results, "insert_summary": insert_summary}
                 except Exception as e:
                     logging.error(f"[/analyze/resume finalize] DB insertion failed: {e}")
-            await set_job(job_id, job, redis_client)
+            set_job(job_id, job, redis_client)
             await broadcast_progress(100, job["status"])
             return {"status": "ok", "results": results}
         except Exception as e:
@@ -1795,7 +2076,7 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
                 # Pass granular start hints if available
                 # Refresh latest job snapshot including granular hints and report type
                 redis_client = _get_redis()
-                job = await get_job(job_id, redis_client) or {}
+                job = get_job(job_id, redis_client) or {}
                 start_at_line = job.get('resume_start_at_line')
                 report_type = job.get('report_type', 'SOC2')  # Default to SOC2 if not set
                 
@@ -1838,7 +2119,7 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
         # Rebuild combined results from disk outputs
         results = _build_combined_results_from_disk()
         redis_client = _get_redis()
-        job = await get_job(job_id, redis_client) or {}
+        job = get_job(job_id, redis_client) or {}
         # Filter out pdf_file bytes before storing in Redis
         results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
         job["result"] = results_for_redis
@@ -1860,12 +2141,12 @@ async def resume_extractors(job_id: str, payload: ResumeRequest, db=Depends(get_
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     insert_summary = await loop.run_in_executor(pool, insert_extracted_data, tmp_path)
                 job["db_saved"] = True
-                await set_job(job_id, job, redis_client)
+                set_job(job_id, job, redis_client)
                 await broadcast_progress(100, job["status"])
                 return {"status": "ok", "results": results, "insert_summary": insert_summary}
             except Exception as e:
                 logging.error(f"[/analyze/resume] DB insertion failed: {e}")
-        await set_job(job_id, job, redis_client)
+        set_job(job_id, job, redis_client)
         await broadcast_progress(100, job["status"])
         return {"status": "ok", "results": results}
     except Exception as e:
@@ -1879,7 +2160,7 @@ async def get_partial_controls(job_id: str, min_pct: float = 20.0, limit: int = 
     - min_pct: threshold at which frontends may decide to show the panel (informational only here)
     - limit: truncate the returned list to the first N controls if > 0
     """
-    job = await get_job(job_id)
+    job = get_job(job_id)
     if not job:
         return {"error": "Job not found"}
     try:
@@ -2458,470 +2739,18 @@ async def get_framework_criteria():
     """
     return framework_service.get_all_framework_criteria()
 
-@app.get("/executive_summary/{scan_id}")
-async def get_executive_summary(scan_id: int, force_refresh: bool = False, db=Depends(get_db)):
-    # Force fresh read from database to avoid caching issues
-    await db.commit()  # Ensure any pending transactions are committed
-    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
-    scan_row = scan_row.scalar_one_or_none()
-    if not scan_row:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    
-    # Get existing summary and staleness flag
-    existing_summary = getattr(scan_row, "executive_summary", None)
-    is_stale = bool(getattr(scan_row, "executive_summary_stale", False))
-    
-    # NEW BEHAVIOR: Do NOT auto-generate an executive summary on page load.
-    # Always return the cached summary (even if null) and the staleness flag
-    # when force_refresh is not requested. Generation is expensive (GPT call)
-    # and should only be triggered explicitly via the POST regeneration endpoint
-    # or when force_refresh=True is passed.
-    if not force_refresh:
-        # Return whatever is stored (could be None) so the frontend can show
-        # the cached summary and a stale-warning if appropriate.
-        summary = existing_summary
-        await db.rollback()  # Clean up any pending transaction
+# REMOVED: Executive Summary Router endpoints (3 endpoints, ~360 lines)
+# - @app.get("/executive_summary/{scan_id}") → /report/{scan_id}/executive_summary in executive_summary_router.py
+# - @app.post("/executive_summary/{scan_id}") → /report/{scan_id}/executive_summary/regenerate in executive_summary_router.py  
+# - @app.patch("/executive_summary/{scan_id}") → /report/{scan_id}/executive_summary in executive_summary_router.py
+# All executive summary operations moved to backend/app/routers/executive_summary_router.py
+# Frontend updated to use modern paths via useExecutiveSummary hook
 
-        # Parse the JSON if it's stored as a string
-        if isinstance(summary, str):
-            import json
-            try:
-                summary = json.loads(summary)
-            except Exception:
-                pass  # If parsing fails, return as-is
-
-        return {"executive_summary": summary, "is_stale": is_stale}
-    
-    # Otherwise, generate summary using GPT (only if force_refresh=True or no summary exists)
-    controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
-    high_conf_controls = [
-        ctrl for ctrl in controls
-        if isinstance(getattr(ctrl, 'control_confidence', 0), (int, float)) and getattr(ctrl, 'control_confidence', 0) >= 0.89
-    ]
-    cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
-    suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
-    tsc_ids_found = set([getattr(ctrl, "control_tsc_id", None) for ctrl in controls if getattr(ctrl, "control_tsc_id", None)])
-    coso_ids_found = set([getattr(ctrl, "control_coso_id", None) for ctrl in controls if getattr(ctrl, "control_coso_id", None)])
-    tsc_criteria = TSC_CRITERIA
-    coso_criteria = COSO_2013_CRITERIA
-    tsc_table = [
-        {"id": crit["id"], "description": crit["description"], "section": crit.get("section", "Unspecified"), "present": crit["id"] in tsc_ids_found}
-        for crit in tsc_criteria
-    ]
-    coso_table = [
-        {"id": crit["id"], "description": crit["description"], "section": crit.get("component", "Unspecified"), "present": crit["id"] in coso_ids_found}
-        for crit in coso_criteria
-    ]
-    suborg_count = len([o for o in suborgs if getattr(o, "confidence", 0) >= 0.9])
-    cuec_count = len([c for c in cuecs if getattr(c, "cuec_confidence", 0) >= 0.9])
-    tsc_table_str = "\n".join([f"{row['section']}: {row['id']} - {row['description']} ({'✔' if row['present'] else '✗'})" for row in tsc_table])
-    coso_table_str = "\n".join([f"{row['section']}: {row['id']} - {row['description']} ({'✔' if row['present'] else '✗'})" for row in coso_table])
-    
-    # Budgeted control test results string (prioritize deviations, then include up to N non-deviations)
-    def _truncate(s: str, max_chars: int) -> str:
-        s = s or ''
-        if len(s) <= max_chars:
-            return s
-        return s[: max_chars - 3] + '...'
-
-    dev_controls = [
-        ctrl for ctrl in high_conf_controls
-        if bool(getattr(ctrl, 'has_deviation', False)) and isinstance(getattr(ctrl, 'control_test_results', ''), str)
-           and getattr(ctrl, 'control_test_results', '').strip()
-    ]
-    non_dev_controls = [
-        ctrl for ctrl in high_conf_controls
-        if (not bool(getattr(ctrl, 'has_deviation', False))) and isinstance(getattr(ctrl, 'control_test_results', ''), str)
-           and getattr(ctrl, 'control_test_results', '').strip()
-    ]
-    # Limit non-deviation controls to configured maximum to reduce prompt size
-    non_dev_controls = non_dev_controls[:EXEC_SUMMARY_MAX_NON_DEVIATION_CONTROLS]
-
-    selected_controls = dev_controls + non_dev_controls
-    parts = []
-    used = 0
-    for ctrl in selected_controls:
-        cid = getattr(ctrl, 'control_id', 'Unknown')
-        res = _truncate(getattr(ctrl, 'control_test_results', ''), EXEC_SUMMARY_PER_CONTROL_MAX_CHARS)
-        chunk = f"Control {cid}: {res}"
-        if used + len(chunk) + 1 > EXEC_SUMMARY_TEST_RESULTS_BUDGET_CHARS:
-            break
-        parts.append(chunk)
-        used += len(chunk) + 1
-    control_test_results_str = "\n".join(parts)
-
-    # Prepare detected deviations list from control-level fields (high-confidence only)
-    detected_deviations_list = [
-        f"Control {getattr(ctrl, 'control_id', 'Unknown')}: {getattr(ctrl, 'deviation_desc', '').strip()}"
-        for ctrl in high_conf_controls
-        if bool(getattr(ctrl, 'has_deviation', False)) and isinstance(getattr(ctrl, 'deviation_desc', ''), str) and getattr(ctrl, 'deviation_desc', '').strip()
-    ]
-    detected_deviations_str = "\n".join(detected_deviations_list) if detected_deviations_list else "None."
-
-    # Helper for later de-duplication only; no heuristic deviation detection here
-    def _norm_text(s):
-        try:
-            return " ".join((s or "").strip().lower().split())
-        except Exception:
-            return ""
-    
-    # Format CUEC control strength assessments for high-confidence CUECs (≥90%)
-    high_conf_cuecs_with_strength = [
-        cuec for cuec in cuecs 
-        if getattr(cuec, 'cuec_confidence', 0) >= 0.9 and getattr(cuec, 'control_strength', None)
-    ]
-    cuec_control_strengths_str = "\n".join([
-        f"CUEC {getattr(cuec, 'cuec_tsc_id', 'Unknown')} - {getattr(cuec, 'control_strength', 'Not Set')}: {getattr(cuec, 'cuec_description', '')[:150]}..."
-        for cuec in high_conf_cuecs_with_strength
-    ]) if high_conf_cuecs_with_strength else "No high-confidence CUECs with control strength assessments found."
-    
-    # Get company and product names for prompt
-    company_name = None
-    product_name = None
-    company_row = (await db.execute(select(Company).where(Company.scan_id == scan_id))).scalars().first()
-    if company_row:
-        company_name = getattr(company_row, 'name', '') or ''
-    product_row = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
-    if product_row:
-        product_name = getattr(product_row, 'name', '') or ''
-    
-    # Get SOX vendor status
-    is_sox_vendor = getattr(scan_row, 'is_sox_vendor', False)
-    sox_vendor_str = "Yes - Subject to SOX Compliance" if is_sox_vendor else "No"
-    
-    # Get coverage period dates
-    coverage_start = getattr(scan_row, 'coverage_start', None)
-    coverage_end = getattr(scan_row, 'coverage_end', None)
-    if coverage_start and coverage_end:
-        coverage_period_str = f"{coverage_start.strftime('%B %d, %Y')} to {coverage_end.strftime('%B %d, %Y')}"
-    elif coverage_start:
-        coverage_period_str = f"starting {coverage_start.strftime('%B %d, %Y')}"
-    elif coverage_end:
-        coverage_period_str = f"ending {coverage_end.strftime('%B %d, %Y')}"
-    else:
-        coverage_period_str = "the audit period"
-    
-    prompt = EXECUTIVE_SUMMARY_PROMPT.format(
-        suborg_count=suborg_count,
-        cuec_count=cuec_count,
-        tsc_covered=sum(1 for row in tsc_table if row['present']),
-        tsc_total=len(tsc_table),
-        coso_covered=sum(1 for row in coso_table if row['present']),
-        coso_total=len(coso_table),
-        tsc_table=tsc_table_str,
-        coso_table=coso_table_str,
-        coverage_period=coverage_period_str,
-        control_test_results=control_test_results_str,
-        detected_deviations=detected_deviations_str,
-        cuec_control_strengths=cuec_control_strengths_str,
-        company=company_name,
-        product=product_name,
-        is_sox_vendor=sox_vendor_str
-    )
-    # No heuristic pre-computed deviations; rely on GPT to analyze control_test_results in the prompt
-    import json
-    
-
-    
-    print(f"REGENERATE DEBUG: Generating new executive summary for scan {scan_id}")
-    print(f"REGENERATE DEBUG: Calling GPT to generate real summary")
-    
-    # Calculate prompt size and check token limits
-    prompt_chars = len(prompt)
-    estimated_tokens = prompt_chars / CHARS_PER_TOKEN
-    token_percentage = estimated_tokens / MAX_INPUT_TOKENS
-    
-    # Log prompt size metrics
-    print(f"REGENERATE DEBUG: Prompt size: {prompt_chars:,} chars, ~{estimated_tokens:,.0f} tokens ({token_percentage:.1%} of limit)")
-    
-    # Check if prompt exceeds token limits
-    if token_percentage >= 1.0:
-        error_msg = (
-            f"Executive summary cannot be generated - prompt size ({estimated_tokens:,.0f} tokens) "
-            f"exceeds token limit ({MAX_INPUT_TOKENS:,} tokens). "
-            f"Report has {len(high_conf_controls)} controls, {len(detected_deviations_list)} deviations, "
-            f"and {len(high_conf_cuecs_with_strength)} CUECs. Please contact support."
-        )
-        logger.error(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-    
-    # Warn if approaching token limit
-    if token_percentage >= EXEC_SUMMARY_TOKEN_WARNING_THRESHOLD:
-        warning_msg = (
-            f"Executive summary prompt approaching token limit: {estimated_tokens:,.0f} tokens "
-            f"({token_percentage:.1%} of {MAX_INPUT_TOKENS:,} max). "
-            f"Report has {len(high_conf_controls)} controls, {len(detected_deviations_list)} deviations, "
-            f"and {len(high_conf_cuecs_with_strength)} CUECs."
-        )
-        logger.warning(warning_msg)
-    
-    # Log the full prompt being sent to GPT
-    print(f"REGENERATE DEBUG: Executive Summary GPT Prompt:")
-    print("=" * 80)
-    print(prompt)
-    print("=" * 80)
-    
-    # Also log to file for later review (reset file each time)
-    from pathlib import Path
-    log_dir = Path(__file__).parent.parent.parent / "data" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "executive_summary_gpt.log"
-    
-    with open(log_file, 'w', encoding='utf-8') as f:
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(f"{'='*80}\n")
-        f.write(f"EXECUTIVE SUMMARY GENERATION - {timestamp}\n")
-        f.write(f"Scan ID: {scan_id}\n")
-        f.write(f"Prompt Size: {prompt_chars:,} chars (~{estimated_tokens:,.0f} tokens, {token_percentage:.1%} of {MAX_INPUT_TOKENS:,} limit)\n")
-        if token_percentage >= EXEC_SUMMARY_TOKEN_WARNING_THRESHOLD:
-            f.write(f"⚠️  WARNING: Prompt size exceeds {EXEC_SUMMARY_TOKEN_WARNING_THRESHOLD:.0%} threshold\n")
-        f.write(f"Report Stats: {len(high_conf_controls)} controls, {len(detected_deviations_list)} deviations, {len(high_conf_cuecs_with_strength)} CUECs\n")
-        f.write(f"{'='*80}\n")
-        f.write(f"PROMPT:\n{prompt}\n")
-        f.write(f"{'-'*80}\n")
-    
-    # Generate real summary using GPT
-    gpt_summary = gpt_extract(prompt, "executive_summary")
-    
-    print(f"REGENERATE DEBUG: GPT Response received (length: {len(gpt_summary)} chars)")
-    print(f"REGENERATE DEBUG: GPT Response preview: {gpt_summary[:200]}...")
-    
-    # Log the response to file as well
-    with open(log_file, 'a', encoding='utf-8') as f:
-        f.write(f"RESPONSE:\n{gpt_summary}\n")
-        f.write(f"{'='*80}\n")
-    
-    # Parse the GPT response JSON
-    # Clean the GPT response by removing markdown code fences
-    cleaned_response = gpt_summary.strip()
-    if cleaned_response.startswith('```json'):
-        cleaned_response = cleaned_response[7:]  # Remove ```json
-    elif cleaned_response.startswith('```'):
-        cleaned_response = cleaned_response[3:]   # Remove ```
-    if cleaned_response.endswith('```'):
-        cleaned_response = cleaned_response[:-3]  # Remove trailing ```
-    cleaned_response = cleaned_response.strip()
-    
-    try:
-        summary_json = json.loads(cleaned_response)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Executive summary is not valid JSON: {e}\nRaw response: {gpt_summary}\nCleaned response: {cleaned_response}")
-    required_keys = ["about_company", "key_findings", "areas_of_concern", "recommendations"]
-    if not all(k in summary_json for k in required_keys):
-        raise HTTPException(status_code=500, detail=f"Executive summary JSON missing required keys. Got: {list(summary_json.keys())}\nRaw response: {gpt_summary}")
-    
-    # Let GPT decide deviations_noted; do minimal de-duplication only.
-    def _norm_text(s):
-        try:
-            return " ".join((s or "").strip().lower().split())
-        except Exception:
-            return ""
-    deduped = []
-    seen = set()
-    for dev in (summary_json.get("deviations_noted") or []):
-        if not isinstance(dev, dict):
-            continue
-        cid = str(dev.get("control_id") or "")
-        summary = dev.get("deviation_summary") or ""
-        k = (cid, _norm_text(summary))
-        if k in seen:
-            continue
-        seen.add(k)
-        deduped.append({"control_id": cid, "deviation_summary": summary})
-    summary_json["deviations_noted"] = deduped
-
-    # Ensure legacy recommendations includes both split lists if present
-    try:
-        risk_list = summary_json.get("recommendations_risk_mitigations") or []
-        contract_list = summary_json.get("recommendations_contract_enhancements") or []
-        base_list = summary_json.get("recommendations") or []
-        # Union while preserving order
-        combined = []
-        seen = set()
-        for item in list(base_list) + list(risk_list) + list(contract_list):
-            key = (item or "").strip()
-            if key and key not in seen:
-                seen.add(key)
-                combined.append(key)
-        summary_json["recommendations"] = combined
-    except Exception:
-        pass
-    
-    # Save the generated summary to the database and reset staleness flag
-    print(f"REGENERATE DEBUG: Saving new executive summary to database for scan {scan_id}")
-    print(f"REGENERATE DEBUG: Summary JSON keys being saved: {list(summary_json.keys())}")
-    print(f"REGENERATE DEBUG: Has sox_objective: {'sox_objective' in summary_json}")
-    print(f"REGENERATE DEBUG: Has sox_assessors_conclusion: {'sox_assessors_conclusion' in summary_json}")
-    scan_row.executive_summary = summary_json
-    scan_row.executive_summary_stale = False  # Reset staleness flag
-    db.add(scan_row)
-    await db.commit()
-    
-    print(f"REGENERATE DEBUG: Executive summary saved successfully for scan {scan_id}")
-    print(f"REGENERATE DEBUG: Returning summary with keys: {list(summary_json.keys())}")
-    return {"executive_summary": summary_json, "is_stale": False}
-
-@app.post("/executive_summary/{scan_id}")
-async def regenerate_executive_summary(scan_id: int, db=Depends(get_db)):
-    """Force regeneration of executive summary"""
-    print(f"REGENERATE DEBUG: Received request to regenerate executive summary for scan {scan_id}")
-    
-    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
-    scan_row = scan_row.scalar_one_or_none()
-    if not scan_row:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    
-    print(f"REGENERATE DEBUG: Found scan {scan_id}, triggering force regeneration")
-    
-    # Rollback to release the row lock before calling get_executive_summary
-    await db.rollback()
-    
-    # Call the GET endpoint with force_refresh=True to regenerate
-    result = await get_executive_summary(scan_id=scan_id, force_refresh=True, db=db)
-    
-    print(f"REGENERATE DEBUG: Executive summary regenerated for scan {scan_id}")
-    return result
-
-@app.patch("/executive_summary/{scan_id}")
-async def patch_executive_summary(scan_id: int, data: dict, db=Depends(get_db)):
-    summary = data.get("executive_summary")
-    if not summary:
-        raise HTTPException(status_code=400, detail="No executive_summary provided")
-    scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
-    scan_row = scan_row.scalar_one_or_none()
-    if not scan_row:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    scan_row.executive_summary = summary
-    db.add(scan_row)
-    await db.commit()
-    return {"status": "ok"}
-
-@app.post("/report/{scan_id}/reload_extracted_text")
-async def reload_extracted_text(scan_id: int, db=Depends(get_db)):
-    """
-    Reload extracted text from output.txt into the database for a specific scan.
-    Useful when the text was extracted but not saved to the database.
-    """
-    try:
-        # Check if scan exists
-        scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
-        scan_row = scan_row.scalar_one_or_none()
-        if not scan_row:
-            return JSONResponse({"error": "Scan not found"}, status_code=404)
-        
-        # Try to load from output.txt
-        PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-        output_path = PROJECT_ROOT / 'data' / 'output' / 'output.txt'
-        
-        if not output_path.exists():
-            return JSONResponse({
-                "error": "output.txt not found",
-                "message": "The extracted text file does not exist. Run text extraction first."
-            }, status_code=404)
-        
-        with open(output_path, 'r', encoding='utf-8') as f:
-            extracted_text = f.read()
-        
-        if not extracted_text:
-            return JSONResponse({
-                "error": "output.txt is empty",
-                "message": "The extracted text file exists but is empty."
-            }, status_code=400)
-        
-        # Update the scan with extracted text
-        scan_row.extracted_text = extracted_text
-        db.add(scan_row)
-        await db.commit()
-        
-        return {
-            "status": "ok",
-            "scan_id": scan_id,
-            "text_length": len(extracted_text),
-            "message": "Extracted text loaded successfully"
-        }
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"Failed to reload extracted text for scan {scan_id}: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.patch("/report/{scan_id}/overview")
-async def patch_report_overview(scan_id: int, data: dict, db=Depends(get_db)):
-    logging.debug(f"/report/{scan_id}/overview payload: {data}")
-    try:
-        from datetime import datetime
-        
-        def parse_date(date_str):
-            """Parse various date string formats to datetime object"""
-            if not date_str:
-                return None
-            if isinstance(date_str, datetime):
-                return date_str
-            # Try multiple date formats
-            for fmt in [
-                "%Y-%m-%dT%H:%M:%S.%f",  # ISO with microseconds
-                "%Y-%m-%dT%H:%M:%S",      # ISO without microseconds
-                "%Y-%m-%d",               # Date only
-            ]:
-                try:
-                    return datetime.strptime(date_str, fmt)
-                except ValueError:
-                    continue
-            # If all formats fail, return None
-            return None
-        
-        scan_row = await db.execute(select(Scan).where(Scan.id == scan_id))
-        scan_row = scan_row.scalar_one_or_none()
-        if not scan_row:
-            return JSONResponse({"error": "Scan not found"}, status_code=404)
-        if "company" in data:
-            scan_row.company = data["company"]
-        if "product" in data:
-            scan_row.product = data["product"]
-        if "coverageStart" in data:
-            scan_row.coverage_start = parse_date(data["coverageStart"])
-        if "coverageEnd" in data:
-            scan_row.coverage_end = parse_date(data["coverageEnd"])
-        if "reportDate" in data:
-            scan_row.report_date = parse_date(data["reportDate"])
-        if "auditor" in data:
-            scan_row.auditor = data["auditor"]
-        if "scanDate" in data:
-            scan_row.scan_date = parse_date(data["scanDate"])
-        if "isSoxVendor" in data:
-            scan_row.is_sox_vendor = bool(data["isSoxVendor"])
-        
-        # Mark executive summary as stale since overview data changed (especially SOX vendor status affects summary)
-        scan_row.executive_summary_stale = True
-        
-        db.add(scan_row)
-        await db.commit()
-        
-        return {"status": "ok"}
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"/report/{scan_id}/overview DB error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.patch("/report/{scan_id}/controls/{control_id}/annotation")
-async def patch_control_annotation(scan_id: int, control_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db)):
-    try:
-        ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.control_id == control_id))).scalar_one_or_none()
-    except MultipleResultsFound:
-        return JSONResponse({
-            "error": "Multiple controls matched control_id. Use ID endpoint /report/{scan_id}/controls/id/{control_db_id}"
-        }, status_code=409)
-    if not ctrl:
-        raise HTTPException(status_code=404, detail="Control not found")
-    ctrl.annotation = data.get("annotation", "")
-    db.add(ctrl)
-    await db.commit()
-    return {"status": "ok"}
-
-# REMOVED: Control Router duplicates (2 endpoints, ~185 lines)
-# - @app.patch("/report/{scan_id}/controls/{control_id}") 
-# - @app.patch("/report/{scan_id}/controls/id/{control_db_id}")
-# Now handled by backend/app/routers/control_router.py
+# REMOVED: Control Router duplicates (3 endpoints, ~205 lines)
+# - @app.patch("/report/{scan_id}/controls/{control_id}/annotation") → /report/{scan_id}/controls/annotation/{control_id} in control_router.py
+# - @app.patch("/report/{scan_id}/controls/{control_id}") → Now in control_router.py
+# - @app.patch("/report/{scan_id}/controls/id/{control_db_id}") → Now in control_router.py
+# All control-related endpoints moved to backend/app/routers/control_router.py
 
 # NOTE: Keep normalization inline in handlers to avoid import scope issues
 
@@ -3011,15 +2840,10 @@ Description 2: {desc2[:500]}"""
                         else:
                             confidence_score += 0.39
                 
-                # TSC/COSO mapping match
-                if primary.control_tsc_id and candidate.control_tsc_id:
-                    if primary.control_tsc_id == candidate.control_tsc_id:
+                # Framework mapping match
+                if primary.primary_criterion_id and candidate.primary_criterion_id:
+                    if primary.primary_criterion_id == candidate.primary_criterion_id:
                         confidence_score += 0.15
-                
-                if primary.control_coso_id and candidate.control_coso_id:
-                    if primary.control_coso_id == candidate.control_coso_id:
-                        if not (primary.control_tsc_id and candidate.control_tsc_id and primary.control_tsc_id == candidate.control_tsc_id):
-                            confidence_score += 0.15
                 
                 # Test procedure similarity
                 test1 = (primary.control_test or "").strip()
@@ -3189,18 +3013,9 @@ async def penalize_incomplete_controls(scan_id: int, db):
         await db.rollback()
         return 0
 
-@app.post("/report/{scan_id}/cleanup")
-async def trigger_cleanup(scan_id: int, db=Depends(get_db)):
-    """Manually trigger automated cleanup for a scan (for testing)"""
-    try:
-        cleanup_stats = await automated_cleanup(scan_id, db)
-        if cleanup_stats:
-            return {"status": "success", "stats": cleanup_stats}
-        else:
-            return {"status": "error", "message": "Cleanup failed"}
-    except Exception as e:
-        logging.error(f"Error triggering cleanup: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
+# REMOVED: @app.post("/report/{scan_id}/cleanup") - Duplicate endpoint (~12 lines)
+# Now handled by backend/app/routers/control_router.py
+# Note: automated_cleanup() helper function is still defined above and used by the router
 
 def detect_duplicate_type(ctrl1: Control, ctrl2: Control) -> Tuple[str, float, Dict[str, Any]]:
     """
@@ -4200,8 +4015,10 @@ async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
             control_test_results=(str(data.get("control_test_results") or "").strip() or None),
             has_deviation=data.get("has_deviation"),
             deviation_desc=(str(data.get("deviation_desc") or "").strip() or None),
-            control_tsc_id=(str(data.get("control_tsc_id") or "").strip() or None),
-            control_coso_id=(str(data.get("control_coso_id") or "").strip() or None),
+            framework_mappings=data.get("framework_mappings"),
+            primary_framework=data.get("primary_framework"),
+            primary_criterion_id=data.get("primary_criterion_id"),
+            primary_confidence=data.get("primary_confidence"),
             control_confidence=conf,
             control_page_refs=_parse_page_refs(data.get("control_page_refs") or data.get("control_page_ref")),
             control_line_ref=_as_float_or_none(data.get("control_line_ref")),
@@ -4223,8 +4040,10 @@ async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
             "control_test_results": ctrl.control_test_results,
             "has_deviation": ctrl.has_deviation,
             "deviation_desc": ctrl.deviation_desc,
-            "control_tsc_id": ctrl.control_tsc_id,
-            "control_coso_id": ctrl.control_coso_id,
+            "framework_mappings": ctrl.framework_mappings,
+            "primary_framework": ctrl.primary_framework,
+            "primary_criterion_id": ctrl.primary_criterion_id,
+            "primary_confidence": ctrl.primary_confidence,
             "control_confidence": ctrl.control_confidence,
             "control_page_refs": ctrl.control_page_refs,
             "control_line_ref": ctrl.control_line_ref,
@@ -4442,6 +4261,194 @@ async def test_gpt_models():
     }
 
 
+@app.post("/test/models")
+async def test_model_availability():
+    """
+    Test availability of all models in DATAIKU_CATALOG_MAP.
+    Tests with JSON validation prompt to check both response and JSON parsing capability.
+    Returns response time, availability status, cost/speed tiers, and recommendations.
+    """
+    import asyncio
+    from .gpt_client import _chat_completion
+    
+    test_prompt = 'Return JSON: {"status": "ok"}'
+    results = []
+    throttle_ms = cfg.BULK_TEST_THROTTLE_MS
+    
+    for model_name in cfg.DATAIKU_CATALOG_MAP.keys():
+        try:
+            # Throttle to avoid rate limits
+            if results:  # Skip throttle on first test
+                await asyncio.sleep(throttle_ms / 1000.0)
+            
+            start_time = time.time()
+            response = _chat_completion(test_prompt, "model_test", override_model=model_name)
+            duration_ms = (time.time() - start_time) * 1000
+            
+            # Validate JSON response
+            json_valid = False
+            try:
+                parsed = json.loads(response.strip())
+                json_valid = isinstance(parsed, dict) and parsed.get("status") == "ok"
+            except Exception:
+                pass
+            
+            # Determine cost and speed tiers
+            cost_tier = "high" if "gpt-4o" == model_name and "mini" not in model_name else \
+                       "medium" if "gpt-4" in model_name or "gpt-5" in model_name else "low"
+            speed_tier = "fast" if "mini" in model_name or "3.5" in model_name else \
+                        "medium" if "4o" in model_name else "slow"
+            
+            results.append({
+                "model": model_name,
+                "available": True,
+                "response_time_ms": round(duration_ms, 1),
+                "json_valid": json_valid,
+                "cost_tier": cost_tier,
+                "speed_tier": speed_tier,
+                "error": None
+            })
+        except Exception as e:
+            results.append({
+                "model": model_name,
+                "available": False,
+                "response_time_ms": None,
+                "json_valid": False,
+                "cost_tier": "unknown",
+                "speed_tier": "unknown",
+                "error": str(e)
+            })
+    
+    # Generate dynamic recommendations based on test results
+    recommendations = {}
+    available_models = [r for r in results if r["available"]]
+    
+    if available_models:
+        # Recommend fastest working model for framework mapping
+        fast_models = [r for r in available_models if r["speed_tier"] == "fast" and r["json_valid"]]
+        if fast_models:
+            fastest = min(fast_models, key=lambda x: x["response_time_ms"])
+            recommendations["framework_mapping"] = {
+                "model": fastest["model"],
+                "reason": f"Fastest ({fastest['response_time_ms']}ms) + {fastest['cost_tier']} cost"
+            }
+        
+        # Recommend best accuracy model for control extraction
+        high_accuracy = [r for r in available_models if "gpt-4o" in r["model"] and "mini" not in r["model"]]
+        if high_accuracy:
+            recommendations["control_extractor_v2"] = {
+                "model": high_accuracy[0]["model"],
+                "reason": "Highest accuracy for complex extraction"
+            }
+    
+    return {
+        "test_time": datetime.datetime.utcnow().isoformat(),
+        "throttle_ms": throttle_ms,
+        "results": results,
+        "recommendations": recommendations
+    }
+
+
+@app.get("/test/model-assignments")
+async def get_model_assignments(db=Depends(get_db)):
+    """
+    Get current model assignments from database with availability status.
+    Returns configured assignments for all extractors with warnings for unavailable models.
+    """
+    from sqlalchemy import text
+    
+    assignments = []
+    warnings = []
+    
+    # Get all configured extractors
+    for extractor_name in cfg.GPT_MODELS.keys():
+        assigned_model = cfg.get_runtime_model_config(extractor_name)
+        is_available = assigned_model in cfg.DATAIKU_CATALOG_MAP
+        
+        # Check if model has been tested and is actually available
+        availability_status = "unknown"
+        if is_available:
+            availability_status = "configured"
+        else:
+            availability_status = "unavailable"
+            warnings.append({
+                "extractor": extractor_name,
+                "model": assigned_model,
+                "message": f"Model '{assigned_model}' not in DATAIKU_CATALOG_MAP"
+            })
+        
+        assignments.append({
+            "extractor": extractor_name,
+            "model": assigned_model,
+            "availability": availability_status,
+            "is_default": assigned_model == cfg.GPT_MODELS.get(extractor_name)
+        })
+    
+    return {
+        "assignments": assignments,
+        "warnings": warnings,
+        "available_models": list(cfg.DATAIKU_CATALOG_MAP.keys())
+    }
+
+
+@app.put("/test/model-assignments")
+async def update_model_assignments(
+    assignments: Dict[str, str],
+    changed_by: Optional[str] = None,
+    db=Depends(get_db)
+):
+    """
+    Update model assignments for extractors.
+    Validates that assigned models exist in DATAIKU_CATALOG_MAP before persisting.
+    
+    Body: {"extractor_name": "model_name", ...}
+    Query param: changed_by (optional) for audit trail
+    """
+    errors = []
+    successes = []
+    
+    for extractor_name, model_name in assignments.items():
+        # Validate extractor exists
+        if extractor_name not in cfg.GPT_MODELS:
+            errors.append({
+                "extractor": extractor_name,
+                "model": model_name,
+                "error": f"Unknown extractor '{extractor_name}'"
+            })
+            continue
+        
+        # Validate model exists in catalog
+        if model_name not in cfg.DATAIKU_CATALOG_MAP:
+            errors.append({
+                "extractor": extractor_name,
+                "model": model_name,
+                "error": f"Model '{model_name}' not found in DATAIKU_CATALOG_MAP"
+            })
+            continue
+        
+        # Persist configuration
+        try:
+            cfg.set_runtime_model_config(extractor_name, model_name, changed_by)
+            successes.append({
+                "extractor": extractor_name,
+                "model": model_name,
+                "previous": cfg.GPT_MODELS.get(extractor_name)
+            })
+        except Exception as e:
+            errors.append({
+                "extractor": extractor_name,
+                "model": model_name,
+                "error": str(e)
+            })
+    
+    return {
+        "updated": len(successes),
+        "failed": len(errors),
+        "successes": successes,
+        "errors": errors
+    }
+
+
 # ============================================================================
 # VALIDATION BASELINE ENDPOINTS
 # ============================================================================
@@ -4635,6 +4642,7 @@ async def migrate_scan_framework_mappings(scan_id: int, db=Depends(get_db)):
         await db.rollback()
         logging.error(f"[MIGRATE_ENDPOINT] Migration failed for scan_id={scan_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
+
 
 
 

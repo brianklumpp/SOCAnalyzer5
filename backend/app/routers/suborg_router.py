@@ -23,13 +23,26 @@ ALLOWED_SUBORG_FIELDS = {
     "third_party_description",
     "third_party_page_ref",
     "name",
+    "edit_log",
 }
 
 
 def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
     """Apply changes to subservice org fields."""
+    from datetime import datetime
+    import logging
+    
+    logging.info(f"[SUBORG] _apply_changes called with data keys: {list(data.keys())}")
+    
     for k in ALLOWED_SUBORG_FIELDS:
         if k in data:
+            # Skip edit_log - it's only modified automatically below
+            if k == "edit_log":
+                continue
+            
+            # Track old value for logging
+            old_value = getattr(suborg, k, None)
+            
             # Normalize confidence to float if passed as string percentage or whole number
             if k == "confidence":
                 v = data[k]
@@ -46,8 +59,27 @@ def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
                         pass
                 elif isinstance(v, (int, float)):
                     suborg.confidence = (float(v) / 100.0) if float(v) > 1 else float(v)
-                continue
-            setattr(suborg, k, data[k])
+            else:
+                # Set the field value for all other fields
+                setattr(suborg, k, data[k])
+            
+            # Log the change to edit_log if value changed
+            new_value = getattr(suborg, k, None)
+            if old_value != new_value:
+                prev_log = getattr(suborg, "edit_log", "") or ""
+                sep = "\n" if prev_log else ""
+                timestamp = datetime.now().isoformat()
+                
+                # Format the log message based on field type
+                if k == "analyst_notes":
+                    log_msg = f"Analyst notes updated [{timestamp}]"
+                elif k == "confidence":
+                    log_msg = f"UI edit: confidence {old_value} -> {new_value} [{timestamp}]"
+                else:
+                    log_msg = f"UI edit: {k} updated [{timestamp}]"
+                
+                suborg.edit_log = f"{prev_log}{sep}{log_msg}"
+                logging.info(f"[SUBORG] Logged change for {k}: old={old_value}, new={new_value}, edit_log={suborg.edit_log}")
 
 
 @router.patch("/report/{scan_id}/suborgs/id/{suborg_id}")
@@ -63,8 +95,20 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, An
             payload["name"] = str(payload["name"]).strip()
         _suborg_apply_changes(row, payload or {})
         await mark_executive_summary_stale(scan_id, db)
+        db.add(row)
         await db.commit()
-        return {"status": "ok"}
+        await db.refresh(row)
+        return {
+            "id": row.id,
+            "name": row.name,
+            "confidence": row.confidence,
+            "confidence_justification": row.confidence_justification,
+            "edit_log": row.edit_log,
+            "analyst_notes": row.analyst_notes,
+            "annotation": row.annotation,
+            "third_party_description": row.third_party_description,
+            "third_party_page_ref": row.third_party_page_ref
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -90,8 +134,20 @@ async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str
             payload["name"] = str(payload["name"]).strip()
         _suborg_apply_changes(row, payload or {})
         await mark_executive_summary_stale(scan_id, db)
+        db.add(row)
         await db.commit()
-        return {"status": "ok"}
+        await db.refresh(row)
+        return {
+            "id": row.id,
+            "name": row.name,
+            "confidence": row.confidence,
+            "confidence_justification": row.confidence_justification,
+            "edit_log": row.edit_log,
+            "analyst_notes": row.analyst_notes,
+            "annotation": row.annotation,
+            "third_party_description": row.third_party_description,
+            "third_party_page_ref": row.third_party_page_ref
+        }
     except HTTPException:
         raise
     except Exception as e:

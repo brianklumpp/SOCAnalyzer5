@@ -5,6 +5,18 @@
 .DESCRIPTION
     This script loads pre-built Docker images and starts all services.
     No building required - everything is ready to run!
+
+.NOTES
+    If you get "cannot be loaded because running scripts is disabled":
+    
+    Option 1 (Recommended): Unblock the file
+    - Right-click IMPORT.ps1 → Properties
+    - Check "Unblock" at the bottom → OK
+    - Run again
+    
+    Option 2: Run with bypass
+    - Open PowerShell
+    - Run: PowerShell -ExecutionPolicy Bypass -File .\IMPORT.ps1
 #>
 
 $ErrorActionPreference = "Stop"
@@ -32,7 +44,7 @@ $requiredFiles = @(
     "dnsmasq.tar",
     "socanalyzer-backend.tar",
     "socanalyzer-frontend.tar",
-    "docker-compose.yml"
+    "docker-compose.prod.yml"
 )
 
 foreach ($file in $requiredFiles) {
@@ -112,11 +124,21 @@ foreach ($dir in $dataDirs) {
     }
 }
 
-# Start services
-docker compose up -d
+# Read VERSION from VERSION.txt
+$version = "latest"
+if (Test-Path "VERSION.txt") {
+    $version = (Get-Content "VERSION.txt").Trim()
+    Write-Host "  Using version: $version" -ForegroundColor Gray
+}
+
+# Set VERSION environment variable for docker-compose
+$env:VERSION = $version
+
+# Start services using production compose file
+docker compose -f docker-compose.prod.yml up -d
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Failed to start services!" -ForegroundColor Red
-    Write-Host "`nTry running: docker compose logs" -ForegroundColor Yellow
+    Write-Host "`nTry running: docker compose -f docker-compose.prod.yml logs" -ForegroundColor Yellow
     exit 1
 }
 
@@ -125,7 +147,7 @@ Write-Host "  Waiting for services to start..." -ForegroundColor Gray
 Start-Sleep -Seconds 10
 
 # Check service status
-$services = docker compose ps --format json | ConvertFrom-Json
+$services = docker compose -f docker-compose.prod.yml ps --format json | ConvertFrom-Json
 $allRunning = $true
 foreach ($service in $services) {
     if ($service.State -ne "running") {
@@ -146,18 +168,18 @@ Write-Host "   SOCAnalyzer is Ready!" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan
 
 Write-Host "Access the application at:" -ForegroundColor Green
-Write-Host "  http://localhost`n" -ForegroundColor White
+Write-Host "  http://localhost:3000`n" -ForegroundColor White
 
 Write-Host "Useful commands:" -ForegroundColor Yellow
-Write-Host "  Check status:  docker compose ps" -ForegroundColor White
-Write-Host "  View logs:     docker compose logs -f" -ForegroundColor White
-Write-Host "  Stop:          docker compose down" -ForegroundColor White
-Write-Host "  Restart:       docker compose restart`n" -ForegroundColor White
+Write-Host "  Check status:  docker compose -f docker-compose.prod.yml ps" -ForegroundColor White
+Write-Host "  View logs:     docker compose -f docker-compose.prod.yml logs -f" -ForegroundColor White
+Write-Host "  Stop:          docker compose -f docker-compose.prod.yml down" -ForegroundColor White
+Write-Host "  Restart:       docker compose -f docker-compose.prod.yml restart`n" -ForegroundColor White
 
 Write-Host "If you see any errors, run:" -ForegroundColor Cyan
-Write-Host "  docker compose logs backend" -ForegroundColor White
-Write-Host "  docker compose logs frontend`n" -ForegroundColor White
+Write-Host "  docker compose -f docker-compose.prod.yml logs backend" -ForegroundColor White
+Write-Host "  docker compose -f docker-compose.prod.yml logs frontend`n" -ForegroundColor White
 
 Write-Host "Opening browser..." -ForegroundColor Gray
 Start-Sleep -Seconds 2
-Start-Process "http://localhost"
+Start-Process "http://localhost:3000"

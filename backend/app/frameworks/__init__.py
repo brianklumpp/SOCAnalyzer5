@@ -18,7 +18,8 @@ from .mapper import (
     map_control_to_frameworks_dynamic,
     map_cuec_to_frameworks_dynamic,
     extract_mapping_fields_for_db,
-    get_primary_criterion_details
+    get_primary_criterion_details,
+    map_control_to_all_frameworks_batched
 )
 
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     'map_cuec_to_frameworks_dynamic',
     'extract_mapping_fields_for_db',
     'get_primary_criterion_details',
+    'map_control_to_all_frameworks_batched',
 ]

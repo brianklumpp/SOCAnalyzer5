@@ -115,7 +115,7 @@ def calculate_distance_from_cuec_keywords(desc):
 def extract_cuecs():
     # Reset output file at the start of extraction
     with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
-        f.write('[]\n')
+        f.write('[]')
     section_results = load_json(SECTION_JSON_PATH)
     desc_section = next((s for s in section_results if s.get('topic') == 'Description_of_System'), None)
     if not desc_section:

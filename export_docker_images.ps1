@@ -42,7 +42,9 @@ Write-Host "[OK] Public images pulled`n" -ForegroundColor Green
 # Step 2: Build custom images
 Write-Host "[2/9] Building custom Docker images..." -ForegroundColor Cyan
 Write-Host "  This may take 5-10 minutes..." -ForegroundColor Gray
-docker compose build
+# Set FRONTEND_TARGET=prod for production nginx build
+$env:FRONTEND_TARGET = "prod"
+docker compose build --no-cache
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Docker build failed!" -ForegroundColor Red
     exit 1
@@ -51,8 +53,8 @@ Write-Host "[OK] Images built successfully`n" -ForegroundColor Green
 
 # Step 3: Tag images with version
 Write-Host "[3/9] Tagging images..." -ForegroundColor Cyan
-docker tag socanalyzer5-backend:latest socanalyzer-backend:$Version
-docker tag socanalyzer5-frontend:latest socanalyzer-frontend:$Version
+docker tag socanalyzer-backend:latest socanalyzer-backend:$Version
+docker tag socanalyzer-frontend:latest socanalyzer-frontend:$Version
 Write-Host "[OK] Images tagged`n" -ForegroundColor Green
 
 # Step 4: Export postgres image
@@ -211,23 +213,22 @@ Write-Host "  [OK] Created README.txt" -ForegroundColor Gray
 
 Write-Host "[OK] Supporting files copied`n" -ForegroundColor Green
 
-Write-Host "Creating distribution ZIP..." -ForegroundColor Cyan
-$zipPath = ".\dist\SOCAnalyzer-Docker-v$Version.zip"
-if (Test-Path $zipPath) {
-    Remove-Item $zipPath -Force
-}
+Write-Host "[Note] Skipping ZIP creation (files too large for Compress-Archive)" -ForegroundColor Yellow
+Write-Host "       Share the folder directly via OneDrive/SharePoint`n" -ForegroundColor Gray
 
-# Compress the directory
-Compress-Archive -Path "$OutputDir\*" -DestinationPath $zipPath -CompressionLevel Optimal -Force
-$zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
-Write-Host "[OK] ZIP created: $zipSize MB`n" -ForegroundColor Green
+# Calculate folder size instead
+$folderSize = [math]::Round((Get-ChildItem $OutputDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 2)
 
 # Summary
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "   Export Complete!" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan
 
-Write-Host "Distribution package created:" -ForegroundColor Green
+Write-Host "Distribution folder created:" -ForegroundColor Green
+Write-Host "  Location: $OutputDir" -ForegroundColor White
+Write-Host "  Size: $folderSize MB`n" -ForegroundColor White
+
+Write-Host "Distribution package info:" -ForegroundColor Green
 Write-Host "  Location: $zipPath" -ForegroundColor White
 Write-Host "  Size: $zipSize MB`n" -ForegroundColor White
 

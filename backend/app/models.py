@@ -76,40 +76,18 @@ class Control(Base):
     control_page_refs = Column(JSON)  # [51, 52, 89] - pages where control appears
     control_line_ref = Column(Integer)
     control_seq = Column(Integer)
-    control_tsc_id = Column(String(128))  # Legacy: highest confidence TSC match
-    control_coso_id = Column(String(128))  # Legacy: highest confidence COSO match
-    control_tsc_similarity = Column(Float)
-    control_coso_similarity = Column(Float)
-    control_tsc_confidence_pct = Column(Integer)
-    control_coso_confidence_pct = Column(Integer)
-    control_closest_framework = Column(String(128))
-    control_tsc_section = Column(String(128))
-    control_coso_section = Column(String(128))
     control_soc_domain = Column(String(128))
+    
+    # ⚠️ LEGACY COLUMNS REMOVED (v2.1.0): control_tsc_id, control_coso_id, control_tsc_similarity, etc.
+    # ✅ USE INSTEAD: framework_mappings (JSON), primary_framework, primary_criterion_id, primary_confidence
+    # See DEPRECATED_FEATURES.md for details
     
     # SOC 1 Type 2 Support - Financial Assertions
     # Schema: [{"id": "EO1", "name": "Existence/Occurrence", "confidence": 0.92, "reasoning": "Control validates transactions occurred"}]
     financial_assertions = Column(JSON)  # Financial assertion mappings for SOC 1 controls
     framework_category = Column(String(32))  # "SOC1", "SOC2", "BOTH", "AMBIGUOUS" - for combined reports
     
-    # Multi-match framework mappings (JSON arrays)
-    # Expected schema for both TSC and COSO mappings:
-    # [
-    #   {
-    #     "id": "CC7.2",           # Framework criterion ID (TSC ID or COSO principle number)
-    #     "confidence": 0.95,      # Match confidence score (0.0-1.0)
-    #     "reasoning": "...",      # Brief explanation of why this criterion matches
-    #     "deviation": "..." or null  # Optional deviation text if applicable
-    #   },
-    #   ...
-    # ]
-    # IMPORTANT: These fields MUST be JSON arrays (not strings). The database enforces this
-    # with CHECK constraints. Backend validation in control_extractor_v4.py and main.py converts
-    # any malformed string data to proper arrays before insertion.
-    control_tsc_mappings = Column(JSON)  # [{"id": "CC7.2", "confidence": 0.95, "reasoning": "...", "deviation": "..."}]
-    control_coso_mappings = Column(JSON)  # [{"id": "10", "confidence": 0.88, "reasoning": "...", "deviation": "..."}]
-    
-    # Multi-framework mapping support (Phase 1)
+    # Phase 1 multi-framework mapping support
     # Universal framework mappings - supports unlimited frameworks beyond TSC/COSO
     # Schema: {"TSC": [{...}], "COSO": [{...}], "FINANCIAL_ASSERTIONS": [{...}], "ISAE3402": [{...}], ...}
     framework_mappings = Column(JSON)  # All framework mappings in one unified structure
@@ -126,6 +104,7 @@ class Control(Base):
     scan_id = Column(Integer)
     annotation = Column(Text)
     analyst_notes = Column(Text)  # Analyst notes for manual annotations
+    edit_log = Column(Text)  # Log of manual edits made to this control
     # Verification and pattern scoring fields
     verification_status = Column(String(32))  # 'verified', 'pending', null
     verification_metadata = Column(JSON)  # Detailed scoring breakdown
@@ -144,7 +123,6 @@ class CUEC(Base):
     __tablename__ = "cuec"
     id = Column(Integer, primary_key=True, autoincrement=True)
     cuec_seq = Column(Integer)
-    cuec_tsc_id = Column(String(128))  # Legacy: highest confidence TSC match
     cuec_description = Column(Text)
     cuec_line_ref = Column(Integer)
     cuec_page_refs = Column(JSON)  # Array of page numbers where CUEC appears
@@ -152,25 +130,10 @@ class CUEC(Base):
     cuec_gpt_opinion = Column(String(32))
     cuec_distance_from_cuec_keywords = Column(Integer)
     cuec_gpt_reasoning = Column(Text)
-    cuec_framework_alignment = Column(String(128))
-    cuec_framework_alignment_id = Column(String(128))
     cuec_justification = Column(Text)
-    cuec_coso_id = Column(String(128))  # Legacy: highest confidence COSO match
-    cuec_tsc_similarity = Column(Float)
-    cuec_coso_similarity = Column(Float)
-    cuec_tsc_confidence_pct = Column(Integer)
-    cuec_coso_confidence_pct = Column(Integer)
-    cuec_closest_framework = Column(String(128))
     cuec_confidence_justification = Column(Text)
     
-    # Multi-match framework mappings (JSON arrays)
-    # Same schema as Control mappings above - see control_tsc_mappings documentation
-    # IMPORTANT: Must be JSON arrays, enforced by database CHECK constraints
-    # Backend validation in main.py ensures type safety before insertion
-    cuec_tsc_mappings = Column(JSON)  # [{"id": "CC7.2", "confidence": 0.95, "reasoning": "...", "deviation": null}]
-    cuec_coso_mappings = Column(JSON)  # [{"id": "10", "confidence": 0.88, "reasoning": "...", "deviation": null}]
-    
-    # Multi-framework mapping support (Phase 1)
+    # Phase 1 multi-framework mapping support
     # Universal framework mappings - supports unlimited frameworks beyond TSC/COSO
     framework_mappings = Column(JSON)  # All framework mappings in one unified structure
     primary_framework = Column(String(64))  # Framework with highest confidence match
@@ -180,6 +143,7 @@ class CUEC(Base):
     scan_id = Column(Integer)
     annotation = Column(Text)
     analyst_notes = Column(Text)  # Analyst notes for manual annotations
+    edit_log = Column(Text)  # Log of manual edits made to this CUEC
     control_strength = Column(String(32))  # High, Medium, Low
 
 class SubserviceOrg(Base):
@@ -199,6 +163,7 @@ class SubserviceOrg(Base):
     third_party_controls = Column(JSON)
     annotation = Column(Text)
     analyst_notes = Column(Text)  # Analyst notes for manual annotations
+    edit_log = Column(Text)  # Log of manual edits made to this subservice org
 
 class Product(Base):
     __tablename__ = "product"
@@ -308,3 +273,36 @@ class ReportTypeDetection(Base):
     user_confirmed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)  # For TTL-based cache expiry
+
+
+class Baseline(Base):
+    """
+    Baseline snapshots for validation and comparison.
+    Stores approved report state for detecting regressions.
+    """
+    __tablename__ = "baselines"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(256), nullable=False)
+    scan_id = Column(Integer, nullable=False, index=True)  # FK to scan.id
+    description = Column(Text, nullable=True)
+    reviewer_notes = Column(Text, nullable=True)
+    snapshot_data = Column(JSON, nullable=False)  # Full report snapshot for comparison
+    created_by = Column(String(128), nullable=True)  # User who created baseline
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+
+class OrganizationPattern(Base):
+    """
+    Learned patterns for organization naming and detection.
+    Helps identify service organizations across reports.
+    """
+    __tablename__ = "organization_patterns"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    canonical_name = Column(String(256), nullable=False, unique=True, index=True)
+    pattern_variants = Column(JSON, nullable=False)  # Array of name variations
+    pattern_type = Column(String(32), nullable=False)  # 'exact', 'fuzzy', 'abbreviation'
+    confidence = Column(Float, nullable=False, default=1.0)
+    times_seen = Column(Integer, nullable=False, default=1)
+    last_seen_scan_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)

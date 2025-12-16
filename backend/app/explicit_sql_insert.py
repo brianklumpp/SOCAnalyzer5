@@ -184,21 +184,9 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
             except Exception as e:
                 logging.error(f"Failed to read PDF file {pdf_path}: {e}")
         
-        # Read section_results.json for PDF metadata
-        sections_json = None
-        section_results_path = config.SECTION_JSON_PATH
-        if os.path.isfile(section_results_path):
-            try:
-                with open(section_results_path, 'r', encoding='utf-8') as f:
-                    sections_data = json.load(f)
-                    sections_json = json.dumps(sections_data, ensure_ascii=False)
-                    logging.info(f"Loaded section results: {len(sections_data)} sections")
-            except Exception as e:
-                logging.error(f"Failed to read section_results.json: {e}")
-        
         scan_fields = [
             "product", "report_date", "coverage_start", "coverage_end", "auditor", "result_json", "scan_date",
-            "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id", "report_type", "sections", "toc_page_offset", "detected_standards"
+            "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id", "report_type", "toc_page_offset", "detected_standards"
         ]
         # Filter out pdf_file bytes from data before JSON serialization
         data_for_json = {k: v for k, v in data.items() if k != 'pdf_file'}
@@ -231,7 +219,6 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
             pdf_bytes,  # Pass bytes directly, psycopg2 handles BYTEA
             sanitize_value(data.get("company_id")),
             report_type,
-            sections_json,  # Store sections JSONB
             sanitize_value(data.get("toc_page_offset")),  # Store TOC page offset for PDF navigation
             detected_standards_json,  # Store detected standards as JSONB
         ]

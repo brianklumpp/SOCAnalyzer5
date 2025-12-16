@@ -194,12 +194,7 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                 ({"id": getattr(ctrl, "id", None)} | {k: getattr(ctrl, k, None) for k in [
                     "control_id", "control_desc", "control_test", "control_test_results",
                     "has_deviation", "deviation_desc", "control_page_refs", "control_line_ref",
-                    "control_seq", "control_tsc_id", "control_coso_id",
-                    "control_tsc_similarity", "control_coso_similarity",
-                    "control_tsc_confidence_pct", "control_coso_confidence_pct",
-                    "control_tsc_mappings", "control_coso_mappings",
-                    "control_closest_framework", "control_tsc_section", "control_coso_section",
-                    "control_soc_domain", "control_status", "merged_to_control_id",
+                    "control_seq", "control_soc_domain", "control_status", "merged_to_control_id",
                     "control_gpt_opinion", "control_gpt_reasoning",
                     "control_confidence", "confidence_calc",
                     "verification_status", "verification_metadata",
@@ -233,6 +228,9 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db)):
                 logging.error(f"/report/{scan_id} json dumps fallback error: {dump_err}\n{traceback.format_exc()}")
                 raise
 
+    except HTTPException:
+        # Re-raise HTTPException as-is to preserve status code
+        raise
     except Exception as e:
         logging.error(f"/report/{scan_id} failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -303,6 +301,8 @@ async def export_excel(scan_id: int, db=Depends(get_db)):
             }
         )
         
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         logging.error(f"Excel export failed - template not found: {e}")
         raise HTTPException(status_code=500, detail=f"Export template not found: {str(e)}")

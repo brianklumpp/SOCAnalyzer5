@@ -107,12 +107,378 @@ def validate_report_type(report_type_str):
         raise ValueError(f"Invalid report_type '{report_type_str}'. Must be one of: {valid_types}")
 
 
+def run_metadata_extractors_parallel(
+    validated_report_type,
+    executor=None,
+    progress_tracker=None,
+    job_id=None,
+    redis_client=None,
+    logger=None
+):
+    """
+    Run metadata extractors in parallel using IntelligentTaskExecutor.
+    
+    Runs 4 extractors concurrently:
+    1. Auditor extraction
+    2. Product extraction
+    3. Report date extraction
+    4. Coverage period extraction
+    
+    Args:
+        validated_report_type: ReportType enum value
+        executor: IntelligentTaskExecutor instance (optional)
+        progress_tracker: ProgressTracker instance (optional)
+        job_id: Redis job ID for progress updates
+        redis_client: Redis client for state updates
+        logger: Logger instance
+        
+    Returns:
+        Dict with keys: 'product_extraction', 'report_date_extraction', 
+        'coverage_period_extraction', 'cuec_extraction', 'subservice_orgs_extraction'
+        
+    Example:
+        from backend.app.threading import IntelligentTaskExecutor, ProgressTracker
+        
+        executor = IntelligentTaskExecutor(max_workers=5)
+        tracker = ProgressTracker(job_id="test-123", redis_client=redis)
+        
+        results = run_metadata_extractors_parallel(
+            validated_report_type=ReportType.SOC2,
+            executor=executor,
+            progress_tracker=tracker,
+            job_id="test-123",
+            redis_client=redis,
+            logger=logging.getLogger(__name__)
+        )
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    # Fallback to sequential if no executor provided
+    if not executor:
+        logger.info("[PARALLEL_METADATA] No executor provided, falling back to sequential")
+        return _run_metadata_extractors_sequential(
+            validated_report_type, job_id, redis_client, logger
+        )
+    
+    import time
+    start_time = time.time()
+    
+    logger.info("[PARALLEL_METADATA] Starting parallel metadata extraction (5 extractors)")
+    
+    # Thread-safe result storage
+    results = {}
+    results_lock = threading.Lock()
+    extractors_completed = 0
+    
+    # Start metadata phase in progress tracker
+    if progress_tracker:
+        progress_tracker.start_phase("metadata")
+    
+    def run_single_extractor(extractor_name, extractor_func):
+        """
+        Wrapper to run a single metadata extractor.
+        
+        Args:
+            extractor_name: Name for logging (e.g., 'product_extraction')
+            extractor_func: Callable that returns extraction result
+            
+        Returns:
+            Tuple of (extractor_name, result)
+        """
+        nonlocal extractors_completed
+        
+        # Check for cancellation
+        if job_id and redis_client:
+            try:
+                cancelled = redis_client.get(f"job:{job_id}:cancelled")
+                if cancelled:
+                    logger.info(f"[PARALLEL_METADATA] Job {job_id} cancelled, stopping {extractor_name}")
+                    return extractor_name, None
+            except Exception as e:
+                logger.warning(f"[PARALLEL_METADATA] Could not check cancellation flag: {e}")
+        
+        logger.info(f"[PARALLEL_METADATA] Starting {extractor_name}")
+        extractor_start = time.time()
+        
+        # Update status for metadata extractors
+        if job_id and redis_client:
+            try:
+                status_messages = {
+                    'auditor_extraction': 'Extracting auditor information...',
+                    'product_extraction': 'Extracting product information...',
+                    'report_date_extraction': 'Extracting report date...',
+                    'coverage_period_extraction': 'Extracting coverage period...'
+                }
+                if extractor_name in status_messages:
+                    job_json = redis_client.get(f"job:{job_id}")
+                    if job_json:
+                        job_data = json.loads(job_json)
+                        job_data["status"] = status_messages[extractor_name]
+                        redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=86400)
+            except Exception:
+                pass  # Fail silently
+        
+        try:
+            result = extractor_func()
+            elapsed = time.time() - extractor_start
+            logger.info(f"[PARALLEL_METADATA] {extractor_name} completed in {elapsed:.2f}s")
+            
+            # Update progress tracker with entity detection
+            if progress_tracker:
+                if extractor_name == 'product_extraction' and result:
+                    product = result.get('product') if isinstance(result, dict) else result
+                    if product:
+                        progress_tracker.update_entity('product', str(product))
+                
+                elif extractor_name == 'report_date_extraction' and result:
+                    report_date = result.get('report_date') if isinstance(result, dict) else result
+                    if report_date:
+                        progress_tracker.update_entity('report_date', str(report_date))
+                
+                elif extractor_name == 'coverage_period_extraction' and result:
+                    coverage = result.get('coverage_period') if isinstance(result, dict) else result
+                    if coverage:
+                        progress_tracker.update_entity('coverage_period', str(coverage))
+                
+                elif extractor_name == 'cuec_extraction' and result:
+                    if isinstance(result, dict):
+                        cuec_count = len(result.get('cuecs', []))
+                        progress_tracker.update_cuecs(extracted_count=cuec_count)
+                
+                elif extractor_name == 'subservice_orgs_extraction' and result:
+                    if isinstance(result, dict):
+                        orgs_count = len(result.get('subservice_orgs', []))
+                        progress_tracker.update_subservice_orgs(extracted_count=orgs_count)
+            
+            # Thread-safe result storage and progress update
+            with results_lock:
+                results[extractor_name] = result
+                extractors_completed += 1
+                
+                # Update Redis job state with entity detection
+                if job_id and redis_client:
+                    try:
+                        job_json = redis_client.get(f"job:{job_id}")
+                        if job_json:
+                            job = json.loads(job_json)
+                            
+                            # Update identified_entities
+                            if 'identified_entities' not in job:
+                                job['identified_entities'] = {}
+                            
+                            if extractor_name == 'product_extraction' and result:
+                                product = result.get('product') if isinstance(result, dict) else result
+                                if product:
+                                    job['identified_entities']['product'] = str(product)
+                            
+                            elif extractor_name == 'report_date_extraction' and result:
+                                report_date = result.get('report_date') if isinstance(result, dict) else result
+                                if report_date:
+                                    job['identified_entities']['report_date'] = str(report_date)
+                            
+                            elif extractor_name == 'coverage_period_extraction' and result:
+                                # Result is dict with {type, start_date, end_date, as_of_date, explanation}
+                                if isinstance(result, dict):
+                                    if result.get('start_date') and result.get('end_date'):
+                                        coverage_str = f"{result['start_date']} to {result['end_date']}"
+                                    elif result.get('as_of_date'):
+                                        coverage_str = f"As of {result['as_of_date']}"
+                                    elif result.get('end_date'):
+                                        coverage_str = f"As of {result['end_date']}"
+                                    else:
+                                        coverage_str = str(result)
+                                    job['identified_entities']['coverage_period'] = coverage_str
+                                else:
+                                    job['identified_entities']['coverage_period'] = str(result)
+                            
+                            # Update counters
+                            if 'counters' not in job:
+                                job['counters'] = {}
+                            
+                            if extractor_name == 'cuec_extraction' and result:
+                                if isinstance(result, dict):
+                                    cuec_count = len(result.get('cuecs', []))
+                                    job['counters']['cuecs_count'] = cuec_count
+                            
+                            elif extractor_name == 'subservice_orgs_extraction' and result:
+                                if isinstance(result, dict):
+                                    orgs_count = len(result.get('subservice_orgs', []))
+                                    job['counters']['subservice_orgs_count'] = orgs_count
+                            
+                            redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
+                    
+                    except Exception as e:
+                        logger.warning(f"[PARALLEL_METADATA] Could not update job state: {e}")
+            
+            return extractor_name, result
+            
+        except Exception as e:
+            logger.error(f"[PARALLEL_METADATA] {extractor_name} failed: {e}")
+            logger.error(traceback.format_exc())
+            return extractor_name, None
+    
+    # Define extractor tasks
+    def _run_cuec_extraction():
+        """Wrapper for CUEC extraction with report type parameter."""
+        from .extractors.cuec_extractor import extract_cuecs
+        logger.info(f"Running unified CUEC extractor (report_type={validated_report_type.value})")
+        return extract_cuecs(report_type=validated_report_type.value)
+    
+    extractor_tasks = [
+        ('auditor_extraction', extract_auditor_from_report),
+        ('product_extraction', extract_product_from_report),
+        ('report_date_extraction', extract_report_date),
+        ('coverage_period_extraction', extract_coverage_period),
+    ]
+    
+    # Execute in parallel using executor
+    try:
+        from .threading.intelligent_executor import TaskPriority
+        
+        # Create list of (name, func) tuples for executor.map
+        task_list = [(name, func) for name, func in extractor_tasks]
+        
+        # Use executor.map with LOW priority (metadata is less critical than controls)
+        futures = []
+        for name, func in task_list:
+            future = executor.submit(
+                run_single_extractor,
+                name,
+                func,
+                priority=TaskPriority.LOW
+            )
+            futures.append(future)
+        
+        # Wait for all to complete
+        for future in futures:
+            try:
+                future.result()  # Blocks until complete
+            except Exception as e:
+                logger.error(f"[PARALLEL_METADATA] Extractor task raised exception: {e}")
+        
+    except Exception as e:
+        logger.error(f"[PARALLEL_METADATA] Executor failed: {e}, falling back to sequential")
+        # Complete fallback to sequential
+        return _run_metadata_extractors_sequential(
+            validated_report_type, job_id, redis_client, logger
+        )
+    
+    # Calculate metrics
+    parallel_time = time.time() - start_time
+    
+    logger.info(f"[PARALLEL_METADATA] Completed: {extractors_completed}/5 extractors in {parallel_time:.2f}s")
+    
+    # Complete metadata phase in progress tracker
+    if progress_tracker:
+        progress_tracker.complete_phase("metadata")
+    
+    return results
+
+
+def _run_metadata_extractors_sequential(
+    validated_report_type,
+    job_id=None,
+    redis_client=None,
+    logger=None
+):
+    """
+    Sequential fallback for metadata extraction.
+    
+    Runs extractors one at a time in the original order.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
+    logger.info("[SEQUENTIAL_METADATA] Running metadata extractors sequentially")
+    
+    results = {}
+    
+    # Import CUEC extraction wrapper
+    def _run_cuec_extraction():
+        from .extractors.cuec_extractor import extract_cuecs
+        return extract_cuecs(report_type=validated_report_type.value)
+    
+    def _run_subservice_orgs_extraction():
+        return extract_subservice_orgs()
+    
+    extractors = [
+        ('product_extraction', extract_product_from_report),
+        ('report_date_extraction', extract_report_date),
+        ('coverage_period_extraction', extract_coverage_period),
+        ('cuec_extraction', _run_cuec_extraction),
+        ('subservice_orgs_extraction', _run_subservice_orgs_extraction),
+    ]
+    
+    for name, func in extractors:
+        try:
+            logger.info(f"[SEQUENTIAL_METADATA] Starting {name}")
+            result = func()
+            results[name] = result
+            logger.info(f"[SEQUENTIAL_METADATA] {name} completed")
+            
+            # Update Redis job state
+            if job_id and redis_client and result:
+                try:
+                    job_json = redis_client.get(f"job:{job_id}")
+                    if job_json:
+                        job = json.loads(job_json)
+                        
+                        if 'identified_entities' not in job:
+                            job['identified_entities'] = {}
+                        
+                        if name == 'product_extraction':
+                            product = result.get('product') if isinstance(result, dict) else result
+                            if product:
+                                job['identified_entities']['product'] = str(product)
+                        
+                        elif name == 'report_date_extraction':
+                            report_date = result.get('report_date') if isinstance(result, dict) else result
+                            if report_date:
+                                job['identified_entities']['report_date'] = str(report_date)
+                        
+                        elif name == 'coverage_period_extraction':
+                            coverage = result.get('coverage_period') if isinstance(result, dict) else result
+                            if coverage:
+                                job['identified_entities']['coverage_period'] = str(coverage)
+                        
+                        if 'counters' not in job:
+                            job['counters'] = {}
+                        
+                        if name == 'cuec_extraction' and isinstance(result, dict):
+                            cuec_count = len(result.get('cuecs', []))
+                            job['counters']['cuecs_count'] = cuec_count
+                        
+                        elif name == 'subservice_orgs_extraction' and isinstance(result, dict):
+                            orgs_count = len(result.get('subservice_orgs', []))
+                            job['counters']['subservice_orgs_count'] = orgs_count
+                        
+                        redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
+                
+                except Exception as e:
+                    logger.warning(f"[SEQUENTIAL_METADATA] Could not update job state: {e}")
+        
+        except Exception as e:
+            logger.error(f"[SEQUENTIAL_METADATA] {name} failed: {e}")
+            logger.error(traceback.format_exc())
+            results[name] = None
+    
+    return results
+
+
 def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json', report_type='SOC2', 
-                      progress_callback=None, checklist_callback=None, job_id=None):
+                      progress_callback=None, checklist_callback=None, job_id=None, 
+                      executor=None, progress_tracker=None):
     # Reset GPT tracking at start of analysis
     from .gpt_tracker import reset_tracking, get_usage_summary
     reset_tracking()
     logger = logging.getLogger(__name__)
+    
+    # Log parallel execution status
+    if executor:
+        logger.info(f"[PARALLEL_EXEC] Parallel execution ENABLED (max_workers={executor.max_workers if hasattr(executor, 'max_workers') else 'unknown'})")
+    else:
+        logger.info("[PARALLEL_EXEC] Parallel execution DISABLED (running sequentially)")
     
     # Track start time for elapsed_seconds
     import time
@@ -336,17 +702,19 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
 
         # --- Enhanced checklist: file upload, text extraction, section extraction, then extractors ---
         checklist = [
-            {"name": "file_uploaded", "status": "pending"},
-            {"name": "text_extracted", "status": "pending"},
-            {"name": "sections_extracted", "status": "pending"},
-            {"name": "company_extraction", "status": "pending"},
-            {"name": "auditor_extraction", "status": "pending"},
-            {"name": "control_extraction", "status": "pending"},
-            {"name": "cuec_extraction", "status": "pending"},
-            {"name": "subservice_orgs_extraction", "status": "pending"},
-            {"name": "product_extraction", "status": "pending"},
-            {"name": "report_date_extraction", "status": "pending"},
-            {"name": "coverage_period_extraction", "status": "pending"},
+            {"name": "file_uploaded", "status": "pending"},       # Index 0
+            {"name": "text_extracted", "status": "pending"},      # Index 1
+            {"name": "sections_extracted", "status": "pending"},  # Index 2
+            {"name": "company_extraction", "status": "pending"},  # Index 3
+            {"name": "logo_fetching", "status": "pending"},       # Index 4
+            {"name": "auditor_extraction", "status": "pending"},  # Index 5
+            {"name": "product_extraction", "status": "pending"},  # Index 6
+            {"name": "report_date_extraction", "status": "pending"}, # Index 7
+            {"name": "coverage_period_extraction", "status": "pending"}, # Index 8
+            {"name": "control_extraction", "status": "pending"},  # Index 9
+            {"name": "control_framework_mapping", "status": "pending"}, # Index 10
+            {"name": "cuec_extraction", "status": "pending"},     # Index 11
+            {"name": "subservice_orgs_extraction", "status": "pending"}, # Index 12
         ]
         # 0: file_uploaded
         checklist[0]["status"] = "done"
@@ -415,51 +783,196 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             - Uses SOC2 prompt for ALL report types (proven, reliable)
             - Optionally maps financial assertions via batch GPT (SOC1 only, if enabled)
             - Gracefully degrades if assertion mapping fails
+            - Supports parallel extraction if executor and progress_tracker are available
             """
-            from .extractors.control_extractor import extract_controls as extract_controls_unified
-            
-            logger.info(f"Using unified control extractor (report_type={validated_report_type.value})")
-            
             # Load sections for extractor
             with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as f:
                 sections = json.load(f)
             
-            # Call unified extractor with job_id and scan_id for progress tracking
-            # max_controls=None allows config.QUICK_TEST_MODE_ENABLED to take effect
-            result = extract_controls_unified(
-                sections=sections,
-                report_type=validated_report_type.value,
-                enable_assertion_mapping=config.ENABLE_ASSERTION_MAPPING,
-                max_controls=None,  # None = use config.QUICK_TEST_MODE_ENABLED if set
-                scan_id=None,  # Checkpoint will still work, just without scan_id tracking
-                job_id=job_id,  # Pass job_id for real-time progress updates
-                redis_client=redis_client  # Pass Redis client for job state updates
-            )
+            # Check if parallel extraction is enabled and infrastructure is available
+            if config.ENABLE_PARALLEL_EXTRACTION and executor and progress_tracker:
+                from .extractors.control_extractor import extract_controls_parallel
+                
+                logger.info(f"[PARALLEL_EXEC] Using parallel control extractor (report_type={validated_report_type.value})")
+                
+                result = extract_controls_parallel(
+                    sections=sections,
+                    report_type=validated_report_type.value,
+                    executor=executor,
+                    progress_tracker=progress_tracker,
+                    enable_assertion_mapping=config.ENABLE_ASSERTION_MAPPING,
+                    max_controls=None,  # None = use config.QUICK_TEST_MODE_ENABLED if set
+                    scan_id=None,  # Checkpoint will still work, just without scan_id tracking
+                    job_id=job_id,  # Pass job_id for real-time progress updates
+                    redis_client=redis_client  # Pass Redis client for job state updates
+                )
+            else:
+                from .extractors.control_extractor import extract_controls as extract_controls_unified
+                
+                logger.info(f"Using unified control extractor (report_type={validated_report_type.value})")
+                
+                # Fall back to sequential extraction
+                result = extract_controls_unified(
+                    sections=sections,
+                    report_type=validated_report_type.value,
+                    enable_assertion_mapping=config.ENABLE_ASSERTION_MAPPING,
+                    max_controls=None,  # None = use config.QUICK_TEST_MODE_ENABLED if set
+                    scan_id=None,  # Checkpoint will still work, just without scan_id tracking
+                    job_id=job_id,  # Pass job_id for real-time progress updates
+                    redis_client=redis_client  # Pass Redis client for job state updates
+                )
             
-            # Return controls (already saved to config.CONTROL_JSON_PATH by extractor)
-            return result.get("controls", [])
+            # Return full result dict (not just controls list) to preserve framework_mappings and all metadata
+            return result
         
-        # Wrapper for CUEC extraction - routes based on report_type
+        # Control framework mapping function - runs after control extraction
+        def _run_control_framework_mapping():
+            """
+            Map extracted controls to frameworks with parallel execution and checkpointing.
+            
+            Returns:
+                Dict with mapped controls count
+            """
+            try:
+                logger.info("[FRAMEWORK_MAPPING] Starting control framework mapping")
+                
+                # Load controls from control_result.json
+                control_json_path = data_path('data/json/control_result.json')
+                if not os.path.isfile(control_json_path):
+                    logger.warning("[FRAMEWORK_MAPPING] control_result.json not found, skipping framework mapping")
+                    return {"controls_mapped": 0, "error": "No controls to map"}
+                
+                with open(control_json_path, 'r', encoding='utf-8') as f:
+                    control_data = json.load(f)
+                
+                controls = control_data.get('controls', [])
+                if not controls:
+                    logger.warning("[FRAMEWORK_MAPPING] No controls found in control_result.json")
+                    return {"controls_mapped": 0}
+                
+                logger.info(f"[FRAMEWORK_MAPPING] Loaded {len(controls)} controls for framework mapping")
+                
+                # Call the batch framework mapping function from control_extractor
+                from .extractors.control_extractor import map_controls_to_frameworks_batch
+                from .frameworks import get_available_frameworks
+                
+                # Get available frameworks for report type
+                available_frameworks = get_available_frameworks(report_type=validated_report_type.value)
+                logger.info(f"[FRAMEWORK_MAPPING] Loaded {len(available_frameworks)} frameworks: {list(available_frameworks.keys())}")
+                
+                # Map controls with parallel execution
+                mapped_controls = map_controls_to_frameworks_batch(
+                    controls=controls,
+                    available_frameworks=available_frameworks,
+                    executor=executor,
+                    progress_tracker=progress_tracker,
+                    job_id=job_id,
+                    redis_client=redis_client,
+                    logger=logger
+                )
+                
+                # Save mapped controls back to control_result.json
+                control_data['controls'] = mapped_controls
+                with open(control_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(control_data, f, indent=2, ensure_ascii=False)
+                
+                logger.info(f"[FRAMEWORK_MAPPING] Successfully mapped {len(mapped_controls)} controls to frameworks")
+                
+                return {"controls_mapped": len(mapped_controls)}
+                
+            except Exception as e:
+                logger.error(f"[FRAMEWORK_MAPPING] Framework mapping failed: {e}", exc_info=True)
+                # Continue with warnings - don't fail the entire scan
+                return {"controls_mapped": 0, "error": str(e)}
+        
+        # Wrapper for CUEC extraction - routes based on report_type with progress updates
         def _run_cuec_extraction():
             """
-            Run unified CUEC extraction with report type parameter.
+            Run unified CUEC extraction with report type parameter and real-time progress updates.
             Supports SOC1, SOC2, and COMBINED report types.
             """
             from .extractors.cuec_extractor import extract_cuecs
             logger.info(f"Running unified CUEC extractor (report_type={validated_report_type.value})")
-            return extract_cuecs(report_type=validated_report_type.value)
+            # Pass job_id and redis_client for real-time progress updates
+            return extract_cuecs(
+                report_type=validated_report_type.value,
+                job_id=job_id,
+                redis_client=redis_client
+            )
+        
+        # Logo fetching function - runs after company is identified
+        def _run_logo_fetching():
+            """Fetch company logo after company has been identified."""
+            try:
+                company_json_path = data_path('data/json/company_result.json')
+                if not os.path.isfile(company_json_path):
+                    logger.warning("[LOGO] company_result.json not found, skipping logo fetch")
+                    return {"success": False, "reason": "Company not yet identified"}
+                
+                with open(company_json_path, 'r', encoding='utf-8') as f:
+                    company_data = json.load(f)
+                
+                company_name = company_data.get('company', 'Unknown')
+                # FIX: Read 'company_domain' field instead of 'domain'
+                company_domain = company_data.get('company_domain') or company_data.get('domain')
+                
+                if not company_domain:
+                    logger.info(f"[LOGO] No domain found for {company_name}, skipping logo fetch")
+                    return {"success": False, "reason": "No domain available"}
+                
+                logger.info(f"[LOGO] Fetching logo for {company_name} (domain: {company_domain})")
+                
+                from .logo_service import fetch_and_cache_logo
+                from sqlalchemy import create_engine
+                from sqlalchemy.orm import sessionmaker
+                from .models import Scan
+                
+                if not config.db_path:
+                    logger.warning("[LOGO] No database path configured")
+                    return {"success": False, "reason": "No database configured"}
+                
+                engine = create_engine(config.db_path)
+                SessionLocal = sessionmaker(bind=engine)
+                db = SessionLocal()
+                try:
+                    # Get company_id from the most recent scan
+                    scan = db.query(Scan).filter(Scan.job_id == job_id).first()
+                    if scan and scan.company_id:
+                        success, logo_url = fetch_and_cache_logo(scan.company_id, company_domain, db)
+                        if success and logo_url:
+                            logger.info(f"[LOGO] ✓ Logo cached: {logo_url}")
+                            return {"success": True, "logo_url": logo_url}
+                        else:
+                            logger.info(f"[LOGO] No logo found for {company_domain}")
+                            return {"success": False, "reason": "Logo not found"}
+                    else:
+                        logger.warning("[LOGO] Could not find scan or company_id")
+                        return {"success": False, "reason": "Scan not found"}
+                finally:
+                    db.close()
+            except Exception as e:
+                logger.error(f"[LOGO] Logo fetch failed: {e}", exc_info=True)
+                return {"success": False, "reason": str(e)}
         
         prereq_steps = [
             (3, "company_extraction", extract_company_from_report, "Running company extractor...", 30),
-            (4, "auditor_extraction", extract_auditor_from_report, "Running auditor extractor...", 40),
+            (4, "logo_fetching", _run_logo_fetching, "Fetching company logo...", 32),
         ]
+        # Metadata extractors that run in parallel after company and logo (NOTE: metadata_parallel_steps is documentation - run_metadata_extractors_parallel has actual list)
+        metadata_parallel_steps = [
+            (5, "auditor_extraction", extract_auditor_from_report, "Running auditor extractor...", 34),
+            (6, "product_extraction", extract_product_from_report, "Running product extractor...", 36),
+            (7, "report_date_extraction", extract_report_date, "Running report date extractor...", 38),
+            (8, "coverage_period_extraction", extract_coverage_period, "Running coverage period extractor...", 40),
+        ]
+        # Control extraction step (has internal parallelism)
         parallel_steps = [
-            (5, "control_extraction", _run_control_extraction, "Running controls extractor...", 50),
-            (6, "cuec_extraction", _run_cuec_extraction, "Running CUECs extractor...", 60),
-            (7, "subservice_orgs_extraction", _run_subservice_orgs_extraction, "Running subservice orgs extractor...", 70),
-            (8, "product_extraction", extract_product_from_report, "Running product extractor...", 80),
-            (9, "report_date_extraction", extract_report_date, "Running report date extractor...", 90),
-            (10, "coverage_period_extraction", extract_coverage_period, "Running coverage period extractor...", 95),
+            (9, "control_extraction", _run_control_extraction, "Running controls extractor...", 50),
+        ]
+        # Post-control extraction steps that run in parallel
+        post_control_parallel_steps = [
+            (11, "cuec_extraction", _run_cuec_extraction, "Running CUECs extractor...", 70),
+            (12, "subservice_orgs_extraction", _run_subservice_orgs_extraction, "Running subservice orgs extractor...", 80),
         ]
 
         # Watchdog: if controls extractor runs too long without increasing result size, mark as partial and continue
@@ -475,8 +988,56 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 from . import config as cfg
                 redis_url = getattr(cfg, 'REDIS_URL', 'redis://localhost:6379/0')
                 redis_client = sync_redis.from_url(redis_url, decode_responses=True)
+                
+                # Clean up any stale pause states from previous runs
+                try:
+                    job_json = redis_client.get(f"job:{job_id}")
+                    if job_json:
+                        job_data = json.loads(job_json)
+                        if job_data.get("status") == "Paused" and not job_data.get("paused"):
+                            # Status is Paused but paused flag is not set - likely stale
+                            logger.error(f"[PAUSE_CLEANUP] Removing stale 'Paused' status from job {job_id}")
+                            job_data["status"] = "Starting"
+                            redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=60*60*24)
+                except Exception as cleanup_err:
+                    logger.debug(f"Pause cleanup error: {cleanup_err}")
+                    
             except Exception as redis_err:
                 logger.warning(f"Could not create Redis client: {redis_err}")
+        
+        # Helper function to check if scan should be paused
+        def _check_pause():
+            """Check if scan queue is paused and raise exception if so."""
+            if job_id and redis_client:
+                try:
+                    # Check both queue pause and individual job pause
+                    is_queue_paused = redis_client.exists("scan_queue:paused") > 0
+                    job_json = redis_client.get(f"job:{job_id}")
+                    
+                    # VERBOSE LOGGING - Log full state for debugging
+                    logger.error(f"[PAUSE_CHECK] job_id={job_id}, queue_paused={is_queue_paused}, job_exists={bool(job_json)}")
+                    
+                    if job_json:
+                        job_data = json.loads(job_json)
+                        is_job_paused = job_data.get("status") == "Paused"
+                        has_paused_flag = job_data.get("paused", False)
+                        
+                        # VERBOSE LOGGING - Log job state details
+                        logger.error(f"[PAUSE_CHECK] status='{job_data.get('status')}', paused_flag={has_paused_flag}, is_job_paused={is_job_paused}")
+                        
+                        # Only trigger if BOTH status is "Paused" AND paused flag is True
+                        # This prevents false positives from stale status
+                        if is_queue_paused or (is_job_paused and has_paused_flag):
+                            logger.warning(f"[PAUSE] Scan paused (queue:{is_queue_paused}, job:{is_job_paused}, flag:{has_paused_flag})")
+                            raise RuntimeError("Scan paused by user")
+                    else:
+                        logger.error(f"[PAUSE_CHECK] No job data found in Redis for {job_id}")
+                except json.JSONDecodeError as jde:
+                    logger.error(f"[PAUSE_CHECK] JSON decode error: {jde}")
+                except RuntimeError:
+                    raise
+                except Exception as pause_err:
+                    logger.error(f"[PAUSE_CHECK] Pause check error: {pause_err}")
         
         # Predefine flatten map for building standardized results (also used for partial writes)
         flatten_map = {
@@ -567,6 +1128,9 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         
         # Run prerequisites sequentially
         for idx, key, func, status, pct in prereq_steps:
+            # Check for pause before each step
+            _check_pause()
+            
             try:
                 update_progress(pct, status)
                 logger.debug(f"{status}")
@@ -590,7 +1154,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                         logger.error(f"Failed to load partial result for {key}: {e2}")
                         results[key] = None
             
-            # Update identified_entities in job state for company and auditor
+            # Update identified_entities in job state for all metadata
             if job_id and redis_client and results.get(key):
                 try:
                     entity_updates = {}
@@ -598,19 +1162,60 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                         company_name = results[key].get('company', 'Unknown')
                         entity_updates = {'identified_entities': {'company': company_name}}
                         logger.info(f"[PROGRESS] Company identified: {company_name}")
+                    elif key == 'logo_fetching' and isinstance(results[key], dict):
+                        if results[key].get('success'):
+                            logo_url = results[key].get('logo_url')
+                            if logo_url:
+                                # Update both identified_entities (for API) and top-level logo_url (for queue card)
+                                entity_updates = {
+                                    'identified_entities': {'company_logo_url': logo_url},
+                                    'logo_url': logo_url  # Add to top-level for frontend queue card display
+                                }
+                                logger.info(f"[PROGRESS] Logo fetched successfully: {logo_url}")
+                            else:
+                                logger.info(f"[PROGRESS] Logo fetched successfully")
+                        else:
+                            logger.info(f"[PROGRESS] Logo fetch: {results[key].get('reason', 'Unknown')}")
                     elif key == 'auditor_extraction':
                         auditor_name = results[key].get('auditor') if isinstance(results[key], dict) else results[key]
                         if auditor_name:
                             entity_updates = {'identified_entities': {'auditor': str(auditor_name)}}
                             logger.info(f"[PROGRESS] Auditor identified: {auditor_name}")
+                    elif key == 'product_extraction':
+                        product = results[key].get('product') if isinstance(results[key], dict) else results[key]
+                        if product:
+                            entity_updates = {'identified_entities': {'product': str(product)}}
+                            logger.info(f"[PROGRESS] Product identified: {product}")
+                    elif key == 'report_date_extraction':
+                        report_date = results[key].get('report_date') if isinstance(results[key], dict) else results[key]
+                        if report_date:
+                            entity_updates = {'identified_entities': {'report_date': str(report_date)}}
+                            logger.info(f"[PROGRESS] Report date identified: {report_date}")
+                    elif key == 'coverage_period_extraction':
+                        coverage = results[key].get('coverage_period') if isinstance(results[key], dict) else results[key]
+                        if coverage:
+                            # Format coverage_period for frontend display
+                            if isinstance(coverage, dict):
+                                if coverage.get('start_date') and coverage.get('end_date'):
+                                    coverage_str = f"{coverage['start_date']} to {coverage['end_date']}"
+                                elif coverage.get('as_of_date'):
+                                    coverage_str = f"As of {coverage['as_of_date']}"
+                                elif coverage.get('end_date'):
+                                    coverage_str = f"As of {coverage['end_date']}"
+                                else:
+                                    coverage_str = str(coverage)
+                            else:
+                                coverage_str = str(coverage)
+                            entity_updates = {'identified_entities': {'coverage_period': coverage_str}}
+                            logger.info(f"[PROGRESS] Coverage period identified: {coverage_str}")
                     
                     if entity_updates:
                         _update_job_state(job_id, entity_updates, redis_client)
                 except Exception as entity_err:
                     logger.warning(f"Could not update identified_entities: {entity_err}")
             
-            # Write checkpoint and update job state after each prerequisite extractor
-            _write_partial_combined(results)
+            # Update job state after each prerequisite extractor
+            # NOTE: combined_result.json will be written once at the end after all extractors complete
             if job_id and redis_client:
                 try:
                     _update_job_state(job_id, {}, redis_client)
@@ -620,9 +1225,38 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             # Update checklist in Redis after each sequential extractor
             update_checklist(checklist)
         
+        # Run metadata extractors in parallel using the OLD superior implementation
+        if config.ENABLE_PARALLEL_METADATA_EXTRACTION and executor and progress_tracker:
+            logger.info("[PARALLEL_EXEC] Running metadata extractors (product, report_date, coverage_period, cuec, subservice_orgs) in PARALLEL mode")
+            
+            # Call the superior run_metadata_extractors_parallel function with correct parameters
+            metadata_results = run_metadata_extractors_parallel(
+                validated_report_type=validated_report_type,
+                executor=executor,
+                progress_tracker=progress_tracker,
+                job_id=job_id,
+                redis_client=redis_client,
+                logger=logger
+            )
+            
+            # Merge results
+            for key, res in metadata_results.items():
+                results[key] = res
+                # Update checklist for these extractors
+                for item in checklist:
+                    if item.get('name') == key:
+                        item['status'] = 'done' if res is not None else 'error'
+                        break
+            
+            logger.info(f"[PARALLEL_EXEC] Parallel metadata extraction complete: {len(metadata_results)} extractors finished")
+            update_checklist(checklist)
+        
         # --- Run remaining extractors in parallel threads ---
         extractor_results = {}
         def run_extractor(idx, key, func, status, pct):
+            # Check for pause before starting extractor
+            _check_pause()
+            
             try:
                 update_progress(pct, status)
                 logger.debug(f"{status}")
@@ -761,91 +1395,246 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             parallel_steps = [(idx, key, func, status, pct) for (idx, key, func, status, pct) in parallel_steps 
                              if key not in completed_extractors]
         
-        # SEQUENTIAL PROCESSING: Run extractors one at a time for maximum stability
-        # No threading, no race conditions, no DNS threading issues
-        logger.info("Running extractors SEQUENTIALLY (no parallel workers)")
-        for idx, key, func, status, pct in parallel_steps:
-            logger.info(f"Starting extractor '{key}' (sequential mode)")
-            try:
-                k, res = run_extractor(idx, key, func, status, pct)
-                extractor_results[k] = res
-                logger.info(f"Extractor '{k}' completed successfully")
-                
-                # Add to checkpoint after each completion
-                if k not in completed_extractors:
-                    completed_extractors.append(k)
-                    save_checkpoint(completed_extractors)
+        # EXTRACTION PROCESSING: Run extractors sequentially OR in parallel if enabled
+        # Check if parallel metadata extraction is enabled
+        if config.ENABLE_PARALLEL_METADATA_EXTRACTION and executor and progress_tracker:
+            logger.info("[PARALLEL_EXEC] Running metadata extractors in PARALLEL mode")
+            
+            # Separate control/cuec/subservice extractors from metadata extractors
+            # Control extraction wrapper already handles parallel vs sequential internally
+            # Metadata extractors: product, report_date, coverage_period, cuec, subservice_orgs
+            control_steps = []
+            metadata_steps = []
+            
+            for idx, key, func, status, pct in parallel_steps:
+                if key == 'control_extraction':
+                    control_steps.append((idx, key, func, status, pct))
+                else:
+                    metadata_steps.append((idx, key, func, status, pct))
+            
+            # Run control extraction first (it has internal parallel logic)
+            for idx, key, func, status, pct in control_steps:
+                logger.info(f"Starting extractor '{key}'")
+                try:
+                    k, res = run_extractor(idx, key, func, status, pct)
+                    extractor_results[k] = res
+                    logger.info(f"Extractor '{k}' completed successfully")
                     
-            except Exception as e:
-                logger.error(f"Extractor '{key}' raised exception: {e}\n{traceback.format_exc()}")
-                extractor_results[key] = None
-                # Mark as failed in checklist but continue with remaining extractors
-                for item in checklist:
-                    if item.get('name') == key:
-                        item['status'] = 'error'
-                        break
-                update_checklist(checklist)
+                    if k not in completed_extractors:
+                        completed_extractors.append(k)
+                        save_checkpoint(completed_extractors)
+                except Exception as e:
+                    logger.error(f"Extractor '{key}' raised exception: {e}\n{traceback.format_exc()}")
+                    extractor_results[key] = None
+                    for item in checklist:
+                        if item.get('name') == key:
+                            item['status'] = 'error'
+                            break
+                    update_checklist(checklist)
+            
+            # Run control framework mapping after control extraction
+            if 'control_extraction' in extractor_results and 'control_framework_mapping' not in completed_extractors:
+                logger.info("Starting control framework mapping")
+                try:
+                    checklist[10]["status"] = "running"  # Index 10 is control_framework_mapping
+                    update_checklist(checklist)
+                    
+                    # Initialize framework mapping state in Redis with total control count
+                    if job_id and redis_client:
+                        try:
+                            control_json_path = data_path('data/json/control_result.json')
+                            if os.path.isfile(control_json_path):
+                                with open(control_json_path, 'r', encoding='utf-8') as f:
+                                    control_data = json.load(f)
+                                total_controls = len(control_data.get('controls', []))
+                                _update_job_state(job_id, {
+                                    'status': f'Mapping 0/{total_controls} controls to frameworks...',
+                                    'counters': {
+                                        'controls_mapped_count': 0,
+                                        'controls_mapped_percent': 0,
+                                        'total_controls': total_controls
+                                    }
+                                }, redis_client)
+                                logger.info(f"[FRAMEWORK_MAPPING] Initialized state: 0/{total_controls} controls")
+                        except Exception as init_err:
+                            logger.warning(f"Could not initialize framework mapping state: {init_err}")
+                    
+                    update_progress(50, "Mapping controls to frameworks...")
+                    
+                    mapping_result = _run_control_framework_mapping()
+                    extractor_results['control_framework_mapping'] = mapping_result
+                    
+                    checklist[10]["status"] = "done"
+                    update_checklist(checklist)
+                    logger.info("Control framework mapping completed successfully")
+                    
+                    completed_extractors.append('control_framework_mapping')
+                    save_checkpoint(completed_extractors)
+                except Exception as e:
+                    logger.error(f"Control framework mapping failed: {e}\n{traceback.format_exc()}")
+                    checklist[10]["status"] = "error"
+                    update_checklist(checklist)
+                    # Continue with warnings
+            
+            # Run post-control parallel steps (CUEC + subservice_orgs)
+            logger.info("[PARALLEL_EXEC] Running post-control extractors in PARALLEL")
+            
+            # Filter post-control steps to skip already completed
+            remaining_post_control_steps = [(idx, key, func, status, pct) for (idx, key, func, status, pct) in post_control_parallel_steps 
+                                           if key not in completed_extractors]
+            
+            for idx, key, func, status, pct in remaining_post_control_steps:
+                logger.info(f"Starting post-control extractor '{key}'")
+                try:
+                    k, res = run_extractor(idx, key, func, status, pct)
+                    extractor_results[k] = res
+                    logger.info(f"Extractor '{k}' completed successfully")
+                    
+                    if k not in completed_extractors:
+                        completed_extractors.append(k)
+                        save_checkpoint(completed_extractors)
+                except Exception as e:
+                    logger.error(f"Extractor '{key}' raised exception: {e}\n{traceback.format_exc()}")
+                    extractor_results[key] = None
+                    for item in checklist:
+                        if item.get('name') == key:
+                            item['status'] = 'error'
+                            break
+                    update_checklist(checklist)
+        else:
+            # SEQUENTIAL PROCESSING: Run extractors one at a time for maximum stability
+            # No threading, no race conditions, no DNS threading issues
+            logger.info("Running extractors SEQUENTIALLY (no parallel workers)")
+            for idx, key, func, status, pct in parallel_steps:
+                logger.info(f"Starting extractor '{key}' (sequential mode)")
+                try:
+                    k, res = run_extractor(idx, key, func, status, pct)
+                    extractor_results[k] = res
+                    logger.info(f"Extractor '{k}' completed successfully")
+                    
+                    # Add to checkpoint after each completion
+                    if k not in completed_extractors:
+                        completed_extractors.append(k)
+                        save_checkpoint(completed_extractors)
+                        
+                except Exception as e:
+                    logger.error(f"Extractor '{key}' raised exception: {e}\n{traceback.format_exc()}")
+                    extractor_results[key] = None
+                    # Mark as failed in checklist but continue with remaining extractors
+                    for item in checklist:
+                        if item.get('name') == key:
+                            item['status'] = 'error'
+                            break
+                    update_checklist(checklist)
                 
-            finally:
-                # Update identified_entities for product, dates, etc. AND counters for subservice orgs/CUECs
-                if job_id and redis_client and key in extractor_results and extractor_results[key]:
-                    try:
+                finally:
+                    # Update identified_entities for product, dates, etc. AND counters for subservice orgs/CUECs
+                    if job_id and redis_client and key in extractor_results and extractor_results[key]:
+                        try:
+                            entity_updates = {}
+                            counter_updates = {}
+                            
+                            if key == 'product_extraction':
+                                product = extractor_results[key].get('product') if isinstance(extractor_results[key], dict) else extractor_results[key]
+                                if product:
+                                    entity_updates = {'identified_entities': {'product': str(product)}}
+                                    logger.info(f"[PROGRESS] Product identified: {product}")
+                            elif key == 'report_date_extraction':
+                                report_date = extractor_results[key].get('report_date') if isinstance(extractor_results[key], dict) else extractor_results[key]
+                                if report_date:
+                                    entity_updates = {'identified_entities': {'report_date': str(report_date)}}
+                                    logger.info(f"[PROGRESS] Report date identified: {report_date}")
+                            elif key == 'coverage_period_extraction':
+                                coverage = extractor_results[key].get('coverage_period') if isinstance(extractor_results[key], dict) else extractor_results[key]
+                                if coverage:
+                                    entity_updates = {'identified_entities': {'coverage_period': str(coverage)}}
+                                    logger.info(f"[PROGRESS] Coverage period identified: {coverage}")
+                            elif key == 'subservice_orgs_extraction':
+                                # Extract subservice orgs count
+                                res = extractor_results[key]
+                                count = 0
+                                if isinstance(res, dict):
+                                    count = len(res.get('subservice_orgs', []))
+                                elif isinstance(res, list):
+                                    count = len(res)
+                                counter_updates = {'counters': {'subservice_orgs_count': count}}
+                                logger.info(f"[PROGRESS] Found {count} subservice organizations")
+                            elif key == 'cuec_extraction':
+                                # Extract CUECs count
+                                res = extractor_results[key]
+                                count = 0
+                                if isinstance(res, dict):
+                                    count = len(res.get('cuecs', []))
+                                elif isinstance(res, list):
+                                    count = len(res)
+                                counter_updates = {'counters': {'cuecs_count': count}}
+                                logger.info(f"[PROGRESS] Found {count} CUECs")
+                            
+                            # Apply entity updates
+                            if entity_updates:
+                                _update_job_state(job_id, entity_updates, redis_client)
+                            # Apply counter updates
+                            if counter_updates:
+                                _update_job_state(job_id, counter_updates, redis_client)
+                        except Exception as entity_err:
+                            logger.warning(f"Could not update progress for {key}: {entity_err}")
+                    
+                    # Update job state after each extractor
+                    # NOTE: combined_result.json will be written once at the end after all extractors complete
+                    results.update(extractor_results)  # Merge extractor results into main results dict
+                    if job_id and redis_client:
+                        try:
+                            _update_job_state(job_id, {}, redis_client)
+                        except Exception as update_err:
+                            logger.warning(f"Could not update job state: {update_err}")
+        
+        # Post-extraction progress updates (for both parallel and sequential modes)
+        # Update final entity counts and progress state
+        if job_id and redis_client:
+            try:
+                for key, result in extractor_results.items():
+                    if result and key not in ['control_extraction']:  # Control extraction already tracked internally
                         entity_updates = {}
                         counter_updates = {}
                         
                         if key == 'product_extraction':
-                            product = extractor_results[key].get('product') if isinstance(extractor_results[key], dict) else extractor_results[key]
+                            product = result.get('product') if isinstance(result, dict) else result
                             if product:
                                 entity_updates = {'identified_entities': {'product': str(product)}}
-                                logger.info(f"[PROGRESS] Product identified: {product}")
                         elif key == 'report_date_extraction':
-                            report_date = extractor_results[key].get('report_date') if isinstance(extractor_results[key], dict) else extractor_results[key]
+                            report_date = result.get('report_date') if isinstance(result, dict) else result
                             if report_date:
                                 entity_updates = {'identified_entities': {'report_date': str(report_date)}}
-                                logger.info(f"[PROGRESS] Report date identified: {report_date}")
                         elif key == 'coverage_period_extraction':
-                            coverage = extractor_results[key].get('coverage_period') if isinstance(extractor_results[key], dict) else extractor_results[key]
+                            coverage = result.get('coverage_period') if isinstance(result, dict) else result
                             if coverage:
                                 entity_updates = {'identified_entities': {'coverage_period': str(coverage)}}
-                                logger.info(f"[PROGRESS] Coverage period identified: {coverage}")
                         elif key == 'subservice_orgs_extraction':
-                            # Extract subservice orgs count
-                            res = extractor_results[key]
                             count = 0
-                            if isinstance(res, dict):
-                                count = len(res.get('subservice_orgs', []))
-                            elif isinstance(res, list):
-                                count = len(res)
+                            if isinstance(result, dict):
+                                count = len(result.get('subservice_orgs', []))
+                            elif isinstance(result, list):
+                                count = len(result)
                             counter_updates = {'counters': {'subservice_orgs_count': count}}
-                            logger.info(f"[PROGRESS] Found {count} subservice organizations")
                         elif key == 'cuec_extraction':
-                            # Extract CUECs count
-                            res = extractor_results[key]
                             count = 0
-                            if isinstance(res, dict):
-                                count = len(res.get('cuecs', []))
-                            elif isinstance(res, list):
-                                count = len(res)
+                            if isinstance(result, dict):
+                                count = len(result.get('cuecs', []))
+                            elif isinstance(result, list):
+                                count = len(result)
                             counter_updates = {'counters': {'cuecs_count': count}}
-                            logger.info(f"[PROGRESS] Found {count} CUECs")
                         
-                        # Apply entity updates
                         if entity_updates:
                             _update_job_state(job_id, entity_updates, redis_client)
-                        # Apply counter updates
                         if counter_updates:
                             _update_job_state(job_id, counter_updates, redis_client)
-                    except Exception as entity_err:
-                        logger.warning(f"Could not update progress for {key}: {entity_err}")
-                
-                # Write partial combined_result.json and update job state after each extractor
-                results.update(extractor_results)  # Merge extractor results into main results dict
-                _write_partial_combined(results)
-                if job_id and redis_client:
-                    try:
-                        _update_job_state(job_id, {}, redis_client)
-                    except Exception as update_err:
-                        logger.warning(f"Could not update job state: {update_err}")
+            except Exception as final_update_err:
+                logger.warning(f"Could not perform final progress updates: {final_update_err}")
+        
+        # Write combined_result.json ONCE after ALL extractors complete (including framework mapping)
+        # This ensures framework_mappings and all other fields are included
+        results.update(extractor_results)
+        _write_partial_combined(results)
             
         # --- Always load extractor outputs from JSON files if present ---
         extractor_json_map = {
@@ -879,7 +1668,10 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         except Exception:
             pass
         for ext_key, (short_key, inner_key) in flatten_map.items():
-            val = extractor_results.get(ext_key)
+            # Try in-memory results first (from parallel extraction), then fall back to file-loaded extractor_results
+            val = results.get(ext_key)
+            if val is None:
+                val = extractor_results.get(ext_key)
             if val is not None:
                 if isinstance(val, dict) and inner_key in val:
                     if short_key == 'controls' and isinstance(val[inner_key], list):

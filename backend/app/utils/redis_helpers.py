@@ -3,7 +3,7 @@ Redis helper functions for job management with connection pooling.
 """
 import json as _json
 import logging
-import redis.asyncio as redis
+import redis
 from typing import Optional, Dict, Any
 
 from ..config import REDIS_URL
@@ -34,7 +34,7 @@ def _get_redis():
     return redis.Redis(connection_pool=_redis_pool)
 
 
-async def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
+def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
     """
     Get job status from Redis.
     
@@ -48,7 +48,7 @@ async def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
     if redis_client is None:
         redis_client = _get_redis()
         try:
-            job_json = await redis_client.get(f"job:{job_id}")
+            job_json = redis_client.get(f"job:{job_id}")
         except Exception as e:
             logging.warning(f"[get_job] Redis access failed: {e}")
             return None
@@ -60,7 +60,7 @@ async def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
         return None
     else:
         # Use provided client (no try/except needed, caller handles)
-        job_json = await redis_client.get(f"job:{job_id}")
+        job_json = redis_client.get(f"job:{job_id}")
         if job_json:
             try:
                 return _json.loads(job_json)
@@ -69,7 +69,7 @@ async def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def set_job(job_id: str, job_dict: Dict[str, Any], redis_client=None) -> None:
+def set_job(job_id: str, job_dict: Dict[str, Any], redis_client=None) -> None:
     """
     Store job status in Redis with 24-hour expiry.
     
@@ -80,10 +80,10 @@ async def set_job(job_id: str, job_dict: Dict[str, Any], redis_client=None) -> N
     """
     if redis_client is None:
         redis_client = _get_redis()
-    await redis_client.set(f"job:{job_id}", _json.dumps(job_dict), ex=60*60*24)  # 24h expiry
+    redis_client.set(f"job:{job_id}", _json.dumps(job_dict), ex=60*60*24)  # 24h expiry
 
 
-async def del_job(job_id: str, redis_client=None) -> None:
+def del_job(job_id: str, redis_client=None) -> None:
     """
     Delete job from Redis.
     
@@ -93,4 +93,5 @@ async def del_job(job_id: str, redis_client=None) -> None:
     """
     if redis_client is None:
         redis_client = _get_redis()
-    await redis_client.delete(f"job:{job_id}")
+    redis_client.delete(f"job:{job_id}")
+
