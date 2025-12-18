@@ -21,17 +21,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps
-COPY backend/requirements.txt /app/backend/requirements.txt
+COPY requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 # Copy project (keep paths so config.py can resolve PROJECT_ROOT correctly)
-COPY . /app
+COPY . /app/backend
 
 # Ensure data dirs exist and are writable (can be mounted via volumes in compose)
 RUN mkdir -p /app/data/output /app/data/json /app/data/logs
 
 # Copy and set up entrypoint script
-COPY backend/entrypoint.sh /app/entrypoint.sh
+COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8000
