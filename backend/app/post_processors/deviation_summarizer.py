@@ -118,14 +118,18 @@ async def generate_summaries(
                 except Exception as e:
                     logger.warning(f"Failed to update Redis progress: {e}")
             
-            # Build GPT prompt
+            # Build GPT prompt - include management response if available
+            mgmt_response_line = ""
+            if control.management_response_text:
+                mgmt_response_line = f"\nManagement Response: {control.management_response_text}"
+            
             prompt = f"""Report Type: {report_type}
 Control: {control.control_id or 'N/A'}
 Description: {control.control_desc or 'N/A'}
 Test Procedure: {control.control_test or 'N/A'}
-Test Result: {control.control_test_results or 'N/A'}
+Test Result: {control.control_test_results or 'N/A'}{mgmt_response_line}
 
-In under 300 characters, explain in plain language what this deviation means for the organization. For SOC 1, focus on financial reporting impact; for SOC 2, focus on security/availability impact."""
+In under 300 characters, explain in plain language what this deviation means for the organization{' and acknowledge the planned remediation' if control.management_response_text else ''}. For SOC 1, focus on financial reporting impact; for SOC 2, focus on security/availability impact."""
             
             # Call GPT
             response = await call_gpt_async(
@@ -136,10 +140,7 @@ In under 300 characters, explain in plain language what this deviation means for
             )
             
             if response and response.strip():
-                # Truncate to 300 characters with ellipsis if needed
                 summary = response.strip()
-                if len(summary) > 300:
-                    summary = summary[:297] + "..."
                 
                 # Update control
                 control.deviation_summary = summary
@@ -212,14 +213,18 @@ async def regenerate_single_summary(
     scan = scan_result.scalar_one_or_none()
     report_type = scan.report_type.value if scan and scan.report_type else "SOC2"
     
-    # Build GPT prompt
+    # Build GPT prompt - include management response if available
+    mgmt_response_line = ""
+    if control.management_response_text:
+        mgmt_response_line = f"\nManagement Response: {control.management_response_text}"
+    
     prompt = f"""Report Type: {report_type}
 Control: {control.control_id or 'N/A'}
 Description: {control.control_desc or 'N/A'}
 Test Procedure: {control.control_test or 'N/A'}
-Test Result: {control.control_test_results or 'N/A'}
+Test Result: {control.control_test_results or 'N/A'}{mgmt_response_line}
 
-In under 300 characters, explain in plain language what this deviation means for the organization. For SOC 1, focus on financial reporting impact; for SOC 2, focus on security/availability impact."""
+Explain in plain language what this deviation means for the organization{' and acknowledge the planned remediation' if control.management_response_text else ''}. For SOC 1, focus on financial reporting impact; for SOC 2, focus on security/availability impact. Be concise but complete."""
     
     try:
         # Call GPT
@@ -227,14 +232,11 @@ In under 300 characters, explain in plain language what this deviation means for
             prompt=prompt,
             model="gpt-3.5-turbo",
             temperature=0.3,
-            max_tokens=150
+            max_tokens=500
         )
         
         if response and response.strip():
-            # Truncate to 300 characters with ellipsis if needed
             summary = response.strip()
-            if len(summary) > 300:
-                summary = summary[:297] + "..."
             
             # Update control
             control.deviation_summary = summary

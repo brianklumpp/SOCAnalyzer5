@@ -76,7 +76,7 @@ async def create_baseline(data: Dict[str, Any] = Body(...), db=Depends(get_db), 
 
 
 @router.get("/baseline/list")
-async def list_baselines(db=Depends(get_db)):
+async def list_baselines(db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """List all available baselines."""
     try:
         result = await db.execute(select(Baseline).order_by(Baseline.created_at.desc()))
@@ -99,7 +99,7 @@ async def list_baselines(db=Depends(get_db)):
 
 
 @router.get("/baseline/{baseline_id}")
-async def get_baseline(baseline_id: int, db=Depends(get_db)):
+async def get_baseline(baseline_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Get a specific baseline."""
     try:
         baseline = (await db.execute(
@@ -183,189 +183,4 @@ async def delete_baseline(baseline_id: int, db=Depends(get_db), current_user: Us
         logging.error(f"Error deleting baseline: {e}", exc_info=True)
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
-@router.post("/verify/{scan_id}")
-async def trigger_verification(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """Trigger verification workflow for a scan."""
-    try:
-        scan = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
-        if not scan:
-            raise HTTPException(status_code=404, detail="Scan not found")
-        
-        # Mark as verifying
-        scan.verification_status = "in_progress"
-        scan.verification_started_at = datetime.utcnow()
-        await db.commit()
-        
-        # Background verification logic would go here
-        
-        return {
-            "scan_id": scan_id,
-            "status": "verification_started",
-            "message": "Verification workflow initiated"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"Error triggering verification: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@router.get("/verify/{scan_id}/status")
-async def get_verification_status(scan_id: int, db=Depends(get_db)):
-    """Get verification status for a scan."""
-    try:
-        scan = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
-        if not scan:
-            raise HTTPException(status_code=404, detail="Scan not found")
-        
-        return {
-            "scan_id": scan_id,
-            "status": getattr(scan, "verification_status", "not_started"),
-            "started_at": getattr(scan, "verification_started_at", None),
-            "completed_at": getattr(scan, "verification_completed_at", None)
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error getting verification status: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@router.post("/verify/{scan_id}/learn_patterns")
-async def learn_patterns(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """Learn patterns from a verified scan."""
-    try:
-        scan = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
-        if not scan:
-            raise HTTPException(status_code=404, detail="Scan not found")
-        
-        # Pattern learning logic would go here
-        
-        return {
-            "scan_id": scan_id,
-            "patterns_learned": 0,
-            "message": "Pattern learning initiated"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error learning patterns: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@router.get("/patterns/review-queue")
-async def get_pattern_review_queue(db=Depends(get_db)):
-    """Get pending pattern merge reviews."""
-    try:
-        result = await db.execute(
-            select(PatternReviewQueue)
-            .where(PatternReviewQueue.status == "pending")
-            .order_by(PatternReviewQueue.created_at.desc())
-        )
-        reviews = result.scalars().all()
-        
-        return [
-            {
-                "id": r.id,
-                "pattern_type": r.pattern_type,
-                "status": r.status,
-                "created_at": r.created_at.isoformat() if r.created_at else None
-            }
-            for r in reviews
-        ]
-        
-    except Exception as e:
-        logging.error(f"Error getting review queue: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@router.post("/patterns/approve-merge/{review_id}")
-async def approve_pattern_merge(review_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """Approve a pattern merge suggestion."""
-    try:
-        review = (await db.execute(
-            select(PatternReviewQueue).where(PatternReviewQueue.id == review_id)
-        )).scalar_one_or_none()
-        
-        if not review:
-            raise HTTPException(status_code=404, detail="Review not found")
-        
-        review.status = "approved"
-        review.reviewed_at = datetime.utcnow()
-        await db.commit()
-        
-        # Apply merge logic would go here
-        
-        return {
-            "id": review_id,
-            "status": "approved",
-            "message": "Pattern merge approved"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"Error approving pattern merge: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@router.post("/patterns/reject-merge/{review_id}")
-async def reject_pattern_merge(review_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """Reject a pattern merge suggestion."""
-    try:
-        review = (await db.execute(
-            select(PatternReviewQueue).where(PatternReviewQueue.id == review_id)
-        )).scalar_one_or_none()
-        
-        if not review:
-            raise HTTPException(status_code=404, detail="Review not found")
-        
-        review.status = "rejected"
-        review.reviewed_at = datetime.utcnow()
-        await db.commit()
-        
-        return {
-            "id": review_id,
-            "status": "rejected",
-            "message": "Pattern merge rejected"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"Error rejecting pattern merge: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@router.get("/patterns/organization/{organization}")
-async def get_organization_patterns(organization: str, db=Depends(get_db)):
-    """Get learned patterns for an organization."""
-    try:
-        result = await db.execute(
-            select(OrganizationPattern)
-            .where(OrganizationPattern.organization == organization)
-            .order_by(OrganizationPattern.created_at.desc())
-        )
-        patterns = result.scalars().all()
-        
-        return [
-            {
-                "id": p.id,
-                "organization": p.organization,
-                "pattern_type": p.pattern_type,
-                "confidence": p.confidence,
-                "created_at": p.created_at.isoformat() if p.created_at else None
-            }
-            for p in patterns
-        ]
-        
-    except Exception as e:
-        logging.error(f"Error getting organization patterns: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
+# REMOVED: All verification and pattern management endpoints (no longer used)

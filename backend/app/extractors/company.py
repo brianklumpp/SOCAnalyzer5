@@ -2,15 +2,11 @@
 import json
 import logging
 from typing import Any, List, Optional
+from pathlib import Path
 from .. import config
 from ..gpt_client import gpt_extract
 
 logger = logging.getLogger(__name__)
-
-# Use centralized config paths
-SECTION_JSON_PATH = str(config.SECTION_JSON_PATH)
-COMPANY_JSON_PATH = str(config.JSON_DIR / "company_result.json")
-PDF_TXT_PATH = str(config.PDF_TXT_PATH)
 
 def load_json(path: str) -> Any:
     with open(path, 'r', encoding='utf-8') as f:
@@ -55,13 +51,32 @@ def extract_title_page(txt_lines):
         title_page_lines.append(line)
     return ''.join(title_page_lines)
 
-def extract_company_from_report():
+def extract_company_from_report(job_paths=None, job_id=None):
+    """Extract company information from SOC report.
+    
+    Args:
+        job_paths: Dict with 'json_dir', 'logs_dir', 'temp_dir' Path objects
+        job_id: Unique job identifier for logging
+    """
+    if not job_paths:
+        raise ValueError("[COMPANY] job_paths parameter is required for job isolation")
+    if not job_id:
+        raise ValueError("[COMPANY] job_id parameter is required for logging")
+    
+    # Set up job-specific paths
+    section_json_path = str(job_paths['json_dir'] / 'section_results.json')
+    company_json_path = str(job_paths['json_dir'] / 'company_result.json')
+    pdf_txt_path = str(job_paths['temp_dir'] / 'output.txt')
+    
+    logger.info(f"[JOB {job_id}] Starting company extraction")
+    
     # Reset output file at the start of extraction
-    with open(config.JSON_DIR / 'company_result.json', 'w', encoding='utf-8') as f:
+    with open(company_json_path, 'w', encoding='utf-8') as f:
         f.write('{}\n')
-    section_results = load_json(SECTION_JSON_PATH)
+    
+    section_results = load_json(section_json_path)
     # Use Management Assertion, Service Auditor Report, and title page
-    with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
+    with open(pdf_txt_path, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
     text_sections = []
     # Add title page (up to PAGE 2 marker)
@@ -151,8 +166,8 @@ def extract_company_from_report():
         'confidence': confidence,
         'raw_gpt_responses': responses
     }
-    save_json(result, COMPANY_JSON_PATH)
-    logging.info(f'Company extraction result: {result}')
+    save_json(result, company_json_path)
+    logger.info(f'[JOB {job_id}] Company extraction result: {result}')
     return result
 
 __all__ = ["extract_company_from_report"]

@@ -1,0 +1,9 @@
+{
+  "company": "Okta, Inc.",
+  "parent_company": null,
+  "company_domain": "okta.com",
+  "confidence": 1,
+  "raw_gpt_responses": [
+    "{\n    \"company\": \"Okta, Inc.\",\n    \"parent_company\": null,\n    \"company_domain\": \"okta.com\",\n    \"confidence\": 1,\n    \"explanation\": \"The report explicitly identifies Okta, Inc. as the audited entity and mentions its domain 'okta.com'. No parent company is mentioned in the provided text.\"\n}"
+  ]
+}

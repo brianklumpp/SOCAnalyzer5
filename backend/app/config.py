@@ -51,6 +51,10 @@ REPORT_TYPE_CONFIDENCE_THRESHOLD = float(os.getenv("REPORT_TYPE_CONFIDENCE_THRES
 # Number of pages to analyze in quick scan stage
 REPORT_TYPE_QUICK_SCAN_PAGES = int(os.getenv("REPORT_TYPE_QUICK_SCAN_PAGES", "10"))
 
+# --- Queue Settings ---
+# Maximum number of scans to process concurrently
+MAX_CONCURRENT_SCANS = int(os.getenv("MAX_CONCURRENT_SCANS", "1"))
+
 # --- PDF Snippet Generation Settings ---
 # Enable generation of pdf_snippet field for controls/CUECs/subservice orgs (for PDF viewer search)
 # When enabled, extractors generate 150-200 char snippets for fuzzy text matching in PDF viewer
@@ -89,7 +93,7 @@ DATAIKU_API_BASE = os.getenv("DATAIKU_API_BASE")  # e.g., https://dataiku-dss.co
 DATAIKU_API_KEY = os.getenv("DATAIKU_API_KEY")
 DATAIKU_SERVICE_ID = os.getenv("DATAIKU_SERVICE_ID", "SOLIDIGM_GPT_API_ACCESS")
 DATAIKU_ENDPOINT_ID = os.getenv("DATAIKU_ENDPOINT_ID", "chat-completions")
-DATAIKU_TIMEOUT = float(os.getenv("DATAIKU_TIMEOUT", "120"))
+DATAIKU_TIMEOUT = float(os.getenv("DATAIKU_TIMEOUT", "45"))  # Reduced from 120 to 45 seconds for faster failure detection
 DATAIKU_VERIFY_SSL = os.getenv("DATAIKU_VERIFY_SSL", "true").lower() == "true"
 DATAIKU_CA_BUNDLE = os.getenv("DATAIKU_CA_BUNDLE")  # optional custom CA path
 
@@ -287,6 +291,22 @@ CONTROL_INCOMPLETE_PENALTY = float(os.getenv("CONTROL_INCOMPLETE_PENALTY", "0.20
 # This is the single source of truth for "high confidence" definition system-wide
 HIGH_CONFIDENCE_THRESHOLD = float(os.getenv("HIGH_CONFIDENCE_THRESHOLD", "0.75"))
 
+# Management Response Extraction Settings
+# Number of pages after deviation control to search for management responses (Strategy 1)
+# Strategy 2 expands this by +1 page automatically if not found
+MANAGEMENT_RESPONSE_SEARCH_WINDOW = int(os.getenv("MANAGEMENT_RESPONSE_SEARCH_WINDOW", "2"))
+# Minimum confidence for auto-populating management responses from section matching (Strategy 3)
+MANAGEMENT_RESPONSE_MIN_CONFIDENCE = float(os.getenv("MANAGEMENT_RESPONSE_MIN_CONFIDENCE", "0.5"))
+
+# --- Manual Extraction Settings ---
+# Confidence boost for manually extracted items (user-verified pages)
+MANUAL_EXTRACTION_CONFIDENCE_BOOST = float(os.getenv("MANUAL_EXTRACTION_CONFIDENCE_BOOST", "0.2"))
+# Description similarity threshold for deduplication (0.0-1.0)
+# Items with >= this similarity are considered duplicates
+MANUAL_EXTRACTION_SIMILARITY_THRESHOLD = float(os.getenv("MANUAL_EXTRACTION_SIMILARITY_THRESHOLD", "0.80"))
+# Log file for manual extraction operations
+MANUAL_EXTRACTION_LOG_PATH = str((pathlib.Path(__file__).resolve().parents[2] / 'data/logs/manual_extractions.log').resolve())
+
 # Framework Preview Rate Limiting
 # Maximum preview requests per scan per minute
 FRAMEWORK_PREVIEW_RATE_LIMIT = int(os.getenv("FRAMEWORK_PREVIEW_RATE_LIMIT", "10"))
@@ -312,18 +332,35 @@ JSON_DIR = DATA_DIR / "json"
 LOGS_DIR = DATA_DIR / "logs"
 OUTPUT_DIR = DATA_DIR / "output"
 
-# Canonical file paths
-SECTION_JSON_PATH = JSON_DIR / "section_results.json"
-PDF_TXT_PATH = OUTPUT_DIR / "output.txt"
-CONTROL_JSON_PATH = JSON_DIR / "control_result.json"
-CONTROL_GPT_LOG_PATH = LOGS_DIR / "control_gpt.log"
-# Add other extractor output/log paths as needed
+# --- Queue Isolation & Cleanup Settings ---
+# Job-specific directory structure: data/jobs/{user_id}/{job_id}/
+JOBS_DIR = DATA_DIR / "jobs"
+# Retention period for failed jobs (hours) - cleanup task removes older failures
+FAILED_JOB_RETENTION_HOURS = int(os.getenv("FAILED_JOB_RETENTION_HOURS", "24"))
+# Log file retention (days) - cleanup task removes older logs
+LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "7"))
+
+def get_job_paths(user_id: int, job_id: str):
+    """
+    Get job-specific directory paths for isolated scan processing.
+    
+    Args:
+        user_id: User ID for scoping job directories
+        job_id: Unique job identifier
+        
+    Returns:
+        Dict with paths: json_dir, logs_dir, temp_dir, txt_path (all as pathlib.Path objects)
+    """
+    job_base = JOBS_DIR / str(user_id) / job_id
+    return {
+        'json_dir': job_base / 'json',
+        'logs_dir': job_base / 'logs',
+        'temp_dir': job_base / 'temp',
+        'txt_path': job_base / 'temp' / 'output.txt'  # Extracted PDF text file
+    }
 
 # Path to SOC reports
 SOC2_REPORTS_DIR = PROJECT_ROOT / 'soc2_reports'
-
-# Path to output text file (legacy, prefer PDF_TXT_PATH)
-OUTPUT_TEXT_FILE = str(PDF_TXT_PATH)
 
 # --- Analyzer/watchdog and timeouts (tunable) ---
 # Group timeout for parallel extractors. 0 disables timeout (wait indefinitely).
@@ -502,45 +539,145 @@ Report Text:
 
 # CUEC Extraction Prompt
 CUEC_EXTRACTION_PROMPT = """
-You are an expert SOC auditor. Your task is to extract only **Complementary User Entity Controls (CUECs)** — statements that assign responsibilities to the user entity, customer, or client.
+You are an expert SOC auditor. Your task is to extract **Complementary User Entity Controls (CUECs)** — statements that CLEARLY and UNAMBIGUOUSLY assign responsibilities to the user entity, customer, or client.
 
-## Key Responsibility Phrases (High Confidence Indicators)
-When you see these phrases, **increase confidence** that the statement is a CUEC:
-- "Customer is responsible for", "Customer are responsible for"
-- "Entity is responsible for", "Entity are responsible for"
-- "User entity is responsible for", "User entities are responsible for"
-- "Client is responsible for", "Clients are responsible for"
-- "Customer must", "Customers must"
-- "Entity must", "Entities must"
-- "User entity must", "User entities must"
-- "[Organization/Company] should", "[Organization/Company] is expected to"
+## Extraction Philosophy: CONSERVATIVE and PRECISE
+**Extract conservatively. Only include statements that clearly assign user entity responsibility. When in doubt, EXCLUDE.**
 
-## Rules
-1. A valid CUEC explicitly assigns responsibility to the user entity (e.g., "User entities must…", "Customers are responsible for…").
-2. Do NOT include internal vendor controls, product descriptions, or general control statements that do not assign responsibility.
-3. Ignore any statement where responsibility is assigned to {company_names} or {parent_company_names}.
-4. For each valid CUEC, extract:
-     - cuec_tsc_id: TSC ID if present, else null.
-     - cuec_description: full CUEC statement.
-     - cuec_line_ref: integer line number where found.
-     - cuec_gpt_opinion: "Yes" (is a CUEC) or "No".
-     - cuec_gpt_responsibility_phrase: exact responsibility phrase (e.g., "user entities are responsible for…"), or null if not clear.
-     - cuec_gpt_reasoning: concise reasoning for inclusion.
-     - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined".
-     - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null.
-     - cuec_justification: brief rationale for framework alignment.
-5. For every non-CUEC control or statement reviewed, output an entry in a second array named "excluded" with:
-     - excluded_description: the statement.
-     - excluded_reason: short reason why it is not a CUEC.
-6. Do not fabricate IDs or frameworks. Use null for missing data.
-7. Return one JSON object containing two arrays: "cuecs" and "excluded".
-8. No markdown, commentary, or text outside JSON.
+## What is NOT a CUEC (Exclude These):
+
+### 1. Service Organization Internal Controls
+If the SERVICE ORGANIZATION or SYSTEM performs the action, it is NOT a CUEC:
+- ❌ "The system monitors user login attempts" (system does the monitoring)
+- ❌ "Automated processes track configuration changes" (automated, not user action)
+- ❌ "The service organization maintains backups" (vendor responsibility)
+- ❌ "Controls are in place to ensure data is encrypted at rest" (vendor encrypts, no user action required)
+- ❌ "The system validates input data" (system validates, not user)
+- ❌ "Controls ensure data is backed up daily" (vendor backs up, no user involvement)
+
+### 2. Product/System Descriptions
+If it describes WHAT the system/product does (capabilities), not what USER must do:
+- ❌ "The platform provides identity as a service capabilities"
+- ❌ "Core capabilities extend the power of..."
+- ❌ "Configuration management is utilized to provision..."
+- ❌ "The system captures data and maintains historical records"
+
+### 3. Vendor Obligations Without User Action
+Even if using "controls ensure" language, ask: **WHO performs the action?**
+- ❌ "Controls ensure data is backed up daily" → Vendor backs up → NOT a CUEC
+- ❌ "Controls ensure network traffic is monitored" → Vendor monitors → NOT a CUEC
+- ❌ "Controls ensure encryption standards are maintained" → Vendor maintains → NOT a CUEC
+
+### 4. Incomplete Fragments
+- ❌ Statements < 30 characters
+- ❌ Missing punctuation and < 80 characters  
+- ❌ Table headers or section titles without complete sentences
+
+### 5. Service Organization Responsibilities
+- ❌ Any statement explicitly assigning responsibility to {company_names} rather than user entities
+- ❌ "{company_names} is responsible for maintaining..." → NOT a CUEC
+- ❌ "{parent_company_names} employees must..." → NOT a CUEC
+
+## What IS a CUEC (Extract These):
+
+### Critical Test: Does the statement assign an action/responsibility to the USER ENTITY/CLIENT/CUSTOMER?
+
+### 1. Explicit User Responsibility
+Clear subject (user/customer/client) + obligation verb:
+- ✅ "User entities are responsible for restricting access to credentials"
+- ✅ "Customers must review functionality changes"
+- ✅ "Clients need to configure access controls"
+- ✅ "User entities should monitor system logs for suspicious activity"
+
+### 2. Implicit User Action in Context
+The statement describes what users must DO, even if phrased indirectly:
+- ✅ "Controls are in place to ensure clients manage administrator accounts" 
+  → Actor: clients, Action: manage accounts → CUEC
+- ✅ "Controls ensure user entities receive and validate data files"
+  → Actor: user entities, Actions: receive and validate → CUEC
+- ✅ "Controls are in place to ensure customers configure encryption settings"
+  → Actor: customers, Action: configure → CUEC
+
+### 3. Context Clues (But Still Require Clear User Responsibility)
+- Section titled "Complementary User Entity Controls" → Likely CUECs, but still verify each statement
+- Framework citation (CC X.X) in CUEC section → Likely CUEC, but verify user action exists
+- Prescriptive language (must/should/need to) directed at users → Likely CUEC
+
+### The Key Question:
+**"If I'm the customer/client, does this tell me something I must DO or be responsible for?"**
+- Yes → Extract as CUEC
+- No → Exclude
+
+### Examples of Context-Based Decisions:
+
+**Vendor Action (NOT CUEC):**
+- ❌ "Controls are in place to ensure data encryption"
+  → WHO encrypts? Vendor encrypts → NOT a CUEC
+
+**User Action (CUEC):**
+- ✅ "Controls are in place to ensure clients configure encryption settings"
+  → WHO configures? Clients configure → CUEC
+
+**System Action (NOT CUEC):**
+- ❌ "The system logs all access attempts"
+  → WHO logs? System logs → NOT a CUEC
+
+**User Action (CUEC):**
+- ✅ "User entities should review system logs for suspicious activity"
+  → WHO reviews? Users review → CUEC
+
+**Vendor Monitoring (NOT CUEC):**
+- ❌ "Controls ensure network traffic is monitored for anomalies"
+  → WHO monitors? Vendor monitors → NOT a CUEC
+
+**User Monitoring (CUEC):**
+- ✅ "User entities are responsible for monitoring vendor-provided reports for anomalies"
+  → WHO monitors? Users monitor → CUEC
+
+## Enhanced Reasoning Requirement
+
+For each potential CUEC, your **cuec_gpt_reasoning** MUST answer these questions:
+1. **WHO** performs the action? (User entity / Service org / System / Automated process)
+2. **WHAT** is the action/responsibility being assigned?
+3. **WHY** is this a user responsibility (or why not)?
+
+**Good reasoning examples:**
+- ✅ "Clients must manage accounts. Actor=clients, Action=manage administrator accounts, User responsibility=explicitly stated."
+- ✅ "System monitors logins. Actor=system, Action=monitor login attempts, Vendor control=automated system action, NOT a CUEC."
+- ✅ "Clients configure encryption. Actor=clients, Action=configure encryption settings, User responsibility=clients must perform configuration."
+
+**Bad reasoning (too vague):**
+- ❌ "This looks like a CUEC."
+- ❌ "Mentions users."
+- ❌ "Has framework citation."
+
+## Extraction Rules
+
+1. **Extract conservatively**: Only extract statements that CLEARLY assign user responsibility. Precision over recall.
+2. Use your best judgment for **cuec_gpt_opinion**:
+   - "Yes" = Confident this is a CUEC (clear user responsibility)
+   - "No" = This is NOT a CUEC (vendor/system control)
+   - "Maybe" = Borderline (unclear responsibility)
+3. For each CUEC, extract:
+   - cuec_description: full CUEC statement
+   - cuec_line_ref: integer line number where found
+   - cuec_gpt_opinion: "Yes", "No", or "Maybe"
+   - cuec_gpt_responsibility_phrase: exact phrase showing user responsibility (e.g., "user entities are responsible for..."), or null
+   - cuec_gpt_reasoning: MUST answer WHO/WHAT/WHY (see above)
+   - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined"
+   - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null
+   - cuec_justification: brief rationale for framework alignment
+4. For clearly non-CUEC statements you considered, optionally output in "excluded" array:
+   - excluded_description: the statement
+   - excluded_reason: short reason (e.g., "Vendor control", "System action", "Product description")
+5. Do not fabricate IDs or frameworks. Use null for missing data.
+6. Return one JSON object with a "cuecs" array (and optionally an "excluded" array).
+7. No markdown, commentary, or text outside JSON.
 
 ## Output Example
 {{
     "cuecs": [
         {{
-            "cuec_tsc_id": "CC6.1",
             "cuec_description": "User entities must restrict access to their own credentials.",
             "cuec_line_ref": 1254,
             "cuec_gpt_opinion": "Yes",
@@ -549,6 +686,36 @@ When you see these phrases, **increase confidence** that the statement is a CUEC
             "cuec_framework_alignment": "AICPA_TSC",
             "cuec_framework_alignment_id": "CC6.1",
             "cuec_justification": "Relates to access control under TSC Security."
+        }},
+        {{
+            "cuec_description": "User entities should review functionality changes, product level changes and enhancements and report if there are any incidents impacting Security and Confidentiality due to changes made by the vendor.",
+            "cuec_line_ref": 1280,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "User entities should",
+            "cuec_gpt_reasoning": "Bullet point format with framework citation describing user responsibility.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC7.3",
+            "cuec_justification": "Change management responsibility, cites CC7.3."
+        }},
+        {{
+            "cuec_description": "Controls are in place to ensure that, once client administrator accounts are enabled, clients are responsible for administering access and additional user accounts for their own employees.",
+            "cuec_line_ref": 1295,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "clients are responsible for administering",
+            "cuec_gpt_reasoning": "Uses 'controls are in place to ensure' pattern followed by client responsibility.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.8",
+            "cuec_justification": "Access control responsibility assigned to clients."
+        }},
+        {{
+            "cuec_description": "Controls are in place to ensure that, once client administrator accounts are enabled, clients are responsible for administering access and additional user accounts for their own employees.",
+            "cuec_line_ref": 1295,
+            "cuec_gpt_opinion": "Yes",
+            "cuec_gpt_responsibility_phrase": "clients are responsible for",
+            "cuec_gpt_reasoning": "Conditional statement format assigning access administration to clients.",
+            "cuec_framework_alignment": "AICPA_TSC",
+            "cuec_framework_alignment_id": "CC6.8",
+            "cuec_justification": "User access administration responsibility."
         }}
     ],
     "excluded": [
@@ -1723,7 +1890,6 @@ Merge duplicate or significant overlapping Complementary User Entity Controls (C
 Return only a JSON array where each object includes:
 {{
     "cuec_seq": <int>,
-    "cuec_tsc_id": "<string or null>",
     "cuec_description": "<string>",
     "cuec_line_ref": <int or null>,
     "cuec_confidence": <float>,
@@ -2240,6 +2406,7 @@ You are a SOC auditor. Determine if the provided control_test_results text conta
 Return only a valid JSON object:
 {{
     "has_deviation": <true or false>,
+    "has_deviation": "<true or false>",
     "deviation_desc": "<string if true, else empty>"
 }}
 
@@ -2485,8 +2652,7 @@ Stop the block when a new control ID, header, or whitespace separator appears.
 
 ### 4. Deviation detection
 - has_deviation = true if any result mentions "exception", "deviation", "failure", or "not effective"
-- deviation_desc = the phrase or short summary
-- Otherwise, has_deviation = false and deviation_desc = ""
+- Otherwise, has_deviation = false
 
 ### 5. Financial assertion mapping
 **Strategy:** Extract the control FIRST with high quality, THEN map assertions.
@@ -2532,18 +2698,26 @@ TABLE_FIELD_MAP = {
     "company": ["name", "parent_company", "confidence", "scan_id", "company_domain", "logo_url"],
     "control": [
         "control_id", "control_desc", "control_test", "control_test_results", "has_deviation", "deviation_desc", "control_page_refs", "control_line_ref", "control_seq",
-        "control_soc_domain",
         "financial_assertions", "framework_category",
         "framework_mappings", "primary_framework", "primary_criterion_id", "primary_confidence",
-        "control_status", "merged_to_control_id", "control_gpt_opinion", "control_gpt_reasoning", "control_confidence", "confidence_calc", "pdf_snippet", "scan_id"
+        "control_status", "merged_to_control_id", "control_gpt_opinion", "control_gpt_reasoning", "control_confidence", "confidence_calc",
+        "verification_status", "verification_metadata", "pattern_confidence", "final_confidence",
+        "management_response_text", "management_response_page_refs", "management_response_line_ref", "management_response_confidence", "response_detection_method",
+        "scan_id"
     ],
     "cuec": [
         "cuec_seq", "cuec_description", "cuec_line_ref", "cuec_page_refs", "cuec_confidence", "cuec_gpt_opinion",
         "cuec_distance_from_cuec_keywords", "cuec_gpt_reasoning", "cuec_justification", "cuec_confidence_justification",
         "framework_mappings", "primary_framework", "primary_criterion_id", "primary_confidence",
-        "annotation", "control_strength", "scan_id"
+        "annotation", "control_strength", "analyst_notes", "edit_log", "scan_id"
     ],
-    "subservice_org": ["name", "confidence", "pdf_snippet", "scan_id"],
+    "subservice_org": [
+        "name", "confidence", "scan_id",
+        "third_party_description", "third_party_page_ref", "third_party_confidence",
+        "distance_from_so_keywords", "likely_so", "common_so",
+        "source_context", "confidence_justification", "third_party_controls",
+        "annotation", "analyst_notes", "edit_log"
+    ],
     "product": ["name", "scan_id"]
 }
 

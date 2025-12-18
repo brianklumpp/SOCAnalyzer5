@@ -1,0 +1,8 @@
+{
+  "type": "Type 2",
+  "start_date": "2024-01-01",
+  "end_date": "2024-11-30",
+  "as_of_date": null,
+  "explanation": "The report explicitly mentions 'throughout the period January 1, 2024 to November 30, 2024' multiple times, indicating a start and end date. This confirms it is a Type 2 report, as it covers the design and operating effectiveness of controls during a specific period. The start date is January 1, 2024, and the end date is November 30, 2024.",
+  "raw_gpt_response": "{\n    \"type\": \"Type 2\",\n    \"start_date\": \"2024-01-01\",\n    \"end_date\": \"2024-11-30\",\n    \"as_of_date\": null,\n    \"explanation\": \"The report explicitly mentions 'throughout the period January 1, 2024 to November 30, 2024' multiple times, indicating a start and end date. This confirms it is a Type 2 report, as it covers the design and operating effectiveness of controls during a specific period. The start date is January 1, 2024, and the end date is November 30, 2024.\"\n}"
+}

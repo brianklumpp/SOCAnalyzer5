@@ -5,7 +5,7 @@ import logging
 import traceback
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi import APIRouter, Depends, Body, HTTPException, BackgroundTasks
 from fastapi.responses import Response
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.future import select
@@ -154,6 +154,7 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
                     "third_party_controls": getattr(s, "third_party_controls", None),
                     "annotation": getattr(s, "annotation", None),
                     "analyst_notes": getattr(s, "analyst_notes", None),
+                    "edit_log": getattr(s, "edit_log", None),
                     "pdf_snippet": getattr(s, "pdf_snippet", None),
                 } for s in suborgs
             ],
@@ -182,13 +183,14 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
                     "cuec_confidence_justification": getattr(c, "cuec_confidence_justification", None),
                     "cuec_tsc_mappings": getattr(c, "cuec_tsc_mappings", None),
                     "cuec_coso_mappings": getattr(c, "cuec_coso_mappings", None),
-                    "cuec_framework_mappings": getattr(c, "cuec_framework_mappings", None),
-                    "cuec_primary_framework": getattr(c, "cuec_primary_framework", None),
-                    "cuec_primary_criterion_id": getattr(c, "cuec_primary_criterion_id", None),
-                    "cuec_primary_confidence": getattr(c, "cuec_primary_confidence", None),
+                    "framework_mappings": getattr(c, "framework_mappings", None),
+                    "primary_framework": getattr(c, "primary_framework", None),
+                    "primary_criterion_id": getattr(c, "primary_criterion_id", None),
+                    "primary_confidence": getattr(c, "primary_confidence", None),
                     "annotation": getattr(c, "annotation", None),
                     "analyst_notes": getattr(c, "analyst_notes", None),
                     "control_strength": getattr(c, "control_strength", None),
+                    "edit_log": getattr(c, "edit_log", None),
                     "pdf_snippet": getattr(c, "pdf_snippet", None),
                 } for c in cuecs
             ],
@@ -239,8 +241,8 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
 
 
 @router.get("/pdf/{scan_id}")
-async def get_pdf(scan_id: int, db=Depends(get_db)):
-    """Serve PDF file for a scan. Returns PDF bytes with proper Content-Type."""
+async def get_pdf(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """Serve PDF file for a scan. Returns embedded PDF if available (from consent agreements), otherwise returns main PDF."""
     try:
         result = await db.execute(select(Scan).where(Scan.id == scan_id))
         scan_row = result.scalar_one_or_none()
@@ -248,7 +250,19 @@ async def get_pdf(scan_id: int, db=Depends(get_db)):
         if not scan_row:
             raise HTTPException(status_code=404, detail="Scan not found")
         
-        pdf_bytes = getattr(scan_row, "pdf_file", None)
+        # Prefer embedded PDF if available (from consent agreement wrapper)
+        pdf_bytes = getattr(scan_row, "embedded_pdf_file", None)
+        pdf_filename = getattr(scan_row, "embedded_pdf_filename", None)
+        
+        if pdf_bytes:
+            logging.info(f"[PDF_SERVE] Serving embedded PDF for scan {scan_id}: {pdf_filename} ({len(pdf_bytes)} bytes)")
+        else:
+            # Fall back to main PDF if no embedded PDF
+            pdf_bytes = getattr(scan_row, "pdf_file", None)
+            pdf_filename = scan_row.pdf_filename
+            if pdf_bytes:
+                logging.info(f"[PDF_SERVE] Serving main PDF for scan {scan_id}: {pdf_filename} ({len(pdf_bytes)} bytes)")
+        
         if not pdf_bytes:
             raise HTTPException(status_code=404, detail="PDF not stored for this scan")
         
@@ -256,7 +270,7 @@ async def get_pdf(scan_id: int, db=Depends(get_db)):
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'inline; filename="{scan_row.pdf_filename or "report.pdf"}"',
+                "Content-Disposition": f'inline; filename="{pdf_filename or "report.pdf"}"',
                 "Cache-Control": "public, max-age=31536000"
             }
         )
@@ -268,7 +282,7 @@ async def get_pdf(scan_id: int, db=Depends(get_db)):
 
 
 @router.get("/export/excel/{scan_id}")
-async def export_excel(scan_id: int, db=Depends(get_db)):
+async def export_to_excel(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Export SOC analysis data to Excel template for a scan.
     Returns Excel file with populated control objectives, exceptions, CUECs, and subservice orgs.
@@ -317,7 +331,7 @@ async def export_excel(scan_id: int, db=Depends(get_db)):
 
 
 @router.get("/report/{scan_id}/pdf")
-async def get_report_pdf(scan_id: int, db=Depends(get_db)):
+async def get_report_pdf(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Serve the original PDF file for the specified scan.
     Returns the PDF with Content-Disposition: inline to open in browser.
@@ -353,6 +367,8 @@ async def get_report_pdf(scan_id: int, db=Depends(get_db)):
 async def patch_report_overview(scan_id: int, data: dict = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update scan overview fields (company, product, dates, etc.)."""
     try:
+        from datetime import datetime
+        
         result = await db.execute(select(Scan).where(Scan.id == scan_id))
         scan = result.scalar_one_or_none()
         
@@ -361,11 +377,25 @@ async def patch_report_overview(scan_id: int, data: dict = Body(...), db=Depends
         
         # Update allowed fields
         allowed_fields = ["company", "product", "auditor", "coverage_start", "coverage_end", 
-                         "report_type", "as_of_date", "is_sox_vendor"]
+                         "report_type", "as_of_date", "is_sox_vendor", "report_date"]
+        
+        # Date fields that need parsing
+        date_fields = ["coverage_start", "coverage_end", "report_date", "as_of_date"]
         
         for field in allowed_fields:
             if field in data:
-                setattr(scan, field, data[field])
+                value = data[field]
+                # Parse date strings to datetime objects
+                if field in date_fields and isinstance(value, str) and value:
+                    try:
+                        value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    except ValueError:
+                        # Try parsing as date-only string (YYYY-MM-DD)
+                        try:
+                            value = datetime.strptime(value, '%Y-%m-%d')
+                        except ValueError:
+                            pass  # Keep as string if parsing fails
+                setattr(scan, field, value)
         
         await db.commit()
         return {"status": "ok"}
@@ -379,7 +409,7 @@ async def patch_report_overview(scan_id: int, data: dict = Body(...), db=Depends
 
 
 @router.get("/report/{scan_id}/reload_text")
-async def reload_extracted_text(scan_id: int, db=Depends(get_db)):
+async def reload_extracted_text(scan_id: int, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Reload extracted text from disk for a scan (for debugging/recovery)."""
     try:
         import os
@@ -411,4 +441,56 @@ async def reload_extracted_text(scan_id: int, db=Depends(get_db)):
         raise
     except Exception as e:
         logging.error(f"Error reloading extracted text for scan {scan_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/report/{scan_id}/manual-extract")
+async def manual_extract(
+    scan_id: int,
+    background_tasks: BackgroundTasks,
+    data: dict = Body(...),
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Manually extract CUECs or Subservice Organizations from specific PDF pages."""
+    print(f"[MANUAL_EXTRACT PRINT] Function entered! scan_id={scan_id}, data={data}")
+    logging.info(f"[MANUAL_EXTRACT] Endpoint called for scan {scan_id} by {current_user.username}, data: {data}")
+    try:
+        from ..services.manual_extraction_service import (
+            parse_page_ranges, 
+            manual_extract_cuecs, 
+            manual_extract_subservice_orgs
+        )
+        
+        entity_type = data.get("entity_type")
+        pages_str = data.get("pages")
+        
+        print(f"[MANUAL_EXTRACT PRINT] entity_type={entity_type}, pages={pages_str}")
+        logging.info(f"[MANUAL_EXTRACT] entity_type={entity_type}, pages={pages_str}")
+        
+        if not entity_type or not pages_str:
+            raise HTTPException(status_code=400, detail="entity_type and pages are required")
+        
+        if entity_type not in ["cuec", "subservice_org"]:
+            raise HTTPException(status_code=400, detail="entity_type must be 'cuec' or 'subservice_org'")
+        
+        # Parse and validate page ranges
+        try:
+            pages = parse_page_ranges(pages_str)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        
+        # Run extraction immediately (without background task for now to maintain existing behavior)
+        # TODO: Consider moving to background task if extractions take too long
+        if entity_type == "cuec":
+            result = await manual_extract_cuecs(scan_id, pages, db, current_user.username)
+        else:
+            result = await manual_extract_subservice_orgs(scan_id, pages, db, current_user.username)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error in manual extraction for scan {scan_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

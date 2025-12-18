@@ -3,15 +3,11 @@ import os
 import json
 import logging
 from typing import Any, List, Optional, Tuple
+from pathlib import Path
 from .. import config
 from ..gpt_client import gpt_extract
 
 logger = logging.getLogger(__name__)
-
-# Use centralized config paths
-SECTION_JSON_PATH = str(config.SECTION_JSON_PATH)
-AUDITOR_JSON_PATH = str(config.JSON_DIR / "auditor_result.json")
-PDF_TXT_PATH = str(config.PDF_TXT_PATH)
 
 
 def load_json(path: str) -> Any:
@@ -540,14 +536,32 @@ def _infer_auditor_from_context(text: str, debug_log) -> Optional[str]:
         debug_log.write(f"Context inference error: {e}\n")
         return None
 
-def extract_auditor_from_report():
+def extract_auditor_from_report(job_paths=None, job_id=None):
+    """Extract auditor information from SOC report.
+    
+    Args:
+        job_paths: Dict with 'json_dir', 'logs_dir', 'temp_dir' Path objects
+        job_id: Unique job identifier for logging
+    """
+    if not job_paths:
+        raise ValueError("[AUDITOR] job_paths parameter is required for job isolation")
+    if not job_id:
+        raise ValueError("[AUDITOR] job_id parameter is required for logging")
+    
+    # Set up job-specific paths
+    section_json_path = str(job_paths['json_dir'] / 'section_results.json')
+    auditor_json_path = str(job_paths['json_dir'] / 'auditor_result.json')
+    pdf_txt_path = str(job_paths['temp_dir'] / 'output.txt')
+    
+    logger.info(f"[JOB {job_id}] Starting auditor extraction")
+    
     # Reset output file at the start of extraction
-    with open(config.JSON_DIR / 'auditor_result.json', 'w', encoding='utf-8') as f:
+    with open(auditor_json_path, 'w', encoding='utf-8') as f:
         f.write('{}\n')
     # Load section results
-    section_results = load_json(SECTION_JSON_PATH)
+    section_results = load_json(section_json_path)
     # Load company and parent company for exclusion
-    company_info = load_json(str(config.JSON_DIR / 'company_result.json'))
+    company_info = load_json(str(job_paths['json_dir'] / 'company_result.json'))
     company = company_info.get('company')
     parent_company = company_info.get('parent_company')
     if parent_company:
@@ -557,8 +571,8 @@ def extract_auditor_from_report():
     # Find the first Service_Auditor_Report section
     auditor_section = next((s for s in section_results if s.get('topic') == 'Service_Auditor_Report'), None)
     if not auditor_section:
-        logging.warning('No Service_Auditor_Report section found. Falling back to full-document scan.')
-    with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
+        logger.info(f"[JOB {job_id}] No Service_Auditor_Report section found. Falling back to full-document scan.")
+    with open(pdf_txt_path, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
     
     # Build line indices set for deduplication
@@ -611,17 +625,17 @@ def extract_auditor_from_report():
                 text_sections.append(extract_text_for_pages(txt_lines, list(range(start_page, end_page + 1))))
                 line_indices.update(section_text_indices)
         else:
-            logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section. Using full document text for context.')
+            logger.info(f'[JOB {job_id}] DOC_page_ref or end_DOC_page_ref is None for auditor section. Using full document text for context.')
             # Fallback to full document text
-            with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
+            with open(pdf_txt_path, 'r', encoding='utf-8') as f2:
                 text_sections.append(f2.read())
     else:
         # No section info detected: pages 1-5 already included, no additional text needed
-        logging.warning('No Service_Auditor_Report section found. Using pages 1-5 only.')
+        logger.info(f'[JOB {job_id}] No Service_Auditor_Report section found. Using pages 1-5 only.')
     
     text = '\n'.join(text_sections)
     total_lines = sum(s.count('\n') for s in text_sections)
-    logging.info(f"Searching pages 1-5 + Service_Auditor_Report section ({total_lines} lines total)")
+    logger.info(f"[JOB {job_id}] Searching pages 1-5 + Service_Auditor_Report section ({total_lines} lines total)")
     
     # Extract auditor with two-stage approach (single attempt)
     auditor, confidence, responses, validation_note = extract_auditor_with_validation(text, company_line)
@@ -646,23 +660,23 @@ def extract_auditor_from_report():
             result['confidence'] = min(1.0, confidence + header_footer_boost)
             result['header_footer_match'] = True
             result['header_footer_boost'] = header_footer_boost
-            logging.info(f"Header/footer pattern matched GPT result. Confidence boosted from {original_confidence:.3f} to {result['confidence']:.3f}")
+            logger.info(f"[JOB {job_id}] Header/footer pattern matched GPT result. Confidence boosted from {original_confidence:.3f} to {result['confidence']:.3f}")
         else:
             # Different auditor detected - log warning but keep GPT result
             result['header_footer_mismatch'] = True
             result['header_footer_auditor'] = header_footer_auditor
-            logging.warning(f"Header/footer detected different auditor: '{header_footer_auditor}' vs GPT: '{auditor}'. Keeping GPT result.")
+            logger.warning(f"[JOB {job_id}] Header/footer detected different auditor: '{header_footer_auditor}' vs GPT: '{auditor}'. Keeping GPT result.")
     elif header_footer_auditor and (not auditor or auditor == "Auditor Could Not Be Identified"):
         # No GPT result (or identification failed) but header/footer found - use it with moderate confidence
         result['auditor'] = header_footer_auditor
         result['confidence'] = 0.70
         result['validation_note'] = 'Detected from header/footer patterns (GPT extraction unsuccessful)'
         result['header_footer_only'] = True
-        logging.info(f"Using header/footer detected auditor: {header_footer_auditor} (GPT extraction unsuccessful)")
+        logger.info(f"[JOB {job_id}] Using header/footer detected auditor: {header_footer_auditor} (GPT extraction unsuccessful)")
     
     # GPT-only approach: if GPT didn't return an auditor, leave it as None
-    save_json(result, AUDITOR_JSON_PATH)
-    logging.info(f'Auditor extraction result: {result}')
+    save_json(result, auditor_json_path)
+    logger.info(f'[JOB {job_id}] Auditor extraction result: {result}')
     return result
 
 def confirm_auditor_with_followup(auditor_name: str, text: str) -> Tuple[Optional[str], float, str]:

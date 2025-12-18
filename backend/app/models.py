@@ -29,6 +29,8 @@ class Scan(Base):
     coverage_end = Column(DateTime)
     pdf_file = Column(LargeBinary)
     pdf_filename = Column(String(256))
+    embedded_pdf_file = Column(LargeBinary)  # Stores embedded consent agreement PDF if present
+    embedded_pdf_filename = Column(String(256))  # Filename of the embedded PDF
     extracted_text = Column(Text)
     result_json = Column(JSON)
     gpt_cost = Column(Float)
@@ -74,9 +76,8 @@ class Control(Base):
     control_page_refs = Column(JSON)  # [51, 52, 89] - pages where control appears
     control_line_ref = Column(Integer)
     control_seq = Column(Integer)
-    control_soc_domain = Column(String(128))
     
-    # ⚠️ LEGACY COLUMNS REMOVED (v2.1.0): control_tsc_id, control_coso_id, control_tsc_similarity, etc.
+    # ⚠️ LEGACY COLUMNS REMOVED (v2.1.0): control_tsc_id, control_coso_id, control_tsc_similarity, control_soc_domain, etc.
     # ✅ USE INSTEAD: framework_mappings (JSON), primary_framework, primary_criterion_id, primary_confidence
     # See DEPRECATED_FEATURES.md for details
     
@@ -109,13 +110,22 @@ class Control(Base):
     pattern_confidence = Column(Float)  # Score from pattern library (0.0-1.0)
     final_confidence = Column(Float)  # Combined multi-factor confidence
     # Deviation summary - AI-generated plain language explanation of what a deviation means
-    deviation_summary = Column(Text)  # GPT-generated summary (≤300 chars) for controls with deviation=true
+    deviation_summary = Column(Text)  # GPT-generated summary for controls with deviation=true
+    # Management response to deviations - extracted from report or manually added
+    management_response_text = Column(Text)  # Management's response/remediation plan for the deviation
+    management_response_page_refs = Column(JSON)  # [67, 68] - pages where management response appears
+    management_response_line_ref = Column(Integer)  # Starting line number of response in extracted text
+    management_response_confidence = Column(Float)  # GPT self-evaluation confidence (0-1)
+    response_detection_method = Column(String(32))  # 'inline_nearby', 'section_match', 'manual'
     # Merge history - audit trail of all merge events
     merge_history = Column(JSON)  # [{"timestamp": "2025-01-07T12:34:56", "type": "auto|manual", "confidence": 0.85, "merged_from_ids": ["CTL-001", "CTL-002"], "reason": "..."}]
     # Duplicate instance tracking - for controls that appear multiple times for different criteria
     is_duplicate_instance = Column(Boolean, default=False)  # True if this is an intentional duplicate (same control, different TSC/COSO criteria or test procedures)
     duplicate_group_id = Column(String(128))  # UUID linking all instances of the same control
     instance_differentiator = Column(JSON)  # {"criteria": ["CC7.2"], "test_variance": "...", "deviation_variance": "...", "instance_number": 1, "total_instances": 3}
+    # Audit fields for tracking manual edits
+    updated_at = Column(DateTime)  # Timestamp of last update
+    updated_by_user_id = Column(Integer, ForeignKey('users.id'))  # User who last updated this control
 
 class CUEC(Base):
     __tablename__ = "cuec"
@@ -159,6 +169,9 @@ class SubserviceOrg(Base):
     source_context = Column(Text)
     confidence_justification = Column(Text)
     third_party_controls = Column(JSON)
+    annotation = Column(Text)
+    analyst_notes = Column(Text)
+    edit_log = Column(Text)
     annotation = Column(Text)
     analyst_notes = Column(Text)  # Analyst notes for manual annotations
     edit_log = Column(Text)  # Log of manual edits made to this subservice org

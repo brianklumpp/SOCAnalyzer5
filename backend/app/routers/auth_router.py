@@ -60,6 +60,12 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
+class ChangePasswordRequest(BaseModel):
+    """Model for change password request."""
+    current_password: str
+    new_password: str
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -102,8 +108,8 @@ async def login(
     await db.commit()
     
     # Create tokens
-    access_token = create_access_token(data={"sub": user.id})
-    refresh_token_str = create_refresh_token(data={"sub": user.id})
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token_str = create_refresh_token(data={"sub": str(user.id)})
     
     # Store refresh token in database
     token_hash = hash_token(refresh_token_str)
@@ -149,11 +155,19 @@ async def refresh_access_token(
             detail="Invalid refresh token"
         )
     
-    user_id: int = payload.get("sub")
-    if user_id is None:
+    user_id_str: str = payload.get("sub")
+    if user_id_str is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token payload"
+        )
+    
+    try:
+        user_id = int(user_id_str)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user ID in token"
         )
     
     # Check if token exists and is not revoked
@@ -181,7 +195,7 @@ async def refresh_access_token(
         )
     
     # Create new access token
-    access_token = create_access_token(data={"sub": user_id})
+    access_token = create_access_token(data={"sub": str(user_id)})
     
     return {
         "access_token": access_token,
@@ -294,3 +308,44 @@ async def create_user(
     await db.refresh(new_user)
     
     return UserResponse.from_orm(new_user)
+
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Change the current user's password.
+    
+    Args:
+        request: ChangePasswordRequest with current and new password
+        db: Database session
+        current_user: The current authenticated user
+        
+    Returns:
+        Success message
+        
+    Raises:
+        HTTPException: If current password is incorrect or new password is invalid
+    """
+    # Verify current password
+    if not verify_password(request.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+    
+    # Validate new password (basic validation)
+    if len(request.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
+        )
+    
+    # Update password
+    current_user.hashed_password = get_password_hash(request.new_password)
+    await db.commit()
+    
+    return {"message": "Password changed successfully"}

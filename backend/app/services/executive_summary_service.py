@@ -89,6 +89,13 @@ async def generate_executive_summary(scan_id: int, db: AsyncSession) -> Dict[str
     Returns:
         Dictionary containing the generated executive summary
     """
+    # Get scan to check if SOX vendor
+    scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+    if not scan_row:
+        raise ValueError(f"Scan {scan_id} not found")
+    
+    is_sox_vendor = getattr(scan_row, 'is_sox_vendor', False)
+    
     controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
     high_conf_controls = [
         ctrl for ctrl in controls
@@ -157,11 +164,16 @@ async def generate_executive_summary(scan_id: int, db: AsyncSession) -> Dict[str
         ctrl_id = getattr(ctrl, "control_id", "Unknown")
         ctrl_desc = _truncate(getattr(ctrl, "control_description", "N/A"), 100)
         test_performed = _truncate(getattr(ctrl, "test_performed", "N/A"), 150)
-        test_result = _truncate(getattr(ctrl, "test_results", "N/A"), 150)
+        test_result = _truncate(getattr(ctrl, "control_test_results", "N/A"), 150)
         
         result_str = f"Control {ctrl_id}: {ctrl_desc}\nTest: {test_performed}\nResult: {test_result}\n"
         
-        if "deviation" in test_result.lower() or "exception" in test_result.lower():
+        # Append management response if available (for deviations)
+        mgmt_response = getattr(ctrl, "management_response_text", None)
+        if mgmt_response:
+            result_str += f"Management Response: {_truncate(mgmt_response, 200)}\n"
+        
+        if getattr(ctrl, 'has_deviation', False):
             deviation_results.append(result_str)
         else:
             non_deviation_results.append(result_str)
@@ -175,8 +187,9 @@ async def generate_executive_summary(scan_id: int, db: AsyncSession) -> Dict[str
     
     control_results_str = "\n---\n".join(budgeted_results) if budgeted_results else "No control test results available."
     
-    # Build GPT prompt
-    prompt = f"""You are an expert SOC 2 auditor. Based on the following SOC 2 report data, provide a comprehensive executive summary.
+    # Build GPT prompt - different format for SOX vendors
+    if is_sox_vendor:
+        prompt = f"""You are an expert SOC 2 auditor conducting a SOX compliance review. Based on the following SOC 2 report data, provide a comprehensive executive summary for SOX compliance assessment.
 
 Report Statistics:
 - Total Controls: {len(controls)}
@@ -193,20 +206,64 @@ COSO 2013 Framework Coverage:
 Sample Control Test Results (prioritizing deviations):
 {control_results_str}
 
-Please provide:
-1. A 2-3 paragraph executive summary of the report's key findings
-2. A list of 3-5 key strengths identified in the control environment
-3. A list of 3-5 key risks or areas requiring attention
-4. An overall assessment rating (Strong, Adequate, Needs Improvement, or Weak)
+Please provide a SOX-focused executive summary with the following sections:
 
-Format your response as JSON with this structure:
+1. **SOX Objective**: Brief statement of the purpose of this SOX review (1-2 sentences)
+2. **Key Findings**: 3-5 bullet points summarizing the most important findings related to financial reporting controls
+3. **Areas of Concern**: 3-5 bullet points describing risks or deficiencies that could impact financial reporting
+4. **Recommendations - Risk Mitigations**: 3-5 customer-actionable items to mitigate SOX compliance risks
+5. **Recommendations - Contract Enhancements**: 2-4 contract-related improvements for SOX compliance
+6. **SOX Assessor's Conclusion**: Assessment of control adequacy, operating effectiveness, and material weaknesses
+
+Format your response as JSON with this exact structure:
 {{
-    "summary": "2-3 paragraph text",
-    "strengths": ["strength 1", "strength 2", ...],
-    "risks": ["risk 1", "risk 2", ...],
-    "rating": "Strong|Adequate|Needs Improvement|Weak"
+    "sox_objective": "Brief statement of SOX review purpose",
+    "key_findings": ["finding 1", "finding 2", ...],
+    "areas_of_concern": ["concern 1", "concern 2", ...],
+    "recommendations_risk_mitigations": ["risk mitigation 1", "risk mitigation 2", ...],
+    "recommendations_contract_enhancements": ["contract enhancement 1", "contract enhancement 2", ...],
+    "sox_assessors_conclusion": {{
+        "adequacy": "Assessment of control coverage adequacy for financial reporting",
+        "operating_effectiveness": "Assessment of how effectively controls operate",
+        "material_weaknesses": "Statement of any material weaknesses identified or 'None identified'"
+    }}
 }}
-"""
+
+Note: Keep each item concise (1-2 sentences). Focus on SOX compliance and financial reporting impact."""
+    else:
+        prompt = f"""You are an expert SOC 2 auditor. Based on the following SOC 2 report data, provide a comprehensive executive summary.
+
+Report Statistics:
+- Total Controls: {len(controls)}
+- High-Confidence Controls (≥0.89): {len(high_conf_controls)}
+- Subservice Organizations: {suborg_count}
+- Complementary User Entity Controls (CUECs): {cuec_count}
+
+TSC Framework Coverage:
+{tsc_table_str}
+
+COSO 2013 Framework Coverage:
+{coso_table_str}
+
+Sample Control Test Results (prioritizing deviations):
+{control_results_str}
+
+Please provide a comprehensive executive summary with the following sections:
+
+1. **Key Findings**: 3-5 bullet points summarizing the most important findings
+2. **Areas of Concern**: 3-5 bullet points describing risks or deficiencies identified
+3. **Recommendations - Risk Mitigations**: 3-5 customer-actionable items to mitigate risks (e.g., implement MFA, enable logging, review access controls)
+4. **Recommendations - Contract Enhancements**: 2-4 contract-related improvements (e.g., negotiate audit rights, add SLA terms, review DPA clauses)
+
+Format your response as JSON with this exact structure:
+{{
+    "key_findings": ["finding 1", "finding 2", ...],
+    "areas_of_concern": ["concern 1", "concern 2", ...],
+    "recommendations_risk_mitigations": ["risk mitigation 1", "risk mitigation 2", ...],
+    "recommendations_contract_enhancements": ["contract enhancement 1", "contract enhancement 2", ...]
+}}
+
+Note: Keep each item concise (1-2 sentences). Focus on actionable insights."""
     
     # Call GPT
     response_text = gpt_extract(prompt, "executive_summary")

@@ -56,6 +56,7 @@ async def patch_control_annotation(scan_id: int, control_id: str, data: Dict[str
 @router.patch("/report/{scan_id}/controls/{control_id}")
 async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update control by control_id (legacy endpoint, prefer ID-based endpoint)."""
+    logging.info(f"[CONTROL PATCH] scan_id={scan_id}, control_id={control_id}, payload keys: {list(data.keys())}")
     logging.debug(f"/report/{scan_id}/controls/{control_id} payload: {data}")
     try:
         try:
@@ -118,10 +119,23 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
         if "deviation_desc" in data:
             ctrl.deviation_desc = data["deviation_desc"]
         
+        # Auto-populate deviation_desc from control_test_results if has_deviation=true but deviation_desc is blank
+        if ctrl.has_deviation and not (ctrl.deviation_desc or "").strip():
+            test_results = ctrl.control_test_results or ""
+            if test_results:
+                # Extract deviation text after "Deviation noted."
+                import re
+                match = re.search(r'Deviation noted\.\s*(.+?)(?:\n\n|$)', test_results, re.IGNORECASE | re.DOTALL)
+                if match:
+                    ctrl.deviation_desc = match.group(1).strip()
+                # Fallback: use first 300 chars of test_results if it contains "deviation"
+                elif 'deviation' in test_results.lower() or 'exception' in test_results.lower():
+                    ctrl.deviation_desc = test_results[:300].strip()
+        
         # Append audit note to edit_log
         if justification_note:
             prev = getattr(ctrl, "edit_log", "") or ""
-            sep = "\n" if prev else ""
+            sep = ",\n" if prev else ""
             ctrl.edit_log = f"{prev}{sep}{justification_note}"
         
         # Mark executive summary stale
@@ -134,6 +148,8 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             "id": ctrl.id,
             "control_id": ctrl.control_id,
             "control_desc": ctrl.control_desc,
+            "control_test": ctrl.control_test,
+            "control_test_results": ctrl.control_test_results,
             "control_confidence": ctrl.control_confidence,
             "confidence_calc": ctrl.confidence_calc,
             "edit_log": ctrl.edit_log,
@@ -156,6 +172,7 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
 @router.patch("/report/{scan_id}/controls/id/{control_db_id}")
 async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update a control by its numeric database ID to avoid duplicate control_id ambiguity."""
+    logging.info(f"[CONTROL PATCH BY ID] scan_id={scan_id}, control_db_id={control_db_id}, payload keys: {list(data.keys())}")
     logging.debug(f"[PATCH CONTROL] scan_id={scan_id}, control_id={control_db_id}, payload keys: {list(data.keys())}")
     try:
         ctrl = (await db.execute(select(Control).where(Control.scan_id == scan_id, Control.id == control_db_id))).scalar_one_or_none()
@@ -212,9 +229,22 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
         if "deviation_desc" in data:
             ctrl.deviation_desc = data["deviation_desc"]
         
+        # Auto-populate deviation_desc from control_test_results if has_deviation=true but deviation_desc is blank
+        if ctrl.has_deviation and not (ctrl.deviation_desc or "").strip():
+            test_results = ctrl.control_test_results or ""
+            if test_results:
+                # Extract deviation text after "Deviation noted."
+                import re
+                match = re.search(r'Deviation noted\.\s*(.+?)(?:\n\n|$)', test_results, re.IGNORECASE | re.DOTALL)
+                if match:
+                    ctrl.deviation_desc = match.group(1).strip()
+                # Fallback: use first 300 chars of test_results if it contains "deviation"
+                elif 'deviation' in test_results.lower() or 'exception' in test_results.lower():
+                    ctrl.deviation_desc = test_results[:300].strip()
+        
         if justification_note:
             prev = getattr(ctrl, "edit_log", "") or ""
-            sep = "\n" if prev else ""
+            sep = ",\n" if prev else ""
             ctrl.edit_log = f"{prev}{sep}{justification_note}"
         
         await mark_executive_summary_stale(scan_id, db)
@@ -226,6 +256,8 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
             "id": ctrl.id,
             "control_id": ctrl.control_id,
             "control_desc": ctrl.control_desc,
+            "control_test": ctrl.control_test,
+            "control_test_results": ctrl.control_test_results,
             "control_confidence": ctrl.control_confidence,
             "confidence_calc": ctrl.confidence_calc,
             "edit_log": ctrl.edit_log,

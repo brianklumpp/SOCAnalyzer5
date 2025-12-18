@@ -3,15 +3,12 @@ import json
 import logging
 import time
 import re
+from pathlib import Path
+from typing import Optional, Any, Dict
 from difflib import SequenceMatcher
 from .. import config
 from ..gpt_client import gpt_extract
 from ..config import HEURISTIC_EXCLUDE_KEYWORDS, THIRD_PARTY_ALIAS_MAP, SO_KEYWORDS, SUBSERVICE_ORG_GPT_FILTER_PROMPT, SUBSERVICE_ORG_ADVANCED_EXTRACTION_PROMPT, SUBSERVICE_ORG_GPT_VERIFY_PROMPT
-
-# Use centralized config paths
-SECTION_JSON_PATH = config.SECTION_JSON_PATH
-OUTPUT_JSON_PATH = config.JSON_DIR / "subservice_orgs_result.json"
-PDF_TXT_PATH = config.PDF_TXT_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -64,18 +61,31 @@ def load_common_so_list(path):
     with open(path, 'r', encoding='utf-8') as f:
         return [line.strip() for line in f if line.strip()]
 
-def extract_subservice_orgs():
+def extract_subservice_orgs(job_paths: Optional[Dict[str, Path]] = None, job_id: Optional[str] = None, redis_client: Optional[Any] = None, disable_chunking: bool = False):
+    # Validate job_paths parameter
+    if job_paths is None:
+        raise ValueError("job_paths parameter is required")
+    if job_id is None:
+        raise ValueError("job_id parameter is required")
+    
+    log_prefix = f"[JOB {job_id}] "
+    
+    # Create job-specific paths
+    section_json_path = str(job_paths['json_dir'] / 'section_results.json')
+    pdf_txt_path = str(job_paths['temp_dir'] / 'output.txt')
+    output_json_path = str(job_paths['json_dir'] / 'subservice_orgs_result.json')
+    
     print("\n" + "="*80, flush=True)
-    print("[DEBUG] Subservice Orgs Extractor Started", flush=True)
+    print(f"{log_prefix}[DEBUG] Subservice Orgs Extractor Started", flush=True)
     print("="*80 + "\n", flush=True)
     
     # Reset output file at the start of extraction
-    print("[DEBUG] Resetting output file...", flush=True)
-    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+    print(f"{log_prefix}[DEBUG] Resetting output file...", flush=True)
+    with open(output_json_path, 'w', encoding='utf-8') as f:
         json.dump({"subservice_orgs": []}, f, ensure_ascii=False, indent=2)
     
-    print(f"[DEBUG] Loading section results from: {SECTION_JSON_PATH}", flush=True)
-    section_results = load_json(SECTION_JSON_PATH)
+    print(f"{log_prefix}[DEBUG] Loading section results from: {section_json_path}", flush=True)
+    section_results = load_json(section_json_path)
     print(f"[DEBUG] Found {len(section_results)} sections", flush=True)
     
     print("[DEBUG] Looking for Description_of_System section...", flush=True)
@@ -99,10 +109,10 @@ def extract_subservice_orgs():
     start_line = desc_section.get('start_line')
     end_line = desc_section.get('end_line')
     
-    print(f"[DEBUG] Reading PDF text from: {PDF_TXT_PATH}", flush=True)
-    with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
+    print(f"{log_prefix}[DEBUG] Reading PDF text from: {pdf_txt_path}", flush=True)
+    with open(pdf_txt_path, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
-    print(f"[DEBUG] Loaded {len(txt_lines)} lines of text", flush=True)
+    print(f"{log_prefix}[DEBUG] Loaded {len(txt_lines)} lines of text", flush=True)
     
     if start_line and end_line:
         print(f"[DEBUG] Extracting text from lines {start_line} to {end_line}", flush=True)
@@ -116,15 +126,20 @@ def extract_subservice_orgs():
     
     print(f"[DEBUG] Extracted text length: {len(text)} characters", flush=True)
     
-    # Cap chunk size for GPT safety and add overlap
-    chunk_size = min(getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000), 1500)
-    # Overlap should be smaller than chunk size - use 10% of chunk size or 200 chars, whichever is larger
-    overlap = min(int(chunk_size * 0.1), 200)
-    
-    print(f"[DEBUG] Chunk size: {chunk_size}, Overlap: {overlap}", flush=True)
-    print(f"[DEBUG] Creating chunks...", flush=True)
-    
-    chunks = chunk_text_with_overlap(text, chunk_size, overlap)
+    if disable_chunking:
+        # Send entire text as single chunk for manual extractions
+        chunks = [text]
+        print(f"[DEBUG] Chunking disabled - sending entire text as single chunk ({len(text)} chars)", flush=True)
+    else:
+        # Cap chunk size for GPT safety and add overlap
+        chunk_size = min(getattr(config, 'SUBSERVICE_CHUNK_SIZE', 3000), 1500)
+        # Overlap should be smaller than chunk size - use 10% of chunk size or 200 chars, whichever is larger
+        overlap = min(int(chunk_size * 0.1), 200)
+        
+        print(f"[DEBUG] Chunk size: {chunk_size}, Overlap: {overlap}", flush=True)
+        print(f"[DEBUG] Creating chunks...", flush=True)
+        
+        chunks = chunk_text_with_overlap(text, chunk_size, overlap)
     chunk_results = []
     bad_chunks = []
     
@@ -369,7 +384,7 @@ def extract_subservice_orgs():
     print("\r" + " " * 80 + "\r", end='', flush=True)
     log_and_print(f"\n[Subservice Orgs] ✓ Completed! Found {len(seen)} organizations")
     
-    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+    with open(output_json_path, 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
     logging.info(f'Subservice orgs extraction result: {output}')
     return output
@@ -684,26 +699,37 @@ def set_likely_so_for_company_and_parent(third_parties, company_names):
                 entry['likely_so'] = 'No'
     return third_parties
 
-def filter_third_parties_with_gpt():
+def filter_third_parties_with_gpt(job_paths: Optional[Dict[str, Path]] = None, job_id: Optional[str] = None):
     """
     Post-processes extracted third parties using GPT to filter out non-companies (frameworks, departments, generic terms, software, etc.).
     Logs exclusions with reasons. Overwrites the JSON with filtered results.
     """
+    # Validate parameters
+    if job_paths is None:
+        raise ValueError("job_paths parameter is required")
+    if job_id is None:
+        raise ValueError("job_id parameter is required")
+    
+    log_prefix = f"[JOB {job_id}] "
+    
     # Import the enhancement module
     from .subservice_orgs_dedup import enhance_subservice_orgs
     # gpt_extract already imported at top
     
-    INPUT_JSON_PATH = OUTPUT_JSON_PATH
-    FILTER_LOG_PATH = os.path.join('data', 'logs', 'subservice_orgs_filter.log')
-    HEURISTIC_LOG_PATH = os.path.join('data', 'logs', 'subservice_orgs_heuristic_filter.log')
-    GPT_LOG_PATH = os.path.join('data', 'logs', 'subservice_orgs_gpt.log')
-    with open(GPT_LOG_PATH, 'w', encoding='utf-8') as gptlog:
+    # Create job-specific paths
+    input_json_path = str(job_paths['json_dir'] / 'subservice_orgs_result.json')
+    filter_log_path = str(config.LOGS_DIR / f'{job_id}_subservice_orgs_filter.log')
+    heuristic_log_path = str(config.LOGS_DIR / f'{job_id}_subservice_orgs_heuristic_filter.log')
+    gpt_log_path = str(config.LOGS_DIR / f'{job_id}_subservice_orgs_gpt.log')
+    
+    with open(gpt_log_path, 'w', encoding='utf-8') as gptlog:
         gptlog.write('')  # Reset GPT log
-    with open(FILTER_LOG_PATH, 'w', encoding='utf-8') as flog:
+    with open(filter_log_path, 'w', encoding='utf-8') as flog:
         flog.write('')  # Reset filter log
-    with open(HEURISTIC_LOG_PATH, 'w', encoding='utf-8') as hlog:
+    with open(heuristic_log_path, 'w', encoding='utf-8') as hlog:
         hlog.write('')  # Reset heuristic log
-    with open(INPUT_JSON_PATH, 'r', encoding='utf-8') as f:
+    
+    with open(input_json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     third_parties = data.get('subservice_orgs', [])
     
@@ -712,7 +738,7 @@ def filter_third_parties_with_gpt():
     third_parties = normalize_third_party_names(third_parties)
     
     # Filter out company being audited and parent
-    company_json_path = str(config.JSON_DIR / 'company_result.json')
+    company_json_path = str(job_paths['json_dir'] / 'company_result.json')
     try:
         with open(company_json_path, 'r', encoding='utf-8') as cf:
             company_data = json.load(cf)
@@ -733,42 +759,45 @@ def filter_third_parties_with_gpt():
         response = ""
         try:
             response = gpt_extract(prompt, 'subservice_orgs_extractor')
-            with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
+            with open(gpt_log_path, 'a', encoding='utf-8') as gptlog:
                 gptlog.write(f'PROMPT:\n{prompt}\nRESPONSE:\n{response}\n---\n')
             if response:
-                clean_response = clean_gpt_json_response(response)
-                result = json.loads(clean_response)
-                if result.get('keep') and result.get('type', '').lower() == 'company':
+                try:
+                    clean_response = clean_gpt_json_response(response)
+                    result = json.loads(clean_response)
+                    # Only filter out if GPT explicitly says keep=False
+                    if result.get('keep') == False:
+                        # Set confidence to 0 only if explicitly rejected
+                        entry['third_party_confidence'] = 0
+                        entry['confidence_justification'] = entry.get('confidence_justification', []) + [f"Filtered by GPT: {result.get('reason', 'No reason provided')}"]
+                        exclusions.append({'entry': entry, 'reason': result.get('reason', 'No reason provided'), 'type': result.get('type', '')})
                     filtered.append(entry)
-                else:
-                    # Instead of excluding, set confidence to 0 and add justification
-                    entry['third_party_confidence'] = 0
-                    entry['confidence_justification'] = entry.get('confidence_justification', []) + [f"Filtered by GPT: {result.get('reason', 'No reason provided')}"]
+                except Exception as parse_err:
+                    # If we can't parse GPT response, keep the item with original confidence
+                    # (extraction already validated it's likely a real provider)
+                    with open(gpt_log_path, 'a', encoding='utf-8') as gptlog:
+                        gptlog.write(f'PARSE ERROR: {parse_err}\n')
                     filtered.append(entry)
-                    exclusions.append({'entry': entry, 'reason': result.get('reason', 'No reason provided'), 'type': result.get('type', '')})
             else:
-                # No response from GPT, set confidence to 0 and add justification
-                entry['third_party_confidence'] = 0
-                entry['confidence_justification'] = entry.get('confidence_justification', []) + ["Filtered by GPT: No response from GPT."]
+                # No response from GPT - keep item with original confidence
+                # (extraction already found it, so benefit of doubt)
                 filtered.append(entry)
-                exclusions.append({'entry': entry, 'reason': 'No response from GPT.'})
         except Exception as e:
-            with open(GPT_LOG_PATH, 'a', encoding='utf-8') as gptlog:
+            with open(gpt_log_path, 'a', encoding='utf-8') as gptlog:
                 gptlog.write(f'PROMPT:\n{prompt}\nRESPONSE:\n{response}\nERROR: {e}\n---\n')
-            entry['third_party_confidence'] = 0
-            entry['confidence_justification'] = entry.get('confidence_justification', []) + [f"Filtered by GPT: GPT error or parse error: {e}. Response: {response}"]
+            # On error, keep the item (extraction already found it)
             filtered.append(entry)
-            exclusions.append({'entry': entry, 'reason': f'GPT error or parse error: {e}. Response: {response}'})
+            exclusions.append({'entry': entry, 'reason': f'GPT validation error: {e}'})
         time.sleep(0.7)  # avoid rate limits
     # Post-process: heuristics, confidence, common_so, distance, sort
-    filtered = postprocess_third_parties(filtered, company_names, so_list, heuristic_exclusions_log_path=HEURISTIC_LOG_PATH)
+    filtered = postprocess_third_parties(filtered, company_names, so_list, heuristic_exclusions_log_path=heuristic_log_path)
     # Set likely_so to 'No' for company/parent
     filtered = set_likely_so_for_company_and_parent(filtered, company_names)
     
     # ENHANCEMENT: Use GPT to deduplicate and adjust confidence for SaaS tools
-    print("\n[Subservice Orgs Enhancement] Starting intelligent deduplication and confidence adjustment...", flush=True)
+    print(f"{log_prefix}[Subservice Orgs Enhancement] Starting intelligent deduplication and confidence adjustment...", flush=True)
     filtered = enhance_subservice_orgs(filtered)
-    print("[Subservice Orgs Enhancement] ✓ Enhancement complete!\n", flush=True)
+    print(f"{log_prefix}[Subservice Orgs Enhancement] ✓ Enhancement complete!\n", flush=True)
     
     # Generate PDF snippets for PDF viewer search (if enabled)
     if config.ENABLE_PDF_SNIPPETS:
@@ -780,13 +809,13 @@ def filter_third_parties_with_gpt():
                 if len(' '.join(text.split())) > 150:
                     snippet += '...'
                 org['pdf_snippet'] = snippet
-        logging.info(f"Generated PDF snippets for {sum(1 for o in filtered if 'pdf_snippet' in o)} subservice orgs")
+        logging.info(f"{log_prefix}Generated PDF snippets for {sum(1 for o in filtered if 'pdf_snippet' in o)} subservice orgs")
     
     # Write filtered results
     filtered = ensure_confidence_justification_field(filtered)
-    with open(str(OUTPUT_JSON_PATH), 'w', encoding='utf-8') as f:
+    with open(input_json_path, 'w', encoding='utf-8') as f:
         json.dump({'subservice_orgs': filtered}, f, indent=2, ensure_ascii=False)
-    logging.info(f"Final filtered subservice orgs written to {OUTPUT_JSON_PATH}. Kept: {len(filtered)}. Excluded: {len(exclusions)}. See {FILTER_LOG_PATH} for details. Heuristic exclusions in {HEURISTIC_LOG_PATH}.")
+    logging.info(f"{log_prefix}Final filtered subservice orgs written to {input_json_path}. Kept: {len(filtered)}. Excluded: {len(exclusions)}. See {filter_log_path} for details. Heuristic exclusions in {heuristic_log_path}.")
     # Return the final filtered result so callers (e.g., analyzer) receive the
     # extractor output directly instead of relying solely on reading the JSON
     # file from disk. This avoids race conditions where the analyzer attempts
@@ -796,11 +825,17 @@ def filter_third_parties_with_gpt():
     except Exception:
         return {'subservice_orgs': filtered}
 
-def elevate_and_group_control_ids(json_path=OUTPUT_JSON_PATH):
+def elevate_and_group_control_ids(json_path=None):
     """
     Post-processes the JSON to elevate and group all unique, non-null third_party_control_id values into a new
     comma-separated field 'third_party_control_ids', and rewrites 'third_party_controls' to only include seq and desc.
+    
+    Legacy function - not used in job isolation pipeline.
     """
+    if json_path is None:
+        # Legacy default for standalone execution
+        from .. import config
+        json_path = str(config.JSON_DIR / 'subservice_orgs_result.json')
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     for entry in data.get('subservice_orgs', []):

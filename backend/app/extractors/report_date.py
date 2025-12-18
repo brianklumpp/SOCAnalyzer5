@@ -1,13 +1,9 @@
 import json
 import logging
 import re
+from pathlib import Path
 from .. import config
 from ..gpt_client import gpt_extract
-
-# Use centralized config paths
-SECTION_JSON_PATH = config.SECTION_JSON_PATH
-OUTPUT_JSON_PATH = config.JSON_DIR / "report_date_result.json"
-PDF_TXT_PATH = config.PDF_TXT_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -32,17 +28,35 @@ def extract_text_for_lines(txt_lines, start_line, end_line):
     # Lines are 1-indexed in section_results.json
     return ''.join(txt_lines[start_line-1:end_line])
 
-def extract_report_date():
+def extract_report_date(job_paths=None, job_id=None):
+    """Extract report date from SOC report.
+    
+    Args:
+        job_paths: Dict with 'json_dir', 'logs_dir', 'temp_dir' Path objects
+        job_id: Unique job identifier for logging
+    """
+    if not job_paths:
+        raise ValueError("[REPORT_DATE] job_paths parameter is required for job isolation")
+    if not job_id:
+        raise ValueError("[REPORT_DATE] job_id parameter is required for logging")
+    
+    # Set up job-specific paths
+    section_json_path = str(job_paths['json_dir'] / 'section_results.json')
+    output_json_path = str(job_paths['json_dir'] / 'report_date_result.json')
+    pdf_txt_path = str(job_paths['temp_dir'] / 'output.txt')
+    
+    logger.info(f"[JOB {job_id}] Starting report date extraction")
+    
     # Reset output file at the start of extraction
-    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+    with open(output_json_path, 'w', encoding='utf-8') as f:
         f.write('{}\n')
-    section_results = load_json(SECTION_JSON_PATH)
+    section_results = load_json(section_json_path)
     auditor_section = next((s for s in section_results if s.get('topic') == 'Service_Auditor_Report'), None)
     if not auditor_section:
-        logging.warning('No Service_Auditor_Report section found. Falling back to full-document scan for report date.')
+        logger.info(f"[JOB {job_id}] No Service_Auditor_Report section found. Falling back to full-document scan for report date.")
     start_line = auditor_section.get('start_line') if auditor_section else None
     end_line = auditor_section.get('end_line') if auditor_section else None
-    with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
+    with open(pdf_txt_path, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
     if start_line and end_line:
         text = extract_text_for_lines(txt_lines, start_line, end_line)
@@ -52,8 +66,8 @@ def extract_report_date():
         pages = list(range(start, end + 1))
         text = extract_text_for_pages(txt_lines, pages)
     else:
-        logging.error('DOC_page_ref or end_DOC_page_ref is None for auditor section. Using entire document for GPT-only extraction context.')
-        with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
+        logger.info(f"[JOB {job_id}] DOC_page_ref or end_DOC_page_ref is None for auditor section. Using entire document for GPT-only extraction context.")
+        with open(pdf_txt_path, 'r', encoding='utf-8') as f2:
             text = f2.read()
     # Primary path: GPT extraction on last lines of the auditor section
     lines = [l.strip() for l in text.splitlines() if l.strip()]
@@ -62,7 +76,7 @@ def extract_report_date():
     response = gpt_extract(prompt, 'report_date_extractor')
     result = {'report_date': None, 'explanation': '', 'raw_gpt_response': response}
     if not response:
-        logging.error('No response from GPT.')
+        logger.info(f'[JOB {job_id}] No response from GPT.')
         result['explanation'] = 'No response from GPT.'
     else:
         try:
@@ -70,7 +84,7 @@ def extract_report_date():
             result['report_date'] = data.get('report_date')
             result['explanation'] = data.get('explanation', '')
         except Exception as e:
-            logging.error(f'Failed to parse GPT response: {response} | Error: {e}')
+            logger.info(f'[JOB {job_id}] Failed to parse GPT response: {response} | Error: {e}')
             result['explanation'] = f'Failed to parse GPT response: {e}'
     # Fallback: heuristic search (disabled by default – see config.ALLOW_REGEX_FALLBACKS)
     def _parse_month_date(s):
@@ -102,9 +116,9 @@ def extract_report_date():
                 result['report_date'] = iso
                 if not result.get('explanation'):
                     result['explanation'] = 'Heuristic parse: last date in auditor section'
-    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+    with open(output_json_path, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
-    logging.info(f'Report date extraction result: {result}')
+    logger.info(f'[JOB {job_id}] Report date extraction result: {result}')
     return result
 
 __all__ = ["extract_report_date"]

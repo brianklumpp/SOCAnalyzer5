@@ -34,6 +34,7 @@ import time
 import re
 import threading
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Callable
 from ..gpt_client import gpt_extract
 import concurrent.futures
@@ -43,9 +44,6 @@ try:
 except Exception as import_err:
     print(f"[CONTROL_EXTRACTOR] Import error: {import_err}")
     raise
-
-# Checkpoint file for incremental writes
-CHECKPOINT_FILE = None  # Will be set dynamically based on config.CONTROL_JSON_PATH
 
 # Configure logging
 log_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'logs', 'control_extractor.log')
@@ -96,7 +94,9 @@ def write_checkpoint(
     validated_controls: List[Dict[str, Any]],
     rejected_controls: List[Dict[str, Any]],
     diagnostics: Dict[str, Any],
-    scan_id: Optional[str] = None
+    checkpoint_path: str,
+    scan_id: Optional[str] = None,
+    job_id: Optional[str] = None
 ) -> None:
     """
     Write current extraction state to checkpoint file for incremental progress tracking.
@@ -110,10 +110,14 @@ def write_checkpoint(
         validated_controls: List of validated controls extracted so far
         rejected_controls: List of rejected controls
         diagnostics: Current diagnostic information
+        checkpoint_path: Path to checkpoint file
         scan_id: Optional scan ID for tracking
+        job_id: Optional job ID for logging
     """
-    if not CHECKPOINT_FILE:
-        logging.warning("Checkpoint file not configured, skipping checkpoint write")
+    log_prefix = f"[JOB {job_id}] " if job_id else ""
+    
+    if not checkpoint_path:
+        logging.warning(f"{log_prefix}Checkpoint file not configured, skipping checkpoint write")
         return
     
     try:
@@ -128,16 +132,16 @@ def write_checkpoint(
         }
         
         # Write to temp file first, then rename for atomic write
-        temp_checkpoint = CHECKPOINT_FILE + ".tmp"
+        temp_checkpoint = checkpoint_path + ".tmp"
         with open(temp_checkpoint, 'w', encoding='utf-8') as f:
             json.dump(checkpoint_data, f, indent=2, ensure_ascii=False)
         
         # Atomic rename
-        if os.path.exists(CHECKPOINT_FILE):
-            os.remove(CHECKPOINT_FILE)
-        os.rename(temp_checkpoint, CHECKPOINT_FILE)
+        if os.path.exists(checkpoint_path):
+            os.remove(checkpoint_path)
+        os.rename(temp_checkpoint, checkpoint_path)
         
-        logging.info(f"✓ Checkpoint saved: {len(validated_controls)} controls")
+        logging.info(f"{log_prefix}✓ Checkpoint saved: {len(validated_controls)} controls")
     except Exception as e:
         logging.error(f"Failed to write checkpoint: {e}", exc_info=True)
         # Non-fatal - continue extraction even if checkpoint fails
@@ -293,15 +297,6 @@ def extract_control_with_cot(chunk: Dict[str, Any]) -> Optional[List[Dict[str, A
             # Adjust end_line if GPT provided relative line number
             if "end_line" in control and isinstance(control["end_line"], int):
                 control["end_line"] = start_line + control["end_line"]
-            # Ensure TSC/COSO mapping fields are present and lists
-            for field in ["control_tsc_mappings", "control_coso_mappings"]:
-                if field not in control or not isinstance(control[field], list):
-                    control[field] = []
-            # Ensure closest framework fields
-            if "control_closest_framework" not in control:
-                control["control_closest_framework"] = "Undetermined"
-            if "control_closest_framework_justification" not in control:
-                control["control_closest_framework_justification"] = ""
             logging.info(f"[CHUNK {chunk_id}] Extracted control: {control.get('control_id', 'N/A')}, confidence: {control.get('control_confidence', 0):.2f}, continuation: {control.get('continuation', False)}")
         
         logging.info(f"[CHUNK {chunk_id}] Extracted {len(controls)} control(s)")
@@ -627,13 +622,13 @@ def validate_controls(
         if i == 0:
             logging.error(f"[VALIDATE_CONTROLS] Processing control 0, keys: {list(control.keys())[:10]}")
         # Strip line markers from text fields
-        text_fields = ['control_id', 'control_desc', 'deviation_desc', 'control_gpt_conf_justification', 'control_closest_framework_justification']
+        text_fields = ['control_id', 'control_desc', 'deviation_desc', 'control_gpt_conf_justification']
         for field in text_fields:
             if field in control and control[field]:
                 control[field] = strip_line_markers(str(control[field]))
         
         # Strip markers from list fields
-        list_fields = ['control_tests', 'control_test_results', 'additional_references', 'control_tsc_mappings', 'control_coso_mappings']
+        list_fields = ['control_tests', 'control_test_results', 'additional_references']
         for field in list_fields:
             if field in control and isinstance(control[field], list):
                 control[field] = [strip_line_markers(str(item)) if item else item for item in control[field]]
@@ -650,7 +645,7 @@ def validate_controls(
             continue
         
         # Normalize lists
-        for field in ["control_tests", "control_test_results", "additional_references", "control_tsc_mappings", "control_coso_mappings"]:
+        for field in ["control_tests", "control_test_results", "additional_references"]:
             if field in control:
                 if not isinstance(control[field], list):
                     control[field] = [control[field]] if control[field] else []
@@ -704,12 +699,6 @@ def validate_controls(
         if "control_confidence" not in control:
             control["control_confidence"] = 0.5
             control["control_gpt_conf_justification"] = "Default confidence (no GPT score provided)"
-        
-        # Ensure closest framework fields
-        if "control_closest_framework" not in control:
-            control["control_closest_framework"] = "Undetermined"
-        if "control_closest_framework_justification" not in control:
-            control["control_closest_framework_justification"] = ""
         
         validated.append(control)
     
@@ -867,6 +856,7 @@ def extract_controls(
     start_at_line: Optional[int] = None,
     max_controls: Optional[int] = None,
     scan_id: Optional[str] = None,
+    job_paths: Optional[Dict[str, Path]] = None,
     job_id: Optional[str] = None,
     redis_client: Optional[Any] = None
 ) -> Dict[str, Any]:
@@ -897,28 +887,41 @@ def extract_controls(
         max_controls: Maximum number of controls to extract (for quick testing, default None = all)
                      If None and QUICK_TEST_MODE_ENABLED is True, uses QUICK_TEST_MAX_CONTROLS from config
         scan_id: Optional scan ID for checkpoint tracking
+        job_paths: Job-specific paths dictionary
+        job_id: Job ID for logging and Redis updates
+        redis_client: Redis client for progress updates
         
     Returns:
         Dict with extraction results and diagnostics
     """
-    # Initialize checkpoint file path
-    global CHECKPOINT_FILE
-    if config.CONTROL_JSON_PATH:
-        CHECKPOINT_FILE = str(config.CONTROL_JSON_PATH).replace('.json', '_checkpoint.json')
-        logging.info(f"Checkpoint file: {CHECKPOINT_FILE}")
+    # Validate job_paths parameter
+    if job_paths is None:
+        raise ValueError("job_paths parameter is required")
+    if job_id is None:
+        raise ValueError("job_id parameter is required")
+    
+    log_prefix = f"[JOB {job_id}] "
+    
+    # Create job-specific paths
+    pdf_txt_path = str(job_paths['txt_path'])
+    control_json_path = str(job_paths['json_dir'] / 'control_result.json')
+    checkpoint_path = str(job_paths['json_dir'] / 'control_checkpoint.json')
+    
+    logging.info(f"{log_prefix}Checkpoint file: {checkpoint_path}")
     
     # Apply quick test mode if enabled and max_controls not explicitly set
     if max_controls is None and getattr(config, 'QUICK_TEST_MODE_ENABLED', False):
         max_controls = getattr(config, 'QUICK_TEST_MAX_CONTROLS', 10)
-        logging.info(f"QUICK TEST MODE ENABLED: Limiting extraction to {max_controls} controls")
+        logging.info(f"{log_prefix}QUICK TEST MODE ENABLED: Limiting extraction to {max_controls} controls")
     
     start_time = time.time()
-    logging.info("=" * 80)
-    logging.info(f"UNIFIED CONTROL EXTRACTION - Report Type: {report_type}")
-    logging.info(f"Assertion Mapping: {'ENABLED' if enable_assertion_mapping else 'DISABLED'}")
-    logging.info(f"Max Controls: {max_controls if max_controls else 'UNLIMITED (full extraction)'}")
-    logging.info(f"Scan ID: {scan_id or 'N/A'}")
-    logging.info("=" * 80)
+    logging.info(f"{log_prefix}" + "=" * 80)
+    logging.info(f"{log_prefix}UNIFIED CONTROL EXTRACTION - Report Type: {report_type}")
+    logging.info(f"{log_prefix}Assertion Mapping: {'ENABLED' if enable_assertion_mapping else 'DISABLED'}")
+    logging.info(f"{log_prefix}Max Controls: {max_controls if max_controls else 'UNLIMITED (full extraction)'}")
+    logging.info(f"{log_prefix}Scan ID: {scan_id or 'N/A'}")
+    logging.info(f"{log_prefix}Job ID: {job_id}")
+    logging.info(f"{log_prefix}" + "=" * 80)
     
     # Find control section - MUST be Control_Descriptions for proper control extraction
     # Do NOT use Description_of_System as it contains narrative, not control tables
@@ -928,8 +931,8 @@ def extract_controls(
     )
     
     if not control_section:
-        logging.error("Control_Descriptions section not found in extracted sections")
-        logging.error(f"Available sections: {[s.get('topic') for s in sections]}")
+        logging.error(f"{log_prefix}Control_Descriptions section not found in extracted sections")
+        logging.error(f"{log_prefix}Available sections: {[s.get('topic') for s in sections]}")
         return {"error": "Control_Descriptions section not found"}
     
     section_start = control_section["start_line"]
@@ -938,25 +941,25 @@ def extract_controls(
     # Handle resume logic
     if start_at_line:
         section_start = start_at_line
-        logging.info(f"Resuming from line {start_at_line}")
+        logging.info(f"{log_prefix}Resuming from line {start_at_line}")
     
-    logging.info(f"Extracting controls from lines {section_start} to {section_end}")
+    logging.info(f"{log_prefix}Extracting controls from lines {section_start} to {section_end}")
     
     # Load document
-    with open(config.PDF_TXT_PATH, 'r', encoding='utf-8') as f:
+    with open(pdf_txt_path, 'r', encoding='utf-8') as f:
         text_lines = f.readlines()
     
     # Validate section bounds against actual file length
     actual_line_count = len(text_lines)
     if section_end > actual_line_count:
-        logging.warning(f"Section end_line ({section_end}) exceeds actual file length ({actual_line_count}). Adjusting to file length.")
+        logging.warning(f"{log_prefix}Section end_line ({section_end}) exceeds actual file length ({actual_line_count}). Adjusting to file length.")
         section_end = actual_line_count
     
     if section_start > actual_line_count:
-        logging.error(f"Section start_line ({section_start}) exceeds actual file length ({actual_line_count}). Cannot proceed.")
+        logging.error(f"{log_prefix}Section start_line ({section_start}) exceeds actual file length ({actual_line_count}). Cannot proceed.")
         return {"error": f"Invalid section bounds: start_line={section_start} > file_length={actual_line_count}"}
     
-    logging.info(f"Validated bounds: lines {section_start}-{section_end} (file has {actual_line_count} lines)")
+    logging.info(f"{log_prefix}Validated bounds: lines {section_start}-{section_end} (file has {actual_line_count} lines)")
     
     # Step 1: Create aware chunks
     chunk_start_time = time.time()
@@ -1094,8 +1097,8 @@ def extract_controls(
             "total_raw_controls": len(raw_controls),
             "elapsed_seconds": round(time.time() - start_time, 2)
         }
-        write_checkpoint(validated_controls, rejected_controls, partial_diagnostics, scan_id)
-        logging.info(f"Checkpoint written: {len(validated_controls)} controls (before framework mapping)")
+        write_checkpoint(validated_controls, rejected_controls, partial_diagnostics, checkpoint_path, scan_id, job_id)
+        logging.info(f"{log_prefix}Checkpoint written: {len(validated_controls)} controls (before framework mapping)")
     
     # Step 5b: Framework mapping - Map controls to appropriate frameworks based on report type
     try:
@@ -1136,13 +1139,6 @@ def extract_controls(
             control["primary_criterion_id"] = db_fields["primary_criterion_id"]
             control["primary_confidence"] = db_fields["primary_confidence"]
             
-            # Add legacy fields for backward compatibility
-            control["control_tsc_mappings"] = db_fields.get("control_tsc_mappings", [])
-            control["control_coso_mappings"] = db_fields.get("control_coso_mappings", [])
-            
-            # Determine closest framework (legacy field)
-            control["control_closest_framework"] = db_fields["primary_framework"] or "Undetermined"
-            
             logging.info(f"[{control_id}] Mapped to {len(db_fields['framework_mappings'])} frameworks, primary: {db_fields['primary_framework']}")
             
             controls_mapped += 1
@@ -1172,8 +1168,8 @@ def extract_controls(
                     "total_controls": len(validated_controls),
                     "elapsed_seconds": round(time.time() - start_time, 2)
                 }
-                write_checkpoint(validated_controls, rejected_controls, partial_diagnostics, scan_id)
-                logging.info(f"Checkpoint written: {idx}/{len(validated_controls)} controls mapped")
+                write_checkpoint(validated_controls, rejected_controls, partial_diagnostics, checkpoint_path, scan_id, job_id)
+                logging.info(f"{log_prefix}Checkpoint written: {idx}/{len(validated_controls)} controls mapped")
         
         frameworks_mapped = sum(1 for c in validated_controls if c.get("framework_mappings"))
         logging.info(f"Framework mapping complete: {frameworks_mapped}/{len(validated_controls)} controls mapped")
@@ -1203,9 +1199,6 @@ def extract_controls(
                 control["primary_framework"] = None
                 control["primary_criterion_id"] = None
                 control["primary_confidence"] = 0.0
-                control["control_tsc_mappings"] = []
-                control["control_coso_mappings"] = []
-                control["control_closest_framework"] = "Undetermined"
     
     # Step 6: Optionally map financial assertions (SOC1 only, if enabled)
     if enable_assertion_mapping and report_type == "SOC1":
@@ -1257,14 +1250,14 @@ def extract_controls(
     }
     
     try:
-        with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as f:
+        with open(control_json_path, 'w', encoding='utf-8') as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
-        logging.info(f"Saved {len(validated_controls)} controls to {config.CONTROL_JSON_PATH}")
+        logging.info(f"{log_prefix}Saved {len(validated_controls)} controls to {control_json_path}")
         
         # Clean up checkpoint file on successful completion
-        if CHECKPOINT_FILE and os.path.exists(CHECKPOINT_FILE):
+        if checkpoint_path and os.path.exists(checkpoint_path):
             try:
-                os.remove(CHECKPOINT_FILE)
+                os.remove(checkpoint_path)
                 logging.info("✓ Checkpoint file removed after successful completion")
             except Exception as e:
                 logging.warning(f"Failed to remove checkpoint file: {e}")
@@ -1290,6 +1283,7 @@ def extract_controls_parallel(
     start_at_line: Optional[int] = None,
     max_controls: Optional[int] = None,
     scan_id: Optional[str] = None,
+    job_paths: Optional[Dict[str, Path]] = None,
     job_id: Optional[str] = None,
     redis_client: Optional[Any] = None
 ) -> Dict[str, Any]:
@@ -1322,7 +1316,8 @@ def extract_controls_parallel(
         start_at_line: Resume from line number
         max_controls: Maximum controls to extract (for testing)
         scan_id: Scan ID for checkpoint tracking
-        job_id: Job ID for Redis progress updates
+        job_paths: Job-specific paths dictionary
+        job_id: Job ID for Redis progress updates and logging
         redis_client: Redis client for progress persistence
         
     Returns:
@@ -1338,15 +1333,25 @@ def extract_controls_parallel(
             start_at_line=start_at_line,
             max_controls=max_controls,
             scan_id=scan_id,
+            job_paths=job_paths,
             job_id=job_id,
             redis_client=redis_client
         )
     
-    # Initialize checkpoint file path
-    global CHECKPOINT_FILE
-    if config.CONTROL_JSON_PATH:
-        CHECKPOINT_FILE = str(config.CONTROL_JSON_PATH).replace('.json', '_checkpoint_parallel.json')
-        logging.info(f"[PARALLEL] Checkpoint file: {CHECKPOINT_FILE}")
+    # Validate job_paths parameter
+    if job_paths is None:
+        raise ValueError("job_paths parameter is required")
+    if job_id is None:
+        raise ValueError("job_id parameter is required")
+    
+    log_prefix = f"[JOB {job_id}] [PARALLEL] "
+    
+    # Create job-specific paths
+    pdf_txt_path = str(job_paths['txt_path'])
+    control_json_path = str(job_paths['json_dir'] / 'control_result.json')
+    checkpoint_path = str(job_paths['json_dir'] / 'control_checkpoint_parallel.json')
+    
+    logging.info(f"{log_prefix}Checkpoint file: {checkpoint_path}")
     
     # Apply quick test mode if enabled
     if max_controls is None and getattr(config, 'QUICK_TEST_MODE_ENABLED', False):
@@ -1383,10 +1388,10 @@ def extract_controls_parallel(
         section_start = start_at_line
         logging.info(f"[PARALLEL] Resuming from line {start_at_line}")
     
-    logging.info(f"[PARALLEL] Extracting from lines {section_start} to {section_end}")
+    logging.info(f"{log_prefix}Extracting from lines {section_start} to {section_end}")
     
     # Load document
-    with open(config.PDF_TXT_PATH, 'r', encoding='utf-8') as f:
+    with open(pdf_txt_path, 'r', encoding='utf-8') as f:
         text_lines = f.readlines()
     
     # Validate section bounds
@@ -1638,9 +1643,9 @@ def extract_controls_parallel(
     }
     
     try:
-        with open(config.CONTROL_JSON_PATH, 'w', encoding='utf-8') as f:
+        with open(control_json_path, 'w', encoding='utf-8') as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
-        logging.info(f"[PARALLEL] Saved {len(validated_controls)} controls to {config.CONTROL_JSON_PATH}")
+        logging.info(f"{log_prefix}Saved {len(validated_controls)} controls to {control_json_path}")
         
         # Clean up checkpoint file
         if CHECKPOINT_FILE and os.path.exists(CHECKPOINT_FILE):
@@ -1697,18 +1702,20 @@ def map_controls_to_frameworks_batch(
     logger.info(f"[FRAMEWORK_MAPPING] Starting batch framework mapping for {len(controls)} controls")
     logger.info(f"[FRAMEWORK_MAPPING] Available frameworks: {list(available_frameworks.keys())}")
     
-    # Load checkpoint if exists
-    checkpoint_path = str(config.CONTROL_JSON_PATH).replace('.json', '_frameworks_checkpoint.json')
+    # NOTE: Checkpoint feature disabled as config.CONTROL_JSON_PATH no longer exists
+    # Job-based paths are now used instead. Checkpointing can be re-enabled in future update.
+    checkpoint_path = None
     mapped_control_ids = set()
     
-    try:
-        if os.path.exists(checkpoint_path):
-            with open(checkpoint_path, 'r', encoding='utf-8') as f:
-                checkpoint_data = json.load(f)
-            mapped_control_ids = set(checkpoint_data.get('mapped_control_ids', []))
-            logger.info(f"[FRAMEWORK_MAPPING] Resumed from checkpoint: {len(mapped_control_ids)} controls already mapped")
-    except Exception as e:
-        logger.warning(f"[FRAMEWORK_MAPPING] Could not load checkpoint: {e}")
+    # Checkpoint loading disabled
+    # try:
+    #     if checkpoint_path and os.path.exists(checkpoint_path):
+    #         with open(checkpoint_path, 'r', encoding='utf-8') as f:
+    #             checkpoint_data = json.load(f)
+    #         mapped_control_ids = set(checkpoint_data.get('mapped_control_ids', []))
+    #         logger.info(f"[FRAMEWORK_MAPPING] Resumed from checkpoint: {len(mapped_control_ids)} controls already mapped")
+    # except Exception as e:
+    #     logger.warning(f"[FRAMEWORK_MAPPING] Could not load checkpoint: {e}")
     
     # Get batch size from config
     batch_size = getattr(config, 'CONTROL_FRAMEWORK_MAPPING_BATCH_SIZE', 5)
@@ -1754,9 +1761,6 @@ def map_controls_to_frameworks_batch(
                 control["primary_framework"] = None
                 control["primary_criterion_id"] = None
                 control["primary_confidence"] = 0.0
-                control["control_tsc_mappings"] = []
-                control["control_coso_mappings"] = []
-                control["control_closest_framework"] = "Undetermined"
                 return control
             
             # Map control to all available frameworks
@@ -1790,13 +1794,6 @@ def map_controls_to_frameworks_batch(
             control["primary_criterion_id"] = db_fields["primary_criterion_id"]
             control["primary_confidence"] = db_fields["primary_confidence"]
             
-            # Add legacy fields for backward compatibility
-            control["control_tsc_mappings"] = db_fields.get("control_tsc_mappings", [])
-            control["control_coso_mappings"] = db_fields.get("control_coso_mappings", [])
-            
-            # Determine closest framework (legacy field)
-            control["control_closest_framework"] = db_fields["primary_framework"] or "Undetermined"
-            
             logger.info(f"[{control_id}] Mapped to {len(db_fields['framework_mappings'])} frameworks, primary: {db_fields['primary_framework']}")
             
             # Update progress counter
@@ -1827,21 +1824,21 @@ def map_controls_to_frameworks_batch(
                     except Exception as progress_err:
                         logger.warning(f"Could not update progress: {progress_err}")
                 
-                # Write checkpoint every 10 controls
-                if controls_mapped % 10 == 0:
-                    try:
-                        mapped_control_ids.add(control_id)
-                        checkpoint_data = {
-                            'timestamp': time.time(),
-                            'mapped_control_ids': list(mapped_control_ids),
-                            'controls_mapped': controls_mapped,
-                            'total_controls': len(controls)
-                        }
-                        with open(checkpoint_path, 'w', encoding='utf-8') as f:
-                            json.dump(checkpoint_data, f, indent=2)
-                        logger.info(f"[CHECKPOINT] {controls_mapped}/{len(controls)} controls mapped")
-                    except Exception as checkpoint_err:
-                        logger.warning(f"Could not write checkpoint: {checkpoint_err}")
+                # Checkpoint writing disabled (checkpoint_path = None)
+                # if checkpoint_path and controls_mapped % 10 == 0:
+                #     try:
+                #         mapped_control_ids.add(control_id)
+                #         checkpoint_data = {
+                #             'timestamp': time.time(),
+                #             'mapped_control_ids': list(mapped_control_ids),
+                #             'controls_mapped': controls_mapped,
+                #             'total_controls': len(controls)
+                #         }
+                #         with open(checkpoint_path, 'w', encoding='utf-8') as f:
+                #             json.dump(checkpoint_data, f, indent=2)
+                #         logger.info(f"[CHECKPOINT] {controls_mapped}/{len(controls)} controls mapped")
+                #     except Exception as checkpoint_err:
+                #         logger.warning(f"Could not write checkpoint: {checkpoint_err}")
             
             return control
             
@@ -1852,9 +1849,6 @@ def map_controls_to_frameworks_batch(
             control["primary_framework"] = None
             control["primary_criterion_id"] = None
             control["primary_confidence"] = 0.0
-            control["control_tsc_mappings"] = []
-            control["control_coso_mappings"] = []
-            control["control_closest_framework"] = "Undetermined"
             return control
     
     # Execute mapping in parallel if executor provided
@@ -1904,5 +1898,23 @@ def map_controls_to_frameworks_batch(
     
     frameworks_mapped = sum(1 for c in controls if c and c.get("framework_mappings"))
     logger.info(f"[FRAMEWORK_MAPPING] Batch mapping complete: {frameworks_mapped}/{len(controls)} controls mapped")
+    
+    # Final progress update to 100%
+    if job_id and redis_client:
+        try:
+            import json as json_mod
+            job_json = redis_client.get(f"job:{job_id}")
+            if job_json:
+                job_data = json_mod.loads(job_json)
+                if "counters" not in job_data:
+                    job_data["counters"] = {}
+                job_data["counters"]["controls_mapped_count"] = len(controls)
+                job_data["counters"]["controls_mapped_percent"] = 100
+                job_data["counters"]["total_controls"] = len(controls)
+                job_data["status"] = f"Framework mapping complete: {frameworks_mapped}/{len(controls)} controls mapped"
+                redis_client.set(f"job:{job_id}", json_mod.dumps(job_data), ex=86400)
+                logger.info(f"[PROGRESS] Framework mapping final update: {frameworks_mapped}/{len(controls)} (100%)")
+        except Exception as final_err:
+            logger.warning(f"Could not update final progress: {final_err}")
     
     return controls

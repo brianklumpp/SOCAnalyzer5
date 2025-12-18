@@ -1,0 +1,67 @@
+{
+  "timestamp": 1766051596.7557282,
+  "completed": [
+    "control_extraction",
+    "control_framework_mapping",
+    "cuec_extraction",
+    "subservice_orgs_extraction"
+  ],
+  "checklist": [
+    {
+      "name": "file_uploaded",
+      "status": "done"
+    },
+    {
+      "name": "text_extracted",
+      "status": "done"
+    },
+    {
+      "name": "sections_extracted",
+      "status": "done"
+    },
+    {
+      "name": "company_extraction",
+      "status": "done"
+    },
+    {
+      "name": "logo_fetching",
+      "status": "done"
+    },
+    {
+      "name": "auditor_extraction",
+      "status": "done"
+    },
+    {
+      "name": "product_extraction",
+      "status": "done"
+    },
+    {
+      "name": "report_date_extraction",
+      "status": "done"
+    },
+    {
+      "name": "coverage_period_extraction",
+      "status": "done"
+    },
+    {
+      "name": "control_extraction",
+      "status": "partial"
+    },
+    {
+      "name": "control_framework_mapping",
+      "status": "done"
+    },
+    {
+      "name": "management_response_extraction",
+      "status": "error"
+    },
+    {
+      "name": "cuec_extraction",
+      "status": "partial"
+    },
+    {
+      "name": "subservice_orgs_extraction",
+      "status": "done"
+    }
+  ]
+}

@@ -69,7 +69,7 @@ def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
             new_value = getattr(suborg, k, None)
             if old_value != new_value:
                 prev_log = getattr(suborg, "edit_log", "") or ""
-                sep = "\n" if prev_log else ""
+                sep = ",\n" if prev_log else ""
                 timestamp = datetime.now().isoformat()
                 
                 # Format the log message based on field type

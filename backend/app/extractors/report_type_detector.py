@@ -145,25 +145,14 @@ def _analyze_with_gpt(
     else:
         prompt = _build_deep_scan_prompt(text, prior_result)
     
-    # Call GPT
-    try:
-        response = gpt_extract(
-            prompt=prompt,
-            extractor_name='report_type_detector'
-        )
-        
-        # Parse response
-        return _parse_gpt_response(response)
-        
-    except Exception as e:
-        logger.error(f"[REPORT_TYPE_DETECTOR] GPT call failed: {e}", exc_info=True)
-        # Return low-confidence result requiring user confirmation
-        return {
-            'detected_type': 'SOC2',  # Default to most common
-            'detected_subtype': 'TYPE2',
-            'confidence': 0.0,
-            'evidence': [f"Detection failed: {str(e)}"]
-        }
+    # Call GPT - let exceptions propagate to caller, no silent fallback
+    response = gpt_extract(
+        prompt=prompt,
+        extractor_name='report_type_detector'
+    )
+    
+    # Parse response
+    return _parse_gpt_response(response)
 
 
 def _build_quick_scan_prompt(text: str) -> str:

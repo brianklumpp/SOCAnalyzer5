@@ -111,7 +111,7 @@ services:
       DEFAULT_GPT_MODEL: ${DEFAULT_GPT_MODEL:-gpt-4o}
       FRAMEWORK_MAPPING_MODEL: ${FRAMEWORK_MAPPING_MODEL:-gpt-4o-mini}
       CONTROL_EMBEDDING_MAPPING_ENABLED: "false"  # Temporarily disabled - GPT mapping overloads Dataiku
-      SOCANALYZER_REDIS_URL: redis://redis:6379/0
+      SOCANALYZER_REDIS_URL: redis://172.20.0.4:6379/0
       DOCKER_CONTROL_ENABLED: "true"
       QUICK_TEST_MODE: ${QUICK_TEST_MODE:-false}
       QUICK_TEST_MAX_CONTROLS: ${QUICK_TEST_MAX_CONTROLS:-10}
@@ -122,6 +122,7 @@ services:
       ENABLE_FRAMEWORK_CACHE: ${ENABLE_FRAMEWORK_CACHE:-true}  # Cache framework mappings for similar controls
       PYTHONUNBUFFERED: "1"
       WATCHFILES_FORCE_POLLING: "true"  # Better file watching on Windows
+      MAX_CONCURRENT_SCANS: ${MAX_CONCURRENT_SCANS:-1}
     ports:
       - "8000:8000"
     volumes:
@@ -129,12 +130,14 @@ services:
       - ./backend/app:/app/backend/app
       - ./backend/alembic:/app/backend/alembic
       - ./backend/alembic.ini:/app/backend/alembic.ini:ro
+      # Mount .env for runtime config updates
+      - ./.env:/app/.env
       # Data, docs, and certs
       - ./data:/app/data
       - ./docs:/app/docs:ro
       - ./certs:/certs:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend/app
+    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --workers 4 --reload --reload-dir /app/backend/app
     networks:
       socanalyzer-network:
         ipv4_address: 172.20.0.5  # Fixed IP for backend
@@ -144,23 +147,22 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-      target: ${FRONTEND_TARGET:-dev}  # Use dev for hot reload, prod for production
+      target: dev
     container_name: socanalyzer-frontend
     restart: unless-stopped
     depends_on:
       - backend
     ports:
-      - "3000:3000"  # Vite dev server port (use 80 for prod)
+      - "3000:3000"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
     volumes:
-      # Bind mount source code for live editing (dev mode)
+      # Bind mount source code for live editing
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
-      - ./frontend/index.html:/app/index.html
       - ./frontend/vite.config.ts:/app/vite.config.ts
-      - ./frontend/tsconfig.json:/app/tsconfig.json
-      - ./frontend/tsconfig.node.json:/app/tsconfig.node.json
-    environment:
-      - CHOKIDAR_USEPOLLING=true  # Better file watching on Windows
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/package.json:/app/package.json
     networks:
       - socanalyzer-network
 

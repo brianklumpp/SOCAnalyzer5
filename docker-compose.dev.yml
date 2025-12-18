@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      target: build  # Use build stage (node development server)
+    command: npm start
+    ports:
+      - "3001:3000"  # React dev server port (map to 3001 to avoid conflicts)
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # Enable polling for file changes on Windows
+      - WATCHPACK_POLLING=true

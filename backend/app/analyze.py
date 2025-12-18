@@ -113,7 +113,8 @@ def run_metadata_extractors_parallel(
     progress_tracker=None,
     job_id=None,
     redis_client=None,
-    logger=None
+    logger=None,
+    job_paths=None
 ):
     """
     Run metadata extractors in parallel using IntelligentTaskExecutor.
@@ -131,6 +132,7 @@ def run_metadata_extractors_parallel(
         job_id: Redis job ID for progress updates
         redis_client: Redis client for state updates
         logger: Logger instance
+        job_paths: Dict with job-specific paths (json_dir, logs_dir, temp_dir)
         
     Returns:
         Dict with keys: 'product_extraction', 'report_date_extraction', 
@@ -158,7 +160,7 @@ def run_metadata_extractors_parallel(
     if not executor:
         logger.info("[PARALLEL_METADATA] No executor provided, falling back to sequential")
         return _run_metadata_extractors_sequential(
-            validated_report_type, job_id, redis_client, logger
+            validated_report_type, job_id, redis_client, logger, job_paths
         )
     
     import time
@@ -220,7 +222,8 @@ def run_metadata_extractors_parallel(
                 pass  # Fail silently
         
         try:
-            result = extractor_func()
+            # Pass job_paths and job_id to metadata extractors
+            result = extractor_func(job_paths=job_paths, job_id=job_id)
             elapsed = time.time() - extractor_start
             logger.info(f"[PARALLEL_METADATA] {extractor_name} completed in {elapsed:.2f}s")
             
@@ -267,7 +270,12 @@ def run_metadata_extractors_parallel(
                             if 'identified_entities' not in job:
                                 job['identified_entities'] = {}
                             
-                            if extractor_name == 'product_extraction' and result:
+                            if extractor_name == 'auditor_extraction' and result:
+                                auditor = result.get('auditor') if isinstance(result, dict) else result
+                                if auditor:
+                                    job['identified_entities']['auditor'] = str(auditor)
+                            
+                            elif extractor_name == 'product_extraction' and result:
                                 product = result.get('product') if isinstance(result, dict) else result
                                 if product:
                                     job['identified_entities']['product'] = str(product)
@@ -380,12 +388,23 @@ def _run_metadata_extractors_sequential(
     validated_report_type,
     job_id=None,
     redis_client=None,
-    logger=None
+    logger=None,
+    job_paths=None
 ):
     """
     Sequential fallback for metadata extraction.
     
     Runs extractors one at a time in the original order.
+    
+    Args:
+        validated_report_type: ReportType enum value
+        job_id: Redis job ID for progress updates
+        redis_client: Redis client for state updates
+        logger: Logger instance
+        job_paths: Dict with job-specific paths (json_dir, logs_dir, temp_dir)
+    
+    Returns:
+        Dict with extraction results
     """
     if logger is None:
         logger = logging.getLogger(__name__)
@@ -397,15 +416,16 @@ def _run_metadata_extractors_sequential(
     # Import CUEC extraction wrapper
     def _run_cuec_extraction():
         from .extractors.cuec_extractor import extract_cuecs
-        return extract_cuecs(report_type=validated_report_type.value)
+        return extract_cuecs(report_type=validated_report_type.value, job_paths=job_paths, job_id=job_id)
     
     def _run_subservice_orgs_extraction():
-        return extract_subservice_orgs()
+        from .extractors.subservice_orgs import extract_subservice_orgs
+        return extract_subservice_orgs(job_paths=job_paths, job_id=job_id)
     
     extractors = [
-        ('product_extraction', extract_product_from_report),
-        ('report_date_extraction', extract_report_date),
-        ('coverage_period_extraction', extract_coverage_period),
+        ('product_extraction', lambda: extract_product_from_report(job_paths=job_paths, job_id=job_id)),
+        ('report_date_extraction', lambda: extract_report_date(job_paths=job_paths, job_id=job_id)),
+        ('coverage_period_extraction', lambda: extract_coverage_period(job_paths=job_paths, job_id=job_id)),
         ('cuec_extraction', _run_cuec_extraction),
         ('subservice_orgs_extraction', _run_subservice_orgs_extraction),
     ]
@@ -468,11 +488,19 @@ def _run_metadata_extractors_sequential(
 
 def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json', report_type='SOC2', 
                       progress_callback=None, checklist_callback=None, job_id=None, 
-                      executor=None, progress_tracker=None):
+                      executor=None, progress_tracker=None, job_paths=None):
     # Reset GPT tracking at start of analysis
     from .gpt_tracker import reset_tracking, get_usage_summary
     reset_tracking()
     logger = logging.getLogger(__name__)
+    
+    # Validate job_paths parameter
+    if not job_paths or not isinstance(job_paths, dict):
+        raise ValueError("[ANALYZE] job_paths parameter is required for job isolation")
+    if not all(k in job_paths for k in ['json_dir', 'logs_dir', 'temp_dir']):
+        raise ValueError("[ANALYZE] job_paths must contain json_dir, logs_dir, and temp_dir keys")
+    
+    logger.info(f"[JOB {job_id}] Starting analysis with isolated workspace: {job_paths['json_dir']}")
     
     # Log parallel execution status
     if executor:
@@ -496,7 +524,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
 
     # --- Reset logs and JSON outputs at the start of each run ---
     # Clear checkpoint file for fresh scan state (unless resuming)
-    CHECKPOINT_PATH = str(config.JSON_DIR / '_extraction_checkpoint.json')
+    CHECKPOINT_PATH = str(job_paths['json_dir'] / '_extraction_checkpoint.json')
     if os.path.isfile(CHECKPOINT_PATH):
         try:
             os.remove(CHECKPOINT_PATH)
@@ -504,51 +532,36 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         except Exception as e:
             logger.warning(f"Failed to clear checkpoint: {e}")
     
-    # List of files to clear
+    # List of files to clear in job-specific directory
     files_to_clear = [
-        str(config.JSON_DIR / 'section_results.json'),
-        str(config.JSON_DIR / 'control_result.json'),
-        str(config.JSON_DIR / 'cuec_result.json'),
-        str(config.JSON_DIR / 'auditor_result.json'),
-        str(config.JSON_DIR / 'company_result.json'),
-        str(config.JSON_DIR / 'product_result.json'),
-        str(config.JSON_DIR / 'report_date_result.json'),
-        str(config.JSON_DIR / 'coverage_period_result.json'),
-        str(config.JSON_DIR / 'subservice_orgs_result.json'),
-        str(config.JSON_DIR / '_extraction_checkpoint.json'),
-        str(config.LOGS_DIR / 'control_gpt.log'),
-        str(config.LOGS_DIR / 'cuec_extractor.log'),
-        str(config.LOGS_DIR / 'backend_errors.log'),
-        str(config.LOGS_DIR / 'section_gpt_responses.log'),
-    # control_extractor.log (v1) removed; v2 logs to control_extractor_v2.log
-        str(config.LOGS_DIR / 'subservice_orgs_extractor.log'),
-        str(config.LOGS_DIR / 'product_extractor.log'),
-        str(config.LOGS_DIR / 'auditor_extractor.log'),
-        str(config.LOGS_DIR / 'company_extractor.log'),
-        str(config.LOGS_DIR / 'coverage_period_extractor.log'),
-        str(config.LOGS_DIR / 'report_date_extractor.log'),
+        str(job_paths['json_dir'] / 'section_results.json'),
+        str(job_paths['json_dir'] / 'control_result.json'),
+        str(job_paths['json_dir'] / 'cuec_result.json'),
+        str(job_paths['json_dir'] / 'auditor_result.json'),
+        str(job_paths['json_dir'] / 'company_result.json'),
+        str(job_paths['json_dir'] / 'product_result.json'),
+        str(job_paths['json_dir'] / 'report_date_result.json'),
+        str(job_paths['json_dir'] / 'coverage_period_result.json'),
+        str(job_paths['json_dir'] / 'subservice_orgs_result.json'),
+        str(job_paths['json_dir'] / '_extraction_checkpoint.json'),
     ]
     for f in files_to_clear:
         try:
             os.makedirs(os.path.dirname(f), exist_ok=True)
             # For JSON outputs, write an empty JSON object to avoid stale content
-            if f.replace('\\', '/').endswith('/data/json/section_results.json'):
+            if f.endswith('section_results.json'):
                 # Section results will be regenerated below; start with an empty array for clarity
                 with open(f, 'w', encoding='utf-8') as clearf:
                     clearf.write('[]')
-            elif '/data/json/' in f.replace('\\', '/') and f.lower().endswith('.json'):
+            elif f.endswith('.json'):
                 with open(f, 'w', encoding='utf-8') as clearf:
                     clearf.write('{}')
-            else:
-                # Logs and other files: truncate
-                with open(f, 'w', encoding='utf-8') as clearf:
-                    clearf.truncate(0)
         except Exception:
             # Ignore if file does not exist yet or cannot be written; downstream steps will recreate as needed
             pass
     # Special-case: do NOT pre-create/overwrite combined_result.json; remove it if present to indicate not-yet-written
     try:
-        _combined_path = str(config.JSON_DIR / 'combined_result.json')
+        _combined_path = str(job_paths['json_dir'] / 'combined_result.json')
         if os.path.isfile(_combined_path):
             os.remove(_combined_path)
     except Exception:
@@ -557,7 +570,15 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
     # Always resolve data paths relative to the project root
     PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     def data_path(rel_path):
-        return os.path.join(PROJECT_ROOT, rel_path)
+        # For job-isolated paths, use job_paths directly
+        if rel_path.startswith('data/json/'):
+            filename = os.path.basename(rel_path)
+            return str(job_paths['json_dir'] / filename)
+        elif rel_path.startswith('data/output/'):
+            filename = os.path.basename(rel_path)
+            return str(job_paths['temp_dir'] / filename)
+        else:
+            return os.path.join(PROJECT_ROOT, rel_path)
 
     def update_progress(percent, status=None):
         if progress_callback:
@@ -567,22 +588,17 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         if checklist_callback:
             checklist_callback(statuses)
 
-    logger.debug(f"Starting analyze_pdf_file for {pdf_path}")
+    logger.debug(f"[JOB {job_id}] Starting analyze_pdf_file for {pdf_path}")
     if not os.path.isfile(pdf_path):
-        logger.error(f"File {pdf_path} not found.")
+        logger.error(f"[JOB {job_id}] File {pdf_path} not found.")
         raise FileNotFoundError(f"File {pdf_path} not found.")
 
-    # Patch all output/input paths to use root-level data directory
-    global OUTPUT_TEXT_FILE
-    global SECTION_JSON_PATH
-    global AUDITOR_JSON_PATH
-    global COMPANY_JSON_PATH
-    global PDF_TXT_PATH
-    OUTPUT_TEXT_FILE = data_path('data/output/output.txt')
-    SECTION_JSON_PATH = data_path('data/json/section_results.json')
-    AUDITOR_JSON_PATH = data_path('data/json/auditor_result.json')
-    COMPANY_JSON_PATH = data_path('data/json/company_result.json')
-    PDF_TXT_PATH = data_path('data/output/output.txt')
+    # Set up job-specific paths
+    OUTPUT_TEXT_FILE = str(job_paths['temp_dir'] / 'output.txt')
+    SECTION_JSON_PATH = str(job_paths['json_dir'] / 'section_results.json')
+    AUDITOR_JSON_PATH = str(job_paths['json_dir'] / 'auditor_result.json')
+    COMPANY_JSON_PATH = str(job_paths['json_dir'] / 'company_result.json')
+    PDF_TXT_PATH = str(job_paths['temp_dir'] / 'output.txt')
 
     # Helper for control extraction progress based on section end_line
     control_section = None
@@ -622,6 +638,15 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         
         if embedded_pdfs:
             logger.info(f"Found {len(embedded_pdfs)} embedded PDF(s), using first one: {embedded_pdfs[0]}")
+            # Store embedded PDF for serving in split view
+            try:
+                with open(embedded_pdfs[0], 'rb') as f:
+                    embedded_pdf_bytes = f.read()
+                standardized_results["embedded_pdf_file"] = embedded_pdf_bytes
+                standardized_results["embedded_pdf_filename"] = os.path.basename(embedded_pdfs[0])
+                logger.info(f"Stored embedded PDF ({len(embedded_pdf_bytes)} bytes) for split view")
+            except Exception as e:
+                logger.error(f"Failed to store embedded PDF: {e}")
             # Use the first embedded PDF as the source
             pdf_path = embedded_pdfs[0]
             # Note: We'll clean this up later
@@ -713,8 +738,9 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             {"name": "coverage_period_extraction", "status": "pending"}, # Index 8
             {"name": "control_extraction", "status": "pending"},  # Index 9
             {"name": "control_framework_mapping", "status": "pending"}, # Index 10
-            {"name": "cuec_extraction", "status": "pending"},     # Index 11
-            {"name": "subservice_orgs_extraction", "status": "pending"}, # Index 12
+            {"name": "management_response_extraction", "status": "pending"}, # Index 11
+            {"name": "cuec_extraction", "status": "pending"},     # Index 12
+            {"name": "subservice_orgs_extraction", "status": "pending"}, # Index 13
         ]
         # 0: file_uploaded
         checklist[0]["status"] = "done"
@@ -727,6 +753,10 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         update_checklist(checklist)
         results = {}
         results['sections'] = section_results
+        
+        # Initialize checkpoint tracking variable early
+        completed_extractors = []
+        
         # Check for section_results.json existence before running extractors
         if not os.path.isfile(data_path(output_json_path)):
             logger.error(f"Required file {output_json_path} not found before running extractors.")
@@ -734,7 +764,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             return {"error": f"Required file {output_json_path} not found before running extractors."}
         # --- Run company and auditor sequentially (prerequisites) ---
         # Wrapper for subservice_orgs to run both extraction and filtering sequentially
-        def _run_subservice_orgs_extraction():
+        def _run_subservice_orgs_extraction(job_paths=job_paths, job_id=job_id):
             """Run subservice extraction + GPT filtering, return final filtered result.
 
             Also write a debug dump of the direct return value to
@@ -742,18 +772,17 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             can be compared with isolated extractor runs.
             """
             try:
-                extract_subservice_orgs()  # Extracts and writes raw results to JSON
+                extract_subservice_orgs(job_paths=job_paths, job_id=job_id)  # Extracts and writes raw results to JSON
             except Exception:
                 # Let downstream filter attempt to load partial results if available
                 pass
             try:
-                res = filter_third_parties_with_gpt()  # Reads JSON, filters, writes back, returns result
+                res = filter_third_parties_with_gpt(job_paths=job_paths, job_id=job_id)  # Reads JSON, filters, writes back, returns result
             except Exception as e:
                 # If filtering fails, attempt to load on-disk JSON as a fallback
                 try:
-                    proj = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                    fallback_p = os.path.join(proj, 'data', 'json', 'subservice_orgs_result.json')
-                    if os.path.isfile(fallback_p):
+                    fallback_p = job_paths['json_dir'] / 'subservice_orgs_result.json'
+                    if fallback_p.exists():
                         with open(fallback_p, 'r', encoding='utf-8') as pf:
                             res = json.load(pf)
                     else:
@@ -763,10 +792,9 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     raise
             # Write a debug post-run dump for immediate inspection by the analyzer
             try:
-                proj = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                log_dir = os.path.join(proj, 'data', 'logs')
-                os.makedirs(log_dir, exist_ok=True)
-                dump_path = os.path.join(log_dir, 'debug_subservice_postrun_dump.json')
+                log_dir = job_paths['logs_dir']
+                log_dir.mkdir(parents=True, exist_ok=True)
+                dump_path = log_dir / f'{job_id}_debug_subservice_postrun_dump.json'
                 with open(dump_path, 'w', encoding='utf-8') as df:
                     json.dump({'type': str(type(res)), 'value': res}, df, indent=2, ensure_ascii=False)
             except Exception:
@@ -785,8 +813,9 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             - Gracefully degrades if assertion mapping fails
             - Supports parallel extraction if executor and progress_tracker are available
             """
-            # Load sections for extractor
-            with open(config.SECTION_JSON_PATH, 'r', encoding='utf-8') as f:
+            # Load sections from job-specific path
+            section_json_path = job_paths['json_dir'] / 'section_results.json'
+            with open(section_json_path, 'r', encoding='utf-8') as f:
                 sections = json.load(f)
             
             # Check if parallel extraction is enabled and infrastructure is available
@@ -803,6 +832,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     enable_assertion_mapping=config.ENABLE_ASSERTION_MAPPING,
                     max_controls=None,  # None = use config.QUICK_TEST_MODE_ENABLED if set
                     scan_id=None,  # Checkpoint will still work, just without scan_id tracking
+                    job_paths=job_paths,  # Pass job-specific paths
                     job_id=job_id,  # Pass job_id for real-time progress updates
                     redis_client=redis_client  # Pass Redis client for job state updates
                 )
@@ -818,6 +848,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     enable_assertion_mapping=config.ENABLE_ASSERTION_MAPPING,
                     max_controls=None,  # None = use config.QUICK_TEST_MODE_ENABLED if set
                     scan_id=None,  # Checkpoint will still work, just without scan_id tracking
+                    job_paths=job_paths,  # Pass job-specific paths
                     job_id=job_id,  # Pass job_id for real-time progress updates
                     redis_client=redis_client  # Pass Redis client for job state updates
                 )
@@ -885,8 +916,101 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 # Continue with warnings - don't fail the entire scan
                 return {"controls_mapped": 0, "error": str(e)}
         
+        # Management response extraction function - runs after control extraction
+        async def _run_management_response_extraction():
+            """
+            Extract management responses for deviation controls using cascading search strategies.
+            
+            Returns:
+                Dict with extracted response count
+            """
+            try:
+                logger.info("[MGMT_RESPONSE] Starting management response extraction for deviations")
+                
+                # Load controls from control_result.json
+                control_json_path = data_path('data/json/control_result.json')
+                if not os.path.isfile(control_json_path):
+                    logger.warning("[MGMT_RESPONSE] control_result.json not found, skipping management response extraction")
+                    return {"responses_extracted": 0, "error": "No controls to process"}
+                
+                with open(control_json_path, 'r', encoding='utf-8') as f:
+                    control_data = json.load(f)
+                
+                controls = control_data.get('controls', [])
+                if not controls:
+                    logger.warning("[MGMT_RESPONSE] No controls found in control_result.json")
+                    return {"responses_extracted": 0}
+                
+                # Check if there are any deviation controls
+                deviation_controls = [c for c in controls if c.get('has_deviation')]
+                if not deviation_controls:
+                    logger.info("[MGMT_RESPONSE] No deviation controls found, skipping management response extraction")
+                    return {"responses_extracted": 0, "message": "No deviations to process"}
+                
+                logger.info(f"[MGMT_RESPONSE] Found {len(deviation_controls)} deviation controls")
+                
+                # Load extracted text with page markers
+                txt_path = data_path('data/json/extracted_text.txt')
+                if not os.path.isfile(txt_path):
+                    logger.warning("[MGMT_RESPONSE] extracted_text.txt not found, cannot extract management responses")
+                    return {"responses_extracted": 0, "error": "No extracted text available"}
+                
+                with open(txt_path, 'r', encoding='utf-8') as f:
+                    txt_lines = f.readlines()
+                
+                # Count total pages
+                total_pages = 0
+                for line in txt_lines:
+                    if line.strip().startswith('=== PAGE '):
+                        try:
+                            page_num = int(line.strip().split()[2])
+                            total_pages = max(total_pages, page_num)
+                        except (IndexError, ValueError):
+                            continue
+                
+                logger.info(f"[MGMT_RESPONSE] Document has {total_pages} pages")
+                
+                # Get Redis client for caching
+                from .extractors.management_response_extractor import extract_management_responses_for_scan
+                
+                # Extract management responses
+                response_results = await extract_management_responses_for_scan(
+                    controls=controls,
+                    txt_lines=txt_lines,
+                    total_pages=total_pages,
+                    scan_id=job_id,
+                    redis_client=redis_client
+                )
+                
+                # Update controls with management response data
+                controls_updated = 0
+                for control in controls:
+                    control_id = control.get('control_id')
+                    if control_id in response_results:
+                        response_data = response_results[control_id]
+                        control['management_response_text'] = response_data['text']
+                        control['management_response_page_refs'] = response_data['page_refs']
+                        control['management_response_line_ref'] = response_data.get('line_ref')
+                        control['management_response_confidence'] = response_data['confidence']
+                        control['response_detection_method'] = response_data['method']
+                        controls_updated += 1
+                
+                # Save updated controls back to control_result.json
+                control_data['controls'] = controls
+                with open(control_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(control_data, f, indent=2, ensure_ascii=False)
+                
+                logger.info(f"[MGMT_RESPONSE] Successfully extracted management responses for {controls_updated}/{len(deviation_controls)} deviation controls")
+                
+                return {"responses_extracted": controls_updated, "deviations_total": len(deviation_controls)}
+                
+            except Exception as e:
+                logger.error(f"[MGMT_RESPONSE] Management response extraction failed: {e}", exc_info=True)
+                # Continue with warnings - don't fail the entire scan
+                return {"responses_extracted": 0, "error": str(e)}
+        
         # Wrapper for CUEC extraction - routes based on report_type with progress updates
-        def _run_cuec_extraction():
+        def _run_cuec_extraction(job_paths=job_paths, job_id=job_id):
             """
             Run unified CUEC extraction with report type parameter and real-time progress updates.
             Supports SOC1, SOC2, and COMBINED report types.
@@ -896,6 +1020,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             # Pass job_id and redis_client for real-time progress updates
             return extract_cuecs(
                 report_type=validated_report_type.value,
+                job_paths=job_paths,
                 job_id=job_id,
                 redis_client=redis_client
             )
@@ -903,76 +1028,105 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         # Logo fetching function - runs after company is identified
         def _run_logo_fetching():
             """Fetch company logo after company has been identified."""
+            logger.error(f"[LOGO_DEBUG] _run_logo_fetching called! job_paths exists: {job_paths is not None}")
             try:
+                logger.error(f"[LOGO_DEBUG] About to call data_path...")
                 company_json_path = data_path('data/json/company_result.json')
-                if not os.path.isfile(company_json_path):
+                logger.error(f"[LOGO_DEBUG] data_path returned: {company_json_path}")
+                logger.error(f"[LOGO_DEBUG] Checking if file exists...")
+                file_exists = os.path.isfile(company_json_path)
+                logger.error(f"[LOGO_DEBUG] File exists: {file_exists}")
+                if not file_exists:
                     logger.warning("[LOGO] company_result.json not found, skipping logo fetch")
                     return {"success": False, "reason": "Company not yet identified"}
                 
-                with open(company_json_path, 'r', encoding='utf-8') as f:
-                    company_data = json.load(f)
+                # Wait for file to be fully written/closed (race condition fix)
+                import time
+                logger.error(f"[LOGO_DEBUG] Waiting 0.5s for file to be fully written...")
+                time.sleep(0.5)
                 
+                logger.error(f"[LOGO_DEBUG] Opening file...")
+                try:
+                    with open(company_json_path, 'r', encoding='utf-8') as f:
+                        company_data = json.load(f)
+                    logger.error(f"[LOGO_DEBUG] File loaded successfully!")
+                    logger.error(f"[LOGO_DEBUG] File data: {company_data}")
+                except Exception as file_ex:
+                    logger.error(f"[LOGO_DEBUG] FILE OPERATION FAILED: {type(file_ex).__name__}: {file_ex}")
+                    raise
+                
+                logger.error(f"[LOGO_DEBUG] Extracting company name and domain...")
                 company_name = company_data.get('company', 'Unknown')
-                # FIX: Read 'company_domain' field instead of 'domain'
                 company_domain = company_data.get('company_domain') or company_data.get('domain')
+                logger.error(f"[LOGO_DEBUG] company_name={company_name}, company_domain={company_domain}")
                 
                 if not company_domain:
-                    logger.info(f"[LOGO] No domain found for {company_name}, skipping logo fetch")
+                    logger.error(f"[LOGO] No domain found for {company_name}, skipping logo fetch")
                     return {"success": False, "reason": "No domain available"}
                 
-                logger.info(f"[LOGO] Fetching logo for {company_name} (domain: {company_domain})")
+                logger.error(f"[LOGO] Fetching logo for {company_name} (domain: {company_domain})")
                 
-                from .logo_service import fetch_and_cache_logo
-                from sqlalchemy import create_engine
-                from sqlalchemy.orm import sessionmaker
-                from .models import Scan
+                # Fetch logo directly from external APIs (Clearbit with Google fallback)
+                # Note: Database caching requires async session, so fetching directly for now
+                import requests
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 
-                if not config.db_path:
-                    logger.warning("[LOGO] No database path configured")
-                    return {"success": False, "reason": "No database configured"}
+                CLEARBIT_LOGO_API = "https://logo.clearbit.com/{domain}"
+                GOOGLE_FAVICON_API = "https://www.google.com/s2/favicons?domain={domain}&sz=128"
+                REQUEST_TIMEOUT = 5  # seconds
                 
-                engine = create_engine(config.db_path)
-                SessionLocal = sessionmaker(bind=engine)
-                db = SessionLocal()
+                logo_url = None
+                
+                # Try Clearbit API first
                 try:
-                    # Get company_id from the most recent scan
-                    scan = db.query(Scan).filter(Scan.job_id == job_id).first()
-                    if scan and scan.company_id:
-                        success, logo_url = fetch_and_cache_logo(scan.company_id, company_domain, db)
-                        if success and logo_url:
-                            logger.info(f"[LOGO] ✓ Logo cached: {logo_url}")
-                            return {"success": True, "logo_url": logo_url}
-                        else:
-                            logger.info(f"[LOGO] No logo found for {company_domain}")
-                            return {"success": False, "reason": "Logo not found"}
-                    else:
-                        logger.warning("[LOGO] Could not find scan or company_id")
-                        return {"success": False, "reason": "Scan not found"}
-                finally:
-                    db.close()
+                    clearbit_url = CLEARBIT_LOGO_API.format(domain=company_domain)
+                    response = requests.head(clearbit_url, timeout=REQUEST_TIMEOUT, allow_redirects=True, verify=False)
+                    if response.status_code == 200:
+                        logo_url = clearbit_url
+                        logger.error(f"[LOGO] ✓ Logo fetched from Clearbit: {logo_url}")
+                except Exception as e:
+                    logger.error(f"[LOGO] Clearbit API failed: {str(e)}")
+                
+                # Fallback to Google Favicon API
+                if not logo_url:
+                    try:
+                        google_url = GOOGLE_FAVICON_API.format(domain=company_domain)
+                        response = requests.head(google_url, timeout=REQUEST_TIMEOUT, allow_redirects=True, verify=False)
+                        if response.status_code == 200:
+                            logo_url = google_url
+                            logger.error(f"[LOGO] ✓ Logo fetched from Google Favicon: {logo_url}")
+                    except Exception as e:
+                        logger.error(f"[LOGO] Google Favicon API failed: {str(e)}")
+                
+                if logo_url:
+                    logger.error(f"[LOGO] SUCCESS! Returning logo_url: {logo_url}")
+                    return {"success": True, "logo_url": logo_url, "domain": company_domain}
+                else:
+                    logger.error(f"[LOGO] No logo available for {company_domain}")
+                    return {"success": False, "reason": "Logo not available from external services"}
+                    
             except Exception as e:
-                logger.error(f"[LOGO] Logo fetch failed: {e}", exc_info=True)
+                logger.error(f"[LOGO] Logo fetch failed: {e}")
                 return {"success": False, "reason": str(e)}
         
         prereq_steps = [
             (3, "company_extraction", extract_company_from_report, "Running company extractor...", 30),
             (4, "logo_fetching", _run_logo_fetching, "Fetching company logo...", 32),
         ]
-        # Metadata extractors that run in parallel after company and logo (NOTE: metadata_parallel_steps is documentation - run_metadata_extractors_parallel has actual list)
-        metadata_parallel_steps = [
-            (5, "auditor_extraction", extract_auditor_from_report, "Running auditor extractor...", 34),
-            (6, "product_extraction", extract_product_from_report, "Running product extractor...", 36),
-            (7, "report_date_extraction", extract_report_date, "Running report date extractor...", 38),
-            (8, "coverage_period_extraction", extract_coverage_period, "Running coverage period extractor...", 40),
-        ]
         # Control extraction step (has internal parallelism)
         parallel_steps = [
             (9, "control_extraction", _run_control_extraction, "Running controls extractor...", 50),
         ]
+        # Management response extraction step - runs after control extraction, before CUEC extraction
+        # This must run sequentially after controls are extracted to process deviation controls
+        management_response_step = [
+            (11, "management_response_extraction", _run_management_response_extraction, "Extracting management responses for deviations...", 60),
+        ]
         # Post-control extraction steps that run in parallel
         post_control_parallel_steps = [
-            (11, "cuec_extraction", _run_cuec_extraction, "Running CUECs extractor...", 70),
-            (12, "subservice_orgs_extraction", _run_subservice_orgs_extraction, "Running subservice orgs extractor...", 80),
+            (12, "cuec_extraction", _run_cuec_extraction, "Running CUECs extractor...", 70),
+            (13, "subservice_orgs_extraction", _run_subservice_orgs_extraction, "Running subservice orgs extractor...", 80),
         ]
 
         # Watchdog: if controls extractor runs too long without increasing result size, mark as partial and continue
@@ -1127,15 +1281,21 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 logger.error(f"Failed partial combined write: {_p_err}")
         
         # Run prerequisites sequentially
+        logger.error(f"[DEBUG_PREREQ] ABOUT TO RUN PREREQ LOOP, prereq_steps has {len(prereq_steps)} items")
         for idx, key, func, status, pct in prereq_steps:
+            logger.error(f"[DEBUG_PREREQ] ENTERING PREREQ LOOP for {key}")
             # Check for pause before each step
             _check_pause()
             
             try:
                 update_progress(pct, status)
-                logger.debug(f"{status}")
-                results[key] = func()
-                logger.debug(f"{key}: {results[key]}")
+                logger.info(f"[PREREQ] Starting: {status}")  # Changed to INFO for visibility
+                # Pass job_paths and job_id to extractors that need them
+                if key in ('company_extraction', 'auditor_extraction', 'product_extraction', 'report_date_extraction', 'coverage_period_extraction'):
+                    results[key] = func(job_paths=job_paths, job_id=job_id)
+                else:
+                    results[key] = func()
+                logger.info(f"[PREREQ] {key} completed: {results[key]}")  # Changed to INFO
                 checklist[idx]["status"] = "done"
             except Exception as e:
                 logger.error(f"{key} extractor failed: {e}\n{traceback.format_exc()}")
@@ -1154,28 +1314,29 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                         logger.error(f"Failed to load partial result for {key}: {e2}")
                         results[key] = None
             
-            # Update identified_entities in job state for all metadata
+            # **CRITICAL FIX**: Update identified_entities in Redis for company AND logo
+            logger.info(f"[REDIS_UPDATE_CHECK] key={key}, job_id={job_id is not None}, redis_client={redis_client is not None}, results_has_key={key in results}, results_key_value={results.get(key) is not None}")
             if job_id and redis_client and results.get(key):
                 try:
                     entity_updates = {}
                     if key == 'company_extraction' and isinstance(results[key], dict):
                         company_name = results[key].get('company', 'Unknown')
+                        company_domain = results[key].get('company_domain')
                         entity_updates = {'identified_entities': {'company': company_name}}
+                        if company_domain:
+                            entity_updates['identified_entities']['company_domain'] = company_domain
                         logger.info(f"[PROGRESS] Company identified: {company_name}")
                     elif key == 'logo_fetching' and isinstance(results[key], dict):
-                        if results[key].get('success'):
-                            logo_url = results[key].get('logo_url')
-                            if logo_url:
-                                # Update both identified_entities (for API) and top-level logo_url (for queue card)
-                                entity_updates = {
-                                    'identified_entities': {'company_logo_url': logo_url},
-                                    'logo_url': logo_url  # Add to top-level for frontend queue card display
-                                }
-                                logger.info(f"[PROGRESS] Logo fetched successfully: {logo_url}")
-                            else:
-                                logger.info(f"[PROGRESS] Logo fetched successfully")
+                        # Logo fetching now returns actual logo URL
+                        if results[key].get('success') and results[key].get('logo_url'):
+                            logo_url = results[key]['logo_url']
+                            entity_updates = {
+                                'identified_entities': {'company_logo_url': logo_url}
+                            }
+                            logger.info(f"[PROGRESS] Company logo fetched: {logo_url}")
                         else:
-                            logger.info(f"[PROGRESS] Logo fetch: {results[key].get('reason', 'Unknown')}")
+                            reason = results[key].get('reason', 'Unknown')
+                            logger.info(f"[PROGRESS] Logo fetch failed: {reason}")
                     elif key == 'auditor_extraction':
                         auditor_name = results[key].get('auditor') if isinstance(results[key], dict) else results[key]
                         if auditor_name:
@@ -1226,8 +1387,11 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             update_checklist(checklist)
         
         # Run metadata extractors in parallel using the OLD superior implementation
+        # DEPENDENCY: Auditor extraction requires company extraction to be completed first
+        # (needs company name for exclusion logic). Company + logo MUST run before this point.
         if config.ENABLE_PARALLEL_METADATA_EXTRACTION and executor and progress_tracker:
-            logger.info("[PARALLEL_EXEC] Running metadata extractors (product, report_date, coverage_period, cuec, subservice_orgs) in PARALLEL mode")
+            logger.info("[PARALLEL_EXEC] Running metadata extractors (auditor, product, report_date, coverage_period) in PARALLEL mode")
+            logger.info("[PARALLEL_EXEC] Dependencies satisfied: company extraction ✓, logo fetching ✓")
             
             # Call the superior run_metadata_extractors_parallel function with correct parameters
             metadata_results = run_metadata_extractors_parallel(
@@ -1236,8 +1400,28 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                 progress_tracker=progress_tracker,
                 job_id=job_id,
                 redis_client=redis_client,
-                logger=logger
+                logger=logger,
+                job_paths=job_paths
             )
+            
+            # STEP 4: Detect partial failures
+            successful = [k for k, v in metadata_results.items() if v is not None]
+            failed = [k for k, v in metadata_results.items() if v is None]
+            
+            if failed:
+                logger.warning(f"[PARALLEL_EXEC] Partial metadata failure: {len(failed)}/{len(metadata_results)} extractors failed: {failed}")
+                if job_id and redis_client:
+                    try:
+                        job_json = redis_client.get(f"job:{job_id}")
+                        if job_json:
+                            job = json.loads(job_json)
+                            job['extraction_partial'] = True
+                            job['extraction_failures'] = failed
+                            redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
+                    except Exception as e:
+                        logger.warning(f"[PARALLEL_EXEC] Could not update partial failure status: {e}")
+            else:
+                logger.info(f"[PARALLEL_EXEC] All {len(metadata_results)} metadata extractors completed successfully")
             
             # Merge results
             for key, res in metadata_results.items():
@@ -1248,7 +1432,13 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                         item['status'] = 'done' if res is not None else 'error'
                         break
             
-            logger.info(f"[PARALLEL_EXEC] Parallel metadata extraction complete: {len(metadata_results)} extractors finished")
+            # STEP 3: Track completed extractors (checkpoint will be saved later in normal flow)
+            for key in successful:
+                if key not in completed_extractors:
+                    completed_extractors.append(key)
+            
+            logger.info(f"[PARALLEL_EXEC] Parallel metadata extraction complete: {len(successful)} successful, {len(failed)} failed")
+            logger.info(f"[PARALLEL_EXEC] Completed extractors tracked: {completed_extractors}")
             update_checklist(checklist)
         
         # --- Run remaining extractors in parallel threads ---
@@ -1260,7 +1450,13 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
             try:
                 update_progress(pct, status)
                 logger.debug(f"{status}")
-                res = func()
+                # Nested wrapper functions (_run_*) are closures with access to job_paths/job_id
+                # Direct extractor functions need parameters passed explicitly
+                if key in ('product_extraction', 'report_date_extraction', 'coverage_period_extraction', 'auditor_extraction', 'company_extraction'):
+                    res = func(job_paths=job_paths, job_id=job_id)
+                else:
+                    # Wrapper functions and other extractors don't need parameters (closures)
+                    res = func()
                 logger.debug(f"{key}: {res}")
                 # If controls extractor returned a list or dict with controls, update watchdog metrics
                 if key == 'control_extraction':
@@ -1464,6 +1660,20 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     mapping_result = _run_control_framework_mapping()
                     extractor_results['control_framework_mapping'] = mapping_result
                     
+                    # CRITICAL: Reload control_result.json after framework mapping to get mapped controls
+                    # Framework mapping writes back to control_result.json but doesn't update in-memory results
+                    # This ensures combined_result.json gets controls WITH framework mappings
+                    try:
+                        control_json_path = data_path('data/json/control_result.json')
+                        if os.path.isfile(control_json_path):
+                            with open(control_json_path, 'r', encoding='utf-8') as f:
+                                updated_control_data = json.load(f)
+                            extractor_results['control_extraction'] = updated_control_data
+                            results['control_extraction'] = updated_control_data
+                            logger.info("[FRAMEWORK_MAPPING] Reloaded control_result.json with framework mappings into memory")
+                    except Exception as reload_err:
+                        logger.error(f"Failed to reload control_result.json after framework mapping: {reload_err}")
+                    
                     checklist[10]["status"] = "done"
                     update_checklist(checklist)
                     logger.info("Control framework mapping completed successfully")
@@ -1475,6 +1685,36 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
                     checklist[10]["status"] = "error"
                     update_checklist(checklist)
                     # Continue with warnings
+            
+            # Run management response extraction step (sequential, after control extraction)
+            if 'management_response_extraction' not in completed_extractors:
+                logger.info("[MGMT_RESPONSE] Running management response extraction")
+                try:
+                    import asyncio
+                    # Run async function synchronously
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # We're in an existing event loop, use run_in_executor
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            mgmt_response_result = loop.run_until_complete(
+                                loop.run_in_executor(pool, lambda: asyncio.run(_run_management_response_extraction()))
+                            )
+                    else:
+                        # No event loop running, create one
+                        mgmt_response_result = asyncio.run(_run_management_response_extraction())
+                    
+                    logger.info(f"[MGMT_RESPONSE] Extraction complete: {mgmt_response_result}")
+                    checklist[11]["status"] = "done"
+                    update_checklist(checklist)
+                    
+                    completed_extractors.append('management_response_extraction')
+                    save_checkpoint(completed_extractors)
+                except Exception as e:
+                    logger.error(f"Management response extraction failed: {e}\n{traceback.format_exc()}")
+                    checklist[11]["status"] = "error"
+                    update_checklist(checklist)
+                    # Continue with warnings - don't fail entire scan
             
             # Run post-control parallel steps (CUEC + subservice_orgs)
             logger.info("[PARALLEL_EXEC] Running post-control extractors in PARALLEL")
@@ -1812,49 +2052,18 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         update_progress(100, "Analysis failed.")
         return {"error": str(e)}
 
-import argparse
-import json
-from .pdf_handler import extract_text_from_pdf, find_section_candidates
-from .config import SOC2_REPORTS_DIR, OUTPUT_TEXT_FILE
-
 def get_text_snippet(text, offset, context=200):
+    """Extract a snippet of text around the given offset"""
     start = max(0, offset - context)
     end = min(len(text), offset + context)
     return text[start:end]
 
 def offset_to_line(text, offset):
+    """Convert character offset to line number"""
     return text[:offset].count('\n') + 1
 
-def main():
-    parser = argparse.ArgumentParser(description="Extract text from a SOC 2 PDF report and analyze sections.")
-    parser.add_argument('--file', type=str, help='PDF filename in soc2_reports to analyze')
-    parser.add_argument('--json', type=str, default='data/json/section_results.json', help='Output JSON file for section results')
-    args = parser.parse_args()
-
-    if args.file:
-        pdf_path = os.path.join(SOC2_REPORTS_DIR, args.file)
-        if not os.path.isfile(pdf_path):
-            print(f"File {args.file} not found in soc2_reports.")
-            return
-    else:
-        pdf_files = [f for f in os.listdir(SOC2_REPORTS_DIR) if f.lower().endswith('.pdf')]
-        if not pdf_files:
-            print("No PDF files found in soc2_reports.")
-            return
-        pdf_path = os.path.join(SOC2_REPORTS_DIR, pdf_files[0])
-
-    extract_text_from_pdf(pdf_path, OUTPUT_TEXT_FILE)
-    print(f"Extracted text from {pdf_path} to {OUTPUT_TEXT_FILE}")
-
-    # Call robust GPT section analysis after extraction
-    with open(OUTPUT_TEXT_FILE, 'r', encoding='utf-8') as f:
-        text = f.read()
-    total_chars = len(text)
-    print(f"Total character count: {total_chars}")
-    section_results = find_section_candidates(text)  # changed function call
-    print("\nSection positions and confidence:")
-    print(json.dumps(section_results, indent=2))
-
+# Legacy standalone test code removed - use production pipeline with job-specific paths
+if __name__ == "__main__":
     # Add text snippets and line numbers, but preserve all other fields
     for section in section_results:
         if section.get('confidence', 0) > 0 and section.get('clean_heading') is not None:

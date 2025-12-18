@@ -17,7 +17,7 @@ from sqlalchemy.dialects import postgresql as pg_dialect
 from ..models import Setting
 from ..models import User
 from ..database import get_db
-from ..auth.dependencies import require_admin
+from ..auth.dependencies import require_admin, get_current_active_user
 from .. import config as cfg
 
 router = APIRouter()
@@ -28,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 @router.get("/settings")
-async def get_settings(request: Request, db=Depends(get_db)):
+async def get_settings(request: Request, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Get all settings with HTML content negotiation for SPA routing."""
     # Content negotiation: if browser expects HTML, serve SPA index
     accept = (request.headers.get("accept") or "").lower()
@@ -69,7 +69,7 @@ async def update_settings(request: Request, db=Depends(get_db), current_user: Us
 
 
 @router.get("/config/runtime")
-async def get_runtime_config():
+async def get_runtime_config(current_user: User = Depends(get_current_active_user)):
     """Get runtime configuration snapshot from config module."""
     return {
         "model": {
@@ -121,12 +121,15 @@ async def get_runtime_config():
         "quick_test": {
             "enabled": cfg.QUICK_TEST_MODE_ENABLED,
             "max_controls": cfg.QUICK_TEST_MAX_CONTROLS,
+        },
+        "queue": {
+            "max_concurrent_scans": cfg.MAX_CONCURRENT_SCANS,
         }
     }
 
 
 @router.get("/config/budgets")
-async def get_budget_snapshot():
+async def get_budget_snapshot(current_user: User = Depends(get_current_active_user)):
     """Get token budget snapshot for debugging."""
     return {
         "timestamp": time.time(),
@@ -193,8 +196,82 @@ async def toggle_quick_test_mode(request: Request, current_user: User = Depends(
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@router.post("/config/max-concurrent-scans")
+async def update_max_concurrent_scans(request: Request, current_user: User = Depends(require_admin)):
+    """Update maximum concurrent scans by updating .env file"""
+    import os
+    import re
+    
+    try:
+        data = await request.json()
+        max_concurrent = int(data.get("max_concurrent", 1))
+        
+        if max_concurrent < 1 or max_concurrent > 10:
+            return JSONResponse({"error": "max_concurrent must be between 1 and 10"}, status_code=400)
+        
+        # Find .env file
+        env_file = Path(os.getenv("ENV_FILE_PATH", ".env"))
+        if not env_file.is_absolute():
+            env_file = PROJECT_ROOT / ".env"
+        
+        if not env_file.exists():
+            return JSONResponse({"error": ".env file not found"}, status_code=404)
+        
+        # Read current content
+        content = env_file.read_text(encoding='utf-8')
+        
+        # Update or add MAX_CONCURRENT_SCANS
+        if re.search(r'(?m)^MAX_CONCURRENT_SCANS=', content):
+            # Update existing
+            content = re.sub(r'(?m)^MAX_CONCURRENT_SCANS=.*$', f'MAX_CONCURRENT_SCANS={max_concurrent}', content)
+        else:
+            # Add new (under Queue Settings section if it exists, otherwise at end)
+            if '# --- Queue Settings ---' in content:
+                content = re.sub(
+                    r'(# --- Queue Settings ---\n)',
+                    f'\\1MAX_CONCURRENT_SCANS={max_concurrent}\n',
+                    content
+                )
+            else:
+                content += f"\n\n# --- Queue Settings ---\nMAX_CONCURRENT_SCANS={max_concurrent}\n"
+        
+        # Write back
+        env_file.write_text(content, encoding='utf-8')
+        
+        # Update runtime config
+        cfg.MAX_CONCURRENT_SCANS = max_concurrent
+        logging.info(f"[CONFIG] Updated cfg.MAX_CONCURRENT_SCANS to {max_concurrent}")
+        
+        # Update scan queue max_concurrent (live update - no restart needed)
+        queue_updated = False
+        old_value = None
+        try:
+            from ..threading.scan_queue import get_scan_queue
+            queue = get_scan_queue()
+            old_value = queue.max_concurrent
+            queue.max_concurrent = max_concurrent
+            queue_updated = True
+            logging.info(f"[CONFIG] Updated scan queue max_concurrent: {old_value} → {max_concurrent}")
+        except Exception as queue_err:
+            logging.warning(f"[CONFIG] Could not update scan queue: {queue_err}")
+        
+        message = f"Max concurrent scans updated: {old_value or 'unknown'} → {max_concurrent}" if queue_updated else f"Max concurrent scans set to {max_concurrent} (will apply on next restart)"
+        
+        return {
+            "status": "ok",
+            "max_concurrent": max_concurrent,
+            "old_value": old_value,
+            "queue_updated": queue_updated,
+            "message": message,
+            "requires_restart": False  # Queue is updated immediately when queue_updated=True
+        }
+    except Exception as e:
+        logging.error(f"Error updating max concurrent scans: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @router.get("/help/index")
-async def get_help_index():
+async def get_help_index(current_user: User = Depends(get_current_active_user)):
     """Get help topics index/manifest."""
     import json
     
@@ -208,7 +285,7 @@ async def get_help_index():
 
 
 @router.get("/help/content/{topic_id}")
-async def get_help_content(topic_id: str):
+async def get_help_content(topic_id: str, current_user: User = Depends(get_current_active_user)):
     """Get markdown content for a specific help topic."""
     import json
     
@@ -271,7 +348,7 @@ def _run_docker_cmd(args):
 
 
 @router.get("/docker/status")
-async def docker_status():
+async def docker_status(current_user: User = Depends(get_current_active_user)):
     """Get Docker container status (requires DOCKER_CONTROL_ENABLED)."""
     if not DOCKER_CONTROL_ENABLED:
         return JSONResponse({"error": "Docker control disabled"}, status_code=403)

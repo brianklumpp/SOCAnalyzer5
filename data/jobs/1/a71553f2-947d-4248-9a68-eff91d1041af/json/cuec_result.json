@@ -1,0 +1,3475 @@
+{
+  "cuecs": [
+    {
+      "cuec_description": "Documented escalation procedures for reporting security incidents are provided to internal users to guide users in identifying, acting upon, and reporting failures, incidents, concerns, and other complaints.",
+      "cuec_line_ref": 1311,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "to guide users in identifying, acting upon, and reporting",
+      "cuec_gpt_reasoning": "WHO: Internal users; WHAT: Identifying, acting upon, and reporting security incidents; WHY: Explicit user responsibility described with 'guide users' and action verbs.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC7.4",
+      "cuec_justification": "Incident response responsibility aligned with CC7.4.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 6,
+      "cuec_confidence": 0.5,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {},
+      "primary_framework": null,
+      "primary_criterion_id": null,
+      "primary_confidence": 0.0,
+      "cuec_page_refs": [
+        32
+      ],
+      "pdf_snippet": "Documented escalation procedures for reporting security incidents are provided to internal users to guide users in identifying, acting upon, and repor..."
+    },
+    {
+      "cuec_description": "Customers are responsible for communicating issues by using the ticketing system on the customer portal.",
+      "cuec_line_ref": 1356,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "Customers are responsible for",
+      "cuec_gpt_reasoning": "Explicitly assigns action of communicating issues to the customer by utilizing the ticketing system.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC7.3",
+      "cuec_justification": "Relates to incident response and communication under TSC framework.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 5,
+      "cuec_confidence": 0.65,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {},
+      "primary_framework": null,
+      "primary_criterion_id": null,
+      "primary_confidence": 0.0,
+      "cuec_page_refs": [
+        33
+      ],
+      "pdf_snippet": "Customers are responsible for communicating issues by using the ticketing system on the customer portal."
+    },
+    {
+      "cuec_description": "Customer administrators are provided with procedures for managing production access and reviewing access logs, upcoming releases, and functionalities.",
+      "cuec_line_ref": 1354,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "managing production access and reviewing",
+      "cuec_gpt_reasoning": "Describes customer administrator responsibilities for production access and reviewing logs, indicating it is their duty.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC6.6",
+      "cuec_justification": "Relates to system access and user activity review under TSC framework.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 10,
+      "cuec_confidence": 0.5,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {},
+      "primary_framework": null,
+      "primary_criterion_id": null,
+      "primary_confidence": 0.0,
+      "cuec_page_refs": [
+        33
+      ],
+      "pdf_snippet": "Customer administrators are provided with procedures for managing production access and reviewing access logs, upcoming releases, and functionalities."
+    },
+    {
+      "cuec_description": "User access reviews are performed at least once every 6 months.",
+      "cuec_line_ref": 1766,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User access reviews are performed",
+      "cuec_gpt_reasoning": "Explicitly outlines that user entities are responsible for reviewing access within a specific timeframe.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC6.1",
+      "cuec_justification": "Relates to access control responsibilities under TSC Security (CC6.1).",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 7,
+      "cuec_confidence": 0.5,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {},
+      "primary_framework": null,
+      "primary_criterion_id": null,
+      "primary_confidence": 0.0,
+      "cuec_page_refs": [
+        44
+      ],
+      "pdf_snippet": "User access reviews are performed at least once every 6 months."
+    },
+    {
+      "cuec_description": "Modifications or removal of privileges is performed as necessary.",
+      "cuec_line_ref": 1758,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "Modifications or removal of privileges is performed",
+      "cuec_gpt_reasoning": "Assigns responsibility to user entities for modifying or removing access privileges as needed.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC6.1",
+      "cuec_justification": "Focuses on user responsibility for access control, in alignment with the TSC Security principle.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 9,
+      "cuec_confidence": 0.5,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {},
+      "primary_framework": null,
+      "primary_criterion_id": null,
+      "primary_confidence": 0.0,
+      "cuec_page_refs": [
+        43
+      ],
+      "pdf_snippet": "Modifications or removal of privileges is performed as necessary."
+    },
+    {
+      "cuec_description": "An up-to-date record of the users or profiles of users who have authorized access to the information system is maintained.",
+      "cuec_line_ref": 1767,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "An up-to-date record of the users or profiles of users",
+      "cuec_gpt_reasoning": "Responsibility for maintaining records of authorized users is assigned to the user entity.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC6.2",
+      "cuec_justification": "Relates to system security monitoring and the responsibility of documenting authorized access.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 6,
+      "cuec_confidence": 0.5,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {},
+      "primary_framework": null,
+      "primary_criterion_id": null,
+      "primary_confidence": 0.0,
+      "cuec_page_refs": [
+        44
+      ],
+      "pdf_snippet": "An up-to-date record of the users or profiles of users who have authorized access to the information system is maintained."
+    },
+    {
+      "cuec_description": "Customers are responsible for reviewing incident and service level reports provided by Okta, where applicable, and reporting any issues based on terms of the service agreement.",
+      "cuec_line_ref": 1990,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "Customers are responsible for",
+      "cuec_gpt_reasoning": "WHO: Customers. WHAT: Reviewing incident and service level reports and reporting issues. WHY: This is clearly stated as a customer responsibility tied to service agreements.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC7.3",
+      "cuec_justification": "Relates to incident management and customer responsibility in ensuring security and confidentiality.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 7,
+      "cuec_confidence": 0.65,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {},
+      "primary_framework": null,
+      "primary_criterion_id": null,
+      "primary_confidence": 0.0,
+      "cuec_page_refs": [
+        49
+      ],
+      "pdf_snippet": "Customers are responsible for reviewing incident and service level reports provided by Okta, where applicable, and reporting any issues based on terms..."
+    },
+    {
+      "cuec_description": "Each user entity must evaluate its own internal controls to determine whether the identified UERs have been implemented and are operating effectively, and to provide additional assurance that the applicable trust criteria described within this report are met.",
+      "cuec_line_ref": 2018,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "Each user entity must",
+      "cuec_gpt_reasoning": "Explicitly assigns user responsibility for evaluating their own internal controls to ensure UERs are implemented and operating effectively.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": null,
+      "cuec_justification": "Applies to trust service criteria and explicitly requires user actions to assess and implement controls.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 3,
+      "cuec_confidence": 0.65,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {},
+      "primary_framework": null,
+      "primary_criterion_id": null,
+      "primary_confidence": 0.0,
+      "cuec_page_refs": [
+        49
+      ],
+      "pdf_snippet": "Each user entity must evaluate its own internal controls to determine whether the identified UERs have been implemented and are operating effectively,..."
+    },
+    {
+      "cuec_description": "User entities are responsible for communicating any bugs, vulnerabilities, or processing issues discovered to Okta.",
+      "cuec_line_ref": 2098,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "Actor=user entities, Action=communicating bugs, vulnerabilities, or issues to Okta, User responsibility=explicitly stated.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC1.1",
+      "cuec_justification": "Relates to communication responsibilities under TSC Availability and Confidentiality.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "CC8.2",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "communicate",
+              "issues",
+              "vulnerabilities"
+            ],
+            "aspect_addressed": "Internal communication regarding control responsibilities",
+            "reasoning": "Emphasizes the necessity for internal messages about vulnerabilities.",
+            "deviation": null
+          },
+          {
+            "id": "CC9.2",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "deficiencies",
+              "timely manner",
+              "issues"
+            ],
+            "aspect_addressed": "Reporting and addressing vulnerabilities effectively",
+            "reasoning": "Focuses on timely communication of discovered issues to management.",
+            "deviation": null
+          },
+          {
+            "id": "CC6.2",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "identify",
+              "risks",
+              "issues"
+            ],
+            "aspect_addressed": "Assessment of risks associated with system vulnerabilities",
+            "reasoning": "Relates to risk analysis of issues reported by user entities.",
+            "deviation": null
+          },
+          {
+            "id": "C1.5",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "mitigate",
+              "security incidents",
+              "issues"
+            ],
+            "aspect_addressed": "Controls to mitigate reported vulnerabilities",
+            "reasoning": "Involves implementing measures to address discovered issues.",
+            "deviation": null
+          },
+          {
+            "id": "CC7.3",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "policies",
+              "expected actions",
+              "procedures"
+            ],
+            "aspect_addressed": "Establishing procedures for bug reporting",
+            "reasoning": "Establishes policies detailing expected responses to vulnerabilities.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "15",
+            "confidence": 0.85,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "external communication",
+              "reporting",
+              "stakeholder communication"
+            ],
+            "aspect_addressed": "Communication of bugs or vulnerabilities to Okta.",
+            "reasoning": "Engagement with user entities for reporting issues relates to external communication.",
+            "deviation": null
+          },
+          {
+            "id": "14",
+            "confidence": 0.8,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "internal communication",
+              "issue escalation",
+              "reporting"
+            ],
+            "aspect_addressed": "Effective communication channels for reporting discovered issues.",
+            "reasoning": "The process requires a structured method for internal communication of issues.",
+            "deviation": null
+          },
+          {
+            "id": "10",
+            "confidence": 0.75,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "control activities",
+              "risk mitigation",
+              "issues management"
+            ],
+            "aspect_addressed": "Proactive measures to address vulnerabilities and bugs.",
+            "reasoning": "Establishing controls to manage discovered vulnerabilities aligns with risk mitigation.",
+            "deviation": null
+          },
+          {
+            "id": "17",
+            "confidence": 0.7,
+            "component": "Monitoring Activities",
+            "keywords_matched": [
+              "deficiency communication",
+              "remediation",
+              "corrective action"
+            ],
+            "aspect_addressed": "Timely communication of identified processing issues and risks.",
+            "reasoning": "Assessing and reporting deficiencies in user feedback supports corrective actions.",
+            "deviation": null
+          },
+          {
+            "id": "7",
+            "confidence": 0.65,
+            "component": "Risk Assessment",
+            "keywords_matched": [
+              "risk identification",
+              "risk analysis",
+              "issues assessment"
+            ],
+            "aspect_addressed": "Identification of risks related to vulnerabilities discovered by users.",
+            "reasoning": "User-reported issues directly contribute to an understanding of risk dynamics.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.16",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "communicating",
+              "bugs",
+              "vulnerabilities",
+              "issues"
+            ],
+            "aspect_addressed": "Management of security incidents and improvements",
+            "reasoning": "Addresses incident reporting and management of identified vulnerabilities.",
+            "deviation": null
+          },
+          {
+            "id": "A.5",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "information security policy",
+              "reporting",
+              "procedures"
+            ],
+            "aspect_addressed": "Establishing policies for communication of issues",
+            "reasoning": "Covers the need for a policy guiding user entities to report security concerns.",
+            "deviation": null
+          },
+          {
+            "id": "A.12",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "operational procedures",
+              "issues",
+              "logging"
+            ],
+            "aspect_addressed": "Established procedures for operational issue reporting",
+            "reasoning": "Addresses the operational aspect of issue reporting as part of control procedures.",
+            "deviation": null
+          },
+          {
+            "id": "A.18",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "legal",
+              "contractual requirements",
+              "communication"
+            ],
+            "aspect_addressed": "Compliance with reporting requirements and responsibilities",
+            "reasoning": "Involves user responsibility under legal or contractual obligations to report incidents.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "ID.RA",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "bugs",
+              "vulnerabilities",
+              "issues"
+            ],
+            "aspect_addressed": "Understanding cybersecurity risks",
+            "reasoning": "Understanding discovered vulnerabilities aligns with assessing cybersecurity risk.",
+            "deviation": null
+          },
+          {
+            "id": "PR.IP",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "communicating",
+              "issues",
+              "management"
+            ],
+            "aspect_addressed": "Maintaining and implementing communication procedures",
+            "reasoning": "Procedures for reporting issues demonstrate control in security policy maintenance.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "communication",
+              "issues",
+              "training"
+            ],
+            "aspect_addressed": "Cybersecurity awareness for personnel",
+            "reasoning": "User training on reporting vulnerabilities enhances overall security awareness.",
+            "deviation": null
+          },
+          {
+            "id": "RS.MI",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "vulnerabilities",
+              "process issues",
+              "communication"
+            ],
+            "aspect_addressed": "Improvement of response activities",
+            "reasoning": "Lessons learned from reported issues can improve incident response processes.",
+            "deviation": null
+          },
+          {
+            "id": "RS.CO",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "responding",
+              "issues",
+              "stakeholders"
+            ],
+            "aspect_addressed": "Coordination of response activities",
+            "reasoning": "Reporting to Okta necessitates coordinating response with internal and external stakeholders.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "ISO27001",
+      "primary_criterion_id": "A.16",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for communicating any bugs, vulnerabilities, or processing issues discovered to Okta."
+    },
+    {
+      "cuec_description": "User entities are responsible for establishing and maintaining appropriate policies and procedures supporting the appropriate use of Okta services.",
+      "cuec_line_ref": 2101,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "Actor=user entities, Action=establishing and maintaining policies and procedures for service use, User responsibility=explicitly stated.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC7.1",
+      "cuec_justification": "Relates to governance responsibilities under TSC Security and Confidentiality.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "CC7.3",
+            "confidence": 0.85,
+            "keywords_matched": [
+              "policies",
+              "procedures"
+            ],
+            "aspect_addressed": "The establishment and implementation of user entity policies.",
+            "reasoning": "Focus on policies that establish expectations and put procedures into action.",
+            "deviation": null
+          },
+          {
+            "id": "CC6.2",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "risks",
+              "policies"
+            ],
+            "aspect_addressed": "Identification and management of risks related to policies.",
+            "reasoning": "Policy maintenance should involve assessing risks to achievement of objectives.",
+            "deviation": null
+          },
+          {
+            "id": "CC5.1",
+            "confidence": 0.75,
+            "keywords_matched": [
+              "accountability"
+            ],
+            "aspect_addressed": "Holding individuals accountable for adherence to user entity policies.",
+            "reasoning": "Focus on accountability for internal control responsibilities related to policies.",
+            "deviation": null
+          },
+          {
+            "id": "CC8.2",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "communication",
+              "information"
+            ],
+            "aspect_addressed": "Internal communication of policies and responsibilities.",
+            "reasoning": "Ensures clear communication regarding objectives and responsibilities for policies.",
+            "deviation": null
+          },
+          {
+            "id": "C1.2",
+            "confidence": 0.65,
+            "keywords_matched": [
+              "access",
+              "authorized personnel"
+            ],
+            "aspect_addressed": "Control over access to Okta services.",
+            "reasoning": "Focus on restricting logical access to ensure proper use and security of services.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "12",
+            "confidence": 0.9,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "documentation"
+            ],
+            "aspect_addressed": "Policies and procedures that establish expectations",
+            "reasoning": "Policies and procedures are critical to guide user entity behavior.",
+            "deviation": null
+          },
+          {
+            "id": "5",
+            "confidence": 0.8,
+            "component": "Control Environment",
+            "keywords_matched": [
+              "accountability",
+              "responsibility",
+              "roles"
+            ],
+            "aspect_addressed": "Accountability for internal control responsibilities",
+            "reasoning": "Ensures individuals are accountable for adherence to policies.",
+            "deviation": null
+          },
+          {
+            "id": "10",
+            "confidence": 0.7,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "control activities",
+              "risk mitigation"
+            ],
+            "aspect_addressed": "Development of controls to mitigate risks from policies",
+            "reasoning": "Establishing activities that mitigate risks related to user policies.",
+            "deviation": null
+          },
+          {
+            "id": "14",
+            "confidence": 0.7,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "communication",
+              "responsibilities",
+              "objectives"
+            ],
+            "aspect_addressed": "Internal communication of policies and procedures",
+            "reasoning": "Ensures effective communication of expectations about policies.",
+            "deviation": null
+          },
+          {
+            "id": "6",
+            "confidence": 0.6,
+            "component": "Risk Assessment",
+            "keywords_matched": [
+              "objectives",
+              "risk identification",
+              "policies"
+            ],
+            "aspect_addressed": "Setting clear objectives to assess associated risks",
+            "reasoning": "Clear user policies help identify and assess related risks.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.5",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "appropriate use"
+            ],
+            "aspect_addressed": "Establishing information security policies",
+            "reasoning": "Directly addresses the need for formalized security policies.",
+            "deviation": null
+          },
+          {
+            "id": "A.9",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "user access management",
+              "appropriate use"
+            ],
+            "aspect_addressed": "User access controls and management",
+            "reasoning": "Focuses on access controls relevant to the use of Okta services.",
+            "deviation": null
+          },
+          {
+            "id": "A.6",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "teleworking"
+            ],
+            "aspect_addressed": "Internal organization and teleworking policies",
+            "reasoning": "Supportive of maintaining security in organizational structures.",
+            "deviation": null
+          },
+          {
+            "id": "A.7",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "employment",
+              "policies",
+              "procedures"
+            ],
+            "aspect_addressed": "Employee lifecycle management",
+            "reasoning": "Pertains to managing user roles and responsibilities.",
+            "deviation": null
+          },
+          {
+            "id": "A.18",
+            "confidence": 0.65,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "compliance"
+            ],
+            "aspect_addressed": "Compliance with legal and contractual standards",
+            "reasoning": "Ensures policies are in line with legal requirements.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "ID.GV",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "cybersecurity risk"
+            ],
+            "aspect_addressed": "Establishing management frameworks for security",
+            "reasoning": "Policies and procedures guide user entities in risk management.",
+            "deviation": null
+          },
+          {
+            "id": "PR.IP",
+            "confidence": 0.85,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "maintenance"
+            ],
+            "aspect_addressed": "Implementation and maintenance of security policies",
+            "reasoning": "Maintaining procedures ensures appropriate use of Okta services.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.75,
+            "keywords_matched": [
+              "education",
+              "training",
+              "policies"
+            ],
+            "aspect_addressed": "Awareness and training for personnel on policy adherence",
+            "reasoning": "Training enhances user understanding of policy compliance.",
+            "deviation": null
+          },
+          {
+            "id": "ID.RA",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "risk",
+              "understands",
+              "operations"
+            ],
+            "aspect_addressed": "Understanding cybersecurity risks to operations",
+            "reasoning": "Identifying risks helps entities formulate appropriate policies.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AC",
+            "confidence": 0.65,
+            "keywords_matched": [
+              "access",
+              "authorized users",
+              "policies"
+            ],
+            "aspect_addressed": "Control over who accesses Okta services",
+            "reasoning": "Access policies limit systems to authorized personnel.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "COSO",
+      "primary_criterion_id": "12",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for establishing and maintaining appropriate policies and procedures supporting the appropriate use of Okta services."
+    },
+    {
+      "cuec_description": "User entities are responsible for approving and provisioning access to their Okta instances.",
+      "cuec_line_ref": 2067,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "WHO: User entities. WHAT: Approving and provisioning access to their Okta instances. WHY: Users must take ownership of access management, which is explicitly stated.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC6.2",
+      "cuec_justification": "Relates to access management responsibility under TSC Security.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "C1.2",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "access",
+              "authorization",
+              "user provisioning"
+            ],
+            "aspect_addressed": "Restricting logical access to authorized users.",
+            "reasoning": "Focuses on access control for provisioning user access in Okta.",
+            "deviation": null
+          },
+          {
+            "id": "CC7.3",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "documentation"
+            ],
+            "aspect_addressed": "Deployment of policies for access provisioning.",
+            "reasoning": "Involves establishing policies on user access approval.",
+            "deviation": null
+          },
+          {
+            "id": "CC6.2",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "risk",
+              "assessment",
+              "management"
+            ],
+            "aspect_addressed": "Identifying risks associated with access provisioning.",
+            "reasoning": "Addresses risks involved in managing user access and provisioning.",
+            "deviation": null
+          },
+          {
+            "id": "CC9.1",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "evaluation",
+              "internal control",
+              "functioning"
+            ],
+            "aspect_addressed": "Ongoing evaluation of access provisioning controls.",
+            "reasoning": "Ensures internal controls over access are functioning effectively.",
+            "deviation": null
+          },
+          {
+            "id": "CC5.1",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "accountability",
+              "responsibility",
+              "users"
+            ],
+            "aspect_addressed": "Holding users accountable for access management.",
+            "reasoning": "Focuses on user accountability in the access provisioning process.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "11",
+            "confidence": 0.8,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "access control",
+              "authentication"
+            ],
+            "aspect_addressed": "Technology controls and access management",
+            "reasoning": "User entities manage access in Okta, aligning with IT control principles.",
+            "deviation": null
+          },
+          {
+            "id": "12",
+            "confidence": 0.7,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "policies",
+              "procedures"
+            ],
+            "aspect_addressed": "Deployment of access control policies",
+            "reasoning": "User entities should have documented policies for access provisioning.",
+            "deviation": null
+          },
+          {
+            "id": "5",
+            "confidence": 0.7,
+            "component": "Control Environment",
+            "keywords_matched": [
+              "accountability",
+              "enforcement"
+            ],
+            "aspect_addressed": "Individual accountability for access control",
+            "reasoning": "User entities are accountable for granting access, enforcing control.",
+            "deviation": null
+          },
+          {
+            "id": "14",
+            "confidence": 0.6,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "communication",
+              "responsibilities"
+            ],
+            "aspect_addressed": "Internal communication of access control responsibilities",
+            "reasoning": "Clear communication ensures entities understand their access roles.",
+            "deviation": null
+          },
+          {
+            "id": "7",
+            "confidence": 0.6,
+            "component": "Risk Assessment",
+            "keywords_matched": [
+              "risk identification",
+              "risk management"
+            ],
+            "aspect_addressed": "Identifying risks associated with access provisioning",
+            "reasoning": "Managing access entails recognizing and addressing related security risks.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.9",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "approved",
+              "user access",
+              "provisioning",
+              "access management"
+            ],
+            "aspect_addressed": "User access and provisioning processes",
+            "reasoning": "Addresses user access management and related responsibilities for approval.",
+            "deviation": null
+          },
+          {
+            "id": "A.7",
+            "confidence": 0.78,
+            "keywords_matched": [
+              "employment",
+              "responsibility",
+              "access provisioning"
+            ],
+            "aspect_addressed": "Access management related to employment status",
+            "reasoning": "Covers responsibilities related to access at employment phases.",
+            "deviation": null
+          },
+          {
+            "id": "A.5",
+            "confidence": 0.75,
+            "keywords_matched": [
+              "information security policy",
+              "approval processes"
+            ],
+            "aspect_addressed": "Governance of user access controls",
+            "reasoning": "Involves the need for policies on user access management and approvals.",
+            "deviation": null
+          },
+          {
+            "id": "A.12",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "operational procedures",
+              "user access management"
+            ],
+            "aspect_addressed": "Operational controls related to access provisioning",
+            "reasoning": "Relates to the operational aspects of provisioning user access effectively.",
+            "deviation": null
+          },
+          {
+            "id": "A.16",
+            "confidence": 0.65,
+            "keywords_matched": [
+              "management of incidents",
+              "user access issues"
+            ],
+            "aspect_addressed": "Incident management related to user access",
+            "reasoning": "Covers incident response related to unauthorized access or provisioning issues.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "PR.AC",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "access",
+              "authorization",
+              "provisioning"
+            ],
+            "aspect_addressed": "Limit access to authorized users",
+            "reasoning": "Focus on ensuring that only authorized users are granted access to systems.",
+            "deviation": null
+          },
+          {
+            "id": "PR.IP",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "management"
+            ],
+            "aspect_addressed": "Maintain security policies and procedures",
+            "reasoning": "Ensures that access approval processes are defined and adhered to through policies.",
+            "deviation": null
+          },
+          {
+            "id": "ID.GV",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "cybersecurity risk"
+            ],
+            "aspect_addressed": "Establish policies to manage cybersecurity risk",
+            "reasoning": "Emphasizes the establishment of policies for managing risks associated with access.",
+            "deviation": null
+          },
+          {
+            "id": "ID.RA",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "cybersecurity risk",
+              "operations",
+              "assets"
+            ],
+            "aspect_addressed": "Understanding of cybersecurity risks",
+            "reasoning": "Focus on recognizing risks related to user access to Okta instances.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "education",
+              "training",
+              "awareness"
+            ],
+            "aspect_addressed": "Cybersecurity awareness training for personnel",
+            "reasoning": "Highlights the need for training users involved in access approvals for awareness.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "TSC",
+      "primary_criterion_id": "C1.2",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for approving and provisioning access to their Okta instances."
+    },
+    {
+      "cuec_description": "User entities are responsible for disabling a User's ID and credentials immediately upon a user's termination and ends any active sessions for the user.",
+      "cuec_line_ref": 2067,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "WHO: User entities. WHAT: Disabling user IDs and credentials immediately after termination and ending active sessions. WHY: User entities are explicitly assigned responsibility for securing access post-employee exit.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC6.3",
+      "cuec_justification": "Relates to access revocation responsibility under TSC Security.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "CC7.1",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "disabling user ID",
+              "credentials",
+              "active sessions"
+            ],
+            "aspect_addressed": "Control activities for mitigating access risks.",
+            "reasoning": "Focus on mitigating risks by disabling access post-termination.",
+            "deviation": null
+          },
+          {
+            "id": "CC7.3",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "disable user"
+            ],
+            "aspect_addressed": "Establishing policies and procedures for account termination.",
+            "reasoning": "Relates to the documented procedures for disabling accounts reliably.",
+            "deviation": null
+          },
+          {
+            "id": "C1.2",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "restricts logical access",
+              "authorized personnel",
+              "termination"
+            ],
+            "aspect_addressed": "Logical access control to prevent unauthorized access.",
+            "reasoning": "Critical for controlling access during and after user termination.",
+            "deviation": null
+          },
+          {
+            "id": "CC9.1",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "ongoing evaluations",
+              "internal control",
+              "user access"
+            ],
+            "aspect_addressed": "Evaluating the effectiveness of access controls.",
+            "reasoning": "Essential to assess whether access controls are functioning post-termination.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "11",
+            "confidence": 0.9,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "user ID",
+              "credentials",
+              "access control"
+            ],
+            "aspect_addressed": "Control over technology and access management",
+            "reasoning": "Directly relates to implementing access control measures for user termination.",
+            "deviation": null
+          },
+          {
+            "id": "10",
+            "confidence": 0.8,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "mitigation",
+              "disabling accounts",
+              "active sessions"
+            ],
+            "aspect_addressed": "Control activities to mitigate risks upon user termination",
+            "reasoning": "Focuses on the necessity of controls to manage risks associated with user access.",
+            "deviation": null
+          },
+          {
+            "id": "12",
+            "confidence": 0.7,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "documentation"
+            ],
+            "aspect_addressed": "Establishment of policies and procedures for disabling access",
+            "reasoning": "Policies must detail the immediate disabling of accounts to enforce controls.",
+            "deviation": null
+          },
+          {
+            "id": "17",
+            "confidence": 0.7,
+            "component": "Monitoring Activities",
+            "keywords_matched": [
+              "deficiencies",
+              "reporting",
+              "corrective actions"
+            ],
+            "aspect_addressed": "Communication of deficiencies related to user access control",
+            "reasoning": "Ensures that failures in access management are reported and addressed swiftly.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.7",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "termination",
+              "user's ID",
+              "credentials"
+            ],
+            "aspect_addressed": "User termination procedures",
+            "reasoning": "Focuses on user management policies during employment and upon termination.",
+            "deviation": null
+          },
+          {
+            "id": "A.9",
+            "confidence": 0.85,
+            "keywords_matched": [
+              "access management",
+              "user access",
+              "active sessions"
+            ],
+            "aspect_addressed": "User access control and management",
+            "reasoning": "Addresses controls about user access provisioning and de-provisioning.",
+            "deviation": null
+          },
+          {
+            "id": "A.5",
+            "confidence": 0.75,
+            "keywords_matched": [
+              "security policy",
+              "policy",
+              "procedures"
+            ],
+            "aspect_addressed": "Information security governance",
+            "reasoning": "Emphasizes the need for documented policies around user access and security.",
+            "deviation": null
+          },
+          {
+            "id": "A.12",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "operational procedures",
+              "session management",
+              "logging"
+            ],
+            "aspect_addressed": "Operational aspect of user session handling",
+            "reasoning": "Covers operational controls related to managing active user sessions securely.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "PR.AC",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "access",
+              "user ID",
+              "authorized users"
+            ],
+            "aspect_addressed": "Control of access to sensitive or critical systems and assets",
+            "reasoning": "Access to assets is limited to authorized users, especially upon termination.",
+            "deviation": null
+          },
+          {
+            "id": "PR.IP",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "disable user ID"
+            ],
+            "aspect_addressed": "Ensuring security policies are maintained regarding user id management",
+            "reasoning": "Policies about disabling user access are critical during user termination.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "training",
+              "cybersecurity awareness",
+              "user management"
+            ],
+            "aspect_addressed": "Personnel are trained on security practices for handling user credentials",
+            "reasoning": "Training ensures staff understand the importance of disabling access timely.",
+            "deviation": null
+          },
+          {
+            "id": "ID.GV",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "policies",
+              "established process",
+              "managing risk"
+            ],
+            "aspect_addressed": "Policies and procedures for managing cybersecurity risks related to user access",
+            "reasoning": "Clear governance ensures the prompt management of user credentials during termination.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "TSC",
+      "primary_criterion_id": "C1.2",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for disabling a User's ID and credentials immediately upon a user's termination and ends any active sessions for the use..."
+    },
+    {
+      "cuec_description": "User entities are responsible for the security and confidentiality of the information submitted on Okta's support tickets.",
+      "cuec_line_ref": 2046,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "Clearly assigns responsibility to user entities for ensuring the security and confidentiality of information submitted through Okta's support tickets.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC2.3",
+      "cuec_justification": "Relates to confidentiality and security under TSC (Trust Services Criteria).",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "C1.2",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "security",
+              "access control",
+              "authorized personnel"
+            ],
+            "aspect_addressed": "Controls for restricting access to support ticket information",
+            "reasoning": "Access control relates to safeguarding submitted information on support tickets.",
+            "deviation": null
+          },
+          {
+            "id": "Conf1.3",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "confidentiality",
+              "protected information",
+              "unauthorized disclosure"
+            ],
+            "aspect_addressed": "Protection of confidential information submitted in tickets",
+            "reasoning": "Addresses the need to protect submitted information from unauthorized disclosure.",
+            "deviation": null
+          },
+          {
+            "id": "P10.1",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "privacy",
+              "monitoring",
+              "enforcement"
+            ],
+            "aspect_addressed": "Monitoring of privacy practices in handling support tickets",
+            "reasoning": "Ensures the monitoring of privacy practices around the submitted information.",
+            "deviation": null
+          },
+          {
+            "id": "CC6.2",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "risk",
+              "confidentiality",
+              "objectives"
+            ],
+            "aspect_addressed": "Identification and management of risks related to user submissions",
+            "reasoning": "Focuses on identifying risks associated with the security of submitted ticket data.",
+            "deviation": null
+          },
+          {
+            "id": "C1.5",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "security events",
+              "prevent",
+              "detect"
+            ],
+            "aspect_addressed": "Controls to mitigate security events involving submitted ticket data",
+            "reasoning": "Targets the prevention and detection of security events related to the support tickets.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "5",
+            "confidence": 0.8,
+            "component": "Control Environment",
+            "keywords_matched": [
+              "accountability",
+              "responsibility",
+              "enforcement"
+            ],
+            "aspect_addressed": "Holds user entities accountable for ticket security.",
+            "reasoning": "Users must be accountable for handling sensitive information on tickets.",
+            "deviation": null
+          },
+          {
+            "id": "12",
+            "confidence": 0.7,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "expectations"
+            ],
+            "aspect_addressed": "Defines the expected security and confidentiality measures.",
+            "reasoning": "Clear policies guide users on handling information in support tickets.",
+            "deviation": null
+          },
+          {
+            "id": "14",
+            "confidence": 0.7,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "internal communication",
+              "responsibilities",
+              "information"
+            ],
+            "aspect_addressed": "Communicates roles and responsibilities related to ticket handling.",
+            "reasoning": "Effective communication ensures users understand their responsibilities.",
+            "deviation": null
+          },
+          {
+            "id": "10",
+            "confidence": 0.65,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "control activities",
+              "mitigation",
+              "risks"
+            ],
+            "aspect_addressed": "Implement controls to mitigate risks related to support ticket data.",
+            "reasoning": "Control activities help reduce risks associated with ticket information security.",
+            "deviation": null
+          },
+          {
+            "id": "6",
+            "confidence": 0.65,
+            "component": "Risk Assessment",
+            "keywords_matched": [
+              "objectives",
+              "risk identification",
+              "clarity"
+            ],
+            "aspect_addressed": "Specifies objectives clearly regarding information security.",
+            "reasoning": "Clear objectives help identify risks related to information confidentiality.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.5",
+            "confidence": 0.85,
+            "keywords_matched": [
+              "security",
+              "confidentiality",
+              "information policy"
+            ],
+            "aspect_addressed": "Establishing policies for handling support ticket information",
+            "reasoning": "Policies guide the security and confidentiality of submitted information.",
+            "deviation": null
+          },
+          {
+            "id": "A.9",
+            "confidence": 0.75,
+            "keywords_matched": [
+              "user access management",
+              "information security",
+              "access control"
+            ],
+            "aspect_addressed": "Ensuring appropriate access management for support ticket information",
+            "reasoning": "Access management is vital for protecting confidential information in support tickets.",
+            "deviation": null
+          },
+          {
+            "id": "A.18",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "legal requirements",
+              "contractual obligations",
+              "confidentiality"
+            ],
+            "aspect_addressed": "Compliance with legal and contractual obligations regarding submitted data",
+            "reasoning": "Ensures that user entities adhere to legal and contractual confidentiality commitments.",
+            "deviation": null
+          },
+          {
+            "id": "A.16",
+            "confidence": 0.65,
+            "keywords_matched": [
+              "security incidents",
+              "information security",
+              "incident management"
+            ],
+            "aspect_addressed": "Management of incidents related to submitted information via tickets",
+            "reasoning": "Effective incident management is crucial for maintaining security after potential breaches.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "ID.GV",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "security",
+              "confidentiality",
+              "policies"
+            ],
+            "aspect_addressed": "Establishment of policies concerning user data handling",
+            "reasoning": "Organizations must have policies on security and confidentiality of information.",
+            "deviation": null
+          },
+          {
+            "id": "PR.DS",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "manage",
+              "information",
+              "risk strategy"
+            ],
+            "aspect_addressed": "Management of information submitted on support tickets",
+            "reasoning": "Ensures records are handled based on the confidentiality and security risk.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AC",
+            "confidence": 0.75,
+            "keywords_matched": [
+              "access",
+              "authorized users",
+              "security"
+            ],
+            "aspect_addressed": "Limited access to support ticket information",
+            "reasoning": "Ensures only authorized individuals can access sensitive support ticket data.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.65,
+            "keywords_matched": [
+              "cybersecurity",
+              "awareness",
+              "training"
+            ],
+            "aspect_addressed": "Training personnel on handling support ticket information",
+            "reasoning": "Personnel must be trained on the importance of security and confidentiality.",
+            "deviation": null
+          },
+          {
+            "id": "ID.RA",
+            "confidence": 0.65,
+            "keywords_matched": [
+              "understands",
+              "cybersecurity risk",
+              "information handling"
+            ],
+            "aspect_addressed": "Understanding cybersecurity risks related to support tickets",
+            "reasoning": "Identifying risks associated with handling sensitive information in support.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "TSC",
+      "primary_criterion_id": "C1.2",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for the security and confidentiality of the information submitted on Okta's support tickets."
+    },
+    {
+      "cuec_description": "User entities are responsible for maintaining appropriate policies and procedures supporting the appropriate use and access services provided by Okta.",
+      "cuec_line_ref": 2051,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "Explicitly places responsibility on user entities to maintain policies and procedures related to the use and access of Okta services.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC6.1",
+      "cuec_justification": "Related to access control and governance in TSC.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "CC7.3",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "appropriate use"
+            ],
+            "aspect_addressed": "Establishment of policies and procedures for user access",
+            "reasoning": "Control requires policies/procedures for user access, aligns with CC7.3.",
+            "deviation": null
+          },
+          {
+            "id": "C1.2",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "access",
+              "authorized personnel",
+              "services"
+            ],
+            "aspect_addressed": "Restricts access to services to authorized users",
+            "reasoning": "Access control is critical to protect services, matches C1.2.",
+            "deviation": null
+          },
+          {
+            "id": "CC5.1",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "accountability",
+              "responsible",
+              "use"
+            ],
+            "aspect_addressed": "Holding individuals accountable for access control",
+            "reasoning": "Accountability is essential for user entities' policies, reflects CC5.1.",
+            "deviation": null
+          },
+          {
+            "id": "CC6.2",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "risks",
+              "appropriate use",
+              "objectives"
+            ],
+            "aspect_addressed": "Identification of risks related to access services",
+            "reasoning": "Control needs risk analysis for objectives, relates to CC6.2.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "12",
+            "confidence": 0.9,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "guidelines"
+            ],
+            "aspect_addressed": "Deployment of control mechanisms to foster appropriate access",
+            "reasoning": "Policies and procedures establish expected behavior for user access.",
+            "deviation": null
+          },
+          {
+            "id": "11",
+            "confidence": 0.8,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "access control",
+              "IT security",
+              "authorization"
+            ],
+            "aspect_addressed": "Technical controls ensuring secure access management by user entities",
+            "reasoning": "User access to Okta demonstrates the need for IT controls over access.",
+            "deviation": null
+          },
+          {
+            "id": "14",
+            "confidence": 0.75,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "communication",
+              "objectives",
+              "responsibilities"
+            ],
+            "aspect_addressed": "Internal communication of roles and control responsibilities",
+            "reasoning": "User entities need to understand their responsibilities in access control.",
+            "deviation": null
+          },
+          {
+            "id": "5",
+            "confidence": 0.7,
+            "component": "Control Environment",
+            "keywords_matched": [
+              "accountability",
+              "responsibilities",
+              "enforcement"
+            ],
+            "aspect_addressed": "Accountability for adherence to policies and procedures",
+            "reasoning": "User entities must be held accountable for managing their access effectively.",
+            "deviation": null
+          },
+          {
+            "id": "1",
+            "confidence": 0.65,
+            "component": "Control Environment",
+            "keywords_matched": [
+              "integrity",
+              "ethical values",
+              "ethical culture"
+            ],
+            "aspect_addressed": "Foundation for operating environments and adhering to access policies",
+            "reasoning": "Commitment to integrity reinforces effective use of access control policies.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.5",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "appropriate use"
+            ],
+            "aspect_addressed": "Development and dissemination of security policies",
+            "reasoning": "Focuses on establishing governance for user access and service use.",
+            "deviation": null
+          },
+          {
+            "id": "A.9",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "user access",
+              "access services",
+              "management"
+            ],
+            "aspect_addressed": "User access management and control processes",
+            "reasoning": "Directly relates to how user entities manage and initiate access provisions.",
+            "deviation": null
+          },
+          {
+            "id": "A.6",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "appropriate access",
+              "mobile devices",
+              "teleworking"
+            ],
+            "aspect_addressed": "Considerations for access policies across different environments",
+            "reasoning": "Addresses the need for policies that govern access in varied contexts.",
+            "deviation": null
+          },
+          {
+            "id": "A.7",
+            "confidence": 0.65,
+            "keywords_matched": [
+              "employment",
+              "access",
+              "termination"
+            ],
+            "aspect_addressed": "Lifecycle of user access management",
+            "reasoning": "Covers how access is managed before, during, and after employment.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "ID.GV",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "appropriate use"
+            ],
+            "aspect_addressed": "Establishment of policies and procedures for user access",
+            "reasoning": "Directly addresses governance and established policies for access management.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AC",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "access",
+              "authorized users",
+              "appropriate use"
+            ],
+            "aspect_addressed": "Control of access to services and assets",
+            "reasoning": "Ensures appropriate access and authorization for users accessing Okta services.",
+            "deviation": null
+          },
+          {
+            "id": "PR.IP",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "procedures",
+              "policies",
+              "maintaining"
+            ],
+            "aspect_addressed": "Maintenance of security policies and procedures",
+            "reasoning": "Focuses on maintaining and updating policies and procedures related to appropriate use.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "training",
+              "personnel",
+              "education"
+            ],
+            "aspect_addressed": "Cybersecurity awareness training for personnel",
+            "reasoning": "Emphasizes the need for training to ensure policies are understood and followed.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "COSO",
+      "primary_criterion_id": "12",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for maintaining appropriate policies and procedures supporting the appropriate use and access services provided by Okta."
+    },
+    {
+      "cuec_description": "User entities are responsible for managing access configurations within the Okta service.",
+      "cuec_line_ref": 2054,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "Specifically assigns user entities the responsibility to manage access configurations within the Okta service.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC6.1",
+      "cuec_justification": "Access management responsibility falls under CC6.1 of AICPA's TSC.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "C1.2",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "access",
+              "authorization",
+              "confidentiality"
+            ],
+            "aspect_addressed": "Restricting access to information assets",
+            "reasoning": "Control addresses user access configurations within Okta service.",
+            "deviation": null
+          },
+          {
+            "id": "CC7.3",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "management"
+            ],
+            "aspect_addressed": "Establishing expectations through policies",
+            "reasoning": "User entities need clear policies for managing access configurations.",
+            "deviation": null
+          },
+          {
+            "id": "CC6.2",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "risk",
+              "management",
+              "assessment"
+            ],
+            "aspect_addressed": "Identifying risks related to access configurations",
+            "reasoning": "User entities must analyze risks associated with access management in Okta.",
+            "deviation": null
+          },
+          {
+            "id": "CC9.1",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "evaluation",
+              "internal control",
+              "performance"
+            ],
+            "aspect_addressed": "Evaluating internal control over access management",
+            "reasoning": "Entities should evaluate the effectiveness of access controls periodically.",
+            "deviation": null
+          },
+          {
+            "id": "C1.3",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "configuration",
+              "system changes",
+              "authorization"
+            ],
+            "aspect_addressed": "Managing system changes for access configuration",
+            "reasoning": "Controls in place to handle changes to user access settings in Okta.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "11",
+            "confidence": 0.9,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "access control",
+              "authentication",
+              "security controls"
+            ],
+            "aspect_addressed": "Technology controls for managing access configurations",
+            "reasoning": "User entities manage access through technology controls in Okta.",
+            "deviation": null
+          },
+          {
+            "id": "12",
+            "confidence": 0.8,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "documentation"
+            ],
+            "aspect_addressed": "Policies and procedures for access management",
+            "reasoning": "Control requires documented policies for access configurations.",
+            "deviation": null
+          },
+          {
+            "id": "16",
+            "confidence": 0.7,
+            "component": "Monitoring Activities",
+            "keywords_matched": [
+              "monitoring",
+              "review",
+              "control testing"
+            ],
+            "aspect_addressed": "Ongoing evaluations of access control effectiveness",
+            "reasoning": "Requires continuous monitoring and evaluations of access configurations.",
+            "deviation": null
+          },
+          {
+            "id": "5",
+            "confidence": 0.7,
+            "component": "Control Environment",
+            "keywords_matched": [
+              "accountability",
+              "responsibility",
+              "performance measures"
+            ],
+            "aspect_addressed": "Accountability for managing access configurations",
+            "reasoning": "User entities are held accountable for their access management responsibilities.",
+            "deviation": null
+          },
+          {
+            "id": "14",
+            "confidence": 0.6,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "communication",
+              "internal communication",
+              "responsibilities"
+            ],
+            "aspect_addressed": "Communication of access management policies and responsibilities",
+            "reasoning": "Necessary communication of roles and responsibilities for access configuration.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.9",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "access management",
+              "user access",
+              "authorization"
+            ],
+            "aspect_addressed": "User access management policies and procedures.",
+            "reasoning": "User entities manage access configurations, aligning with user access management criteria.",
+            "deviation": null
+          },
+          {
+            "id": "A.5",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "information security policy",
+              "policies"
+            ],
+            "aspect_addressed": "Establishment of access control policies for user entities.",
+            "reasoning": "Control relies on policies guiding how access configurations should be managed.",
+            "deviation": null
+          },
+          {
+            "id": "A.7",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "prior to employment",
+              "during employment"
+            ],
+            "aspect_addressed": "Access management throughout the employee lifecycle.",
+            "reasoning": "User entities' responsibilities cover access during and after employment.",
+            "deviation": null
+          },
+          {
+            "id": "A.12",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "procedures",
+              "logging",
+              "operational software"
+            ],
+            "aspect_addressed": "Operational procedures related to user access configurations.",
+            "reasoning": "Access configurations must include operational controls like logging.",
+            "deviation": null
+          },
+          {
+            "id": "A.18",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "compliance",
+              "legal requirements"
+            ],
+            "aspect_addressed": "Compliance with legal aspects of access management.",
+            "reasoning": "User entities must ensure access configurations comply with legal obligations.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "PR.AC",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "access",
+              "authorization",
+              "user entities"
+            ],
+            "aspect_addressed": "Management of user access to the Okta service",
+            "reasoning": "Access limited to authorized users aligns with managing access configurations.",
+            "deviation": null
+          },
+          {
+            "id": "PR.IP",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "access configurations"
+            ],
+            "aspect_addressed": "Establishment and maintenance of access management policies",
+            "reasoning": "Security policies reflect procedures for managing access configurations.",
+            "deviation": null
+          },
+          {
+            "id": "ID.GV",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "cybersecurity risk"
+            ],
+            "aspect_addressed": "Establishment of governance for managing cybersecurity risk",
+            "reasoning": "Policies about access configurations support overarching risk management.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "training",
+              "educational",
+              "personnel"
+            ],
+            "aspect_addressed": "Training personnel on access management procedures",
+            "reasoning": "User entities should be trained to manage access effectively as per control.",
+            "deviation": null
+          },
+          {
+            "id": "ID.RA",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "risk",
+              "cybersecurity",
+              "access configurations"
+            ],
+            "aspect_addressed": "Understanding risks related to access configurations",
+            "reasoning": "User entities must comprehend cybersecurity risks in access management.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "TSC",
+      "primary_criterion_id": "C1.2",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for managing access configurations within the Okta service."
+    },
+    {
+      "cuec_description": "User entities are responsible for staying informed of new features and functionality by reviewing Okta's updates and release notes.",
+      "cuec_line_ref": 2036,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "Actor=user entities, Action=staying informed of features/functionality via reviewing updates/release notes, User responsibility=explicitly assigned.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC2.3",
+      "cuec_justification": "Relates to monitoring and communication under TSC CC2.3.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "CC6.1",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "staying informed",
+              "new features",
+              "updates"
+            ],
+            "aspect_addressed": "Clarity of objectives related to new features.",
+            "reasoning": "Objectives include understanding updates to manage risks effectively.",
+            "deviation": null
+          },
+          {
+            "id": "CC7.3",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "reviewing",
+              "release notes",
+              "updates"
+            ],
+            "aspect_addressed": "Deployment of policies and procedures for information review.",
+            "reasoning": "Policies are needed to ensure users review updates as part of control.",
+            "deviation": null
+          },
+          {
+            "id": "CC8.2",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "staying informed",
+              "communication",
+              "updates"
+            ],
+            "aspect_addressed": "Internal communication regarding responsibilities and updates.",
+            "reasoning": "Importance of informing entities about new features to support controls.",
+            "deviation": null
+          },
+          {
+            "id": "C1.6",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "user entities",
+              "staying informed",
+              "security events"
+            ],
+            "aspect_addressed": "Controls to detect and mitigate security incidents related to features.",
+            "reasoning": "Understanding updates helps mitigate security incidents with new features.",
+            "deviation": null
+          },
+          {
+            "id": "C1.3",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "new features",
+              "changes",
+              "release notes"
+            ],
+            "aspect_addressed": "Control around implementing system changes for updates.",
+            "reasoning": "User entities need to understand system changes from updates for control.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "11",
+            "confidence": 0.9,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "Okta",
+              "technology",
+              "user entities"
+            ],
+            "aspect_addressed": "General control activities related to technology use.",
+            "reasoning": "User entities need to implement Okta's updates effectively.",
+            "deviation": null
+          },
+          {
+            "id": "12",
+            "confidence": 0.8,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "procedures",
+              "documentation",
+              "release notes"
+            ],
+            "aspect_addressed": "Policies and procedures for controlling user access and features.",
+            "reasoning": "Entities must document and follow policies for release updates.",
+            "deviation": null
+          },
+          {
+            "id": "14",
+            "confidence": 0.7,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "communication",
+              "updates",
+              "release notes"
+            ],
+            "aspect_addressed": "Internal communication of objectives and updates.",
+            "reasoning": "Effective communication is needed to stay informed about updates.",
+            "deviation": null
+          },
+          {
+            "id": "5",
+            "confidence": 0.65,
+            "component": "Control Environment",
+            "keywords_matched": [
+              "accountability",
+              "responsibilities",
+              "objectives"
+            ],
+            "aspect_addressed": "Holding individuals accountable for updates and usage.",
+            "reasoning": "Entities are accountable for staying informed and utilizing features.",
+            "deviation": null
+          },
+          {
+            "id": "9",
+            "confidence": 0.6,
+            "component": "Risk Assessment",
+            "keywords_matched": [
+              "changes",
+              "impact",
+              "assessing"
+            ],
+            "aspect_addressed": "Identifying changes that could impact internal control.",
+            "reasoning": "Entities must assess risks from new features and their impact.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [
+          {
+            "id": "RA1",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "risks",
+              "control objectives",
+              "features"
+            ],
+            "aspect_addressed": "Risk Assessment - identifying risks",
+            "reasoning": "Identifies risks related to new features and their possible impacts.",
+            "deviation": null
+          },
+          {
+            "id": "IC2",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "communication",
+              "updates",
+              "release notes"
+            ],
+            "aspect_addressed": "Information & Communication - timely communication",
+            "reasoning": "Ensures important updates are communicated to user entities.",
+            "deviation": null
+          }
+        ],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.5",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "staying informed",
+              "updates",
+              "release notes"
+            ],
+            "aspect_addressed": "Information security policy governance",
+            "reasoning": "Policies require users to stay updated on features impacting security.",
+            "deviation": null
+          },
+          {
+            "id": "A.9",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "access",
+              "features",
+              "functionality"
+            ],
+            "aspect_addressed": "User access management and system usage",
+            "reasoning": "Managing user access includes knowing features that affect access control.",
+            "deviation": null
+          },
+          {
+            "id": "A.12",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "operational procedures",
+              "updates",
+              "procedures"
+            ],
+            "aspect_addressed": "Operational procedures regarding system updates",
+            "reasoning": "Users must follow procedures for operational updates to ensure security.",
+            "deviation": null
+          },
+          {
+            "id": "A.18",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "compliance",
+              "updates",
+              "release notes"
+            ],
+            "aspect_addressed": "Compliance with updates and legal requirements",
+            "reasoning": "Staying informed ensures compliance with security and regulatory updates.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "ID.GV",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "staying informed"
+            ],
+            "aspect_addressed": "Establishment of policies and procedures for management",
+            "reasoning": "This control highlights the need for policies to manage new features.",
+            "deviation": null
+          },
+          {
+            "id": "ID.RM",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "risk tolerances",
+              "assumptions",
+              "new functionality"
+            ],
+            "aspect_addressed": "Understanding priorities and constraints related to functionality",
+            "reasoning": "The control indicates that user entities must know their risk tolerances.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "cybersecurity awareness",
+              "user entities",
+              "updates"
+            ],
+            "aspect_addressed": "Personnel training and awareness regarding updates",
+            "reasoning": "Control pertains to users being informed, indicative of training needs.",
+            "deviation": null
+          },
+          {
+            "id": "PR.IP",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "processes",
+              "maintained",
+              "release notes"
+            ],
+            "aspect_addressed": "Maintenance of security processes related to updates",
+            "reasoning": "The need for a consistent process regarding updates aligns with this criterion.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "COSO",
+      "primary_criterion_id": "11",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for staying informed of new features and functionality by reviewing Okta's updates and release notes."
+    },
+    {
+      "cuec_description": "User entities are responsible for updating any internal controls or processes, which may be impacted by the feature change or new functionality.",
+      "cuec_line_ref": 2039,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "Actor=user entities, Action=updating internal controls or processes based on feature changes or new functionality, User responsibility=explicitly stated.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC2.3",
+      "cuec_justification": "Change management responsibility related to feature changes, aligns with TSC CC2.3.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "CC6.4",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "changes",
+              "internal controls",
+              "impact"
+            ],
+            "aspect_addressed": "Identifying changes that impact internal control.",
+            "reasoning": "Addresses assessment of changes affecting internal controls.",
+            "deviation": null
+          },
+          {
+            "id": "CC7.3",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "processes",
+              "controls"
+            ],
+            "aspect_addressed": "Deployment of control activities through policies.",
+            "reasoning": "Focuses on establishing expected processes due to changes.",
+            "deviation": null
+          },
+          {
+            "id": "CC8.2",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "communicates",
+              "responsibilities",
+              "internal control"
+            ],
+            "aspect_addressed": "Communication of responsibilities related to internal control.",
+            "reasoning": "Supports internal communication of control responsibilities.",
+            "deviation": null
+          },
+          {
+            "id": "C1.3",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "change management",
+              "system changes",
+              "internal controls"
+            ],
+            "aspect_addressed": "Authorization and management of system changes.",
+            "reasoning": "Directly relates to managing changes impacting controls.",
+            "deviation": null
+          },
+          {
+            "id": "CC9.1",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "evaluations",
+              "internal control",
+              "present and functioning"
+            ],
+            "aspect_addressed": "Ongoing evaluation of internal controls.",
+            "reasoning": "Emphasizes need for evaluations to ensure controls are effective.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "9",
+            "confidence": 0.9,
+            "component": "Risk Assessment",
+            "keywords_matched": [
+              "change assessment",
+              "impact analysis"
+            ],
+            "aspect_addressed": "Identification of changes impacting internal controls",
+            "reasoning": "Control focuses on assessing internal control changes due to features.",
+            "deviation": null
+          },
+          {
+            "id": "10",
+            "confidence": 0.8,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "control activities",
+              "risk mitigation"
+            ],
+            "aspect_addressed": "Mitigation of risks associated with feature changes",
+            "reasoning": "Entities must adjust control activities to mitigate new risks from changes.",
+            "deviation": null
+          },
+          {
+            "id": "12",
+            "confidence": 0.7,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "documentation"
+            ],
+            "aspect_addressed": "Documentation and deployment of updated processes",
+            "reasoning": "Updating internal processes requires formalized policies and procedures.",
+            "deviation": null
+          },
+          {
+            "id": "14",
+            "confidence": 0.6,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "internal communication",
+              "responsibilities"
+            ],
+            "aspect_addressed": "Communication of changes to internal control responsibilities",
+            "reasoning": "Entities must internally communicate updated responsibilities due to changes.",
+            "deviation": null
+          },
+          {
+            "id": "16",
+            "confidence": 0.6,
+            "component": "Monitoring Activities",
+            "keywords_matched": [
+              "ongoing evaluations",
+              "control assessments"
+            ],
+            "aspect_addressed": "Evaluation of the effectiveness of updated controls",
+            "reasoning": "Regular reviews of updated controls ensure they function as intended.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.5",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "internal controls",
+              "policies",
+              "procedures"
+            ],
+            "aspect_addressed": "Governance and policy adherence related to control updates",
+            "reasoning": "Addresses the need for policies governing internal controls affected by changes.",
+            "deviation": null
+          },
+          {
+            "id": "A.14",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "feature change",
+              "development processes",
+              "new functionality"
+            ],
+            "aspect_addressed": "Security requirements and relevance during feature changes",
+            "reasoning": "Covers security in development and support processes impacted by feature changes.",
+            "deviation": null
+          },
+          {
+            "id": "A.12",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "operational procedures",
+              "processes",
+              "feature change"
+            ],
+            "aspect_addressed": "Operational procedures and how they adapt to changes",
+            "reasoning": "Emphasizes the need to update operational procedures influenced by control changes.",
+            "deviation": null
+          },
+          {
+            "id": "A.18",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "compliance",
+              "internal controls",
+              "process changes"
+            ],
+            "aspect_addressed": "Compliance with requirements regarding internal control updates",
+            "reasoning": "Ensures that updates to internal controls are compliant with legal standards.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "ID.GV",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "controls"
+            ],
+            "aspect_addressed": "Establishment of processes to manage changes to internal controls",
+            "reasoning": "Policies guide updates reflecting organizational changes due to feature updates.",
+            "deviation": null
+          },
+          {
+            "id": "PR.IP",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "processes",
+              "procedures",
+              "maintained"
+            ],
+            "aspect_addressed": "Maintenance of controls and procedures impacted by changes",
+            "reasoning": "Security processes must be updated to align with new functionalities or features.",
+            "deviation": null
+          },
+          {
+            "id": "ID.RA",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "risk",
+              "understands",
+              "impact"
+            ],
+            "aspect_addressed": "Understanding risk implications due to control changes",
+            "reasoning": "Analyzing risks associated with new functionalities is crucial for entity responsibility.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "training",
+              "education",
+              "personnel"
+            ],
+            "aspect_addressed": "Educating personnel on changes and their implications",
+            "reasoning": "Training is vital for ensuring personnel are equipped to handle changes in controls.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "TSC",
+      "primary_criterion_id": "CC6.4",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for updating any internal controls or processes, which may be impacted by the feature change or new functionality."
+    },
+    {
+      "cuec_description": "User entities are responsible for the security and confidentiality of the information submitted on Okta's support tickets.",
+      "cuec_line_ref": 2042,
+      "cuec_gpt_opinion": "Yes",
+      "cuec_gpt_responsibility_phrase": "User entities are responsible for",
+      "cuec_gpt_reasoning": "Actor=user entities, Action=ensuring the security and confidentiality of information submitted in support tickets, User responsibility=explicitly assigned.",
+      "cuec_framework_alignment": "AICPA_TSC",
+      "cuec_framework_alignment_id": "CC2.3",
+      "cuec_justification": "Addresses responsibility for protecting submitted information, aligns with TSC CC2.3 under confidentiality and security.",
+      "cuec_seq": 1,
+      "cuec_distance_from_cuec_keywords": 0,
+      "cuec_confidence": 0.85,
+      "cuec_confidence_justification": [
+        "Base score: 0.3",
+        "+0.1: GPT says 'yes'",
+        "+0.2: Close keyword match (distance: 0)",
+        "+0.15: Entity responsibility statement",
+        "+0.1: Control obligation present"
+      ],
+      "framework_mappings": {
+        "TSC": [
+          {
+            "id": "C1.2",
+            "confidence": 0.9,
+            "keywords_matched": [
+              "access control",
+              "authorized personnel",
+              "user entities"
+            ],
+            "aspect_addressed": "Logical access to support ticket information",
+            "reasoning": "This criterion ensures only authorized personnel access support ticket info.",
+            "deviation": null
+          },
+          {
+            "id": "Conf1.3",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "confidentiality",
+              "protected information",
+              "security"
+            ],
+            "aspect_addressed": "Protection of confidential information in support tickets",
+            "reasoning": "Focuses on protecting confidential info from unauthorized disclosure.",
+            "deviation": null
+          },
+          {
+            "id": "P1.1",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "personal information",
+              "protection",
+              "security"
+            ],
+            "aspect_addressed": "Protection of personal information in tickets",
+            "reasoning": "Addresses controls to protect personal information in support tickets.",
+            "deviation": null
+          },
+          {
+            "id": "CC6.2",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "risk identification",
+              "risks to objectives",
+              "support tickets"
+            ],
+            "aspect_addressed": "Identification of risks related to support ticket information",
+            "reasoning": "Focuses on identifying risks in achieving objectives related to support.",
+            "deviation": null
+          }
+        ],
+        "COSO": [
+          {
+            "id": "5",
+            "confidence": 0.8,
+            "component": "Control Environment",
+            "keywords_matched": [
+              "accountability",
+              "responsibility",
+              "enforcement"
+            ],
+            "aspect_addressed": "Accountability for information security responsibilities",
+            "reasoning": "User entities must be accountable for the security of information submitted.",
+            "deviation": null
+          },
+          {
+            "id": "6",
+            "confidence": 0.7,
+            "component": "Risk Assessment",
+            "keywords_matched": [
+              "objectives",
+              "clarity",
+              "security"
+            ],
+            "aspect_addressed": "Clear objectives for user entities regarding information security",
+            "reasoning": "Clear objectives help user entities understand their security responsibilities.",
+            "deviation": null
+          },
+          {
+            "id": "12",
+            "confidence": 0.75,
+            "component": "Control Activities",
+            "keywords_matched": [
+              "policies",
+              "procedures",
+              "documentation"
+            ],
+            "aspect_addressed": "Policies to govern user entities' handling of support ticket information",
+            "reasoning": "Policies are necessary to outline expectations for information security.",
+            "deviation": null
+          },
+          {
+            "id": "14",
+            "confidence": 0.65,
+            "component": "Information & Communication",
+            "keywords_matched": [
+              "communication",
+              "responsibilities",
+              "information flow"
+            ],
+            "aspect_addressed": "Internal communication of information security responsibilities",
+            "reasoning": "Users need clear communication of their roles regarding information confidentiality.",
+            "deviation": null
+          },
+          {
+            "id": "17",
+            "confidence": 0.6,
+            "component": "Monitoring Activities",
+            "keywords_matched": [
+              "deficiency",
+              "reporting",
+              "remediation"
+            ],
+            "aspect_addressed": "Addressing potential deficiencies in user information handling",
+            "reasoning": "Monitoring of how users handle information can reveal control weaknesses.",
+            "deviation": null
+          }
+        ],
+        "CSAE3416": [],
+        "AAF0106": [],
+        "GS007": [],
+        "ISO27001": [
+          {
+            "id": "A.9",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "user access management",
+              "information confidentiality",
+              "security of support tickets"
+            ],
+            "aspect_addressed": "User access control and management of information security",
+            "reasoning": "Focuses on user access management related to submitting support tickets.",
+            "deviation": null
+          },
+          {
+            "id": "A.8",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "information classification",
+              "assets responsibility",
+              "media handling"
+            ],
+            "aspect_addressed": "Responsibility for handling and classifying information submitted in tickets",
+            "reasoning": "Addresses responsibility for asset classification including support ticket data.",
+            "deviation": null
+          },
+          {
+            "id": "A.18",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "confidentiality",
+              "legal requirements",
+              "information security reviews"
+            ],
+            "aspect_addressed": "Compliance with legal and contractual requirements related to information submitted",
+            "reasoning": "Ensures user entities comply with confidentiality and legal obligations over tickets.",
+            "deviation": null
+          },
+          {
+            "id": "A.5",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "information security policy",
+              "security governance",
+              "control of information"
+            ],
+            "aspect_addressed": "Establishment of security policies governing ticket submission",
+            "reasoning": "Policies ensure entities understand security and confidentiality for submitted information.",
+            "deviation": null
+          },
+          {
+            "id": "A.16",
+            "confidence": 0.6,
+            "keywords_matched": [
+              "incident management",
+              "security incidents",
+              "responsiveness"
+            ],
+            "aspect_addressed": "Management of incidents related to submitted support ticket information",
+            "reasoning": "Focuses on incident response for security incidents involving support ticket data.",
+            "deviation": null
+          }
+        ],
+        "NIST": [
+          {
+            "id": "ID.GV",
+            "confidence": 0.8,
+            "keywords_matched": [
+              "security",
+              "confidentiality",
+              "policies"
+            ],
+            "aspect_addressed": "Establishment of policies for managing security and confidentiality.",
+            "reasoning": "This criterion covers the need for established policies to manage cybersecurity risks.",
+            "deviation": null
+          },
+          {
+            "id": "PR.DS",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "information",
+              "records",
+              "confidentiality"
+            ],
+            "aspect_addressed": "Management of submitted information consistent with confidentiality strategies.",
+            "reasoning": "This highlights the management of information to ensure it aligns with risk strategies.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AC",
+            "confidence": 0.75,
+            "keywords_matched": [
+              "access",
+              "authorized users",
+              "tickets"
+            ],
+            "aspect_addressed": "Access control for the support tickets and information submitted.",
+            "reasoning": "Ensures that only authorized users can access information submitted in support tickets.",
+            "deviation": null
+          },
+          {
+            "id": "PR.AT",
+            "confidence": 0.65,
+            "keywords_matched": [
+              "training",
+              "security awareness",
+              "user responsibility"
+            ],
+            "aspect_addressed": "Cybersecurity awareness education for user entities.",
+            "reasoning": "Training personnel ensures they understand their responsibility for data security.",
+            "deviation": null
+          },
+          {
+            "id": "ID.RA",
+            "confidence": 0.7,
+            "keywords_matched": [
+              "risk",
+              "understands",
+              "operations"
+            ],
+            "aspect_addressed": "Understanding risks associated with submitted information.",
+            "reasoning": "Ensures the organization highlights risks related to the information submitted by users.",
+            "deviation": null
+          }
+        ]
+      },
+      "primary_framework": "TSC",
+      "primary_criterion_id": "C1.2",
+      "primary_confidence": 0.9,
+      "cuec_page_refs": [
+        50
+      ],
+      "pdf_snippet": "User entities are responsible for the security and confidentiality of the information submitted on Okta's support tickets."
+    }
+  ],
+  "bad_chunks": [
+    {
+      "chunk_index": 1,
+      "chunk_text": "s. Okta’s information technology \n(“IT”) products enable organizations to deploy, manage, automate workflows, secure applications, \nmanage provisioning, and support users across their IT environments. Additionally, Okta’s application \nprogramming interface (“API”) products allow developers to similarly leverage a robust set of \ncapabilities to quickly build custom web and mobile application experiences leveraging Okta’s Identity \nCloud as the underlying identity platform. \nScope and Purpose  \nTh",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Okta’s information technology (“IT”) products enable organizations to deploy, manage, automate workflows, secure applications, manage provisioning, and support users across their IT environments.\",\n            \"excluded_reason\": \"Product/system description, not user entity action.\"\n        },\n        {\n            \"excluded_description\": \"Okta’s application programming interface (“API”) products allow developers to similarly leverage a robust set of capabilities to quickly build custom web and mobile application experiences leveraging Okta’s Identity Cloud as the underlying identity platform.\",\n            \"excluded_reason\": \"Product/system description, not user entity action.\"\n        },\n        {\n            \"excluded_description\": \"The System and Organization Controls (“SOC”) 2 report is an examination of the internal controls of Okta, Inc. (“Okta” or “The Company”) as it relates to the Okta Identity",
+      "error": "e1: Expecting ',' delimiter: line 5 column 70 (char 116); e2: Expecting ',' delimiter: line 5 column 70 (char 116); e3: Expecting ',' delimiter: line 5 column 70 (char 116)",
+      "response_length": 1518,
+      "chunk_size": 900,
+      "prompt_length": 10691
+    },
+    {
+      "chunk_index": 4,
+      "chunk_text": " active directory (“AD”), lightweight directory access protocol (“LDAP”) integration, centralized \nprovisioning and de-provisioning of users, multi-factor authentication, mobile identity management, \nand flexible policies for security and control. \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 13 ===\n \nPage | 11 \n\nAll of Okta’s features are brought together through a network of pre-integrated applications called the \nOkta Integration Network (“OIN”). ",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"active directory (“AD”), lightweight directory access protocol (“LDAP”) integration, centralized provisioning and de-provisioning of users, multi-factor authentication, mobile identity management, and flexible policies for security and control.\",\n            \"excluded_reason\": \"Product/system description, not user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"All of Okta’s features are brought together through a network of pre-integrated applications called the Okta Integration Network (“OIN”).\",\n            \"excluded_reason\": \"Product/system description, not user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"The OIN provides diverse integration options with business and consumer applications, enabling SSO login for every application user.\",\n            \"excluded_reason\": \"Product/system description, not user responsibility.\"\n        },\n        {",
+      "error": "e1: Expecting ',' delimiter: line 5 column 57 (char 103); e2: Expecting ',' delimiter: line 5 column 57 (char 103); e3: Expecting ',' delimiter: line 5 column 57 (char 103)",
+      "response_length": 1484,
+      "chunk_size": 856,
+      "prompt_length": 10647
+    },
+    {
+      "chunk_index": 2,
+      "chunk_text": " \nand Okta Identity Governance (“OIG”) System (hereinafter, “the Systems”) relevant to Security, \nAvailability, and Confidentiality trust service criteria as set forth in TSP section 100, 2017 Trust \nServices Criteria for Security, Availability, Processing Integrity, Confidentiality, and Privacy established \nby the American Institute of Certified Public Accountants (“AICPA”).  \nThis section of the report was prepared by the management of Okta in accordance with the criteria for \na description of",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"and Okta Identity Governance (“OIG”) System (hereinafter, “the Systems”) relevant to Security, Availability, and Confidentiality trust service criteria as set forth in TSP section 100, 2017 Trust Services Criteria for Security, Availability, Processing Integrity, Confidentiality, and Privacy established by the American Institute of Certified Public Accountants (“AICPA”).\",\n            \"excluded_reason\": \"Product description/capabilities summary; no user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"This section of the report was prepared by the management of Okta in accordance with the criteria for a description of a service organization’s system set forth in the Description Criteria DC section 200 2018 Description Criteria for a Description of a Service Organization’s System in a SOC 2 Report (Description Criteria) and is intended to provide user organizations with informat",
+      "error": "e1: Expecting ',' delimiter: line 5 column 69 (char 115); e2: Expecting ',' delimiter: line 5 column 69 (char 115); e3: Expecting ',' delimiter: line 5 column 69 (char 115)",
+      "response_length": 1341,
+      "chunk_size": 999,
+      "prompt_length": 10790
+    },
+    {
+      "chunk_index": 3,
+      "chunk_text": "nternal controls to achieve the service commitments and system requirements based on the \napplication trust service criteria for Security, Availability, and Confidentiality for the period January 1, \n2024 to November 30, 2024. It does not and is not intended to encompass all aspects of the services, \nprocedures, or controls performed by Okta.  \nDescription of Products and Services  \nOkta’s suite of products and solutions (referred to herein as “Okta platform”, “Core Identity Platform”, \nor “IDaa",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Internal controls to achieve the service commitments and system requirements based on the application trust service criteria for Security, Availability, and Confidentiality for the period January 1, 2024 to November 30, 2024. It does not and is not intended to encompass all aspects of the services, procedures, or controls performed by Okta.\",\n            \"excluded_reason\": \"Vendor responsibility, not user entity.\"\n        },\n        {\n            \"excluded_description\": \"Description of Products and Services\",\n            \"excluded_reason\": \"Incomplete statement and section title.\"\n        },\n        {\n            \"excluded_description\": \"Okta’s suite of products and solutions (referred to herein as “Okta platform”, “Core Identity Platform”, or “IDaaS”) includes the following:\",\n            \"excluded_reason\": \"Product description, not user responsibility.\"\n        },\n        {\n            \"excluded_descr",
+      "error": "e1: Expecting ',' delimiter: line 13 column 101 (char 793); e2: Expecting ',' delimiter: line 13 column 101 (char 793); e3: Expecting ',' delimiter: line 13 column 101 (char 793)",
+      "response_length": 1837,
+      "chunk_size": 969,
+      "prompt_length": 10760
+    },
+    {
+      "chunk_index": 5,
+      "chunk_text": "ection \nintegrations are continuously validated and maintained. Okta and its service integration partners \ncomplete the upfront work of integrating application-connectors into the application network. Okta’s \ncloud services platform, which is the core of Okta’s IDaaS, contains the functionality for SSO, user \nidentity management, and system activity reporting. The core capabilities of IDaaS include the \nfollowing: \n• \nSSO capabilities are achieved through federated user authentication. If the ve",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Integrations are continuously validated and maintained.\",\n            \"excluded_reason\": \"Vendor responsibility, no user action required.\"\n        },\n        {\n            \"excluded_description\": \"Okta and its service integration partners complete the upfront work of integrating application-connectors into the application network.\",\n            \"excluded_reason\": \"Vendor responsibility, not user entity action.\"\n        },\n        {\n            \"excluded_description\": \"Okta’s cloud services platform contains the functionality for SSO, user identity management, and system activity reporting.\",\n            \"excluded_reason\": \"Product description, no user responsibilities assigned.\"\n        },\n        {\n            \"excluded_description\": \"SSO capabilities are achieved through federated user authentication.\",\n            \"excluded_reason\": \"System action, not user entity responsibility.\"\n        },\n        ",
+      "error": "e1: Expecting ',' delimiter: line 21 column 98 (char 1099); e2: Expecting ',' delimiter: line 21 column 98 (char 1099); e3: Expecting ',' delimiter: line 21 column 98 (char 1099)",
+      "response_length": 1932,
+      "chunk_size": 997,
+      "prompt_length": 10788
+    },
+    {
+      "chunk_index": 6,
+      "chunk_text": "etary SSO protocols. For Software as a Service (“SaaS”) applications that do not provide \nsupport for federated user authentication, Okta has developed a secure web authentication \n(“SWA”) technology. Credentials are stored using a strong advanced encryption standard \n(“AES”). Okta executes a secure login sequence specific to a vendor leveraging user credentials \nto complete the login. \n• \nIDaaS provides pre-integrated provisioning capabilities which allows integration for centralized \nprovision",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Okta executes a secure login sequence specific to a vendor leveraging user credentials to complete the login.\",\n            \"excluded_reason\": \"System performs action, not user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"IDaaS provides pre-integrated provisioning capabilities which allows integration for centralized provisioning that support coarse-grained to fine-grained management of application user accounts.\",\n            \"excluded_reason\": \"Describes system functionality, not user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"IDaaS has real-time user provisioning triggered by the client’s preferred human resources (“HR”) system or application.\",\n            \"excluded_reason\": \"System functionality with automated processes, no user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"Integration to AD or LDAP including",
+      "error": "e1: Expecting ',' delimiter: line 13 column 130 (char 773); e2: Expecting ',' delimiter: line 13 column 130 (char 773); e3: Expecting ',' delimiter: line 13 column 130 (char 773)",
+      "response_length": 1179,
+      "chunk_size": 888,
+      "prompt_length": 10679
+    },
+    {
+      "chunk_index": 7,
+      "chunk_text": "system or application. The provisioning functionality also includes the \nfollowing features: \n• \nIntegration to AD or LDAP including extended rich profiles, group push, license, and \nrole assignment \n• \nAutomatically detects different users’ attributes in different applications, along with \napplication entitlements \n• \nMatches directory groups with application groups, assigns and revokes licenses, and \ncreates a custom offboarding process \n• \nExtends the power of provisioning to clients’ custom ",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Integration to AD or LDAP including extended rich profiles, group push, license, and role assignment\",\n            \"excluded_reason\": \"Product description, no user responsibility described.\"\n        },\n        {\n            \"excluded_description\": \"Automatically detects different users’ attributes in different applications, along with application entitlements\",\n            \"excluded_reason\": \"System action, no user responsibility described.\"\n        },\n        {\n            \"excluded_description\": \"Matches directory groups with application groups, assigns and revokes licenses, and creates a custom offboarding process\",\n            \"excluded_reason\": \"System action, no user responsibility described.\"\n        },\n        {\n            \"excluded_description\": \"Extends the power of provisioning to clients’ custom applications by using the system for cross-domain identity management (“SCIM”)\",\n            \"ex",
+      "error": "e1: Expecting ',' delimiter: line 17 column 163 (char 976); e2: Expecting ',' delimiter: line 17 column 163 (char 976); e3: Expecting ',' delimiter: line 17 column 163 (char 976)",
+      "response_length": 2072,
+      "chunk_size": 998,
+      "prompt_length": 10789
+    },
+    {
+      "chunk_index": 11,
+      "chunk_text": " identity. \n• \nMobile application integration is seamless, whether they are Hypertext Markup Language \n(“HTML”) 5 web applications optimized for mobile platforms, native iOS, or Android \napplications. Mobile web applications can use industry standard SSO or Okta’s SWA SSO \ntechnology. \n• \nFeature rich APIs that aim to make it easy to connect to and use any of Okta’s capabilities \nprogrammatically, whether for software developers who want to use Okta as an identity layer \nfor their applications o",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Mobile application integration is seamless, whether they are Hypertext Markup Language (“HTML”) 5 web applications optimized for mobile platforms, native iOS, or Android applications. Mobile web applications can use industry standard SSO or Okta’s SWA SSO technology.\",\n            \"excluded_reason\": \"Product description, no user responsibility assigned.\"\n        },\n        {\n            \"excluded_description\": \"Feature rich APIs that aim to make it easy to connect to and use any of Okta’s capabilities programmatically, whether for software developers who want to use Okta as an identity layer for their applications or IT administrators who require a high level of customization.\",\n            \"excluded_reason\": \"Product description, no user responsibility assigned.\"\n        },\n        {\n            \"excluded_description\": \"Okta captures a comprehensive set of events and states including user import, appli",
+      "error": "e1: Expecting ',' delimiter: line 5 column 127 (char 173); e2: Expecting ',' delimiter: line 5 column 127 (char 173); e3: Expecting ',' delimiter: line 5 column 127 (char 173)",
+      "response_length": 1361,
+      "chunk_size": 904,
+      "prompt_length": 10695
+    },
+    {
+      "chunk_index": 14,
+      "chunk_text": "s to \nprovide enhanced user lifecycle management and create complex user access workflows. Specifically, \nthe OIG product is delivered through the integration of IDaaS, Okta Workflows, and Okta Inbox. The OIG \nproduct is supported by controls within each of the respective products mentioned above. IDaaS is \ncovered in this report, however, Okta Workflows and Okta Inbox are covered in their own respective \nattestation reports. \nThe feature set known as Identity Governance Administration (“IGA”) i",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"The service provider maintains backups daily.\",\n            \"excluded_reason\": \"Vendor responsibility, not user entity.\"\n        },\n        {\n            \"excluded_description\": \"The feature set known as Identity Governance Administration (“IGA”) is architected and maintained within the same systems and infrastructure as IDaaS.\",\n            \"excluded_reason\": \"Product description not assigning explicit user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"The controls in place to secure the IDaaS platform also secure the IGA components of the OIG product.\",\n            \"excluded_reason\": \"Vendor controls and system action—not a user entity responsibility.\"\n        },\n        {\n            \"excluded_description\": \"Principal Service Commitments and System Requirements Okta designs its processes and procedures to meet its objectives and commitments.\",\n            \"excluded_reason",
+      "error": "e1: Expecting ',' delimiter: line 9 column 100 (char 325); e2: Expecting ',' delimiter: line 9 column 100 (char 325); e3: Expecting ',' delimiter: line 9 column 100 (char 325)",
+      "response_length": 1090,
+      "chunk_size": 946,
+      "prompt_length": 10737
+    },
+    {
+      "chunk_index": 18,
+      "chunk_text": "de establishing \nand maintaining a data classification and data handling policy, business continuity plan, risk \nassessment process, and proper access management to restrict access to customers’ data.  \nChanges to system and controls \nThere were no significant changes to the description of the system and controls for Okta IDaaS since \nthe prior reporting period. \nComponents of the System  \nA system is designed, implemented, and operated to achieve specific business objectives in accordance \nwith",
+      "gpt_response": "{\n    \"cuecs\": [\n        {\n            \"cuec_description\": \"User entities are responsible for establishing and maintaining a data classification and data handling policy, business continuity plan, risk assessment process, and proper access management to restrict access to customers’ data.\",\n            \"cuec_line_ref\": 1,\n            \"cuec_gpt_opinion\": \"Yes\",\n            \"cuec_gpt_responsibility_phrase\": \"User entities are responsible for\",\n            \"cuec_gpt_reasoning\": \"WHO: User entities. WHAT: Establish and maintain data classification and handling policies, business continuity plan, risk assessments, and access management to restrict access to customer data. WHY: The user's responsibility is explicitly stated and involves actions necessary to ensure proper control over their own data and systems.\",\n            \"cuec_framework_alignment\": \"AICPA_TSC\",\n            \"cuec_framework_alignment_id\": \"CC6.1\",\n            \"cuec_justification\": \"Relates to user responsibility for securi",
+      "error": "e1: Expecting ',' delimiter: line 20 column 142 (char 1571); e2: Expecting ',' delimiter: line 20 column 142 (char 1571); e3: Expecting ',' delimiter: line 20 column 142 (char 1571)",
+      "response_length": 2386,
+      "chunk_size": 904,
+      "prompt_length": 10695
+    },
+    {
+      "chunk_index": 23,
+      "chunk_text": " \nPalo Alto Network \nVPN \nMultiple AWS \nregions \nSoftware \nThe following software, infrastructure services, and tools are utilized in support of the control \nenvironment and delivery of the Systems: \n• \nAmazon GuardDuty – threat detection service that continuously monitors malicious activity and \nunauthorized behavior to protect Okta AWS accounts and workloads \n• \nArtifactory - development image deployment tool \n• \nAWS CloudTrail – web service that records and logs AWS API calls. The recorded in",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Amazon GuardDuty – threat detection service that continuously monitors malicious activity and unauthorized behavior to protect Okta AWS accounts and workloads\",\n            \"excluded_reason\": \"System action. Monitoring is performed by Amazon GuardDuty, not user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"Artifactory - development image deployment tool\",\n            \"excluded_reason\": \"Product description. It explains the tool's purpose, but does not assign responsibility to users.\"\n        },\n        {\n            \"excluded_description\": \"AWS CloudTrail – web service that records and logs AWS API calls. The recorded information includes the API caller, time, source IP address request parameters, and response elements\",\n            \"excluded_reason\": \"System action. AWS CloudTrail performs logging automatically; no user action described.\"\n        },\n        {\n            \"e",
+      "error": "e1: Expecting ',' delimiter: line 21 column 71 (char 1415); e2: Expecting ',' delimiter: line 21 column 71 (char 1415); e3: Expecting ',' delimiter: line 21 column 71 (char 1415)",
+      "response_length": 1665,
+      "chunk_size": 906,
+      "prompt_length": 10697
+    },
+    {
+      "chunk_index": 22,
+      "chunk_text": "n \nBusiness Function Description \nOperating System \nPlatform and \nDatabase \nPhysical \nLocation \nIDaaS \nOIG \nOkta’s web-based application that \nprovides secure identity management \nand single sign-on \nAmazon Machine \nImage (“AMI”)  \nApache Tomcat; \nRedis; MySQL \nMultiple AWS \nregions \n \nAWS management \nconsole \nCloud computing platform used to \nmanage application service for \ndeployment and operation of the Okta \nplatform \nN/A \nMultiple AWS \nregions \nAmazon Elastic \nCompute Cloud \n(Amazon EC2) \nV",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Okta’s web-based application that provides secure identity management and single sign-on\",\n            \"excluded_reason\": \"Product/system description\"\n        },\n        {\n            \"excluded_description\": \"Amazon Machine Image (“AMI”), Apache Tomcat; Redis; MySQL\",\n            \"excluded_reason\": \"Product/system description\"\n        },\n        {\n            \"excluded_description\": \"AWS management console - Cloud computing platform used to manage application service for deployment and operation of the Okta platform\",\n            \"excluded_reason\": \"Product/system description\"\n        },\n        {\n            \"excluded_description\": \"Amazon Elastic Compute Cloud (Amazon EC2) - Virtualized network and processing infrastructure to host Okta\",\n            \"excluded_reason\": \"Product/system description\"\n        },\n        {\n            \"excluded_description\": \"Linux (Ubuntu & Amazon Linux) - Operating syste",
+      "error": "e1: Expecting ',' delimiter: line 9 column 61 (char 316); e2: Expecting ',' delimiter: line 9 column 61 (char 316); e3: Expecting ',' delimiter: line 9 column 61 (char 316)",
+      "response_length": 1791,
+      "chunk_size": 875,
+      "prompt_length": 10666
+    },
+    {
+      "chunk_index": 24,
+      "chunk_text": "allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – managed service used to create and control \nencryption keys used to encrypt data used by Okta in AWS \n• \nAWS Lambda - serverless computing tool that is configured via AWS API to interact with the \nOkta APIs to fetch relevant details \n• \nBacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and \ncode development activities such as automated testing and code analysis ",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"allow and deny access to specific Okta AWS resources\",\n            \"excluded_reason\": \"Product description, does not assign user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"AWS Key Management Service (AWS “KMS”) – managed service used to create and control encryption keys used to encrypt data used by Okta in AWS\",\n            \"excluded_reason\": \"Describes vendor capabilities; no user responsibility assigned.\"\n        },\n        {\n            \"excluded_description\": \"AWS Lambda - serverless computing tool that is configured via AWS API to interact with the Okta APIs to fetch relevant details\",\n            \"excluded_reason\": \"Describes vendor/system functionality; no user responsibility assigned.\"\n        },\n        {\n            \"excluded_description\": \"Bacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and code development activities su",
+      "error": "e1: Expecting ',' delimiter: line 9 column 71 (char 321); e2: Expecting ',' delimiter: line 9 column 71 (char 321); e3: Expecting ',' delimiter: line 9 column 71 (char 321)",
+      "response_length": 1817,
+      "chunk_size": 946,
+      "prompt_length": 10737
+    },
+    {
+      "chunk_index": 25,
+      "chunk_text": "oyments as part of the Release Management Process  \n• \nChef – configuration management solution utilized to provision, configure, and manage IDaaS \nproduction infrastructure throughout its lifecycle \n• \nConductor - internal integration tool that allows operators and non-operators to perform and \nmonitor deployments, execute deployment pipelines with various approval steps, and run tasks \nin any environment \n• \nCrowdstrike – security tool utilized for endpoint detection and response, malware moni",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Chef – configuration management solution utilized to provision, configure, and manage IDaaS production infrastructure throughout its lifecycle\",\n            \"excluded_reason\": \"Product/system description, no user responsibility assigned.\"\n        },\n        {\n            \"excluded_description\": \"Conductor - internal integration tool that allows operators and non-operators to perform and monitor deployments, execute deployment pipelines with various approval steps, and run tasks in any environment\",\n            \"excluded_reason\": \"Product/system description, no user responsibility assigned.\"\n        },\n        {\n            \"excluded_description\": \"Crowdstrike – security tool utilized for endpoint detection and response, malware monitoring, and device logging and monitoring\",\n            \"excluded_reason\": \"Product/system description, no user responsibility assigned.\"\n        },\n        {\n            \"ex",
+      "error": "e1: Expecting ',' delimiter: line 25 column 54 (char 1607); e2: Expecting ',' delimiter: line 25 column 54 (char 1607); e3: Expecting ',' delimiter: line 25 column 54 (char 1607)",
+      "response_length": 1842,
+      "chunk_size": 958,
+      "prompt_length": 10749
+    },
+    {
+      "chunk_index": 26,
+      "chunk_text": "g and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing system utilized for centrally managing and tracking \nproduction issues and change management activities \n• \nJamF Pro – mobile device management tool utilized to manage and secure Mac devices \ndeployed to the organization \n• \nNaruto - internal integration tool that is designed to interact with the Tenable/Nessus API \n• \nPagerDuty – alerting system which delivers alerts to on-call IT personnel when prede",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Jira Software (“Jira”) – ticketing system utilized for centrally managing and tracking production issues and change management activities\",\n            \"excluded_reason\": \"Product/System description related to tools used by the service organization.\"\n        },\n        {\n            \"excluded_description\": \"JamF Pro – mobile device management tool utilized to manage and secure Mac devices deployed to the organization\",\n            \"excluded_reason\": \"Product/System description related to tools used by the service organization.\"\n        },\n        {\n            \"excluded_description\": \"Naruto - internal integration tool that is designed to interact with the Tenable/Nessus API\",\n            \"excluded_reason\": \"Product/System description related to tools used by the service organization.\"\n        },\n        {\n            \"excluded_description\": \"PagerDuty – alerting system which delivers alerts to on-call ",
+      "error": "e1: Expecting ',' delimiter: line 5 column 54 (char 100); e2: Expecting ',' delimiter: line 5 column 54 (char 100); e3: Expecting ',' delimiter: line 5 column 54 (char 100)",
+      "response_length": 2082,
+      "chunk_size": 907,
+      "prompt_length": 10698
+    },
+    {
+      "chunk_index": 47,
+      "chunk_text": "g audit and non-audit services. It oversees the scope, activities \nand performance of the Company’s internal audit function, including SOX controls testing and the \nEnterprise Risk Management program. At least annually, the Audit Committee reviews the company’s \npolicies and procedures related to financial issues and adopts any changes, as appropriate; these \npolicies and procedures include the Code of Conduct, Anti-Corruption Policy, Insider Trading Policy and \nSpecial Trading Procedures, Audit",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"The Audit Committee reviews the company’s policies and procedures related to financial issues and adopts any changes, as appropriate; these policies and procedures include the Code of Conduct, Anti-Corruption Policy, Insider Trading Policy and Special Trading Procedures, Audit Committee Complaint Procedures and the ethics reporting system (whistleblower hotline).\",\n            \"excluded_reason\": \"Vendor or board responsibility, not user entity.\"\n        },\n        {\n            \"excluded_description\": \"The Nominating and Corporate Governance Committee (“NCGC\\\") is appointed by the Board. It recommends criteria for Board and committee membership, establishes a process for identifying and evaluating and recommending Board nominees, and makes director independence recommendations to\",\n            \"excluded_reason\": \"Describes governance process, not user entity responsibility.\"\n        }\n    ]\n}",
+      "error": "e1: Expecting ',' delimiter: line 9 column 90 (char 644); e2: Expecting ',' delimiter: line 9 column 90 (char 644); e3: Expecting ',' delimiter: line 9 column 90 (char 644)",
+      "response_length": 989,
+      "chunk_size": 986,
+      "prompt_length": 10777
+    },
+    {
+      "chunk_index": 52,
+      "chunk_text": "ional domain is approved by \nthe top-level manager for that domain and recorded in finance and HR records. Following this approval, \nthe managers below communicate and implement changes, as necessary. \nDedicated resources in HR have been assigned the responsibility to support key managers and help \nensure they have adequate resources to be successful at Okta. Additionally, a combination of hiring \n“top tier” employees, focusing on employee success, and having a resource management program, \nallo",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"The top-level manager for that domain approves the organizational domain and records it in finance and HR records.\",\n            \"excluded_reason\": \"Vendor responsibility, involves organizational and management actions within the company itself.\"\n        },\n        {\n            \"excluded_description\": \"Dedicated resources in HR have been assigned the responsibility to support key managers and help ensure they have adequate resources to be successful at Okta.\",\n            \"excluded_reason\": \"Vendor responsibility, actions involve HR at the service organization and do not assign user entity responsibility.\"\n        },\n        {\n            \"excluded_description\": \"A combination of hiring “top tier” employees, focusing on employee success, and having a resource management program, allows Okta personnel to be successful.\",\n            \"excluded_reason\": \"Vendor internal processes, unrelated to user entity",
+      "error": "e1: Expecting ',' delimiter: line 13 column 63 (char 782); e2: Expecting ',' delimiter: line 13 column 63 (char 782); e3: Expecting ',' delimiter: line 13 column 63 (char 782)",
+      "response_length": 1675,
+      "chunk_size": 829,
+      "prompt_length": 10620
+    },
+    {
+      "chunk_index": 56,
+      "chunk_text": "people. To minimize the risk of malicious behavior and to help ensure that new employees understand \nthe policies for maintaining a secure and safe workplace, potential employees and contractors who \nhave and will have access to confidential data, undergo the following required verifications: \n• \nBackground screenings that include examination of criminal conviction records, credit bureau \nrecords, social security number (“SSN”) verification, as applicable, address history, and \nverification of p",
+      "gpt_response": "Here is the JSON output based on the provided text:\n\n```json\n{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"To minimize the risk of malicious behavior and to help ensure that new employees understand the policies for maintaining a secure and safe workplace, potential employees and contractors who have and will have access to confidential data, undergo the following required verifications:\",\n            \"excluded_reason\": \"Vendor responsibility, not user entity.\"\n        },\n        {\n            \"excluded_description\": \"Background screenings that include examination of criminal conviction records, credit bureau records, social security number (“SSN”) verification, as applicable, address history, and verification of previous employment. A background screening commences once an offer of employment has been communicated and accepted. The background screening must be completed and in-hand before an employee’s first day of employment.\",\n            \"exclu",
+      "error": "e1: Expecting value: line 1 column 1 (char 0); e2: Expecting ',' delimiter: line 9 column 165 (char 628); e3: Expecting ',' delimiter: line 9 column 165 (char 628)",
+      "response_length": 2009,
+      "chunk_size": 979,
+      "prompt_length": 10770
+    },
+    {
+      "chunk_index": 69,
+      "chunk_text": "curity Team defines and communicates ownership and responsibilities for data integrity, \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 29 ===\n \nPage | 27 \n\ninformation classification, and security. The Security Team periodically provides the Board of \nDirectors, the Risk Oversight Committee, and/or the Audit Committee with an overview of \ncybersecurity risks and steps that management has taken to mitigate such risks. \nOkta has established processes to",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"The Security Team defines and communicates ownership and responsibilities for data integrity.\",\n            \"excluded_reason\": \"Vendor responsibility, not user entity.\"\n        },\n        {\n            \"excluded_description\": \"The Security Team periodically provides the Board of Directors, the Risk Oversight Committee, and/or the Audit Committee with an overview of cybersecurity risks and steps that management has taken to mitigate such risks.\",\n            \"excluded_reason\": \"Vendor responsibility, not user entity.\"\n        },\n        {\n            \"excluded_description\": \"Okta has established processes to identify and manage risks that could affect their ability to provide reliable cloud services to their customers.\",\n            \"excluded_reason\": \"Vendor responsibility, describes service organization processes.\"\n        },\n        {\n            \"excluded_description\": \"These include continually moni",
+      "error": "e1: Expecting ',' delimiter: line 17 column 268 (char 1200); e2: Expecting ',' delimiter: line 17 column 268 (char 1200); e3: Expecting ',' delimiter: line 17 column 268 (char 1200)",
+      "response_length": 1377,
+      "chunk_size": 898,
+      "prompt_length": 10689
+    },
+    {
+      "chunk_index": 83,
+      "chunk_text": " department meetings and \ninformal notifications. Management is responsible for directing and controlling operations and for \nestablishing, communicating, monitoring control activities and procedures. Monitoring activities include \nusing information from communications from external parties such as user entity complaints and \nregulatory comments that may indicate problems or highlight areas in need of improvement. \nManagement has implemented a self-assessment and compliance program to help ensur",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Management is responsible for directing and controlling operations and for establishing, communicating, monitoring control activities and procedures.\",\n            \"excluded_reason\": \"Service organization responsibility, not user entity.\"\n        },\n        {\n            \"excluded_description\": \"Monitoring activities include using information from communications from external parties such as user entity complaints and regulatory comments that may indicate problems or highlight areas in need of improvement.\",\n            \"excluded_reason\": \"Mentions user entities but describes system/vendor control process rather than assigning user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"Management has implemented a self-assessment and compliance program to help ensure the controls are consistently applied as designed.\",\n            \"excluded_reason\": \"Service organization responsibili",
+      "error": "e1: Expecting ',' delimiter: line 21 column 67 (char 1438); e2: Expecting ',' delimiter: line 21 column 67 (char 1438); e3: Expecting ',' delimiter: line 21 column 67 (char 1438)",
+      "response_length": 1650,
+      "chunk_size": 879,
+      "prompt_length": 10670
+    },
+    {
+      "chunk_index": 94,
+      "chunk_text": "le via multi-factor authentication. \nTo access the production environment from the back end, multiple authentication and authorization \nmechanisms are utilized, as mentioned in the following sections. \nRemote Access and Production Environment Access \nRemote access to the IDaaS production resources is restricted through an encrypted Virtual Protocol \nNetwork (“VPN”) to help ensure the integrity of data passing through the public network. VPN \nconnections are secured utilizing AES-128-bit or great",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Remote access to the IDaaS production resources is restricted through an encrypted Virtual Protocol Network (“VPN”) to help ensure the integrity of data passing through the public network.\",\n            \"excluded_reason\": \"System/Vendor responsibility for restricting access.\"\n        },\n        {\n            \"excluded_description\": \"VPN connections are secured utilizing AES-128-bit or greater encryption.\",\n            \"excluded_reason\": \"System/Vendor responsibility for securing VPN connections.\"\n        },\n        {\n            \"excluded_description\": \"Users are authenticated with an Okta-issued user specific public key infrastructure (“PKI”) certificate before establishing a VPN session.\",\n            \"excluded_reason\": \"System/Vendor responsibility for authentication using issued certificates.\"\n        },\n        {\n            \"excluded_description\": \"Administrative access to the VPN system is restri",
+      "error": "e1: Expecting ',' delimiter: line 5 column 148 (char 194); e2: Expecting ',' delimiter: line 5 column 148 (char 194); e3: Expecting ',' delimiter: line 5 column 148 (char 194)",
+      "response_length": 1473,
+      "chunk_size": 875,
+      "prompt_length": 10666
+    },
+    {
+      "chunk_index": 95,
+      "chunk_text": "ss to the VPN system is restricted to authorized personnel. In the event that an \nemployee is terminated, IT personnel revoke the associated VPN certificate as a component of the \ntermination process.  \nThe production environment is administered remotely, and access must be performed through a secure \nVPN connection or through an internal implementation of the Advanced Server Access (“ASA”) \napplication, as well as a hardware multi-factor device. \nAccess to the production environment via a VPN c",
+      "gpt_response": "{\n    \"cuecs\": [\n        {\n            \"cuec_description\": \"Access to the production environment via a VPN connection requires an Okta-issued user-specific PKI certificate to be installed on the user’s personal computer (“PC”) and a hardware multi-factor device.\",\n            \"cuec_line_ref\": 6,\n            \"cuec_gpt_opinion\": \"Yes\",\n            \"cuec_gpt_responsibility_phrase\": \"requires an Okta-issued user-specific PKI certificate to be installed\",\n            \"cuec_gpt_reasoning\": \"The statement specifies that the user must install the PKI certificate on their personal computer—a clear user entity responsibility.\",\n            \"cuec_framework_alignment\": \"AICPA_TSC\",\n            \"cuec_framework_alignment_id\": \"CC6.1\",\n            \"cuec_justification\": \"Access control related to authentication methods is assigned to users under TSC Security.\"\n        }\n    ],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Access to the VPN system is restricted to authorized personne",
+      "error": "e1: Expecting ',' delimiter: line 4 column 196 (char 222); e2: Expecting ',' delimiter: line 4 column 196 (char 222); e3: Expecting ',' delimiter: line 4 column 196 (char 222)",
+      "response_length": 2416,
+      "chunk_size": 944,
+      "prompt_length": 10735
+    },
+    {
+      "chunk_index": 100,
+      "chunk_text": "rtal in an industry-standard format over a secure \nconnection (i.e., CSV or REST API). \nChange Management \nOkta utilizes the agile software development methodology for application and API development. \nProgram change documents and security best practices including policies, procedures, and guidance \ndocuments are documented on the Okta wiki. Okta analyzes changes to the information system to \ndetermine potential system impacts prior to change implementation and immediately after \nimplementation.",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Okta analyzes changes to the information system to determine potential system impacts prior to change implementation and immediately after implementation.\",\n            \"excluded_reason\": \"Vendor responsibility, not user entity.\"\n        },\n        {\n            \"excluded_description\": \"Services that are new or changing are implemented in accordance with the defined service management objectives and requirements.\",\n            \"excluded_reason\": \"Vendor action for service implementation, not user responsibility.\"\n        },\n        {\n            \"excluded_description\": \"Security and privacy requirements are taken into account while allocating resources for new information system development efforts or changes to existing information systems and applications.\",\n            \"excluded_reason\": \"Vendor responsibility to handle security/privacy in development efforts.\"\n        },\n        {\n            \"exclu",
+      "error": "e1: Expecting ',' delimiter: line 17 column 132 (char 1113); e2: Expecting ',' delimiter: line 17 column 132 (char 1113); e3: Expecting ',' delimiter: line 17 column 132 (char 1113)",
+      "response_length": 1282,
+      "chunk_size": 985,
+      "prompt_length": 10776
+    },
+    {
+      "chunk_index": 108,
+      "chunk_text": "ta’s change development and release process. This includes, but is not \nlimited to, testing in a lower environment prior to production, version control, validation checks, and \napprovals for releases. \nDisaster Recovery and Backup Strategy \nBusiness Continuity Plan and Disaster Recovery Plan \nBusiness Impact Analysis (“BIA”) is performed to understand enterprise resilience requirements and \ndetermine recovery objectives. BIA takes into consideration the criticality of the organizational \nprocess",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Okta’s change development and release process. This includes, but is not limited to, testing in a lower environment prior to production, version control, validation checks, and approvals for releases.\",\n            \"excluded_reason\": \"Vendor responsibility; describes the service organization's internal control processes.\"\n        },\n        {\n            \"excluded_description\": \"Business Impact Analysis (“BIA”) is performed to understand enterprise resilience requirements and determine recovery objectives. BIA takes into consideration the criticality of the organizational processes and services and their components, including associated applications and systems.\",\n            \"excluded_reason\": \"Vendor/system action; the statement outlines an internal control (BIA) performed by the service organization.\"\n        },\n        {\n            \"excluded_description\": \"A business continuity plan that includes a",
+      "error": "e1: Expecting ',' delimiter: line 9 column 65 (char 493); e2: Expecting ',' delimiter: line 9 column 65 (char 493); e3: Expecting ',' delimiter: line 9 column 65 (char 493)",
+      "response_length": 1373,
+      "chunk_size": 835,
+      "prompt_length": 10626
+    },
+    {
+      "chunk_index": 111,
+      "chunk_text": " to Amazon Simple Storage Service (“S3”) for \nproduction backup data. Data stored within AWS S3 includes cross-region replication, which \nautomatically replicates the data across separate AWS regions. For IDaaS, Okta’s system monitoring \ntools are configured to automatically alert the Operations Team if replication lag time falls significantly \nbehind production databases.  \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 39 ===\n \nPage | 37 \n\nBackup res",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"to Amazon Simple Storage Service (“S3”) for production backup data. Data stored within AWS S3 includes cross-region replication, which automatically replicates the data across separate AWS regions.\",\n            \"excluded_reason\": \"Vendor/system responsibility, not user entity.\"\n        },\n        {\n            \"excluded_description\": \"For IDaaS, Okta’s system monitoring tools are configured to automatically alert the Operations Team if replication lag time falls significantly behind production databases.\",\n            \"excluded_reason\": \"System and vendor control, not user-related.\"\n        },\n        {\n            \"excluded_description\": \"Backup restoration testing is conducted at least annually to validate that critical systems and production backup data can be recovered.\",\n            \"excluded_reason\": \"Vendor responsibility, backup recovery testing conducted by the service organization.\"\n        }",
+      "error": "e1: Expecting ',' delimiter: line 5 column 73 (char 119); e2: Expecting ',' delimiter: line 5 column 73 (char 119); e3: Expecting ',' delimiter: line 5 column 73 (char 119)",
+      "response_length": 1445,
+      "chunk_size": 933,
+      "prompt_length": 10724
+    },
+    {
+      "chunk_index": 116,
+      "chunk_text": "ve encryption, enforce automated patch updates, and prevent the use of removable media. \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 40 ===\n \nPage | 38 \n\nEncryption \nOkta’s Encryption Management Standard outlines the controls and techniques used to encrypt data \naligned with relevant agreements, legislations, and regulations. To protect data while in transit, \ncustomer sessions to Okta web servers are transmitted utilizing Hypertext Transfer Protoco",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"Okta utilizes a trusted certificate authority (“CA”) to issue a TLS digital certificate to inform users that the Okta website is secure.\",\n            \"excluded_reason\": \"Vendor performs the action (system responsibility).\"\n        },\n        {\n            \"excluded_description\": \"Okta utilizes Advanced Encryption Standard (“AES”) volume encryption to protect organizationally classified data at rest and encrypts sensitive customer data in the database using AES 256-bit encryption.\",\n            \"excluded_reason\": \"Vendor responsibility to ensure encryption; no user action.\"\n        },\n        {\n            \"excluded_description\": \"Customer sessions to Okta web servers are transmitted utilizing Hypertext Transfer Protocol Secure (“HTTPS”) and Transport Layer Security (“TLS”) encryption protocols and allow for 2048-bit encryption.\",\n            \"excluded_reason\": \"System responsibility; encryption during ",
+      "error": "e1: Expecting ',' delimiter: line 5 column 86 (char 132); e2: Expecting ',' delimiter: line 5 column 86 (char 132); e3: Expecting ',' delimiter: line 5 column 86 (char 132)",
+      "response_length": 1380,
+      "chunk_size": 957,
+      "prompt_length": 10748
+    },
+    {
+      "chunk_index": 117,
+      "chunk_text": "utilizes Advanced Encryption Standard (“AES”) volume \nencryption to protect organizationally classified data at rest and encrypts sensitive customer data in \nthe database using AES 256-bit encryption. Okta applies an AWS key management service to manage \nencryption keys used to encrypt data. \nIncident Response \nIncident response and escalation procedures are in place to manage unexpected incidents impacting \nthe business. The incident response process defines activities for identifying and mitig",
+      "gpt_response": "{\n    \"cuecs\": [],\n    \"excluded\": [\n        {\n            \"excluded_description\": \"utilizes Advanced Encryption Standard (“AES”) volume encryption to protect organizationally classified data at rest and encrypts sensitive customer data in the database using AES 256-bit encryption.\",\n            \"excluded_reason\": \"Vendor/system responsibility for encryption, no user action required.\"\n        },\n        {\n            \"excluded_description\": \"Okta applies an AWS key management service to manage encryption keys used to encrypt data.\",\n            \"excluded_reason\": \"Vendor/system responsibility for key management, no user action required.\"\n        },\n        {\n            \"excluded_description\": \"Incident response and escalation procedures are in place to manage unexpected incidents impacting the business.\",\n            \"excluded_reason\": \"Vendor/system responsibility, no user action assigned.\"\n        },\n        {\n            \"excluded_description\": \"The incident response process define",
+      "error": "e1: Expecting ',' delimiter: line 5 column 78 (char 124); e2: Expecting ',' delimiter: line 5 column 78 (char 124); e3: Expecting ',' delimiter: line 5 column 78 (char 124)",
+      "response_length": 2164,
+      "chunk_size": 942,
+      "prompt_length": 10733
+    }
+  ],
+  "bad_chunk_rescue_report": [
+    {
+      "bad_chunk_desc": "s. Okta’s information technology \n(“IT”) products enable organizations to deploy, manage, automate w",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " active directory (“AD”), lightweight directory access protocol (“LDAP”) integration, centralized \np",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " \nand Okta Identity Governance (“OIG”) System (hereinafter, “the Systems”) relevant to Security, \nAv",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "nternal controls to achieve the service commitments and system requirements based on the \napplicatio",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ection \nintegrations are continuously validated and maintained. Okta and its service integration par",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "etary SSO protocols. For Software as a Service (“SaaS”) applications that do not provide \nsupport fo",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "system or application. The provisioning functionality also includes the \nfollowing features: \n• \nInt",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " identity. \n• \nMobile application integration is seamless, whether they are Hypertext Markup Languag",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "s to \nprovide enhanced user lifecycle management and create complex user access workflows. Specifica",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "de establishing \nand maintaining a data classification and data handling policy, business continuity",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " \nPalo Alto Network \nVPN \nMultiple AWS \nregions \nSoftware \nThe following software, infrastructure se",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "n \nBusiness Function Description \nOperating System \nPlatform and \nDatabase \nPhysical \nLocation \nIDaa",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – ma",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "oyments as part of the Release Management Process  \n• \nChef – configuration management solution util",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "g and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing syste",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "g audit and non-audit services. It oversees the scope, activities \nand performance of the Company’s ",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ional domain is approved by \nthe top-level manager for that domain and recorded in finance and HR re",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "people. To minimize the risk of malicious behavior and to help ensure that new employees understand ",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "curity Team defines and communicates ownership and responsibilities for data integrity, \nGeorge Sajo",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " department meetings and \ninformal notifications. Management is responsible for directing and contro",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "le via multi-factor authentication. \nTo access the production environment from the back end, multipl",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ss to the VPN system is restricted to authorized personnel. In the event that an \nemployee is termin",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "rtal in an industry-standard format over a secure \nconnection (i.e., CSV or REST API). \nChange Manag",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ta’s change development and release process. This includes, but is not \nlimited to, testing in a low",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " to Amazon Simple Storage Service (“S3”) for \nproduction backup data. Data stored within AWS S3 incl",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ve encryption, enforce automated patch updates, and prevent the use of removable media. \nGeorge Sajo",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "utilizes Advanced Encryption Standard (“AES”) volume \nencryption to protect organizationally classif",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    }
+  ],
+  "bad_chunk_count": 27,
+  "rescued_chunk_count": 0,
+  "unrecoverable_chunks": [
+    {
+      "bad_chunk_desc": "s. Okta’s information technology \n(“IT”) products enable organizations to deploy, manage, automate w",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " active directory (“AD”), lightweight directory access protocol (“LDAP”) integration, centralized \np",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " \nand Okta Identity Governance (“OIG”) System (hereinafter, “the Systems”) relevant to Security, \nAv",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "nternal controls to achieve the service commitments and system requirements based on the \napplicatio",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ection \nintegrations are continuously validated and maintained. Okta and its service integration par",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "etary SSO protocols. For Software as a Service (“SaaS”) applications that do not provide \nsupport fo",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "system or application. The provisioning functionality also includes the \nfollowing features: \n• \nInt",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " identity. \n• \nMobile application integration is seamless, whether they are Hypertext Markup Languag",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "s to \nprovide enhanced user lifecycle management and create complex user access workflows. Specifica",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "de establishing \nand maintaining a data classification and data handling policy, business continuity",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " \nPalo Alto Network \nVPN \nMultiple AWS \nregions \nSoftware \nThe following software, infrastructure se",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "n \nBusiness Function Description \nOperating System \nPlatform and \nDatabase \nPhysical \nLocation \nIDaa",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – ma",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "oyments as part of the Release Management Process  \n• \nChef – configuration management solution util",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "g and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing syste",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "g audit and non-audit services. It oversees the scope, activities \nand performance of the Company’s ",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ional domain is approved by \nthe top-level manager for that domain and recorded in finance and HR re",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "people. To minimize the risk of malicious behavior and to help ensure that new employees understand ",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "curity Team defines and communicates ownership and responsibilities for data integrity, \nGeorge Sajo",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " department meetings and \ninformal notifications. Management is responsible for directing and contro",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "le via multi-factor authentication. \nTo access the production environment from the back end, multipl",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ss to the VPN system is restricted to authorized personnel. In the event that an \nemployee is termin",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "rtal in an industry-standard format over a secure \nconnection (i.e., CSV or REST API). \nChange Manag",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ta’s change development and release process. This includes, but is not \nlimited to, testing in a low",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": " to Amazon Simple Storage Service (“S3”) for \nproduction backup data. Data stored within AWS S3 incl",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "ve encryption, enforce automated patch updates, and prevent the use of removable media. \nGeorge Sajo",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    },
+    {
+      "bad_chunk_desc": "utilizes Advanced Encryption Standard (“AES”) volume \nencryption to protect organizationally classif",
+      "rescue_type": "unmatched",
+      "matched_desc": null,
+      "confidence_pct": 0
+    }
+  ]
+}

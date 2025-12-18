@@ -49,7 +49,7 @@ def get_all_framework_criteria() -> Dict[str, Any]:
                 "name": crit.get("name", "")
             })
         
-        result[framework_name.lower()] = {
+        result[framework_name] = {
             "framework_name": framework_name,
             "display_name": framework_info.display_name,
             "sections": grouped,

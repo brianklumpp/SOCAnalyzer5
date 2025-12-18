@@ -359,8 +359,8 @@ def extract_text_from_pdf(pdf_path, output_path):
             if should_filter:
                 continue
             filtered_lines.append(line)
-        # Insert page break marker (logical page numbering: starts at 1 after skipped pages)
-        logical_page_num = i - start_page + 1
+        # Insert page break marker (using actual PDF page number, 1-based)
+        logical_page_num = i + 1
         all_text.append(f"=== PAGE {logical_page_num} ===")
         all_text.append('\n'.join(filtered_lines))
     # Collapse extra blank lines before writing

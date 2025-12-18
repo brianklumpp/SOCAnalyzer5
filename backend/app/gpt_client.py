@@ -10,7 +10,7 @@ import contextvars
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 from .config import (
-    OUTPUT_TEXT_FILE, GPT_PROMPTS, ENV_PATH, DEFAULT_GPT_MODEL, GPT_MODELS,
+    GPT_PROMPTS, ENV_PATH, DEFAULT_GPT_MODEL, GPT_MODELS,
     DEFAULT_TEMPERATURE, DEFAULT_TOP_P, DEFAULT_CHUNK_SIZE, TEXT_OVERLAP, MAX_OUTPUT_TOKENS,
     LLM_PROVIDER, AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_API_KEY, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENTS, DATAIKU_API_BASE,
@@ -185,7 +185,7 @@ def chunk_text(text, chunk_size=DEFAULT_CHUNK_SIZE, overlap=TEXT_OVERLAP):
         start = end - overlap  # overlap for context
     return chunks
 
-def run_gpt_inquiry(prompt_key, input_file=OUTPUT_TEXT_FILE, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P):
+def run_gpt_inquiry(prompt_key, input_file=None, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P):
     if prompt_key not in GPT_PROMPTS:
         raise ValueError(f"Prompt '{prompt_key}' not found in config.")
     with open(input_file, 'r', encoding='utf-8') as f:
@@ -215,6 +215,40 @@ def _with_retries(func, *, retries: int = 3, base_delay_seconds: float = 1.0, on
             return func()
         except (requests.exceptions.RequestException, Exception) as exc:  # Broad by design; last attempt re-raises
             last_exc = exc
+            
+            # Log errors explicitly for visibility
+            exc_type = type(exc).__name__
+            if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ReadTimeout, requests.exceptions.ConnectTimeout)):
+                logging.error(f"[GPT_TIMEOUT] Request timed out on attempt {attempt + 1}/{retries}: {exc}")
+            else:
+                logging.error(f"[GPT_ERROR] {exc_type} on attempt {attempt + 1}/{retries}: {exc}")
+            
+            # Update job status to show GPT service warning for ALL errors
+            try:
+                ctx = _gpt_log_ctx.get() or {}
+                job_id = ctx.get("job_id")
+                if job_id:
+                    import redis
+                    redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
+                    job_json = redis_client.get(f"job:{job_id}")
+                    if job_json:
+                        import json
+                        job_data = json.loads(job_json)
+                        original_status = job_data.get("status", "")
+                        # Extract readable error message
+                        error_msg = str(exc)
+                        if "502 Bad Gateway" in error_msg:
+                            error_msg = "502 Bad Gateway (service unavailable)"
+                        elif "timeout" in error_msg.lower():
+                            error_msg = "Request timeout"
+                        else:
+                            error_msg = exc_type
+                        job_data["status"] = f"⚠️ GPT service error: {error_msg} (retry {attempt + 1}/{retries}). {original_status}"
+                        job_data["gpt_service_warning"] = True
+                        redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=86400)
+            except Exception as status_err:
+                logging.warning(f"Could not update job status for GPT error: {status_err}")
+                    
             if attempt == retries - 1:
                 break
             sleep_seconds = base_delay_seconds * (2 ** attempt) + random.uniform(0, 0.25)
@@ -567,7 +601,7 @@ def main():
     import json
     parser = argparse.ArgumentParser(description="Run GPT inquiry on SOC 2 report text.")
     parser.add_argument('--prompt', type=str, help='Prompt key to use (see config.py)')
-    parser.add_argument('--input', type=str, default=OUTPUT_TEXT_FILE, help='Input text file (default: output.txt)')
+    parser.add_argument('--input', type=str, required=True, help='Input text file')
     parser.add_argument('--model', type=str, default=DEFAULT_GPT_MODEL, help='GPT model to use (see config.py)')
     parser.add_argument('--temperature', type=float, default=DEFAULT_TEMPERATURE, help='Sampling temperature')
     parser.add_argument('--top_p', type=float, default=DEFAULT_TOP_P, help='Nucleus sampling top_p')

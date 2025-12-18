@@ -120,13 +120,11 @@ async def analyze_pdf_bg(
         "extraction_partial": False
     })
     
-    # Add scan to queue (v2.1.0)
+    # Add scan to queue (v2.1.0) - queue worker will start threads
     try:
-        logging.error(f"[DEBUG /analyze/] About to enqueue scan: job_id={job_id}")
+        logging.info(f"[SCAN] Enqueueing scan: job_id={job_id}, filename={filename}")
         from ..threading.scan_queue import get_scan_queue
-        logging.error(f"[DEBUG /analyze/] Import successful")
         queue = get_scan_queue()
-        logging.error(f"[DEBUG /analyze/] Got queue instance: {queue}")
         position = queue.enqueue(
             job_id=job_id,
             filename=filename,
@@ -134,38 +132,31 @@ async def analyze_pdf_bg(
             report_type=report_type,
             priority=10  # Normal priority
         )
-        logging.error(f"[DEBUG /analyze/] Enqueue succeeded, position={position}")
         logging.info(f"[QUEUE] Added scan to queue: job_id={job_id}, position={position}")
-        
-        # Start background thread to process queue
-        logging.error(f"[DEBUG /analyze/] Starting thread with args: job_id={job_id}, filename={filename}, report_type='{report_type}'")
-        from ..main import run_analysis_job
-        thread = threading.Thread(
-            target=run_analysis_job, 
-            args=(job_id, temp_pdf_path, filename, report_type, db)
-        )
-        thread.start()
+        # Queue worker will automatically pick up and process this scan
     except RuntimeError as e:
         # Queue not initialized, fall back to direct execution
-        logging.error(f"[DEBUG /analyze/] RuntimeError in queue operations: {e}")
-        logging.warning(f"[QUEUE] Queue not initialized, using direct execution")
+        logging.warning(f"[QUEUE] Queue not initialized, using direct execution: {e}")
         from ..main import run_analysis_job
         thread = threading.Thread(
             target=run_analysis_job, 
-            args=(job_id, temp_pdf_path, filename, report_type, db)
+            args=(job_id, temp_pdf_path, filename, report_type, db, current_user.id),
+            name=f"DirectScan-{job_id[:8]}"
         )
+        thread.daemon = True
         thread.start()
     except Exception as e:
         # Unexpected error, log and fall back
         import traceback
-        logging.error(f"[DEBUG /analyze/] Unexpected error in queue operations: {e}")
-        logging.error(f"[DEBUG /analyze/] Traceback: {traceback.format_exc()}")
-        logging.warning(f"[QUEUE] Error enqueueing, using direct execution")
+        logging.error(f"[SCAN] Error enqueueing scan: {e}\n{traceback.format_exc()}")
+        logging.warning(f"[QUEUE] Using direct execution as fallback")
         from ..main import run_analysis_job
         thread = threading.Thread(
             target=run_analysis_job, 
-            args=(job_id, temp_pdf_path, filename, report_type, db)
+            args=(job_id, temp_pdf_path, filename, report_type, db, current_user.id),
+            name=f"DirectScan-{job_id[:8]}"
         )
+        thread.daemon = True
         thread.start()
     
     return {"job_id": job_id}
@@ -245,7 +236,7 @@ async def confirm_report_type(
     from ..main import run_analysis_job
     thread = threading.Thread(
         target=run_analysis_job,
-        args=(job_id, temp_pdf_path, filename, confirmed_type, db, True)
+        args=(job_id, temp_pdf_path, filename, confirmed_type, db, current_user.id, True)
     )
     thread.start()
     
@@ -258,7 +249,7 @@ async def confirm_report_type(
 
 
 @router.get("/analyze/status/{job_id}")
-async def get_job_status(job_id: str):
+async def get_job_status(job_id: str, current_user: User = Depends(get_current_active_user)):
     """Get detailed job status with artifacts and counts."""
     logging.info(f"[INFO] get_job_status: called for job_id={job_id}")
     job = get_job(job_id)
@@ -329,7 +320,7 @@ async def get_job_status(job_id: str):
 
 
 @router.get("/analyze/status_min/{job_id}")
-async def get_job_status_min(job_id: str, include_artifacts: bool = False):
+async def get_job_status_min(job_id: str, include_artifacts: bool = False, current_user: User = Depends(get_current_active_user)):
     """Ultra-lightweight status endpoint for active scans."""
     job = get_job(job_id)
     if not job:
@@ -381,26 +372,37 @@ async def get_job_status_min(job_id: str, include_artifacts: bool = False):
             # Convert to string if it's some other type
             identified_entities["coverage_period"] = str(cp)
     
-    # Fetch company logo URL if logo has been fetched
-    if phase_completion.get("logo_fetched") and identified_entities.get("company"):
+    # Fetch company logo URL and auditor from database if scan has been saved
+    scan_id = job.get("scan_id")
+    if scan_id:
         try:
             from ..database import get_db
-            from ..models import Company
+            from ..models import Company, Scan
             
             # Get database session
             db_gen = get_db()
             db = next(db_gen)
             
             try:
+                # Query scan record for auditor
+                from sqlalchemy import select
+                scan = db.execute(select(Scan).where(Scan.id == scan_id)).scalar_one_or_none()
+                if scan:
+                    if scan.auditor and "auditor" not in identified_entities:
+                        identified_entities["auditor"] = scan.auditor
+                    if scan.company and "company" not in identified_entities:
+                        identified_entities["company"] = scan.company
+                
                 # Query company logo by name
                 company_name = identified_entities.get("company")
-                company = db.query(Company).filter(Company.name == company_name).first()
-                if company and company.logo_url:
-                    identified_entities["company_logo_url"] = company.logo_url
+                if company_name:
+                    company = db.query(Company).filter(Company.name == company_name).first()
+                    if company and company.logo_url:
+                        identified_entities["company_logo_url"] = company.logo_url
             finally:
                 db.close()
-        except Exception as logo_err:
-            logging.warning(f"Could not fetch company logo: {logo_err}")
+        except Exception as db_err:
+            logging.warning(f"Could not fetch data from database: {db_err}")
     
     # Line-based progress
     def _line_progress():
@@ -464,7 +466,8 @@ async def get_job_result(
     force_save: bool = False, 
     format: Optional[str] = None, 
     request: Request = None, 
-    db=Depends(get_db)
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """Return analysis results with content negotiation."""
     job = get_job(job_id)
@@ -591,7 +594,7 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
                         
                         redis_client_deviation = None
                         try:
-                            redis_client_deviation = aioredis.from_url("redis://socanalyzer-redis:6379", decode_responses=True)
+                            redis_client_deviation = aioredis.from_url("redis://redis:6379", decode_responses=True)
                         except Exception:
                             pass
                         
@@ -640,7 +643,7 @@ async def resume_extractors(job_id: str, payload: dict, db=Depends(get_db), curr
 
 
 @router.get("/analyze/controls_partial/{job_id}")
-async def get_partial_controls(job_id: str, min_pct: float = 20.0, limit: int = 0):
+async def get_partial_controls(job_id: str, min_pct: float = 20.0, limit: int = 0, current_user: User = Depends(get_current_active_user)):
     """Expose partial controls mid-run with completion percentage."""
     job = get_job(job_id)
     if not job:
@@ -898,23 +901,10 @@ async def batch_upload_scans(
             logging.error(f"[BATCH_UPLOAD] {error_msg}")
             errors.append(error_msg)
     
-    # Start processing threads for all queued scans
+    # Note: Queue worker thread will automatically start processing queued scans
+    # based on max_concurrent limit. No need to manually start threads here.
     if queued_jobs:
-        logging.info(f"[BATCH_UPLOAD] Starting processing threads for {len(queued_jobs)} scans")
-        import threading
-        from ..main import run_analysis_job
-        
-        for idx, job in enumerate(queued_jobs):
-            try:
-                thread = threading.Thread(
-                    target=run_analysis_job,
-                    args=(job["job_id"], job["pdf_path"], job["filename"], report_type_list[idx], db)
-                )
-                thread.daemon = True  # Daemon thread so it doesn't block shutdown
-                thread.start()
-                logging.info(f"[BATCH_UPLOAD] Started processing thread for {job['filename']}")
-            except Exception as thread_err:
-                logging.error(f"[BATCH_UPLOAD] Failed to start thread for {job['filename']}: {thread_err}")
+        logging.info(f"[BATCH_UPLOAD] Queued {len(queued_jobs)} scans. Worker will process them based on max_concurrent limit.")
     
     return {
         "queued_count": len(queued_jobs),
@@ -926,7 +916,7 @@ async def batch_upload_scans(
 
 
 @router.get("/analyze/queue")
-async def get_queue_status():
+async def get_queue_status(current_user: User = Depends(get_current_active_user)):
     """
     Get current scan queue status.
     
@@ -1033,7 +1023,7 @@ async def resume_queue(current_user: User = Depends(require_admin)):
 
 
 @router.post("/analyze/queue/prioritize/{job_id}")
-async def reprioritize_scan(job_id: str, request: PrioritizeRequest):
+async def reprioritize_scan(job_id: str, request: PrioritizeRequest, current_user: User = Depends(get_current_active_user)):
     """
     Change the priority of a queued scan.
     
@@ -1223,7 +1213,7 @@ async def cancel_queued_scan(job_id: str, current_user: User = Depends(get_curre
 
 
 @router.get("/analyze/queue/active")
-async def get_active_scans():
+async def get_active_scans(current_user: User = Depends(get_current_active_user)):
     """
     Get all active scans (running + queued).
     

@@ -1,5 +1,61 @@
 # What's New
 
+## Version 5.1.0 - December 18, 2025
+
+### 🆕 Management Response Extraction
+
+**Automatic Extraction**
+- Automatically extracts management's responses to control deviations from SOC reports
+- Uses GPT semantic search with 3 cascading strategies:
+  1. Search nearby pages (configurable window)
+  2. Expand search window if not found
+  3. Find dedicated "Management Response" section (cached for 7 days)
+- Only extracts responses with ≥50% confidence (configurable)
+- Identifies duplicate responses across multiple controls
+
+**Data Storage**
+- New database fields: `management_response_text`, `management_response_page_refs`, `management_response_confidence`, `response_detection_method`
+- Alembic migration: `2ac3574edb1e` (applied)
+- Stores page references and line numbers for traceability
+
+**UI Display**
+- Color-coded confidence badges (green >70%, orange 50-70%, red <40%)
+- Page reference links to source location
+- "Also applies to X other deviations" indicator for shared responses
+- Manual edit capability with save/cancel
+- Regenerate button to re-extract from report
+
+**GPT Integration**
+- Deviation summaries include management response in context
+- Executive summary displays remediation plans (truncated to 200 chars)
+- GPT acknowledges planned remediation in summaries
+
+**API Endpoints**
+- `GET /report/{scan_id}/deviations/{control_id}/management-response` - Fetch with related controls
+- `PATCH /report/{scan_id}/deviations/{control_id}/management-response` - Manual edit
+- `POST /report/{scan_id}/deviations/{control_id}/regenerate-management-response` - Re-extract
+
+**Configuration**
+- `MANAGEMENT_RESPONSE_SEARCH_WINDOW=1` - Pages to search after control
+- `MANAGEMENT_RESPONSE_MIN_CONFIDENCE=0.5` - Minimum confidence to store
+- Redis caching with 7-day TTL for section locations
+
+### 🔧 CUEC Confidence Scoring Adjustments
+
+**Refined Weights**
+- GPT opinion "yes" boost: +0.2 → +0.1 (since already +0.3 for finding CUEC)
+- Keyword proximity threshold: <5 → <2 words
+- New penalty: GPT opinion "maybe" = -0.2
+- Clarified entity responsibility vs individual user responsibility
+
+### 🐛 Deviation Tab Authentication Fix
+
+**Resolved**
+- Fixed 401 Unauthorized errors when loading deviation tab
+- Changed from plain `axios` to authenticated `api` client
+- Ensures Bearer token included in all requests
+- Windows SSO authentication now works properly
+
 ## Version 5.0.0 - December 2025
 
 ### Control Merge Enhancements 🎯

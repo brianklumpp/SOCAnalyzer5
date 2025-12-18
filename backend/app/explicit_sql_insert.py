@@ -85,7 +85,24 @@ def _parse_datetime(val):
         return val
     return None
 
-def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = None):
+def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = None, user_id: int = None):
+    # Validate required parameters for job isolation
+    if not job_id or not user_id:
+        raise ValueError("[DB_INSERT] job_id and user_id are required for job isolation")
+    
+    # Get job-specific paths
+    job_paths = config.get_job_paths(user_id, job_id)
+    combined_json_path = job_paths['json_dir'] / 'combined_result.json'
+    
+    if not combined_json_path.exists():
+        logging.error(f"[JOB {job_id}] Combined JSON not found at {combined_json_path}")
+        raise FileNotFoundError(f"Combined result not found for job {job_id}")
+    
+    logging.info(f"[JOB {job_id}] Reading from isolated path: {combined_json_path}")
+    
+    # Override json_path to use job-specific path
+    json_path = str(combined_json_path)
+    
     # Load environment variables from .env
     load_dotenv()
     
@@ -101,7 +118,7 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
                 decode_responses=True
             )
         except Exception as redis_err:
-            logging.warning(f"Could not create Redis client for job state updates: {redis_err}")
+            logging.warning(f"[JOB {job_id}] Could not create Redis client for job state updates: {redis_err}")
     DATABASE_URL = os.getenv("DATABASE_URL_SYNC")
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL_SYNC environment variable is not set. Please set it in your .env file.")
@@ -186,7 +203,7 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
         
         scan_fields = [
             "product", "report_date", "coverage_start", "coverage_end", "auditor", "result_json", "scan_date",
-            "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id", "report_type", "toc_page_offset", "detected_standards"
+            "gpt_cost", "gpt_model", "estimated_time_seconds", "gpt_usage_details", "extracted_text", "pdf_filename", "pdf_file", "company_id", "report_type", "toc_page_offset", "detected_standards", "user_id", "company", "active_frameworks", "elapsed_seconds"
         ]
         # Filter out pdf_file bytes from data before JSON serialization
         data_for_json = {k: v for k, v in data.items() if k != 'pdf_file'}
@@ -201,6 +218,19 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
         detected_standards = data.get("detected_standards", [])
         detected_standards_json = json.dumps(detected_standards, ensure_ascii=False) if detected_standards else None
         logging.info(f"Detected standards for scan: {detected_standards}")
+        
+        # Get company name from nested structure
+        company_data = data.get("company")
+        company_name = None
+        if company_data:
+            if isinstance(company_data, str):
+                company_name = company_data
+            elif isinstance(company_data, dict):
+                company_name = company_data.get("company") or company_data.get("name")
+        
+        # Get active_frameworks from data
+        active_frameworks = data.get("active_frameworks", [])
+        active_frameworks_json = json.dumps(active_frameworks, ensure_ascii=False) if active_frameworks else None
         
         scan_values = [
             sanitize_value(product_name),
@@ -221,6 +251,10 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
             report_type,
             sanitize_value(data.get("toc_page_offset")),  # Store TOC page offset for PDF navigation
             detected_standards_json,  # Store detected standards as JSONB
+            user_id,  # User who initiated the scan
+            sanitize_value(company_name),  # Company name string
+            active_frameworks_json,  # Active frameworks JSONB
+            sanitize_value(data.get("elapsed_seconds")),  # Store elapsed time from analysis
         ]
         scan_sql = f"INSERT INTO scan ({', '.join(scan_fields)}) VALUES ({', '.join(['%s']*len(scan_fields))}) RETURNING id"
         logging.info(f"SQL: {scan_sql} | Values: {scan_values}")
@@ -262,7 +296,7 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
         # Insert controls
         controls = data.get("controls")
         if controls:
-            for ctrl in controls:
+            for idx, ctrl in enumerate(controls):
                 try:
                     cur.execute("SAVEPOINT control_insert")
                     # Backward-compatible mapping for new fields
@@ -270,9 +304,18 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
                         ctrl['has_deviation'] = False
                     if 'deviation_desc' not in ctrl:
                         ctrl['deviation_desc'] = None
-                    # Map control_gpt_conf_justification (JSON) → confidence_calc (database)
+                    
+                    # Map JSON fields to database fields
                     if 'control_gpt_conf_justification' in ctrl and 'confidence_calc' not in ctrl:
                         ctrl['confidence_calc'] = ctrl['control_gpt_conf_justification']
+                    
+                    # Set control_seq if not present (use enumeration index)
+                    if 'control_seq' not in ctrl:
+                        ctrl['control_seq'] = idx + 1
+                    
+                    # Ignore obsolete fields - do NOT populate from control_tsc_mappings, control_coso_mappings, control_soc_domain
+                    # Only use current framework_mappings, primary_framework, primary_criterion_id, primary_confidence if present
+                    
                     values = [sanitize_value(ctrl.get(f)) for f in config.TABLE_FIELD_MAP["control"][:-1]] + [scan_id]
                     fields = config.TABLE_FIELD_MAP["control"]
                     sql = f"INSERT INTO control ({', '.join(fields)}) VALUES ({', '.join(['%s']*len(fields))})"

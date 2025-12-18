@@ -4,13 +4,9 @@ import logging
 import re
 from dateutil import parser as date_parser
 from collections import Counter
+from pathlib import Path
 from .. import config
 from ..gpt_client import gpt_extract
-
-# Use centralized config paths
-SECTION_JSON_PATH = config.SECTION_JSON_PATH
-OUTPUT_JSON_PATH = config.JSON_DIR / "coverage_period_result.json"
-PDF_TXT_PATH = config.PDF_TXT_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +31,7 @@ def extract_text_for_lines(txt_lines, start_line, end_line):
     # Lines are 1-indexed in section_results.json
     return ''.join(txt_lines[start_line-1:end_line])
 
-def deduce_dates_from_candidates(txt_lines, section_results):
+def deduce_dates_from_candidates(txt_lines, section_results, job_id=None):
     """
     Deduce coverage period and report date using temporal relationship rules.
     
@@ -49,11 +45,13 @@ def deduce_dates_from_candidates(txt_lines, section_results):
     Args:
         txt_lines: Full document text lines
         section_results: Section metadata from section_results.json
+        job_id: Unique job identifier for logging
         
     Returns:
         Dict with type, start_date, end_date, as_of_date, explanation or None if deduction fails
     """
-    logger.info("Starting date deduction with temporal rules...")
+    log_prefix = f"[JOB {job_id}] " if job_id else ""
+    logger.info(f"{log_prefix}Starting date deduction with temporal rules...")
     
     # Collect dates from Management_Assertion and Service_Auditor_Report sections
     management_section = next((s for s in section_results if s.get('topic') == 'Management_Assertion'), None)
@@ -61,7 +59,7 @@ def deduce_dates_from_candidates(txt_lines, section_results):
     
     sections_to_scan = [s for s in [management_section, auditor_section] if s]
     if not sections_to_scan:
-        logger.warning("No Management_Assertion or Service_Auditor_Report sections found for date deduction")
+        logger.warning(f"{log_prefix}No Management_Assertion or Service_Auditor_Report sections found for date deduction")
         return None
     
     # Extract all dates from sections
@@ -82,7 +80,7 @@ def deduce_dates_from_candidates(txt_lines, section_results):
                     pass
     
     if not all_dates:
-        logger.warning("No dates found in sections for deduction")
+        logger.warning(f"{log_prefix}No dates found in sections for deduction")
         return None
     
     # Count frequency to filter watermarks
@@ -90,17 +88,17 @@ def deduce_dates_from_candidates(txt_lines, section_results):
     watermark_threshold = config.WATERMARK_FREQUENCY_THRESHOLD
     filtered_dates = [d for d in all_dates if date_counter[d.date()] <= watermark_threshold]
     
-    logger.info(f"Found {len(all_dates)} total dates, {len(filtered_dates)} after watermark filtering (threshold={watermark_threshold})")
+    logger.info(f"{log_prefix}Found {len(all_dates)} total dates, {len(filtered_dates)} after watermark filtering (threshold={watermark_threshold})")
     
     if len(filtered_dates) < 1:
-        logger.warning(f"Insufficient dates after filtering ({len(filtered_dates)} dates). Need at least 1.")
+        logger.warning(f"{log_prefix}Insufficient dates after filtering ({len(filtered_dates)} dates). Need at least 1.")
         return None
     
     # Log all candidates with rejection reasons
     for date_obj in sorted(set(all_dates), key=lambda d: d):
         freq = date_counter[date_obj.date()]
         status = "FILTERED" if freq > watermark_threshold else "VALID"
-        logger.info(f"Date candidate: {date_obj.strftime('%Y-%m-%d')} (frequency={freq}, status={status})")
+        logger.info(f"{log_prefix}Date candidate: {date_obj.strftime('%Y-%m-%d')} (frequency={freq}, status={status})")
     
     # Sort chronologically
     sorted_dates = sorted(filtered_dates)
@@ -108,7 +106,7 @@ def deduce_dates_from_candidates(txt_lines, section_results):
     # Handle different scenarios based on number of dates found
     if len(sorted_dates) == 1:
         # Only one date - likely Type 1 "as of" report
-        logger.info(f"Only one date found: {sorted_dates[0].strftime('%Y-%m-%d')}. Inferring Type 1 report.")
+        logger.info(f"{log_prefix}Only one date found: {sorted_dates[0].strftime('%Y-%m-%d')}. Inferring Type 1 report.")
         return {
             'type': 'Type 1',
             'start_date': None,
@@ -130,7 +128,7 @@ def deduce_dates_from_candidates(txt_lines, section_results):
         
         if months_apart >= 6 and months_apart <= 12:
             # Dates span 6-12 months: date1 is coverage_start, date2 is coverage_end
-            logger.info(f"Two dates spanning {months_apart} months: inferring Type 2 with coverage_start={date1.strftime('%Y-%m-%d')}, coverage_end={date2.strftime('%Y-%m-%d')}")
+            logger.info(f"{log_prefix}Two dates spanning {months_apart} months: inferring Type 2 with coverage_start={date1.strftime('%Y-%m-%d')}, coverage_end={date2.strftime('%Y-%m-%d')}")
             return {
                 'type': 'Type 2',
                 'start_date': date1.strftime('%Y-%m-%d'),
@@ -141,8 +139,8 @@ def deduce_dates_from_candidates(txt_lines, section_results):
         elif days_apart <= 30:
             # Dates within 30 days: likely coverage_end + report_date, infer start as 6 months before
             inferred_start = date1 - relativedelta(months=6)
-            logger.info(f"Two dates within {days_apart} days: inferring coverage_start as 6 months before first date")
-            logger.info(f"Inferred coverage_start={inferred_start.strftime('%Y-%m-%d')}, coverage_end={date1.strftime('%Y-%m-%d')}, report_date={date2.strftime('%Y-%m-%d')}")
+            logger.info(f"{log_prefix}Two dates within {days_apart} days: inferring coverage_start as 6 months before first date")
+            logger.info(f"{log_prefix}Inferred coverage_start={inferred_start.strftime('%Y-%m-%d')}, coverage_end={date1.strftime('%Y-%m-%d')}, report_date={date2.strftime('%Y-%m-%d')}")
             return {
                 'type': 'Type 2',
                 'start_date': inferred_start.strftime('%Y-%m-%d'),
@@ -152,7 +150,7 @@ def deduce_dates_from_candidates(txt_lines, section_results):
             }
         else:
             # Dates don't match expected patterns
-            logger.warning(f"Two dates found but spacing unclear ({months_apart} months, {days_apart} days apart). Defaulting to Type 1.")
+            logger.warning(f"{log_prefix}Two dates found but spacing unclear ({months_apart} months, {days_apart} days apart). Defaulting to Type 1.")
             return {
                 'type': 'Type 1',
                 'start_date': None,
@@ -165,8 +163,8 @@ def deduce_dates_from_candidates(txt_lines, section_results):
     coverage_start = sorted_dates[0]
     report_date = sorted_dates[-1]
     
-    logger.info(f"Deduced coverage_start (earliest): {coverage_start.strftime('%Y-%m-%d')}")
-    logger.info(f"Deduced report_date (latest): {report_date.strftime('%Y-%m-%d')}")
+    logger.info(f"{log_prefix}Deduced coverage_start (earliest): {coverage_start.strftime('%Y-%m-%d')}")
+    logger.info(f"{log_prefix}Deduced report_date (latest): {report_date.strftime('%Y-%m-%d')}")
     
     # Find valid coverage_end candidates
     min_months = config.COVERAGE_PERIOD_MIN_MONTHS
@@ -190,18 +188,18 @@ def deduce_dates_from_candidates(txt_lines, section_results):
             reasons.append(f"{days_before_report} days before report exceeds proximity={proximity_days}")
         
         if reasons:
-            logger.info(f"Coverage_end candidate {date_obj.strftime('%Y-%m-%d')} REJECTED: {'; '.join(reasons)}")
+            logger.info(f"{log_prefix}Coverage_end candidate {date_obj.strftime('%Y-%m-%d')} REJECTED: {'; '.join(reasons)}")
         else:
-            logger.info(f"Coverage_end candidate {date_obj.strftime('%Y-%m-%d')} VALID (months_after_start={months_after_start}, days_before_report={days_before_report})")
+            logger.info(f"{log_prefix}Coverage_end candidate {date_obj.strftime('%Y-%m-%d')} VALID (months_after_start={months_after_start}, days_before_report={days_before_report})")
             valid_coverage_ends.append(date_obj)
     
     if not valid_coverage_ends:
-        logger.warning("No valid coverage_end candidates found matching temporal rules")
+        logger.warning(f"{log_prefix}No valid coverage_end candidates found matching temporal rules")
         return None
     
     # Pick coverage_end closest to report_date (but not later)
     coverage_end = max(valid_coverage_ends, key=lambda d: d)
-    logger.info(f"Selected coverage_end (closest to report_date): {coverage_end.strftime('%Y-%m-%d')}")
+    logger.info(f"{log_prefix}Selected coverage_end (closest to report_date): {coverage_end.strftime('%Y-%m-%d')}")
     
     # Determine report type
     months_duration = (coverage_end.year - coverage_start.year) * 12 + (coverage_end.month - coverage_start.month)
@@ -215,14 +213,32 @@ def deduce_dates_from_candidates(txt_lines, section_results):
         'explanation': f'Deduced via temporal rules: earliest={coverage_start.strftime("%Y-%m-%d")}, end={coverage_end.strftime("%Y-%m-%d")} (closest to report), latest={report_date.strftime("%Y-%m-%d")}. Duration={months_duration} months.'
     }
     
-    logger.info(f"Date deduction successful: {result}")
+    logger.info(f"{log_prefix}Date deduction successful: {result}")
     return result
 
-def extract_coverage_period():
+def extract_coverage_period(job_paths=None, job_id=None):
+    """Extract coverage period from SOC report.
+    
+    Args:
+        job_paths: Dict with 'json_dir', 'logs_dir', 'temp_dir' Path objects
+        job_id: Unique job identifier for logging
+    """
+    if not job_paths:
+        raise ValueError("[COVERAGE_PERIOD] job_paths parameter is required for job isolation")
+    if not job_id:
+        raise ValueError("[COVERAGE_PERIOD] job_id parameter is required for logging")
+    
+    # Set up job-specific paths
+    section_json_path = str(job_paths['json_dir'] / 'section_results.json')
+    output_json_path = str(job_paths['json_dir'] / 'coverage_period_result.json')
+    pdf_txt_path = str(job_paths['temp_dir'] / 'output.txt')
+    
+    logger.info(f"[JOB {job_id}] Starting coverage period extraction")
+    
     # Reset output file at the start of extraction
-    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+    with open(output_json_path, 'w', encoding='utf-8') as f:
         f.write('{}\n')
-    section_results = load_json(SECTION_JSON_PATH)
+    section_results = load_json(section_json_path)
     # SOC1 reports often have coverage period in Management's Assertion or Service Auditor Report
     management_section = next((s for s in section_results if s.get('topic') == 'Management_Assertion'), None)
     system_desc_section = next((s for s in section_results if s.get('topic') == 'Description_of_System'), None)
@@ -232,17 +248,17 @@ def extract_coverage_period():
     if management_section:
         section_length = management_section.get('end_line', 0) - management_section.get('start_line', 0)
         if section_length < 10:
-            logging.warning(f'[COVERAGE_PERIOD] Management_Assertion section too short ({section_length} lines), trying Service_Auditor_Report instead')
+            logger.info(f'[JOB {job_id}] Management_Assertion section too short ({section_length} lines), trying Service_Auditor_Report instead')
             management_section = None
     
     # Priority: Service Auditor Report (most reliable for dates) > Management Assertion > System Description
     target_section = auditor_section or management_section or system_desc_section
     if not target_section:
-        logging.warning('[COVERAGE_PERIOD] No system description or auditor report section found. Falling back to full-document scan.')
+        logger.info(f'[JOB {job_id}] No system description or auditor report section found. Falling back to full-document scan.')
     
     start_line = target_section.get('start_line') if target_section else None
     end_line = target_section.get('end_line') if target_section else None
-    with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f:
+    with open(pdf_txt_path, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
     if start_line and end_line:
         text = extract_text_for_lines(txt_lines, start_line, end_line)
@@ -253,36 +269,36 @@ def extract_coverage_period():
         text = extract_text_for_pages(txt_lines, pages)
     else:
         section_name = 'system description or auditor report'
-        logging.error(f'DOC_page_ref or end_DOC_page_ref is None for {section_name} section. Using entire document for heuristic extraction.')
-        with open(PDF_TXT_PATH, 'r', encoding='utf-8') as f2:
+        logger.info(f'[JOB {job_id}] DOC_page_ref or end_DOC_page_ref is None for {section_name} section. Using entire document for heuristic extraction.')
+        with open(pdf_txt_path, 'r', encoding='utf-8') as f2:
             text = f2.read()
     # Primary path: GPT extraction
     # Get first 40 non-empty lines (increased from 20 for better SOC1 coverage)
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     first_lines = '\n'.join(lines[:40])
     
-    logging.info(f'[COVERAGE_PERIOD] Section target: {target_section.get("topic") if target_section else "full document"}')
-    logging.info(f'[COVERAGE_PERIOD] Extracted {len(lines[:40])} non-empty lines, {len(first_lines)} characters for GPT')
-    logging.debug(f'[COVERAGE_PERIOD] Text sample (first 300 chars): {first_lines[:300]}...')
+    logger.info(f'[JOB {job_id}] Section target: {target_section.get("topic") if target_section else "full document"}')
+    logger.info(f'[JOB {job_id}] Extracted {len(lines[:40])} non-empty lines, {len(first_lines)} characters for GPT')
+    logger.debug(f'[JOB {job_id}] Text sample (first 300 chars): {first_lines[:300]}...')
     
     # Write the actual text to a debug file for verification
-    debug_file = config.OUTPUT_DIR / "coverage_period_gpt_input.txt"
+    debug_file = job_paths['logs_dir'] / "coverage_period_gpt_input.txt"
     try:
         with open(debug_file, 'w', encoding='utf-8') as f:
             f.write(f"=== TEXT SENT TO GPT FOR COVERAGE PERIOD EXTRACTION ===\n\n{first_lines}\n")
-        logging.debug(f'[COVERAGE_PERIOD] Wrote GPT input to {debug_file}')
+        logger.debug(f'[JOB {job_id}] Wrote GPT input to {debug_file}')
     except Exception as e:
-        logging.warning(f'[COVERAGE_PERIOD] Could not write debug file: {e}')
+        logger.warning(f'[JOB {job_id}] Could not write debug file: {e}')
     
     prompt = config.COVERAGE_PERIOD_EXTRACTION_PROMPT.format(text=first_lines)
-    logging.debug(f'[COVERAGE_PERIOD] Sending prompt to GPT (length: {len(prompt)} chars)')
+    logger.debug(f'[JOB {job_id}] Sending prompt to GPT (length: {len(prompt)} chars)')
     
     response = gpt_extract(prompt, 'coverage_period_extractor')
-    logging.info(f'[COVERAGE_PERIOD] GPT response received (length: {len(response) if response else 0} chars)')
+    logger.info(f'[JOB {job_id}] GPT response received (length: {len(response) if response else 0} chars)')
     
     result = {'type': None, 'start_date': None, 'end_date': None, 'as_of_date': None, 'explanation': '', 'raw_gpt_response': response}
     if not response:
-        logging.error('[COVERAGE_PERIOD] No response from GPT.')
+        logger.info(f'[JOB {job_id}] No response from GPT.')
         result['explanation'] = 'No response from GPT.'
     else:
         try:
@@ -300,7 +316,7 @@ def extract_coverage_period():
             result['end_date'] = data.get('end_date')
             result['as_of_date'] = data.get('as_of_date')
             result['explanation'] = data.get('explanation', '')
-            logging.info(f'[COVERAGE_PERIOD] GPT extraction result: type={result["type"]}, start={result["start_date"]}, end={result["end_date"]}')
+            logger.info(f'[JOB {job_id}] GPT extraction result: type={result["type"]}, start={result["start_date"]}, end={result["end_date"]}')
             
             # Sanity check: If GPT returned null dates but text contains obvious date patterns, warn
             if not result.get('start_date') and not result.get('end_date') and not result.get('as_of_date'):
@@ -315,12 +331,12 @@ def extract_coverage_period():
                 
                 if date_hints:
                     warning_msg = f'GPT returned null dates but text contains: {", ".join(date_hints)}'
-                    logging.warning(f'[COVERAGE_PERIOD] {warning_msg}')
-                    logging.warning(f'[COVERAGE_PERIOD] GPT may have hallucinated. Consider reviewing: {debug_file}')
+                    logger.warning(f'[JOB {job_id}] {warning_msg}')
+                    logger.warning(f'[JOB {job_id}] GPT may have hallucinated. Consider reviewing: {debug_file}')
                     result['explanation'] += f' [WARNING: {warning_msg}]'
         except Exception as e:
-            logging.error(f'[COVERAGE_PERIOD] Failed to parse GPT response: {e}')
-            logging.debug(f'[COVERAGE_PERIOD] Raw response: {response[:500]}...')
+            logger.info(f'[JOB {job_id}] Failed to parse GPT response: {e}')
+            logger.debug(f'[JOB {job_id}] Raw response: {response[:500]}...')
             result['explanation'] = f'Failed to parse GPT response: {e}'
     
     # Deduction fallback: Try temporal rule-based deduction if GPT failed or incomplete
@@ -341,20 +357,20 @@ def extract_coverage_period():
                          is_type1_missing_date or
                          missing_end_date)
         
-        logging.info(f"Deduction check: type={result.get('type')}, start={result.get('start_date')}, end={result.get('end_date')}, as_of={result.get('as_of_date')}, need_deduction={need_deduction}")
+        logger.info(f"[JOB {job_id}] Deduction check: type={result.get('type')}, start={result.get('start_date')}, end={result.get('end_date')}, as_of={result.get('as_of_date')}, need_deduction={need_deduction}")
     except Exception as e:
-        logging.error(f"Error checking deduction need: {e}")
+        logger.info(f"[JOB {job_id}] Error checking deduction need: {e}")
         need_deduction = True
     
     if need_deduction:
-        logging.info("GPT extraction incomplete, attempting date deduction fallback...")
-        deduced = deduce_dates_from_candidates(txt_lines, section_results)
+        logger.info(f"[JOB {job_id}] GPT extraction incomplete, attempting date deduction fallback...")
+        deduced = deduce_dates_from_candidates(txt_lines, section_results, job_id=job_id)
         if deduced:
             result = deduced
             result['raw_gpt_response'] = response  # Preserve GPT response for debugging
-            logging.info(f"Deduction fallback successful: {result}")
+            logger.info(f"[JOB {job_id}] Deduction fallback successful: {result}")
         else:
-            logging.warning("Deduction fallback failed, trying regex heuristics...")
+            logger.warning(f"[JOB {job_id}] Deduction fallback failed, trying regex heuristics...")
 
     # Fallback: heuristic parsing (disabled by default – see config.ALLOW_REGEX_FALLBACKS)
     def _parse_month_date(s):
@@ -412,9 +428,9 @@ def extract_coverage_period():
                 if not result.get('explanation'):
                     result['explanation'] = 'Heuristic parse: matched "As of <date>"'
 
-    with open(OUTPUT_JSON_PATH, 'w', encoding='utf-8') as f:
+    with open(output_json_path, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
-    logging.info(f'Coverage period extraction result: {result}')
+    logger.info(f'[JOB {job_id}] Coverage period extraction result: {result}')
     return result
 
 __all__ = ["extract_coverage_period"]

@@ -1,0 +1,664 @@
+{
+  "subservice_orgs": [
+    {
+      "third_party_name": "GitHub",
+      "third_party_description": "Source code management and version control system.",
+      "third_party_page_ref": [
+        "18"
+      ],
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "oles, users, and groups with permissions \nthat allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – managed service used to create and control \nencryption keys used to encrypt data used by Okta in AWS \n• \nAWS Lambda - serverless computing tool that is configured via AWS API to interact with the \nOkta APIs to fetch relevant details \n• \nBacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and \ncode development activities such as automated testing and code analysis of source code prior \nto implementation \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 18 ===\n \nPage | 16 \n\n• \nBurp Vulnerability Scanner – Application Vulnerability Scanning Tool used for change \ndeployments as part of the Release Management Process  \n• \nChef – configuration management solution utilized to provision, configure, and manage IDaaS \nproduction infrastructure throughout its lifecycle \n• \nCond",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "GitHub"
+    },
+    {
+      "third_party_name": "PagerDuty",
+      "third_party_description": "Alerting system which delivers alerts to on-call IT personnel when predefined events occur.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "keting system utilized for centrally managing and tracking security events and \nincidents flagged within the organization \n• \nGitHub – source code management software utilized to control code versioning and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing system utilized for centrally managing and tracking \nproduction issues and change management activities \n• \nJamF Pro – mobile device management tool utilized to manage and secure Mac devices \ndeployed to the organization \n• \nNaruto - internal integration tool that is designed to interact with the Tenable/Nessus API \n• \nPagerDuty – alerting system which delivers alerts to on-call IT personnel when predefined \nevents occur \n• \nSalesforce - used by Okta Support for organization creation, deletion and customer \ncommunication. Support.okta.com customer management support portal is also used to help \ntroubleshoot customer issues and requests \n• \nServiceNow - ticketing system utilized for centrally man",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "pagerduty"
+    },
+    {
+      "third_party_name": "ServiceNow",
+      "third_party_description": "Ticketing system utilized for centrally managing and tracking tickets across internal processes.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "keting system utilized for centrally managing and tracking security events and \nincidents flagged within the organization \n• \nGitHub – source code management software utilized to control code versioning and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing system utilized for centrally managing and tracking \nproduction issues and change management activities \n• \nJamF Pro – mobile device management tool utilized to manage and secure Mac devices \ndeployed to the organization \n• \nNaruto - internal integration tool that is designed to interact with the Tenable/Nessus API \n• \nPagerDuty – alerting system which delivers alerts to on-call IT personnel when predefined \nevents occur \n• \nSalesforce - used by Okta Support for organization creation, deletion and customer \ncommunication. Support.okta.com customer management support portal is also used to help \ntroubleshoot customer issues and requests \n• \nServiceNow - ticketing system utilized for centrally man",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "ServiceNow"
+    },
+    {
+      "third_party_name": "Splunk",
+      "third_party_description": "Security information and event management tool utilized to provide centralized log management.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.9,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "keting system utilized for centrally managing and tracking security events and \nincidents flagged within the organization \n• \nGitHub – source code management software utilized to control code versioning and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing system utilized for centrally managing and tracking \nproduction issues and change management activities \n• \nJamF Pro – mobile device management tool utilized to manage and secure Mac devices \ndeployed to the organization \n• \nNaruto - internal integration tool that is designed to interact with the Tenable/Nessus API \n• \nPagerDuty – alerting system which delivers alerts to on-call IT personnel when predefined \nevents occur \n• \nSalesforce - used by Okta Support for organization creation, deletion and customer \ncommunication. Support.okta.com customer management support portal is also used to help \ntroubleshoot customer issues and requests \n• \nServiceNow - ticketing system utilized for centrally man",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "+0.1: likely_so is Yes",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "splunk"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Amazon Web Services",
+      "aliases": [
+        "AWS",
+        "Amazon Web Services (AWS)",
+        "AWS Key Management Service (KMS)",
+        "AWS Lambda"
+      ],
+      "third_party_page_ref": [
+        "16",
+        "23",
+        "Page 32",
+        "Infrastructure",
+        "39"
+      ],
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Cloud hosting in multiple availability zones across AWS regions to ensure the availability of Okta's systems."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Implemented management oversight and monitoring processes to confirm that the subservice organization continues to provide services in a controlled manner."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Review of third-party service auditor reports."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Holding discussions with management of the subservice organization."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Security groups monitor incoming network traffic for ruleset compliance."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Logging changes to AWS security groups via a centralized logging tool."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Sending automated alerts for AWS security group changes to IT security personnel."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Infrastructure hosting and support for IDaaS production accounts."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Manages encryption keys used to encrypt data."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Shared security responsibility model between AWS and Okta, where AWS manages the security of the cloud infrastructure."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Amazon GuardDuty – threat detection service that continuously monitors malicious activity and unauthorized behavior to protect Okta AWS accounts and workloads."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "AWS CloudTrail – web service that records and logs AWS API calls. The recorded information includes the API caller, time, source IP address request parameters, and response elements."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "AWS Identity Center – web service utilized to grant roles, users, and groups with permissions that allow and deny access to specific Okta AWS resources."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "AWS Key Management Service (AWS KMS) – managed service to create and control encryption keys for securing data."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Utilized for production environment access and integrates with multi-factor authentication."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Data backups using AWS S3 with cross-region replication."
+        }
+      ],
+      "dedup_reason": "Different names and abbreviations refer to Amazon Web Services and its subservices used for cloud hosting and infrastructure resources.",
+      "third_party_confidence": 0.7,
+      "confidence_justification": [
+        "Aggregated from 4 variant rows; canonical_confidence = max(variant_confidences) = 0.7",
+        "Variants: AWS, Amazon Web Services (AWS), AWS Key Management Service (KMS), AWS Lambda"
+      ],
+      "merged_from_count": 4,
+      "merged_from_variants": [
+        "AWS",
+        "Amazon Web Services (AWS)",
+        "AWS Key Management Service (KMS)",
+        "AWS Lambda"
+      ],
+      "merged_at": "2025-12-18T09:53:15Z"
+    },
+    {
+      "third_party_name": "Salesforce",
+      "third_party_description": "Used by Okta Support for organization creation, deletion, and customer communication, as well as for helping troubleshoot customer issues and requests.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.6,
+      "distance_from_so_keywords": 5,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "keting system utilized for centrally managing and tracking security events and \nincidents flagged within the organization \n• \nGitHub – source code management software utilized to control code versioning and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing system utilized for centrally managing and tracking \nproduction issues and change management activities \n• \nJamF Pro – mobile device management tool utilized to manage and secure Mac devices \ndeployed to the organization \n• \nNaruto - internal integration tool that is designed to interact with the Tenable/Nessus API \n• \nPagerDuty – alerting system which delivers alerts to on-call IT personnel when predefined \nevents occur \n• \nSalesforce - used by Okta Support for organization creation, deletion and customer \ncommunication. Support.okta.com customer management support portal is also used to help \ntroubleshoot customer issues and requests \n• \nServiceNow - ticketing system utilized for centrally man",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Salesforce"
+    },
+    {
+      "third_party_name": "AWS",
+      "third_party_description": "Cloud hosting provider used by Okta for system availability in multiple availability zones across regions.",
+      "third_party_page_ref": [
+        "16",
+        "23",
+        "Page 32"
+      ],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 7,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Cloud hosting in multiple availability zones across AWS regions to ensure the availability of Okta's systems."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Implemented management oversight and monitoring processes to confirm that the subservice organization continues to provide services in a controlled manner."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Review of third-party service auditor reports."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Holding discussions with management of the subservice organization."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Security groups monitor incoming network traffic for ruleset compliance."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Logging changes to AWS security groups via a centralized logging tool."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Sending automated alerts for AWS security group changes to IT security personnel."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Infrastructure hosting and support for IDaaS production accounts."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Manages encryption keys used to encrypt data."
+        }
+      ],
+      "source_context": "ted \nto the following: \n• \nProduct Security - Okta has a range of security controls designed to keep the Systems secure, \nprotect customers’ data against unauthorized access, and guide necessary changes. These \ncontrols include, but are not limited to, implementing security processes and tools for change, \nvulnerability, and incident management to prevent, detect, and remediate security threats and \nvulnerabilities, as well as the use of encryption technologies to protect customer data at rest \nand in transit. \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 16 ===\n \nPage | 14 \n\n• \nSystem Availability - Okta helps ensure its systems’ availability to customers by using cloud \nhosting in multiple availability zones across AWS regions, maintains optimal infrastructure \nperformance through continuous monitoring, and establishes backups and disaster recovery \nplans for quick and effective recovery in case of an incident.  \n• \nData Security and Conf",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "Marked as variant of Amazon Web Services; confidence reduced 0.7 -> 0.2",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Amazon Web Services (AWS)",
+      "third_party_description": "Cloud hosting provider utilized by Okta for infrastructure resource requirements, including multiple AWS regions and availability zones for redundancy and availability.",
+      "third_party_page_ref": [
+        "Infrastructure",
+        "39"
+      ],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 4,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Shared security responsibility model between AWS and Okta, where AWS manages the security of the cloud infrastructure."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Amazon GuardDuty – threat detection service that continuously monitors malicious activity and unauthorized behavior to protect Okta AWS accounts and workloads."
+        },
+        {
+          "third_party_control_seq": 2,
+          "third_party_control_id": null,
+          "third_party_control_desc": "AWS CloudTrail – web service that records and logs AWS API calls. The recorded information includes the API caller, time, source IP address request parameters, and response elements."
+        },
+        {
+          "third_party_control_seq": 3,
+          "third_party_control_id": null,
+          "third_party_control_desc": "AWS Identity Center – web service utilized to grant roles, users, and groups with permissions that allow and deny access to specific Okta AWS resources."
+        },
+        {
+          "third_party_control_seq": 4,
+          "third_party_control_id": null,
+          "third_party_control_desc": "AWS Key Management Service (AWS KMS) – managed service to create and control encryption keys for securing data."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Utilized for production environment access and integrates with multi-factor authentication."
+        },
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Data backups using AWS S3 with cross-region replication."
+        }
+      ],
+      "source_context": "rs’ data.  \nChanges to system and controls \nThere were no significant changes to the description of the system and controls for Okta IDaaS since \nthe prior reporting period. \nComponents of the System  \nA system is designed, implemented, and operated to achieve specific business objectives in accordance \nwith management-specified requirements. The purpose of the system description is to delineate the \nboundaries of the system, which includes the products and services outlined above and the five \ncomponents described below: infrastructure, software, people, procedures, and data. \nInfrastructure  \nOkta has outsourced infrastructure resource requirements for the Okta platform to Amazon Web \nServices (“AWS”). Okta views the use of public cloud solutions as a strategic advantage, that enables \nthe Company to react to changing market trends and deploy services faster than traditional in-house \ndata center management. Okta utilizes multiple AWS regions and multiple availability zones within ea",
+      "confidence_justification": [
+        "+0.5: in common subservice orgs list",
+        "+0.2: likely_so is Yes",
+        "Marked as variant of Amazon Web Services; confidence reduced 0.7 -> 0.2",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Palo Alto Networks",
+      "third_party_description": "Provider of VPN solutions for secure remote access to the production environment.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "tion \nApplication \nBusiness Function Description \nOperating System \nPlatform and \nDatabase \nPhysical \nLocation \nIDaaS \nOIG \nOkta’s web-based application that \nprovides secure identity management \nand single sign-on \nAmazon Machine \nImage (“AMI”)  \nApache Tomcat; \nRedis; MySQL \nMultiple AWS \nregions \n \nAWS management \nconsole \nCloud computing platform used to \nmanage application service for \ndeployment and operation of the Okta \nplatform \nN/A \nMultiple AWS \nregions \nAmazon Elastic \nCompute Cloud \n(Amazon EC2) \nVirtualized network and processing \ninfrastructure to host Okta \nLinux (Ubuntu & \nAmazon Linux) \nMultiple AWS \nregions \nVPN \nSecure remote access to the \nproduction environment \nPalo Alto Network \nVPN \nMultiple AWS \nregions \nSoftware \nThe following software, infrastructure services, and tools are utilized in support of the control \nenvironment and delivery of the Systems: \n• \nAmazon GuardDuty – threat detection service that continuously monitors malicious activity and \nunauthorize",
+      "confidence_justification": [
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "palo alto networks"
+    },
+    {
+      "third_party_name": "Artifactory",
+      "third_party_description": "Development image deployment tool.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "tion \nApplication \nBusiness Function Description \nOperating System \nPlatform and \nDatabase \nPhysical \nLocation \nIDaaS \nOIG \nOkta’s web-based application that \nprovides secure identity management \nand single sign-on \nAmazon Machine \nImage (“AMI”)  \nApache Tomcat; \nRedis; MySQL \nMultiple AWS \nregions \n \nAWS management \nconsole \nCloud computing platform used to \nmanage application service for \ndeployment and operation of the Okta \nplatform \nN/A \nMultiple AWS \nregions \nAmazon Elastic \nCompute Cloud \n(Amazon EC2) \nVirtualized network and processing \ninfrastructure to host Okta \nLinux (Ubuntu & \nAmazon Linux) \nMultiple AWS \nregions \nVPN \nSecure remote access to the \nproduction environment \nPalo Alto Network \nVPN \nMultiple AWS \nregions \nSoftware \nThe following software, infrastructure services, and tools are utilized in support of the control \nenvironment and delivery of the Systems: \n• \nAmazon GuardDuty – threat detection service that continuously monitors malicious activity and \nunauthorize",
+      "confidence_justification": [
+        "Filtered by GPT: Artifactory is a development tool, specifically a repository manager used for storing and managing artifacts like images and binaries during development. It does not provide a distinct external service or platform necessary for Okta's SOC 2 control environment. Instead, it is an internal tool utilized as part of the development workflow.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "artifactory"
+    },
+    {
+      "third_party_name": "Chef",
+      "third_party_description": "Configuration management solution utilized to provision, configure, and manage production infrastructure throughout its lifecycle.",
+      "third_party_page_ref": [
+        "18"
+      ],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "oles, users, and groups with permissions \nthat allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – managed service used to create and control \nencryption keys used to encrypt data used by Okta in AWS \n• \nAWS Lambda - serverless computing tool that is configured via AWS API to interact with the \nOkta APIs to fetch relevant details \n• \nBacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and \ncode development activities such as automated testing and code analysis of source code prior \nto implementation \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 18 ===\n \nPage | 16 \n\n• \nBurp Vulnerability Scanner – Application Vulnerability Scanning Tool used for change \ndeployments as part of the Release Management Process  \n• \nChef – configuration management solution utilized to provision, configure, and manage IDaaS \nproduction infrastructure throughout its lifecycle \n• \nCond",
+      "confidence_justification": [
+        "Filtered by GPT: Chef is a configuration management tool used to automate provisioning, configuring, and management of infrastructure. It does not provide a distinct external service or platform but serves as a software tool utilized internally for infrastructure management purposes.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "chef"
+    },
+    {
+      "third_party_name": "Crowdstrike",
+      "third_party_description": "Security tool utilized for endpoint detection and response, malware monitoring, and device logging and monitoring.",
+      "third_party_page_ref": [
+        "18"
+      ],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 3,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "oles, users, and groups with permissions \nthat allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – managed service used to create and control \nencryption keys used to encrypt data used by Okta in AWS \n• \nAWS Lambda - serverless computing tool that is configured via AWS API to interact with the \nOkta APIs to fetch relevant details \n• \nBacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and \ncode development activities such as automated testing and code analysis of source code prior \nto implementation \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 18 ===\n \nPage | 16 \n\n• \nBurp Vulnerability Scanner – Application Vulnerability Scanning Tool used for change \ndeployments as part of the Release Management Process  \n• \nChef – configuration management solution utilized to provision, configure, and manage IDaaS \nproduction infrastructure throughout its lifecycle \n• \nCond",
+      "confidence_justification": [
+        "Filtered by GPT: Crowdstrike is a security tool used for endpoint detection and response, malware monitoring, and device logging. It represents software rather than an external service provider offering distinct services or platforms widely recognized as subservice organizations.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "crowdstrike"
+    },
+    {
+      "third_party_name": "Jira Software",
+      "third_party_description": "Ticketing system utilized for centrally managing and tracking production issues and change management activities.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "keting system utilized for centrally managing and tracking security events and \nincidents flagged within the organization \n• \nGitHub – source code management software utilized to control code versioning and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing system utilized for centrally managing and tracking \nproduction issues and change management activities \n• \nJamF Pro – mobile device management tool utilized to manage and secure Mac devices \ndeployed to the organization \n• \nNaruto - internal integration tool that is designed to interact with the Tenable/Nessus API \n• \nPagerDuty – alerting system which delivers alerts to on-call IT personnel when predefined \nevents occur \n• \nSalesforce - used by Okta Support for organization creation, deletion and customer \ncommunication. Support.okta.com customer management support portal is also used to help \ntroubleshoot customer issues and requests \n• \nServiceNow - ticketing system utilized for centrally man",
+      "confidence_justification": [
+        "Filtered by GPT: Jira Software is a ticketing and project management software tool used internally by organizations. It is not an external service provider but rather an internal workflow management solution.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "jira software"
+    },
+    {
+      "third_party_name": "JamF Pro",
+      "third_party_description": "Mobile device management tool utilized to manage and secure Mac devices deployed to the organization.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "keting system utilized for centrally managing and tracking security events and \nincidents flagged within the organization \n• \nGitHub – source code management software utilized to control code versioning and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing system utilized for centrally managing and tracking \nproduction issues and change management activities \n• \nJamF Pro – mobile device management tool utilized to manage and secure Mac devices \ndeployed to the organization \n• \nNaruto - internal integration tool that is designed to interact with the Tenable/Nessus API \n• \nPagerDuty – alerting system which delivers alerts to on-call IT personnel when predefined \nevents occur \n• \nSalesforce - used by Okta Support for organization creation, deletion and customer \ncommunication. Support.okta.com customer management support portal is also used to help \ntroubleshoot customer issues and requests \n• \nServiceNow - ticketing system utilized for centrally man",
+      "confidence_justification": [
+        "Filtered by GPT: JamF Pro is a software tool for mobile device management and does not represent a distinct external service provider. It is not a true subservice organization as it does not independently provide a distinct external service.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "jamf pro"
+    },
+    {
+      "third_party_name": "Tenable",
+      "third_party_description": "Tenable SC UI is a control plane for Nessus, covering vulnerability scans across applications and network layers.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "keting system utilized for centrally managing and tracking security events and \nincidents flagged within the organization \n• \nGitHub – source code management software utilized to control code versioning and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing system utilized for centrally managing and tracking \nproduction issues and change management activities \n• \nJamF Pro – mobile device management tool utilized to manage and secure Mac devices \ndeployed to the organization \n• \nNaruto - internal integration tool that is designed to interact with the Tenable/Nessus API \n• \nPagerDuty – alerting system which delivers alerts to on-call IT personnel when predefined \nevents occur \n• \nSalesforce - used by Okta Support for organization creation, deletion and customer \ncommunication. Support.okta.com customer management support portal is also used to help \ntroubleshoot customer issues and requests \n• \nServiceNow - ticketing system utilized for centrally man",
+      "confidence_justification": [
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "Identified as canonical form of group; confidence preserved at 0.0",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "Tenable"
+    },
+    {
+      "third_party_name": "VMWare",
+      "third_party_description": "Operational monitoring.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "keting system utilized for centrally managing and tracking security events and \nincidents flagged within the organization \n• \nGitHub – source code management software utilized to control code versioning and security \nthroughout the code development process \n• \nJira Software (“Jira”) – ticketing system utilized for centrally managing and tracking \nproduction issues and change management activities \n• \nJamF Pro – mobile device management tool utilized to manage and secure Mac devices \ndeployed to the organization \n• \nNaruto - internal integration tool that is designed to interact with the Tenable/Nessus API \n• \nPagerDuty – alerting system which delivers alerts to on-call IT personnel when predefined \nevents occur \n• \nSalesforce - used by Okta Support for organization creation, deletion and customer \ncommunication. Support.okta.com customer management support portal is also used to help \ntroubleshoot customer issues and requests \n• \nServiceNow - ticketing system utilized for centrally man",
+      "confidence_justification": [
+        "Filtered by GPT: VMWare primarily offers virtualization and cloud computing software; it is not providing a distinct external service that performs a subservice organization role in the described context. Operational monitoring indicates use of VMWare tools rather than external subservice context.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "vmware"
+    },
+    {
+      "third_party_name": "Snyk",
+      "third_party_description": "Snyk is used to regularly scan the code base on the master branch of repositories to detect vulnerable open-source libraries.",
+      "third_party_page_ref": [
+        "Page 36"
+      ],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 5,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Scanning code for vulnerabilities in the master branch of repositories."
+        }
+      ],
+      "source_context": "e configuration management process helps ensure that information assets are hardened and \nperiodically reviewed and are aligned with security best practices. Okta’s endpoint configurations for \nworkstations and mobile devices are mandatory. Configuration baselines must be approved and \ninstalled on all workstations, and mobile devices require multi-factor authentication along with device \nencryption, and Mobile Device Management (“MDM”) enabled to access the internal network. Okta also \ninstalls security tools such as antivirus and malware detection and malicious code protection on all \nOkta managed endpoint devices and systems. Malware protection is installed, updated, enabled and \nmonitored regularly. Installation of software by users is controlled and monitored to avoid employees \nfrom installing vulnerable software on Okta’s assets. \nProduction Code Scanning \nOkta utilizes Snyk to regularly scan the code base on the master branch of repositories to detect \nvulnerable open-source li",
+      "confidence_justification": [
+        "Filtered by GPT: Snyk is a software tool used for scanning code bases to detect vulnerable open-source libraries. It is not a distinct external service provider or platform that operates independently as a subservice organization.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "snyk"
+    },
+    {
+      "third_party_name": "Tenable Nessus",
+      "third_party_description": "Vulnerability scanning tool utilized to scan for vulnerabilities at various frequencies within the IDaaS production accounts.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.1,
+      "distance_from_so_keywords": 7,
+      "likely_so": "Yes",
+      "common_so": "No",
+      "third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Tool provides API control to manage vulnerability scanners in AWS production accounts."
+        }
+      ],
+      "source_context": "ed by information security \npersonnel and third-party vendors on a periodic basis to identify threats and assess their potential \nimpact to system security, the production network, and the web application. Security vulnerabilities \nthat are detected are triaged and monitored through resolution. If a potential or actual security breach \nis encountered, security personnel work to identify the cause and remediate the breach immediately. \nFor the IDaaS product, Okta’s Vulnerability Management Team currently utilizes the Tenable Nessus \ntool to scan for vulnerabilities at various frequencies. The Nessus control plane provides API control to \nTenable Nessus scanners on IDaaS production accounts in AWS.  \nPenetration testing is performed by information security personnel and third-party vendors on an \nannual basis or after any significant update or modification to the infrastructure, to identify threats and \nassess their potential impact on production systems. Based on the results of the pene",
+      "confidence_justification": [
+        "Filtered by GPT: Tenable Nessus is a vulnerability scanning tool, which is a type of software rather than a distinct external service provider. It is not a subservice organization as it does not provide a distinct external platform or service.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "+0.1: likely_so is Yes"
+      ],
+      "canonical_name": "Tenable"
+    },
+    {
+      "third_party_name": "Okta",
+      "third_party_description": "IDaaS (Identity as a Service) provider enabling single sign-on (SSO) capabilities, federated user authentication, and provisioning workflows.",
+      "third_party_page_ref": [],
+      "third_party_confidence": 0.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "Yes",
+      "third_party_controls": [],
+      "source_context": "capabilities of IDaaS include the \nfollowing: \n• \nSSO capabilities are achieved through federated user authentication. If the vendor supports \nsecurity assertion markup language (“SAML”) 1.1 or 2.0, Okta will as a SAML identity provider \n(“IdP”), respond to SAML requests from those applications with a SAML assertion and facilitate \nsecure user authentication. Okta also supports OAuth and OpenID Connect, as well as \nproprietary SSO protocols. For Software as a Service (“SaaS”) applications that do not provide \nsupport for federated user authentication, Okta has developed a secure web authentication \n(“SWA”) technology. Credentials are stored using a strong advanced encryption standard \n(“AES”). Okta executes a secure login sequence specific to a vendor leveraging user credentials \nto complete the login. \n• \nIDaaS provides pre-integrated provisioning capabilities which allows integration for centralized \nprovisioning that support coarse-grained to fine-grained management of application u",
+      "confidence_justification": [
+        "-0.8: matches company or parent name (okta)",
+        "+0.2: likely_so is Yes",
+        "+0.1: distance_from_so_keywords is 3 (very close)",
+        "-0.2: likely_so is No",
+        "+0.1: common_so is Yes"
+      ],
+      "canonical_name": "Okta"
+    },
+    {
+      "third_party_name": "AWS Key Management Service (KMS)",
+      "third_party_description": "Managed service used to create and control encryption keys used to encrypt data used by Okta in AWS.",
+      "third_party_page_ref": [
+        "16"
+      ],
+      "third_party_confidence": 0.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "oles, users, and groups with permissions \nthat allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – managed service used to create and control \nencryption keys used to encrypt data used by Okta in AWS \n• \nAWS Lambda - serverless computing tool that is configured via AWS API to interact with the \nOkta APIs to fetch relevant details \n• \nBacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and \ncode development activities such as automated testing and code analysis of source code prior \nto implementation \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 18 ===\n \nPage | 16 \n\n• \nBurp Vulnerability Scanner – Application Vulnerability Scanning Tool used for change \ndeployments as part of the Release Management Process  \n• \nChef – configuration management solution utilized to provision, configure, and manage IDaaS \nproduction infrastructure throughout its lifecycle \n• \nCond",
+      "confidence_justification": [
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "-0.2: likely_so is No"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "AWS Lambda",
+      "third_party_description": "Serverless computing tool that is configured via AWS API to interact with the Okta APIs to fetch relevant details.",
+      "third_party_page_ref": [
+        "16"
+      ],
+      "third_party_confidence": 0.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "oles, users, and groups with permissions \nthat allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – managed service used to create and control \nencryption keys used to encrypt data used by Okta in AWS \n• \nAWS Lambda - serverless computing tool that is configured via AWS API to interact with the \nOkta APIs to fetch relevant details \n• \nBacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and \ncode development activities such as automated testing and code analysis of source code prior \nto implementation \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 18 ===\n \nPage | 16 \n\n• \nBurp Vulnerability Scanner – Application Vulnerability Scanning Tool used for change \ndeployments as part of the Release Management Process  \n• \nChef – configuration management solution utilized to provision, configure, and manage IDaaS \nproduction infrastructure throughout its lifecycle \n• \nCond",
+      "confidence_justification": [
+        "Filtered by GPT: AWS Lambda is a serverless computing service provided by AWS, but it functions as a component of AWS's broader platform instead of being a distinct external service provider. AWS itself would be the legitimate subservice organization, not its individual tools or services such as Lambda.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "-0.2: likely_so is No"
+      ],
+      "canonical_name": "Amazon Web Services"
+    },
+    {
+      "third_party_name": "Bacon",
+      "third_party_description": "Continuous integration and delivery tool utilized for software and code development activities such as automated testing and code analysis of source code prior to implementation.",
+      "third_party_page_ref": [
+        "16"
+      ],
+      "third_party_confidence": 0.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "oles, users, and groups with permissions \nthat allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – managed service used to create and control \nencryption keys used to encrypt data used by Okta in AWS \n• \nAWS Lambda - serverless computing tool that is configured via AWS API to interact with the \nOkta APIs to fetch relevant details \n• \nBacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and \ncode development activities such as automated testing and code analysis of source code prior \nto implementation \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 18 ===\n \nPage | 16 \n\n• \nBurp Vulnerability Scanner – Application Vulnerability Scanning Tool used for change \ndeployments as part of the Release Management Process  \n• \nChef – configuration management solution utilized to provision, configure, and manage IDaaS \nproduction infrastructure throughout its lifecycle \n• \nCond",
+      "confidence_justification": [
+        "Filtered by GPT: Bacon is a continuous integration and delivery tool used internally for software development activities like automated testing and code analysis. It does not represent a distinct external service provider offering a subservice to Okta.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "-0.2: likely_so is No"
+      ],
+      "canonical_name": "bacon"
+    },
+    {
+      "third_party_name": "Burp Vulnerability Scanner",
+      "third_party_description": "Application vulnerability scanning tool used for change deployments as part of the Release Management Process.",
+      "third_party_page_ref": [
+        "18"
+      ],
+      "third_party_confidence": 0.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "oles, users, and groups with permissions \nthat allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – managed service used to create and control \nencryption keys used to encrypt data used by Okta in AWS \n• \nAWS Lambda - serverless computing tool that is configured via AWS API to interact with the \nOkta APIs to fetch relevant details \n• \nBacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and \ncode development activities such as automated testing and code analysis of source code prior \nto implementation \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 18 ===\n \nPage | 16 \n\n• \nBurp Vulnerability Scanner – Application Vulnerability Scanning Tool used for change \ndeployments as part of the Release Management Process  \n• \nChef – configuration management solution utilized to provision, configure, and manage IDaaS \nproduction infrastructure throughout its lifecycle \n• \nCond",
+      "confidence_justification": [
+        "Filtered by GPT: Burp Vulnerability Scanner is an application vulnerability scanning tool used internally during change deployments as part of the Release Management Process. It does not qualify as a subservice organization because it is not an external service provider but rather a tool used for a specific technical function.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "-0.2: likely_so is No"
+      ],
+      "canonical_name": "burp vulnerability scanner"
+    },
+    {
+      "third_party_name": "Hive",
+      "third_party_description": "Ticketing system utilized for centrally managing and tracking security events and incidents flagged within the organization.",
+      "third_party_page_ref": [
+        "18"
+      ],
+      "third_party_confidence": 0.0,
+      "distance_from_so_keywords": 3,
+      "likely_so": "No",
+      "common_so": "No",
+      "third_party_controls": [],
+      "source_context": "oles, users, and groups with permissions \nthat allow and deny access to specific Okta AWS resources \n• \nAWS Key Management Service (AWS “KMS”) – managed service used to create and control \nencryption keys used to encrypt data used by Okta in AWS \n• \nAWS Lambda - serverless computing tool that is configured via AWS API to interact with the \nOkta APIs to fetch relevant details \n• \nBacon – continuous integration and delivery tool utilized by IDaaS and OIG for software and \ncode development activities such as automated testing and code analysis of source code prior \nto implementation \nGeorge Sajonian, george.sajonian@solidigmtechnology.com, 2025-04-07T15:45:12.402Z\n=== PAGE 18 ===\n \nPage | 16 \n\n• \nBurp Vulnerability Scanner – Application Vulnerability Scanning Tool used for change \ndeployments as part of the Release Management Process  \n• \nChef – configuration management solution utilized to provision, configure, and manage IDaaS \nproduction infrastructure throughout its lifecycle \n• \nCond",
+      "confidence_justification": [
+        "Filtered by GPT: Hive is a ticketing system software used internally by the organization to manage and track security events. It does not represent a distinct external service provider but rather a tool for internal operational purposes.",
+        "-0.0: excluded by Python heuristic (keyword/company match)",
+        "-0.2: likely_so is No"
+      ],
+      "canonical_name": "hive"
+    },
+    {
+      "is_canonical_summary": true,
+      "canonical_name": "Tenable",
+      "aliases": [
+        "Tenable",
+        "Tenable Nessus"
+      ],
+      "third_party_page_ref": null,
+      "aggregated_third_party_controls": [
+        {
+          "third_party_control_seq": 1,
+          "third_party_control_id": null,
+          "third_party_control_desc": "Tool provides API control to manage vulnerability scanners in AWS production accounts."
+        }
+      ],
+      "dedup_reason": "Tenable and Tenable Nessus are closely related products from the same vendor used for vulnerability scanning and security management.",
+      "third_party_confidence": 0.0,
+      "confidence_justification": [
+        "Aggregated from 2 variant rows; canonical_confidence = max(variant_confidences) = 0.0",
+        "Variants: Tenable, Tenable Nessus"
+      ],
+      "merged_from_count": 2,
+      "merged_from_variants": [
+        "Tenable",
+        "Tenable Nessus"
+      ],
+      "merged_at": "2025-12-18T09:53:15Z"
+    }
+  ]
+}

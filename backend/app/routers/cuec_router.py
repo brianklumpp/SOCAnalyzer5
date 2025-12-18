@@ -42,8 +42,12 @@ def _norm_pct_like(val):
 async def create_cuec(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Create a new CUEC row for a scan."""
     try:
+        logging.info(f"[CREATE_CUEC] Request data for scan {scan_id}: {data}")
+        logging.info(f"[CREATE_CUEC] User: {current_user.username}")
+        
         desc = str(data.get("cuec_description", "")).strip()
         if not desc:
+            logging.error(f"[CREATE_CUEC] Missing required field: cuec_description")
             raise HTTPException(status_code=400, detail="cuec_description is required")
         conf = _norm_pct_like(data.get("cuec_confidence"))
         
@@ -92,7 +96,9 @@ async def create_cuec(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends
         raise
     except Exception as e:
         await db.rollback()
-        logging.error(f"create_cuec error: {e}")
+        logging.error(f"[CREATE_CUEC] Error creating CUEC: {str(e)}")
+        import traceback
+        logging.error(f"[CREATE_CUEC] Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -149,7 +155,7 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...
         if "analyst_notes" in data:
             cuec.analyst_notes = data["analyst_notes"]
             prev_log = getattr(cuec, "edit_log", "") or ""
-            sep = "\n" if prev_log else ""
+            sep = ",\n" if prev_log else ""
             cuec.edit_log = f"{prev_log}{sep}Analyst notes updated [{datetime.now().isoformat()}]"
         if "control_strength" in data:
             cuec.control_strength = data["control_strength"]
@@ -163,7 +169,7 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...
         # Append confidence change to edit log
         if justification_note:
             prev_log = getattr(cuec, "edit_log", "") or ""
-            sep = "\n" if prev_log else ""
+            sep = ",\n" if prev_log else ""
             cuec.edit_log = f"{prev_log}{sep}{justification_note} [{datetime.now().isoformat()}]"
         # Mark executive summary stale
         await mark_executive_summary_stale(scan_id, db)
@@ -238,7 +244,7 @@ async def patch_cuec_by_tsc(scan_id: int, cuec_tsc_id: str, data: Dict[str, Any]
         if "analyst_notes" in data:
             cuec.analyst_notes = data["analyst_notes"]
             prev_log = getattr(cuec, "edit_log", "") or ""
-            sep = "\n" if prev_log else ""
+            sep = ",\n" if prev_log else ""
             cuec.edit_log = f"{prev_log}{sep}Analyst notes updated [{datetime.now().isoformat()}]"
         if "control_strength" in data:
             cuec.control_strength = data["control_strength"]
@@ -250,7 +256,7 @@ async def patch_cuec_by_tsc(scan_id: int, cuec_tsc_id: str, data: Dict[str, Any]
             cuec.cuec_justification = data["cuec_justification"]
         if justification_note:
             prev_log = getattr(cuec, "edit_log", "") or ""
-            sep = "\n" if prev_log else ""
+            sep = ",\n" if prev_log else ""
             cuec.edit_log = f"{prev_log}{sep}{justification_note} [{datetime.now().isoformat()}]"
         await mark_executive_summary_stale(scan_id, db)
         db.add(cuec)

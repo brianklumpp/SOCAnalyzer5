@@ -1,0 +1,11 @@
+{
+  "auditor": "Ernst & Young LLP",
+  "confidence": 0.9,
+  "source_section": "Independent Service Auditor’s Assurance Report",
+  "source_page": 5,
+  "raw_gpt_responses": [
+    "[\"Okta, Inc.\", \"Amazon Web Services\", \"AWS\", \"Ernst & Young Global Limited\", \"Ernst & Young LLP\", \"American Institute of Certified Public Accountants\", \"AICPA\", \"International Auditing and Assurance Standards Board\"]",
+    "{\n    \"auditor\": \"Ernst & Young LLP\",\n    \"confidence\": 0.9,\n    \"reasoning\": \"Ernst & Young LLP is clearly identified in the list and matches naming patterns typical of CPA firms that perform SOC audits. As one of the 'Big 4' accounting firms, it has substantial expertise in SOC examinations. No other company in the list matches the attributes of an independent service auditor conducting SOC audits.\"\n}"
+  ],
+  "validation_note": "Two-stage extraction: Ernst & Young LLP is clearly identified in the list and matches naming patterns typical of CPA firms..."
+}

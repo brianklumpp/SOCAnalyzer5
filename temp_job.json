@@ -1,0 +1,156 @@
+﻿{
+    "status":  "Running controls extractor...",
+    "progress":  50,
+    "result":  null,
+    "checklist":  [
+                      {
+                          "name":  "file_uploaded",
+                          "status":  "done"
+                      },
+                      {
+                          "name":  "text_extracted",
+                          "status":  "done"
+                      },
+                      {
+                          "name":  "sections_extracted",
+                          "status":  "done"
+                      },
+                      {
+                          "name":  "company_extraction",
+                          "status":  "partial"
+                      },
+                      {
+                          "name":  "logo_fetching",
+                          "status":  "done"
+                      },
+                      {
+                          "name":  "auditor_extraction",
+                          "status":  "pending"
+                      },
+                      {
+                          "name":  "product_extraction",
+                          "status":  "pending"
+                      },
+                      {
+                          "name":  "report_date_extraction",
+                          "status":  "pending"
+                      },
+                      {
+                          "name":  "coverage_period_extraction",
+                          "status":  "pending"
+                      },
+                      {
+                          "name":  "control_extraction",
+                          "status":  "pending"
+                      },
+                      {
+                          "name":  "control_framework_mapping",
+                          "status":  "pending"
+                      },
+                      {
+                          "name":  "cuec_extraction",
+                          "status":  "pending"
+                      },
+                      {
+                          "name":  "subservice_orgs_extraction",
+                          "status":  "pending"
+                      }
+                  ],
+    "filename":  "Bitwarden.pdf",
+    "report_type":  null,
+    "start_time":  1765916443.0163603,
+    "pdf_path":  "data/tmp/0765b8a1-596d-4946-ba29-3e9519142b3a_Bitwarden.pdf",
+    "priority":  2,
+    "identified_entities":  {
+                                "report_type":  "SOC2"
+                            },
+    "counters":  {
+                     "subservice_orgs_count":  0,
+                     "controls_count":  102,
+                     "controls_total_estimate":  121,
+                     "controls_percent":  84,
+                     "controls_mapped_count":  0,
+                     "controls_mapped_percent":  0,
+                     "cuecs_count":  0
+                 },
+    "phase_completion":  {
+                             "logo_fetched":  false,
+                             "cleanup_done":  false,
+                             "db_uploaded":  false
+                         },
+    "extraction_partial":  false,
+    "detected_report_type":  "SOC2",
+    "detected_subtype":  "TYPE2",
+    "detection_confidence":  1.0,
+    "gpt_service_warning":  true,
+    "enhanced_progress":  {
+                              "job_id":  "0765b8a1-596d-4946-ba29-3e9519142b3a",
+                              "current_phase":  "metadata",
+                              "overall_progress":  24,
+                              "phases":  {
+                                             "prerequisites":  {
+                                                                   "status":  "pending",
+                                                                   "progress":  0,
+                                                                   "duration_seconds":  0
+                                                               },
+                                             "metadata":  {
+                                                              "status":  "completed",
+                                                              "progress":  100,
+                                                              "duration_seconds":  4
+                                                          },
+                                             "content_extraction":  {
+                                                                        "status":  "pending",
+                                                                        "progress":  0,
+                                                                        "duration_seconds":  0,
+                                                                        "extractors":  {
+                                                                                           "controls":  {
+                                                                                                            "status":  "running",
+                                                                                                            "progress":  66,
+                                                                                                            "extracted_count":  102,
+                                                                                                            "estimated_total":  154,
+                                                                                                            "mapped_count":  0,
+                                                                                                            "current_chunk":  0,
+                                                                                                            "total_chunks":  80,
+                                                                                                            "extraction_rate":  92.34,
+                                                                                                            "mapping_rate":  0.0
+                                                                                                        },
+                                                                                           "cuecs":  {
+                                                                                                         "status":  "queued",
+                                                                                                         "progress":  0,
+                                                                                                         "extracted_count":  0,
+                                                                                                         "estimated_total":  null,
+                                                                                                         "mapped_count":  0,
+                                                                                                         "current_chunk":  0,
+                                                                                                         "total_chunks":  0,
+                                                                                                         "extraction_rate":  0.0,
+                                                                                                         "mapping_rate":  0.0
+                                                                                                     },
+                                                                                           "subservice_orgs":  {
+                                                                                                                   "status":  "queued",
+                                                                                                                   "progress":  0,
+                                                                                                                   "extracted_count":  0,
+                                                                                                                   "estimated_total":  null,
+                                                                                                                   "mapped_count":  0,
+                                                                                                                   "current_chunk":  0,
+                                                                                                                   "total_chunks":  0,
+                                                                                                                   "extraction_rate":  0.0,
+                                                                                                                   "mapping_rate":  0.0
+                                                                                                               }
+                                                                                       }
+                                                                    },
+                                             "post_processing":  {
+                                                                     "status":  "pending",
+                                                                     "progress":  0,
+                                                                     "duration_seconds":  0
+                                                                 }
+                                         },
+                              "stats":  {
+                                            "elapsed_seconds":  0,
+                                            "estimated_remaining_seconds":  0,
+                                            "current_memory_mb":  0,
+                                            "current_cpu_percent":  0,
+                                            "thread_pool_active":  0,
+                                            "thread_pool_queued":  0
+                                        }
+                          }
+}

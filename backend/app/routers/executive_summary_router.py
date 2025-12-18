@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.get("/report/{scan_id}/executive_summary")
-async def get_executive_summary(scan_id: int, force_regenerate: bool = False, db=Depends(get_db)):
+async def get_executive_summary(scan_id: int, force_regenerate: bool = False, db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Get executive summary for a scan.
     

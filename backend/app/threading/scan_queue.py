@@ -465,10 +465,47 @@ class ScanQueue:
         self.redis.hset(scan_key, mapping=scan.to_dict())
         self.redis.expire(scan_key, 86400 * 7)  # 7 day TTL
         self._local_cache[scan.job_id] = scan
+    
+    def get_all(self) -> List[QueuedScan]:
+        """Get all scans from cache and sync with Redis."""
+        # Get all job IDs from Redis active queue
+        job_ids = self.redis.zrange(self.KEY_ACTIVE, 0, -1)
+        
+        # Load scans that aren't in cache
+        for job_id in job_ids:
+            if job_id not in self._local_cache:
+                scan = self._load_scan(job_id)
+                if scan:
+                    self._local_cache[job_id] = scan
+        
+        # Also check running scans (not in active queue)
+        for scan in list(self._local_cache.values()):
+            if scan.status == ScanQueueStatus.RUNNING:
+                # Refresh from Redis to get latest state
+                fresh_scan = self._load_scan(scan.job_id)
+                if fresh_scan:
+                    self._local_cache[scan.job_id] = fresh_scan
+        
+        return list(self._local_cache.values())
+    
+    def get_running_count(self) -> int:
+        """Get count of currently running scans."""
+        all_scans = self.get_all()
+        running = [s for s in all_scans if s.status == ScanQueueStatus.RUNNING]
+        return len(running)
+    
+    def can_start_new_scan(self) -> bool:
+        """Check if we can start a new scan based on max_concurrent limit."""
+        if self.is_paused():
+            return False
+        running_count = self.get_running_count()
+        return running_count < self.max_concurrent
 
 
 # Global queue instance (initialized in main.py)
 scan_queue: Optional[ScanQueue] = None
+_worker_thread: Optional['threading.Thread'] = None
+_worker_stop_event: Optional['threading.Event'] = None
 
 
 def initialize_scan_queue(redis_client: redis.Redis, max_concurrent: int = 1):
@@ -484,3 +521,94 @@ def get_scan_queue() -> ScanQueue:
     if scan_queue is None:
         raise RuntimeError("Scan queue not initialized. Call initialize_scan_queue() first.")
     return scan_queue
+
+
+def _queue_worker():
+    """
+    Background worker that processes queued scans.
+    Runs continuously and starts new scans when slots are available.
+    """
+    import threading
+    import time
+    
+    logger.info("[QUEUE_WORKER] Starting queue worker thread")
+    
+    while not _worker_stop_event.is_set():
+        try:
+            queue = get_scan_queue()
+            
+            # Check if we can start new scans
+            if queue.can_start_new_scan():
+                # Get all queued scans
+                all_scans = queue.get_all()
+                queued_scans = [s for s in all_scans if s.status == ScanQueueStatus.QUEUED]
+                
+                # Sort by priority (lower number = higher priority)
+                queued_scans.sort(key=lambda s: s.priority)
+                
+                # Start scans up to max_concurrent limit
+                running_count = queue.get_running_count()
+                slots_available = queue.max_concurrent - running_count
+                
+                for scan in queued_scans[:slots_available]:
+                    try:
+                        # Import here to avoid circular dependency
+                        from ..main import run_analysis_job
+                        
+                        # Mark as running
+                        scan.status = ScanQueueStatus.RUNNING
+                        scan.started_at = datetime.now().isoformat()
+                        queue._save_scan(scan)
+                        
+                        # Start processing thread
+                        thread = threading.Thread(
+                            target=run_analysis_job,
+                            args=(scan.job_id, scan.pdf_path, scan.filename, scan.report_type, None, 1),  # db=None, user_id=1
+                            name=f"ScanWorker-{scan.job_id[:8]}"
+                        )
+                        thread.daemon = True
+                        thread.start()
+                        
+                        logger.info(f"[QUEUE_WORKER] Started scan {scan.filename} (job_id={scan.job_id})")
+                        
+                    except Exception as e:
+                        logger.error(f"[QUEUE_WORKER] Failed to start scan {scan.job_id}: {e}")
+                        scan.status = ScanQueueStatus.FAILED
+                        scan.error = str(e)
+                        queue._save_scan(scan)
+            
+            # Sleep before next check
+            time.sleep(2)  # Check every 2 seconds
+            
+        except Exception as e:
+            logger.error(f"[QUEUE_WORKER] Error in worker loop: {e}")
+            time.sleep(5)  # Longer sleep on error
+    
+    logger.info("[QUEUE_WORKER] Queue worker stopped")
+
+
+def start_queue_worker():
+    """Start the background queue worker thread."""
+    global _worker_thread, _worker_stop_event
+    import threading
+    
+    if _worker_thread is not None and _worker_thread.is_alive():
+        logger.warning("[QUEUE_WORKER] Worker thread already running")
+        return
+    
+    _worker_stop_event = threading.Event()
+    _worker_thread = threading.Thread(target=_queue_worker, name="QueueWorker", daemon=True)
+    _worker_thread.start()
+    logger.info("[QUEUE_WORKER] Queue worker thread started")
+
+
+def stop_queue_worker():
+    """Stop the background queue worker thread."""
+    global _worker_stop_event
+    
+    if _worker_stop_event:
+        logger.info("[QUEUE_WORKER] Stopping queue worker...")
+        _worker_stop_event.set()
+        if _worker_thread:
+            _worker_thread.join(timeout=5)
+        logger.info("[QUEUE_WORKER] Queue worker stopped")

@@ -64,7 +64,12 @@ from .routers import (
     config_router,
     auth_router,
     users_router,
+    grace_router,
 )
+
+# Import authentication dependencies
+from .auth.dependencies import get_current_user
+from .models import User
 
 app = FastAPI()
 # Minimal direct diagnostic route (bypasses router) to ensure availability
@@ -148,7 +153,7 @@ async def _init_db_on_startup():
         logging.info("[STARTUP] Initializing scan queue...")
         
         # Create Redis client for queue
-        redis_url = getattr(cfg, 'REDIS_URL', 'redis://redis:6379/0')
+        redis_url = cfg.REDIS_URL
         print(f"[STARTUP] Connecting to Redis at {redis_url}")
         logging.info(f"[STARTUP] Connecting to Redis at {redis_url}")
         redis_client = sync_redis.from_url(redis_url, decode_responses=True)
@@ -162,9 +167,86 @@ async def _init_db_on_startup():
         # Initialize scan queue
         print("[STARTUP] Creating scan queue instance...")
         logging.info("[STARTUP] Creating scan queue instance...")
-        initialize_scan_queue(redis_client, max_concurrent=1)
-        print("[STARTUP] Scan queue initialized successfully!")
-        logging.info("[STARTUP] Scan queue initialized successfully")
+        max_concurrent = getattr(cfg, 'MAX_CONCURRENT_SCANS', 1)
+        initialize_scan_queue(redis_client, max_concurrent=max_concurrent)
+        print(f"[STARTUP] Scan queue initialized successfully! (max_concurrent={max_concurrent})")
+        logging.info(f"[STARTUP] Scan queue initialized successfully (max_concurrent={max_concurrent})")
+        
+        # Start queue worker thread
+        from .threading.scan_queue import start_queue_worker
+        print("[STARTUP] Starting queue worker thread...")
+        logging.info("[STARTUP] Starting queue worker thread...")
+        start_queue_worker()
+        print("[STARTUP] Queue worker started!")
+        logging.info("[STARTUP] Queue worker started")
+        
+        # Clean up expired failed jobs and old log files
+        print("[STARTUP] Running cleanup task...")
+        logging.info("[STARTUP] Running cleanup task...")
+        try:
+            import time
+            import shutil
+            
+            retention_seconds = cfg.FAILED_JOB_RETENTION_HOURS * 3600
+            log_retention_seconds = 7 * 24 * 3600  # 7 days
+            current_time = time.time()
+            cleaned_dirs = 0
+            cleaned_keys = 0
+            cleaned_logs = 0
+            
+            # Clean up expired failed job directories
+            if cfg.JOBS_DIR.exists():
+                for user_dir in cfg.JOBS_DIR.iterdir():
+                    if not user_dir.is_dir():
+                        continue
+                    for job_dir in user_dir.iterdir():
+                        if not job_dir.is_dir():
+                            continue
+                        
+                        failure_marker = job_dir / '.failed'
+                        if failure_marker.exists():
+                            try:
+                                failure_time = float(failure_marker.read_text())
+                                age_seconds = current_time - failure_time
+                                
+                                if age_seconds > retention_seconds:
+                                    job_id = job_dir.name
+                                    shutil.rmtree(job_dir)
+                                    cleaned_dirs += 1
+                                    
+                                    # Remove Redis key
+                                    try:
+                                        redis_client.delete(f'scan_queue:scan:{job_id}')
+                                        cleaned_keys += 1
+                                    except Exception:
+                                        pass
+                                    
+                                    logging.info(f"[CLEANUP] Removed expired failed job: {job_id}")
+                            except Exception as e:
+                                logging.error(f"[CLEANUP] Error cleaning {job_dir}: {e}")
+            
+            # Clean up old log files (7 days)
+            if cfg.LOGS_DIR.exists():
+                for log_file in cfg.LOGS_DIR.iterdir():
+                    if log_file.is_file():
+                        try:
+                            file_age = current_time - log_file.stat().st_mtime
+                            if file_age > log_retention_seconds:
+                                log_file.unlink()
+                                cleaned_logs += 1
+                        except Exception as e:
+                            logging.error(f"[CLEANUP] Error removing log {log_file}: {e}")
+            
+            if cleaned_dirs > 0 or cleaned_logs > 0:
+                print(f"[CLEANUP] Cleaned {cleaned_dirs} job dirs, {cleaned_keys} Redis keys, {cleaned_logs} log files")
+                logging.info(f"[CLEANUP] Cleaned {cleaned_dirs} job dirs, {cleaned_keys} Redis keys, {cleaned_logs} log files")
+            else:
+                print("[CLEANUP] No expired items to clean")
+                logging.info("[CLEANUP] No expired items to clean")
+        except Exception as cleanup_err:
+            print(f"[CLEANUP] Cleanup task failed: {cleanup_err}")
+            logging.error(f"[CLEANUP] Cleanup task failed: {cleanup_err}")
+        
     except Exception as queue_err:
         import traceback
         print(f"[STARTUP] FAILED to initialize scan queue: {queue_err}")
@@ -305,6 +387,9 @@ app.include_router(auth_router.router)
 
 # User management (admin-only)
 app.include_router(users_router.router)
+
+# GRaCe AI Assistant
+app.include_router(grace_router.router, tags=["grace"])
 
 if __name__ == "__main__" and sys.argv[-1] == "test_insert_combined_result":
     async def _main():
@@ -804,14 +889,14 @@ def _result_counts_from_disk() -> Dict[str, int]:
 
 # (Removed duplicate earlier definition of _build_combined_results_from_disk; keeping the comprehensive version below.)
 
-def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=False):
+def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=None, resume=False):
     import logging
     import asyncio
     import threading
     import time
     start_time = time.time()
     
-    logging.error(f"[DEBUG run_analysis_job] ENTRY - Thread: {threading.current_thread().name}, job_id={job_id}, report_type='{report_type}', type={type(report_type)}, resume={resume}")
+    logging.error(f"[DEBUG run_analysis_job] ENTRY - Thread: {threading.current_thread().name}, job_id={job_id}, report_type='{report_type}', type={type(report_type)}, user_id={user_id}, resume={resume}")
     logging.error(f"[DEBUG run_analysis_job] Condition check - not resume: {not resume}, not report_type: {not report_type}, cfg.REPORT_TYPE_AUTO_DETECT: {cfg.REPORT_TYPE_AUTO_DETECT}")
     
     # Mark scan as running in queue
@@ -882,7 +967,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                         job["status"] = f"Detected: {report_type}"
                         job["progress"] = 2
                         job["detected_report_type"] = report_type
-                        job["detected_subtype"] = cached_detection.detected_subtype or 'TYPE2'
+                        job["detected_subtype"] = cached_detection.detected_subtype  # No default - let None propagate
                         job["detection_confidence"] = cached_detection.confidence
                         # Update identified_entities with report_type
                         if "identified_entities" not in job:
@@ -962,7 +1047,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                         job["status"] = f"Detected: {report_type}"
                         job["progress"] = 2
                         job["detected_report_type"] = report_type
-                        job["detected_subtype"] = detection_result.get('detected_subtype', 'TYPE2')
+                        job["detected_subtype"] = detection_result.get('detected_subtype')  # No default - let None propagate
                         job["detection_confidence"] = detection_result['confidence']
                         # Update identified_entities with report_type
                         if "identified_entities" not in job:
@@ -975,10 +1060,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                 sync_db.close()
         except Exception as e:
             logging.error(f"[REPORT_TYPE_DETECTION] Detection failed: {e}", exc_info=True)
-            # Fall back to provided report_type or default
+            # If no report_type provided and detection failed, raise error - don't default to SOC2
             if not report_type:
-                report_type = "SOC2"
-                logging.warning(f"[REPORT_TYPE_DETECTION] Falling back to default: {report_type}")
+                raise Exception(f"Report type detection failed: {e}. Unable to determine report type.")
     
     # Track progress and last update for watchdog
     last_progress_value = {"val": 0}
@@ -994,7 +1078,15 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
             job = {}
         # Only update progress and status, do not set 'done' or 'error' here
         job["progress"] = percent
-        job["status"] = status or job.get("status", "")
+        
+        # **FIX**: Preserve GPT service warning in status if flag is set
+        new_status = status or job.get("status", "")
+        if job.get("gpt_service_warning"):
+            # Prepend warning icon if not already in the status
+            if not new_status.startswith("⚠️"):
+                new_status = f"⚠️ GPT service degraded. {new_status}"
+        job["status"] = new_status
+        
         job.pop("done", None)
         job.pop("error", None)
         redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
@@ -1133,6 +1225,12 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                 executor = None
                 progress_tracker = None
         
+        # Create job-specific directories for isolation
+        job_paths = cfg.get_job_paths(user_id, job_id)
+        for dir_path in [job_paths['json_dir'], job_paths['logs_dir'], job_paths['temp_dir']]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+        logging.info(f"[JOB {job_id}] Created job directories for user {user_id}: {job_paths['json_dir']}")
+        
         # Run the analysis, but check for cancellation after each major step
         logging.error(f"[DEBUG] Calling analyze_pdf_file with report_type={report_type}, type={type(report_type)}")
         results = analyze_pdf_file(
@@ -1142,8 +1240,15 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
             report_type=report_type,
             job_id=job_id,
             executor=executor,
-            progress_tracker=progress_tracker
+            progress_tracker=progress_tracker,
+            job_paths=job_paths
         )
+        
+        # Check if analysis failed and returned an error
+        if "error" in results:
+            error_msg = results["error"]
+            logging.error(f"[JOB {job_id}] analyze_pdf_file returned error: {error_msg}")
+            raise Exception(error_msg)
         
     # Add timing, filename, and report_type metadata to results
         elapsed_time = time.time() - start_time
@@ -1214,7 +1319,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                 tmp_path = tmpf.name
             
             # Insert into database with PDF path for storage
-            summary = insert_extracted_data(tmp_path, pdf_path=temp_pdf_path, job_id=job_id)
+            summary = insert_extracted_data(tmp_path, pdf_path=temp_pdf_path, job_id=job_id, user_id=user_id)
             logging.error(f"[SUCCESS] Database insertion completed: {summary}")
             
             # Calculate and store elapsed_seconds and completion status
@@ -1240,6 +1345,41 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
                 
             # Add insertion summary to results
             results["db_insertion_summary"] = summary
+            
+            # **CRITICAL FIX**: Store scan_id in Redis AND fetch auditor/logo from database
+            if scan_id:
+                try:
+                    redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
+                    job_json = redis_client.get(f"job:{job_id}")
+                    if job_json:
+                        job_data = _json.loads(job_json)
+                        # Add scan_id to job
+                        job_data["scan_id"] = scan_id
+                        
+                        # Fetch auditor and logo from database and add to identified_entities
+                        scan = db.query(Scan).filter(Scan.id == scan_id).first()
+                        if scan:
+                            if "identified_entities" not in job_data:
+                                job_data["identified_entities"] = {}
+                            
+                            if scan.auditor:
+                                job_data["identified_entities"]["auditor"] = scan.auditor
+                                logging.info(f"[REDIS_UPDATE] Added auditor to job: {scan.auditor}")
+                            
+                            if scan.company:
+                                job_data["identified_entities"]["company"] = scan.company
+                                # Query company logo
+                                from .models import Company
+                                company = db.query(Company).filter(Company.name == scan.company).first()
+                                if company and company.logo_url:
+                                    job_data["identified_entities"]["company_logo_url"] = company.logo_url
+                                    job_data["logo_url"] = company.logo_url  # Also add to top level for queue card
+                                    logging.info(f"[REDIS_UPDATE] Added logo to job: {company.logo_url}")
+                        
+                        redis_client.set(f"job:{job_id}", _json.dumps(job_data), ex=60*60*24)
+                        logging.info(f"[REDIS_UPDATE] Added scan_id={scan_id} and enriched identified_entities")
+                except Exception as redis_err:
+                    logging.error(f"[ERROR] Failed to update Redis with scan_id: {redis_err}")
             
         except Exception as db_error:
             logging.error(f"[ERROR] Database insertion failed: {db_error}")
@@ -1317,6 +1457,10 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, resume=Fa
         stop_event.set()
         # DB write removed from background thread. Will be handled in result endpoint.
     except Exception as e:
+        # Log the full exception details
+        logging.error(f"[JOB {job_id}] Analysis failed with exception: {str(e)}")
+        logging.error(f"[JOB {job_id}] Traceback:\n{traceback.format_exc()}")
+        
         async def _update():
             redis_client = _get_redis()
             logging.error(f"[DEBUG] [error_update:_update] Thread: {threading.current_thread().name}, job_id={job_id}, redis_client={id(redis_client)}")
@@ -1405,6 +1549,7 @@ import traceback
 async def analyze_pdf_bg(
     file: UploadFile = File(...), 
     report_type: str = Form(None),
+    current_user: User = Depends(get_current_user),
     db=Depends(get_db)
 ):
     """
@@ -1413,11 +1558,13 @@ async def analyze_pdf_bg(
     Args:
         file: PDF file to analyze
         report_type: Report type - "SOC1", "SOC2", or "COMBINED" (default: None for auto-detection)
+        current_user: Authenticated user from JWT token
         db: Database session
         
     Returns:
         {"job_id": str} - Job ID for polling status
     """
+    user_id = current_user.id
     logging.error(f"[DEBUG /analyze/] Received report_type='{report_type}', type={type(report_type)}, file={file.filename}")
     import uuid
     import shutil
@@ -1439,12 +1586,6 @@ async def analyze_pdf_bg(
     
     with open(temp_pdf_path, "wb") as f_out:
         shutil.copyfileobj(file.file, f_out)
-    
-    # Reset prior artifacts/logs to ensure clean scan state
-    try:
-        _reset_scan_state()
-    except Exception:
-        pass
     
     job_id = str(uuid.uuid4())
     logging.error(f"[DEBUG /analyze/] Creating job {job_id} with report_type='{report_type}'")
@@ -1495,10 +1636,10 @@ async def analyze_pdf_bg(
         
         # Start background thread to process queue
         # (In future, this will be a worker pool that auto-processes)
-        logging.error(f"[DEBUG /analyze/] Starting thread with args: job_id={job_id}, filename={filename}, report_type='{report_type}'")
+        logging.error(f"[DEBUG /analyze/] Starting thread with args: job_id={job_id}, filename={filename}, report_type='{report_type}', user_id={user_id}")
         thread = threading.Thread(
             target=run_analysis_job, 
-            args=(job_id, temp_pdf_path, filename, report_type, db)
+            args=(job_id, temp_pdf_path, filename, report_type, db, user_id)
         )
         thread.start()
     except RuntimeError as e:
@@ -1507,7 +1648,7 @@ async def analyze_pdf_bg(
         logging.warning(f"[QUEUE] Queue not initialized, using direct execution")
         thread = threading.Thread(
             target=run_analysis_job, 
-            args=(job_id, temp_pdf_path, filename, report_type, db)
+            args=(job_id, temp_pdf_path, filename, report_type, db, user_id)
         )
         thread.start()
     except Exception as e:
@@ -1518,7 +1659,7 @@ async def analyze_pdf_bg(
         logging.warning(f"[QUEUE] Error enqueueing, using direct execution")
         thread = threading.Thread(
             target=run_analysis_job, 
-            args=(job_id, temp_pdf_path, filename, report_type, db)
+            args=(job_id, temp_pdf_path, filename, report_type, db, user_id)
         )
         thread.start()
     
@@ -1940,7 +2081,7 @@ async def finalize_job_from_disk(job_id: str, force_save: bool = True, db=Depend
                                 
                                 redis_client_deviation = None
                                 try:
-                                    redis_client_deviation = aioredis.from_url("redis://socanalyzer-redis:6379", decode_responses=True)
+                                    redis_client_deviation = aioredis.from_url("redis://redis:6379", decode_responses=True)
                                 except Exception as redis_err:
                                     logging.warning(f"[/analyze/finalize] Redis not available for deviation summaries: {redis_err}")
                                 
@@ -2398,6 +2539,9 @@ async def get_runtime_config():
         "quick_test": {
             "enabled": cfg.QUICK_TEST_MODE_ENABLED,
             "max_controls": cfg.QUICK_TEST_MAX_CONTROLS,
+        },
+        "queue": {
+            "max_concurrent_scans": cfg.MAX_CONCURRENT_SCANS,
         }
     }
 
@@ -2629,7 +2773,8 @@ async def get_history(limit: int = 100, db=Depends(get_db)):
             "coverage_start": row.coverage_start.date().isoformat() if row.coverage_start else None,
             "coverage_end": row.coverage_end.date().isoformat() if row.coverage_end else None,
             "report_date": row.report_date.isoformat() if row.report_date else None,
-            "report_type": row.report_type.value if row.report_type else "SOC2"
+            "report_type": row.report_type.value if row.report_type else "SOC2",
+            "elapsed_seconds": row.elapsed_seconds if row.elapsed_seconds else None
             # Note: result_json excluded for performance - use /report/{scan_id} for full data
         })
     
@@ -3277,261 +3422,7 @@ async def split_control(scan_id: int, control_db_id: int, db=Depends(get_db)):
 # REMOVED: POST /report/{scan_id}/controls/batch_recompute_frameworks
 # Now handled by backend/app/routers/control_router.py line 488
 
-# VERIFICATION ENDPOINTS
-# ============================================================================
-
-@app.post("/verify/{scan_id}")
-async def trigger_verification(scan_id: int, db=Depends(get_db)):
-    """
-    Manually trigger verification for a scan's controls.
-    Applies pattern library scoring and multi-factor confidence analysis.
-    """
-    try:
-        from .services.verification_service import ControlVerificationService
-        
-        # Get organization name from scan
-        scan_result = await db.execute(select(Scan).where(Scan.id == scan_id))
-        scan = scan_result.scalar_one_or_none()
-        
-        if not scan:
-            raise HTTPException(status_code=404, detail="Scan not found")
-        
-        organization = None
-        if scan.company_id:
-            company_result = await db.execute(
-                select(Company).where(Company.id == scan.company_id)
-            )
-            company = company_result.scalar_one_or_none()
-            if company:
-                organization = company.name
-        
-        if not organization:
-            organization = "Unknown"
-        
-        # Run verification
-        service = ControlVerificationService()
-        stats = await service.start_verification(scan_id, db, organization)
-        
-        return {
-            "status": "completed",
-            "stats": stats
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Verification error for scan {scan_id}: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.get("/verify/{scan_id}/status")
-async def get_verification_status(scan_id: int, db=Depends(get_db)):
-    """
-    Get verification status and statistics for a scan.
-    """
-    try:
-        from .services.verification_service import ControlVerificationService
-        
-        service = ControlVerificationService()
-        stats = await service.get_verification_status(scan_id, db)
-        
-        return stats
-        
-    except Exception as e:
-        logging.error(f"Error fetching verification status for scan {scan_id}: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.post("/verify/{scan_id}/learn_patterns")
-async def learn_patterns(scan_id: int, db=Depends(get_db)):
-    """
-    Learn patterns from a scan's validated controls.
-    Called automatically after extraction, but can be triggered manually.
-    """
-    try:
-        from .services.verification_service import ControlVerificationService
-        
-        service = ControlVerificationService()
-        stats = await service.learn_patterns_from_scan(scan_id, db)
-        
-        return {
-            "status": "completed",
-            "stats": stats
-        }
-        
-    except Exception as e:
-        logging.error(f"Pattern learning error for scan {scan_id}: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.get("/patterns/review-queue")
-async def get_pattern_review_queue(organization: Optional[str] = None, db=Depends(get_db)):
-    """
-    Get pending pattern merge suggestions for manual review.
-    """
-    try:
-        from .models import PatternReviewQueue
-        
-        query = select(PatternReviewQueue).where(
-            PatternReviewQueue.status == 'pending'
-        )
-        
-        if organization:
-            query = query.where(PatternReviewQueue.organization == organization)
-        
-        query = query.order_by(PatternReviewQueue.created_at.desc())
-        
-        result = await db.execute(query)
-        items = result.scalars().all()
-        
-        return {
-            "items": [
-                {
-                    "id": item.id,
-                    "organization": item.organization,
-                    "pattern1": item.pattern1,
-                    "pattern2": item.pattern2,
-                    "merged_pattern": item.merged_pattern,
-                    "similarity_score": item.similarity_score,
-                    "created_at": item.created_at.isoformat() if item.created_at else None
-                }
-                for item in items
-            ]
-        }
-        
-    except Exception as e:
-        logging.error(f"Error fetching pattern review queue: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.post("/patterns/approve-merge/{review_id}")
-async def approve_pattern_merge(review_id: int, db=Depends(get_db)):
-    """
-    Approve a pattern merge suggestion.
-    Merges the two patterns into one and updates existing controls.
-    """
-    try:
-        from .models import PatternReviewQueue, ControlPattern
-        from datetime import datetime
-        
-        # Get review item
-        result = await db.execute(
-            select(PatternReviewQueue).where(PatternReviewQueue.id == review_id)
-        )
-        review = result.scalar_one_or_none()
-        
-        if not review:
-            raise HTTPException(status_code=404, detail="Review item not found")
-        
-        if review.status != 'pending':
-            raise HTTPException(status_code=400, detail="Review already processed")
-        
-        # Get both patterns
-        patterns_result = await db.execute(
-            select(ControlPattern).where(
-                sqlalchemy.and_(
-                    ControlPattern.organization == review.organization,
-                    ControlPattern.pattern.in_([review.pattern1, review.pattern2])
-                )
-            )
-        )
-        patterns = patterns_result.scalars().all()
-        
-        if len(patterns) != 2:
-            raise HTTPException(status_code=400, detail="Patterns not found in database")
-        
-        # Merge patterns: combine frequencies and scan_ids
-        pattern1 = next(p for p in patterns if p.pattern == review.pattern1)
-        pattern2 = next(p for p in patterns if p.pattern == review.pattern2)
-        
-        combined_frequency = pattern1.frequency + pattern2.frequency
-        combined_scan_ids = list(set((pattern1.scan_ids or []) + (pattern2.scan_ids or [])))
-        
-        # Create merged pattern
-        merged = ControlPattern(
-            organization=review.organization,
-            pattern=review.merged_pattern,
-            frequency=combined_frequency,
-            first_seen=min(pattern1.first_seen, pattern2.first_seen),
-            last_seen=datetime.utcnow(),
-            scan_ids=combined_scan_ids
-        )
-        db.add(merged)
-        
-        # Delete old patterns
-        await db.delete(pattern1)
-        await db.delete(pattern2)
-        
-        # Update review status
-        review.status = 'approved'
-        review.reviewed_at = datetime.utcnow()
-        db.add(review)
-        
-        await db.commit()
-        
-        return {
-            "status": "approved",
-            "merged_pattern": review.merged_pattern,
-            "combined_frequency": combined_frequency
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"Error approving pattern merge {review_id}: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.post("/patterns/reject-merge/{review_id}")
-async def reject_pattern_merge(review_id: int, db=Depends(get_db)):
-    """
-    Reject a pattern merge suggestion.
-    Keeps patterns separate.
-    """
-    try:
-        from .models import PatternReviewQueue
-        from datetime import datetime
-        
-        result = await db.execute(
-            select(PatternReviewQueue).where(PatternReviewQueue.id == review_id)
-        )
-        review = result.scalar_one_or_none()
-        
-        if not review:
-            raise HTTPException(status_code=404, detail="Review item not found")
-        
-        if review.status != 'pending':
-            raise HTTPException(status_code=400, detail="Review already processed")
-        
-        review.status = 'rejected'
-        review.reviewed_at = datetime.utcnow()
-        db.add(review)
-        
-        await db.commit()
-        
-        return {
-            "status": "rejected"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        logging.error(f"Error rejecting pattern merge {review_id}: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.get("/patterns/organization/{organization}")
-async def get_organization_patterns(organization: str, db=Depends(get_db)):
-    """
-    Get pattern profile for an organization.
-    """
-    try:
-        from .utils.pattern_library import ControlPatternLibrary
-        
-        pattern_lib = ControlPatternLibrary(db_session=db)
-        profile = pattern_lib.get_org_profile(organization)
-        
-        return profile
-        
-    except Exception as e:
-        logging.error(f"Error fetching patterns for {organization}: {e}", exc_info=True)
-        return JSONResponse({"error": str(e)}, status_code=500)
+# REMOVED: All verification endpoints - moved to baseline_router.py
 
 # ============================================================================
 # CONFIDENCE WEIGHTS MANAGEMENT ENDPOINTS
