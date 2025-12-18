@@ -15,7 +15,7 @@ COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 COPY . ./
 # Vite build is fast and efficient - no memory issues!
-RUN npm run build
+RUN npm run build && ls -la /app/build && echo "Build directory contents:" && ls -la /app/build/ || echo "Build failed!"
 
 # Production stage with nginx
 FROM nginx:alpine AS prod
