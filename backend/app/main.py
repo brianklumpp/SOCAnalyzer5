@@ -2750,11 +2750,11 @@ async def get_history(limit: int = 100, db=Depends(get_db)):
     history = []
     for row in scan_rows:
         # Get company name for this scan
-        # Order by confidence DESC, id DESC to get the most confident/recent company record
+        # Order by confidence DESC NULLS LAST, id DESC to get the most confident/recent company record
         company_result = await db.execute(
             select(Company)
             .where(Company.scan_id == row.id)
-            .order_by(Company.confidence.desc().nullslast(), Company.id.desc())
+            .order_by(Company.confidence.desc().nulls_last(), Company.id.desc())
             .limit(1)
         )
         company_row = company_result.scalar_one_or_none()
