@@ -1,0 +1,70 @@
+/**
+ * TSC Criteria Configuration
+ * 
+ * Trust Services Criteria (TSC) framework definitions and section mappings.
+ * Based on AICPA SOC 2 Trust Services Criteria.
+ */
+
+export const TSC_CRITERIA = [
+  { id: "CC1.1", description: "The entity demonstrates a commitment to integrity and ethical values." },
+  { id: "CC2.1", description: "The board of directors demonstrates independence from management and exercises oversight of the development and performance of internal control." },
+  { id: "CC3.1", description: "Management establishes, with board oversight, structures, reporting lines, and appropriate authorities and responsibilities in the pursuit of objectives." },
+  { id: "CC4.1", description: "The entity demonstrates a commitment to attract, develop, and retain competent individuals in alignment with objectives." },
+  { id: "CC5.1", description: "The entity holds individuals accountable for their internal control responsibilities in the pursuit of objectives." },
+  { id: "CC6.1", description: "The entity specifies objectives with sufficient clarity to enable the identification and assessment of risks relating to objectives." },
+  { id: "CC6.2", description: "The entity identifies risks to the achievement of its objectives across the entity and analyzes risks as a basis for determining how the risks should be managed." },
+  { id: "CC6.3", description: "The entity considers the potential for fraud in assessing risks to the achievement of objectives." },
+  { id: "CC6.4", description: "The entity identifies and assesses changes that could significantly impact the system of internal control." },
+  { id: "CC7.1", description: "The entity selects and develops control activities that contribute to the mitigation of risks to the achievement of objectives to acceptable levels." },
+  { id: "CC7.2", description: "The entity selects and develops general control activities over technology to support the achievement of objectives." },
+  { id: "CC7.3", description: "The entity deploys control activities through policies that establish what is expected and procedures that put policies into action." },
+  { id: "CC8.1", description: "The entity obtains or generates and uses relevant, quality information to support the functioning of internal control." },
+  { id: "CC8.2", description: "The entity internally communicates information, including objectives and responsibilities for internal control, necessary to support the functioning of internal control." },
+  { id: "CC8.3", description: "The entity communicates with external parties regarding matters affecting the functioning of internal control." },
+  { id: "CC9.1", description: "The entity selects, develops, and performs ongoing and/or separate evaluations to ascertain whether the components of internal control are present and functioning." },
+  { id: "CC9.2", description: "The entity evaluates and communicates internal control deficiencies in a timely manner to those parties responsible for taking corrective action, including senior management and the board of directors, as appropriate." },
+  { id: "C1.1", description: "The entity identifies and manages the inventory of information assets." },
+  { id: "C1.2", description: "The entity restricts logical access to information assets and protected information to authorized personnel." },
+  { id: "C1.3", description: "The entity authorizes, designs, develops, or acquires, configures, documents, tests, approves, and implements system changes." },
+  { id: "C1.4", description: "The entity restricts physical access to information assets and protected information to authorized personnel." },
+  { id: "C1.5", description: "The entity implements controls to prevent, detect, and mitigate security events." },
+  { id: "C1.6", description: "The entity implements controls to prevent, detect, and mitigate security incidents." },
+  { id: "C1.7", description: "The entity implements controls to prevent, detect, and mitigate unauthorized disclosure of protected information." },
+  { id: "C1.8", description: "The entity implements controls to prevent, detect, and mitigate unauthorized destruction of protected information." },
+  { id: "C1.9", description: "The entity implements controls to prevent, detect, and mitigate unauthorized use of protected information." },
+  { id: "A1.1", description: "The entity implements controls to protect the availability of information assets." },
+  { id: "A1.2", description: "The entity implements controls to prevent, detect, and mitigate availability incidents." },
+  { id: "P1.1", description: "The entity implements controls to protect the privacy of personal information." },
+  { id: "P2.1", description: "The entity provides notice to data subjects about its privacy practices." },
+  { id: "P3.1", description: "The entity provides data subjects with choices regarding the collection, use, and disclosure of personal information." },
+  { id: "P3.2", description: "The entity obtains explicit consent from data subjects for the collection, use, and disclosure of personal information." },
+  { id: "P4.1", description: "The entity collects and uses personal information for purposes identified in the entity's privacy notice." },
+  { id: "P5.1", description: "The entity provides data subjects with access to their personal information for review and correction." },
+  { id: "P6.1", description: "The entity discloses personal information to third parties only for purposes identified in the entity's privacy notice." },
+  { id: "P7.1", description: "The entity implements controls to protect the quality and integrity of personal information." },
+  { id: "P8.1", description: "The entity implements controls to protect the retention and disposal of personal information." },
+  { id: "P9.1", description: "The entity implements controls to protect the transfer of personal information." },
+  { id: "P10.1", description: "The entity implements controls to protect the monitoring and enforcement of privacy practices." },
+  { id: "Conf1.1", description: "The entity identifies and maintains confidential information to meet the entity's objectives." },
+  { id: "Conf1.2", description: "The entity disposes of confidential information to meet the entity's objectives." },
+  { id: "Conf1.3", description: "The entity protects confidential information from unauthorized disclosure." },
+  { id: "Conf1.4", description: "The entity protects confidential information from unauthorized use." },
+  { id: "PI1.1", description: "The entity defines processing specifications to meet the entity's objectives." },
+  { id: "PI1.2", description: "The entity implements controls to achieve processing objectives and detect and correct processing errors." },
+  { id: "PI1.3", description: "The entity implements controls to protect processing from unauthorized modification." },
+  { id: "PI1.4", description: "The entity implements controls to ensure system output is complete, accurate, and timely." },
+  { id: "PI1.5", description: "The entity implements controls to protect the integrity of system processing." },
+];
+
+export const CONTROL_TSC_SECTIONS: { [section: string]: string[] } = {
+  "Control Environment (CC1.1 - CC1.5)": ["CC1.1", "CC2.1", "CC3.1", "CC4.1", "CC5.1"],
+  "Risk Assessment (CC6.1 - CC6.4)": ["CC6.1", "CC6.2", "CC6.3", "CC6.4"],
+  "Control Activities (CC7.1 - CC7.3)": ["CC7.1", "CC7.2", "CC7.3"],
+  "Information & Communication (CC8.1 - CC8.3)": ["CC8.1", "CC8.2", "CC8.3"],
+  "Monitoring Activities (CC9.1 - CC9.2)": ["CC9.1", "CC9.2"],
+  "Common Criteria - Security (C1.1 - C1.9)": ["C1.1", "C1.2", "C1.3", "C1.4", "C1.5", "C1.6", "C1.7", "C1.8", "C1.9"],
+  "Availability (A1.1 - A1.2)": ["A1.1", "A1.2"],
+  "Privacy (P1.1 - P10.1)": ["P1.1", "P2.1", "P3.1", "P3.2", "P4.1", "P5.1", "P6.1", "P7.1", "P8.1", "P9.1", "P10.1"],
+  "Confidentiality (Conf1.1 - Conf1.4)": ["Conf1.1", "Conf1.2", "Conf1.3", "Conf1.4"],
+  "Processing Integrity (PI1.1 - PI1.5)": ["PI1.1", "PI1.2", "PI1.3", "PI1.4", "PI1.5"]
+};

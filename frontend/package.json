@@ -1,0 +1,87 @@
+{
+  "name": "frontend",
+  "homepage": "/",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@emotion/css": "^11.13.5",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.2.0",
+    "@mui/lab": "^7.0.0-beta.14",
+    "@mui/material": "^7.2.0",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^13.5.0",
+    "@types/jest": "^27.5.2",
+    "@types/node": "^16.18.126",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/react-virtualized": "^9.22.3",
+    "axios": "^1.10.0",
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
+    "pdfjs-dist": "^5.4.449",
+    "react": "^18.2.0",
+    "react-countup": "^6.5.3",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^9.0.1",
+    "react-pdf": "^10.2.0",
+    "react-quill": "^0.0.2",
+    "react-resizable-panels": "^2.0.0",
+    "react-router-dom": "^6.28.0",
+    "react-syntax-highlighter": "^16.1.0",
+    "react-virtualized": "^9.22.6",
+    "recharts": "^2.12.7",
+    "remark-gfm": "^4.0.0",
+    "socket.io-client": "^4.8.1",
+    "typescript": "^4.9.5",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "legacy:start": "react-app-rewired start",
+    "legacy:build": "node scripts/patch-ajv.js && react-app-rewired build",
+    "serve:prod": "serve -s build",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@types/node": "^20.11.5",
+    "@types/react-beautiful-dnd": "^13.1.8",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "@vitejs/plugin-react": "^4.7.0",
+    "cypress": "^13.13.0",
+    "serve": "14.2.5",
+    "vite": "^5.4.21"
+  },
+  "overrides": {
+    "nth-check": "^2.0.1",
+    "ajv": "8.17.1",
+    "ajv-keywords": "5.1.0",
+    "ajv-formats": "2.1.1",
+    "fork-ts-checker-webpack-plugin": "9.0.2"
+  }
+}

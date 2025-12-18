@@ -1,0 +1,884 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  IconButton,
+  Box,
+  Typography,
+  TextField,
+  InputAdornment,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  Drawer,
+  useTheme,
+  useMediaQuery,
+  Skeleton,
+  Alert,
+  Button,
+  Collapse
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import SearchIcon from '@mui/icons-material/Search';
+import MenuIcon from '@mui/icons-material/Menu';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+interface HelpDialogProps {
+  open: boolean;
+  onClose: () => void;
+  initialTopic?: string;
+}
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`help-tabpanel-${index}`}
+      aria-labelledby={`help-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+}
+
+const HelpDialog: React.FC<HelpDialogProps> = ({ open, onClose }) => {
+  const [tabValue, setTabValue] = useState(0);
+
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
+
+  return (
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="lg" 
+      fullWidth
+      PaperProps={{
+        sx: { height: '90vh' }
+      }}
+    >
+      <DialogTitle sx={{ m: 0, p: 2, bgcolor: 'primary.main', color: 'white' }}>
+        <Box display="flex" alignItems="center" justifyContent="space-between">
+          <Typography variant="h5" component="div">
+            SOC 2 Analyzer User Guide
+          </Typography>
+          <IconButton
+            aria-label="close"
+            onClick={onClose}
+            sx={{ color: 'white' }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </Box>
+      </DialogTitle>
+
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs value={tabValue} onChange={handleTabChange} aria-label="help tabs">
+          <Tab icon={<ArchitectureIcon />} iconPosition="start" label="Architecture" />
+          <Tab icon={<WorkflowIcon />} iconPosition="start" label="Workflow" />
+          <Tab icon={<MenuBookIcon />} iconPosition="start" label="How-To Guide" />
+          <Tab icon={<TipsAndUpdatesIcon />} iconPosition="start" label="Tips & Best Practices" />
+        </Tabs>
+      </Box>
+
+      <DialogContent sx={{ p: 0, overflowY: 'auto' }}>
+        {/* Architecture Tab */}
+        <TabPanel value={tabValue} index={0}>
+          <Typography variant="h6" gutterBottom color="primary">
+            System Architecture
+          </Typography>
+          
+          <Alert severity="info" sx={{ mb: 3 }}>
+            SOC 2 Analyzer is a multi-component system that uses AI to extract and analyze SOC 2 audit reports
+          </Alert>
+
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+            Core Components
+          </Typography>
+
+          <List>
+            <ListItem>
+              <Card sx={{ width: '100%', mb: 1 }}>
+                <CardContent>
+                  <Typography variant="h6" color="primary" gutterBottom>
+                    Frontend (React/TypeScript)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • User interface for uploading PDFs, viewing reports, and managing data
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • Interactive tables with sorting, filtering, and editing
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    • Real-time progress tracking via WebSocket
+                  </Typography>
+                  <Box sx={{ mt: 1 }}>
+                    <Chip label="Port: 3000" size="small" sx={{ mr: 1 }} />
+                    <Chip label="React 18" size="small" sx={{ mr: 1 }} />
+                    <Chip label="Material-UI" size="small" />
+                  </Box>
+                </CardContent>
+              </Card>
+            </ListItem>
+
+            <ListItem>
+              <Card sx={{ width: '100%', mb: 1 }}>
+                <CardContent>
+                  <Typography variant="h6" color="primary" gutterBottom>
+                    Backend API (FastAPI/Python)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • REST API endpoints for all operations
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • PDF processing and text extraction
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • GPT-4 integration via Dataiku DSS proxy
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    • Automated cleanup and merge logic
+                  </Typography>
+                  <Box sx={{ mt: 1 }}>
+                    <Chip label="Port: 8000" size="small" sx={{ mr: 1 }} />
+                    <Chip label="Python 3.13" size="small" sx={{ mr: 1 }} />
+                    <Chip label="FastAPI" size="small" />
+                  </Box>
+                </CardContent>
+              </Card>
+            </ListItem>
+
+            <ListItem>
+              <Card sx={{ width: '100%', mb: 1 }}>
+                <CardContent>
+                  <Typography variant="h6" color="primary" gutterBottom>
+                    Database (PostgreSQL)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • Stores all extracted data: controls, CUECs, subservice orgs
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • Maintains scan history and audit trail
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    • Tracks confidence scores and verification status
+                  </Typography>
+                  <Box sx={{ mt: 1 }}>
+                    <Chip label="Port: 5433" size="small" sx={{ mr: 1 }} />
+                    <Chip label="PostgreSQL 15" size="small" />
+                  </Box>
+                </CardContent>
+              </Card>
+            </ListItem>
+
+            <ListItem>
+              <Card sx={{ width: '100%', mb: 1 }}>
+                <CardContent>
+                  <Typography variant="h6" color="primary" gutterBottom>
+                    Cache Layer (Redis)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • Job queue and progress tracking
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • Session management
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    • Temporary result caching
+                  </Typography>
+                  <Box sx={{ mt: 1 }}>
+                    <Chip label="Port: 6379" size="small" sx={{ mr: 1 }} />
+                    <Chip label="Redis 7" size="small" />
+                  </Box>
+                </CardContent>
+              </Card>
+            </ListItem>
+
+            <ListItem>
+              <Card sx={{ width: '100%', mb: 1 }}>
+                <CardContent>
+                  <Typography variant="h6" color="primary" gutterBottom>
+                    AI Layer (GPT-4o via Dataiku DSS)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • Corporate proxy for OpenAI GPT-4o
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    • DNS fallback for network resilience
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    • Rate limiting and cost tracking
+                  </Typography>
+                  <Box sx={{ mt: 1 }}>
+                    <Chip label="Internal DNS" size="small" sx={{ mr: 1 }} />
+                    <Chip label="GPT-4o" size="small" />
+                  </Box>
+                </CardContent>
+              </Card>
+            </ListItem>
+          </List>
+
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold" sx={{ mt: 3 }}>
+            Data Flow
+          </Typography>
+          <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+            <Typography variant="body2" component="div">
+              1. User uploads PDF → Frontend<br />
+              2. Frontend → Backend API (/analyze)<br />
+              3. Backend extracts text → Chunks document<br />
+              4. Backend → GPT-4o (via Dataiku DSS)<br />
+              5. GPT-4o returns JSON → Backend processes<br />
+              6. Backend → PostgreSQL (stores data)<br />
+              7. Automated cleanup runs (merges, flagging)<br />
+              8. Backend → Frontend (via WebSocket)<br />
+              9. User views results in interactive tables
+            </Typography>
+          </Paper>
+        </TabPanel>
+
+        {/* Workflow Tab */}
+        <TabPanel value={tabValue} index={1}>
+          <Typography variant="h6" gutterBottom color="primary">
+            Processing Workflow
+          </Typography>
+
+          <Alert severity="success" sx={{ mb: 3 }}>
+            The system follows a multi-stage extraction and cleanup workflow
+          </Alert>
+
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+            Stage 1: PDF Upload & Initial Processing
+          </Typography>
+          <List dense>
+            <ListItem>
+              <ListItemText 
+                primary="1. User uploads SOC 2 PDF report"
+                secondary="System validates file type and size"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="2. PDF text extraction"
+                secondary="Extracts all text content preserving structure"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="3. Document chunking"
+                secondary="Splits into manageable sections for GPT processing"
+              />
+            </ListItem>
+          </List>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+            Stage 2: AI Extraction (Parallel Processing)
+          </Typography>
+          <List dense>
+            <ListItem>
+              <ListItemText 
+                primary="Auditor Extractor"
+                secondary="Identifies auditing firm name and details"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Company Extractor"
+                secondary="Extracts company name and parent company"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Product Extractor"
+                secondary="Identifies the product/service covered by the audit"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Report Date Extractor"
+                secondary="Finds report issuance date"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Coverage Period Extractor"
+                secondary="Identifies audit period start and end dates"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Control Extractor (Primary)"
+                secondary="Extracts all controls with descriptions, tests, and results"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="CUEC Extractor"
+                secondary="Identifies Complementary User Entity Controls"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Subservice Organization Extractor"
+                secondary="Finds third-party vendors and dependencies"
+              />
+            </ListItem>
+          </List>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+            Stage 3: Framework Mapping
+          </Typography>
+          <List dense>
+            <ListItem>
+              <ListItemText 
+                primary="TSC Mapping"
+                secondary="Maps controls to Trust Services Criteria (CC, A, C, PI, P)"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="COSO 2013 Mapping"
+                secondary="Maps controls to COSO Internal Control Framework principles"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Confidence Scoring"
+                secondary="Calculates mapping confidence using semantic similarity"
+              />
+            </ListItem>
+          </List>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+            Stage 4: Automated Cleanup (NEW!)
+          </Typography>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This stage runs automatically after extraction completes
+          </Alert>
+          <List dense>
+            <ListItem>
+              <ListItemText 
+                primary="Blank Control ID Detection"
+                secondary="Flags controls with missing control_id (confidence → 0.1)"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Duplicate Analysis"
+                secondary="Groups controls by control_id and calculates similarity scores"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Auto-Merge (≥0.85 similarity)"
+                secondary="Automatically merges high-confidence duplicates, consolidates data"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Extraction Error Flagging (<0.60 similarity)"
+                secondary="Marks low-similarity duplicates as extraction errors (confidence → 0.3)"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Low-Confidence CUEC/Subservice Org Flagging"
+                secondary="Adds notes to items with confidence < 0.5"
+              />
+            </ListItem>
+          </List>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+            Stage 5: Data Storage & Presentation
+          </Typography>
+          <List dense>
+            <ListItem>
+              <ListItemText 
+                primary="Database insertion"
+                secondary="All extracted data stored in PostgreSQL"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="Pattern learning"
+                secondary="System learns from verified controls for future scans"
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText 
+                primary="User review"
+                secondary="Interactive tables allow editing, verification, and export"
+              />
+            </ListItem>
+          </List>
+
+          <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Typical Processing Time:
+            </Typography>
+            <Typography variant="body2">
+              • Small report (50-100 pages): 3-5 minutes<br />
+              • Medium report (100-200 pages): 5-10 minutes<br />
+              • Large report (200+ pages): 10-20 minutes
+            </Typography>
+          </Box>
+        </TabPanel>
+
+        {/* How-To Guide Tab */}
+        <TabPanel value={tabValue} index={2}>
+          <Typography variant="h6" gutterBottom color="primary">
+            Step-by-Step How-To Guide
+          </Typography>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                1. Uploading a SOC 2 Report
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Navigate to the Analyzer page"
+                    secondary="Click 'SOC 2 Analyzer' in the top navigation"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Click 'Choose File' and select your PDF"
+                    secondary="Supported: .pdf files up to 50MB"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Click 'Analyze' to start processing"
+                    secondary="Processing runs in the background"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Monitor progress via the checklist"
+                    secondary="Green checkmarks indicate completed extractors"
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                2. Reviewing Extracted Data
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Select scan from history dropdown"
+                    secondary="Shows all previously processed reports"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Use tabs to navigate: Controls, CUECs, Coverage, etc."
+                    secondary="Each tab shows different aspects of the audit"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• High/Low Confidence tables"
+                    secondary="Controls are automatically sorted by confidence threshold (default: 0.75)"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Click row for details"
+                    secondary="Opens modal with full information and confidence breakdown"
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                3. Editing Data
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Double-click any cell to edit"
+                    secondary="Most fields support in-line editing"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Press Enter or click outside to save"
+                    secondary="Changes saved immediately to database"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Use dropdown editors for framework mappings"
+                    secondary="TSC and COSO fields have autocomplete"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Add justification notes"
+                    secondary="Document why you made changes"
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                4. Managing Duplicate Controls
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Click 'Find Merge Suggestions'"
+                    secondary="System analyzes controls with duplicate control_ids"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Review suggestions in side panel"
+                    secondary="Shows similarity score and comparison details"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Click 'Merge' to consolidate duplicates"
+                    secondary="Primary keeps all data, secondary moves to low confidence"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Use 'Merge All' for batch processing"
+                    secondary="Merges all suggestions at once"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Low-similarity duplicates auto-flagged"
+                    secondary="Extraction errors automatically moved to low confidence"
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                5. Understanding Confidence Scores
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Confidence = Overall extraction quality"
+                    secondary="Range: 0.0 (low) to 1.0 (high), default threshold: 0.75"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Click info icon to see breakdown"
+                    secondary="Shows component scores: GPT opinion, pattern matching, structure, framework alignment, etc."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Confidence Calc field shows justification"
+                    secondary="Explains why confidence is high or low"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Merged controls → confidence 0.0"
+                    secondary="Secondaries automatically moved to low confidence table"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Extraction errors → confidence 0.1-0.3"
+                    secondary="System flags blank IDs and dissimilar duplicates"
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                6. Column Visibility & Customization
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Click column visibility icon (eye)"
+                    secondary="Toggle which columns are displayed"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Drag column headers to reorder"
+                    secondary="Customize table layout to your preference"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Use search/filter boxes"
+                    secondary="Filter by control_id, description, framework mapping, etc."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Sort by clicking column headers"
+                    secondary="Multi-column sorting supported"
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                7. Deleting Scans
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Select scan from history dropdown"
+                    secondary="Navigate to the scan you want to delete"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Click 'Delete Scan' button"
+                    secondary="Located in the header area"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="• Confirm deletion"
+                    secondary="This permanently removes scan and all associated data"
+                  />
+                </ListItem>
+              </List>
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                Deletion is permanent and cannot be undone
+              </Alert>
+            </CardContent>
+          </Card>
+        </TabPanel>
+
+        {/* Tips & Best Practices Tab */}
+        <TabPanel value={tabValue} index={3}>
+          <Typography variant="h6" gutterBottom color="primary">
+            Tips & Best Practices
+          </Typography>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom color="success.main">
+                ✓ Best Practices
+              </Typography>
+              <List>
+                <ListItem>
+                  <ListItemText 
+                    primary="Use high-quality PDF scans"
+                    secondary="Clear, text-based PDFs work best. Avoid scanned images when possible."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Review automated merges"
+                    secondary="Check the low-confidence table after scan completion to verify automated cleanup results."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Add justification notes"
+                    secondary="Document your manual edits and framework mapping changes for audit trail."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Verify high-confidence items"
+                    secondary="Even high-confidence items may need review - use the Confidence Calc field to understand why confidence is high."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Process large reports during off-hours"
+                    secondary="200+ page reports can take 15-20 minutes and use significant GPT resources."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Use merge suggestions wisely"
+                    secondary="Review similarity scores before merging - scores below 0.85 may indicate false positives."
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom color="error.main">
+                ✗ Common Pitfalls
+              </Typography>
+              <List>
+                <ListItem>
+                  <ListItemText 
+                    primary="Don't ignore low-confidence items"
+                    secondary="Low confidence doesn't mean wrong - review and verify, especially for critical controls."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Don't merge without reviewing"
+                    secondary="Always check the merge suggestion details before clicking 'Merge All'."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Don't delete scans without backup"
+                    secondary="Export or save data before deletion - there's no undo."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Don't process corrupted PDFs"
+                    secondary="Validate PDF integrity before upload - corrupted files will fail or produce incorrect results."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Don't ignore extraction errors"
+                    secondary="Controls flagged as extraction errors (confidence 0.1-0.3) need manual review and correction."
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom color="primary">
+                Understanding Confidence Thresholds
+              </Typography>
+              <Paper sx={{ p: 2, bgcolor: 'grey.50', mb: 2 }}>
+                <Typography variant="body2" fontWeight="bold">
+                  Confidence Ranges:
+                </Typography>
+                <Typography variant="body2" component="div" sx={{ mt: 1 }}>
+                  • <strong>0.90-1.00:</strong> Excellent - High confidence in extraction accuracy<br />
+                  • <strong>0.75-0.89:</strong> Good - Default threshold, generally reliable<br />
+                  • <strong>0.60-0.74:</strong> Fair - Review recommended<br />
+                  • <strong>0.30-0.59:</strong> Poor - Manual verification required<br />
+                  • <strong>0.10-0.29:</strong> Extraction error - Likely needs correction<br />
+                  • <strong>0.00-0.09:</strong> Merged secondary - Intentionally set to 0
+                </Typography>
+              </Paper>
+
+              <Alert severity="info">
+                The default confidence threshold of 0.75 balances precision and recall. You can adjust this based on your quality requirements.
+              </Alert>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom color="primary">
+                Keyboard Shortcuts
+              </Typography>
+              <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                <Typography variant="body2" component="div">
+                  • <strong>Double-click cell:</strong> Edit mode<br />
+                  • <strong>Enter:</strong> Save edit and move down<br />
+                  • <strong>Escape:</strong> Cancel edit<br />
+                  • <strong>Tab:</strong> Move to next cell<br />
+                  • <strong>Ctrl/Cmd + Click:</strong> Multi-select rows
+                </Typography>
+              </Paper>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom color="primary">
+                Troubleshooting
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="Scan stuck in processing?"
+                    secondary="Wait 20+ minutes for large files. If still stuck, try canceling and re-uploading."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="No controls extracted?"
+                    secondary="Check if PDF is text-based (not scanned image). Try OCR if needed."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="High-confidence but incorrect data?"
+                    secondary="System confidence is based on structure, not semantic accuracy. Always review."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Merge suggestions not appearing?"
+                    secondary="Refresh the page. If still no suggestions, there may be no duplicates or all below threshold."
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="History dropdown empty?"
+                    secondary="Check backend connection. Try refreshing the page or clearing browser cache."
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+        </TabPanel>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default HelpDialog;

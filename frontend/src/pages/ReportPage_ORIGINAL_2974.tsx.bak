@@ -1,0 +1,2971 @@
+import './ReportPage.css';
+import { formatDateSafe, formatLocalDateTimeWithTZ } from '../utils/date';
+import { getCoverageStart, getCoverageEnd, getReportDate, getScanDate } from '../utils/report';
+import React, { useEffect, useState, useMemo, useRef } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { Box, Button, Typography, Paper, Collapse, CircularProgress, FormControl, InputLabel, Select, MenuItem, ThemeProvider, createTheme, CssBaseline, Switch, FormControlLabel, Tooltip, Tabs, Tab } from "@mui/material";
+import SummarizeIcon from '@mui/icons-material/Summarize';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import PieChartIcon from '@mui/icons-material/PieChart';
+import BusinessIcon from '@mui/icons-material/Business';
+import VerifiedIcon from '@mui/icons-material/Verified';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import EditableTable from "../components/EditableTable";
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import EditIcon from '@mui/icons-material/Edit';
+import TextField from '@mui/material/TextField';
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
+// Replaced MUI Timeline with compact SVG timeline to ensure perfect centering
+import CompactTimeline from '../components/CompactTimeline';
+import IconButton from '@mui/material/IconButton';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Checkbox from '@mui/material/Checkbox';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
+import WarningIcon from '@mui/icons-material/Warning';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import './ReportPage.css';
+import api from '../api/client';
+import FrameworkMappingInfo from '../components/FrameworkMappingInfo';
+import VerificationSection from '../components/VerificationSection';
+import ConfidenceTooltip from '../components/ConfidenceTooltip';
+import ConfidenceModal from '../components/ConfidenceModal';
+import CuecDetailsModal from '../components/CuecDetailsModal';
+
+const API_URL = "/report/";
+const HISTORY_URL = "/history";
+const FRAMEWORK_CRITERIA_URL = "/framework_criteria";
+const EXEC_SUMMARY_URL = "/executive_summary/";
+
+const confidenceThreshold = 0.75;
+
+
+// CUECs Table as a subcomponent to allow hooks
+interface CuecsTableProps {
+  highConfCuecs: any[];
+  ignored: Set<number>;
+  setIgnored: React.Dispatch<React.SetStateAction<any>>;
+  onEdit: (row: any, idx: number) => void;
+  onBatchEdit: (changes: { [rowIdx: number]: any }, rows: any[]) => void;
+  recentlyChangedIds: Set<number>;
+  lowConfCuecs: any[];
+  showLowConfidence: { [key: string]: boolean };
+  toggleShow: (key: string) => void;
+  handleEditCuec: (row: any, idx: number) => void;
+  onIgnoreRow: (row: any) => void;
+  onConfirmRow: (row: any) => void;
+  onRecompute: (row: any) => Promise<void>;
+  additionalButtons?: React.ReactNode;
+}
+
+function CuecsTable({
+  highConfCuecs,
+  ignored,
+  setIgnored,
+  onEdit,
+  onBatchEdit,
+  recentlyChangedIds,
+  lowConfCuecs,
+  showLowConfidence,
+  toggleShow,
+  handleEditCuec,
+  onIgnoreRow,
+  onConfirmRow,
+  onRecompute,
+  additionalButtons
+}: CuecsTableProps) {
+  const [recomputingIds, setRecomputingIds] = useState<Set<number>>(new Set());
+  const mainCols = [
+    { key: "cuec_description", label: "Description", width: 300 },
+    { key: "cuec_gpt_reasoning", label: "GPT Reasoning", width: 300 },
+    { key: "cuec_confidence", label: "Confidence", width: 80 },
+    { key: "cuec_confidence_justification", label: "Confidence Justification", width: 300, editable: false, format: (v: any) => Array.isArray(v) ? v.join('\n') : (typeof v === 'string' ? v.replace(/,\s*/g, ',\n') : ''), cellSx: { whiteSpace: 'pre-line' } },
+    { key: "control_strength", label: "Control Strength", width: 120, format: (v: any) => v || "Not Set" },
+    { 
+      key: "cuec_tsc_id", 
+      label: "TSC ID (computed)", 
+      width: 140, 
+      editable: false, 
+      headerInfo: "Computed — read-only. Use Recompute to refresh. Icon shows multi-match details.", 
+      render: (row: any) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <span>{row.cuec_tsc_id || ''}</span>
+          {row.cuec_tsc_mappings && row.cuec_tsc_mappings.length > 0 && (
+            <FrameworkMappingInfo 
+              mappings={row.cuec_tsc_mappings} 
+              type="tsc" 
+              controlId={`CUEC_${row.id}`}
+            />
+          )}
+        </Box>
+      )
+    },
+    { key: "cuec_tsc_confidence_pct", label: "TSC Conf. % (computed)", width: 140, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { 
+      key: "cuec_coso_id", 
+      label: "COSO ID (computed)", 
+      width: 140, 
+      editable: false, 
+      headerInfo: "Computed — read-only. Use Recompute to refresh. Icon shows multi-match details.", 
+      render: (row: any) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <span>{row.cuec_coso_id || ''}</span>
+          {row.cuec_coso_mappings && row.cuec_coso_mappings.length > 0 && (
+            <FrameworkMappingInfo 
+              mappings={row.cuec_coso_mappings} 
+              type="coso" 
+              controlId={`CUEC_${row.id}`}
+            />
+          )}
+        </Box>
+      )
+    },
+    { key: "cuec_coso_confidence_pct", label: "COSO Conf. % (computed)", width: 150, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+  ];
+  const hiddenCols = [
+    { key: "cuec_tsc_similarity", label: "TSC Similarity (computed)", width: 130, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "cuec_coso_similarity", label: "COSO Similarity (computed)", width: 140, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "cuec_seq", label: "Seq", width: 80 },
+    { key: "cuec_line_ref", label: "Line Ref", width: 80 },
+    { key: "cuec_gpt_opinion", label: "GPT Opinion", width: 80 },
+    { key: "cuec_distance_from_cuec_keywords", label: "Dist. from Keywords", width: 80 },
+    { key: "cuec_closest_framework", label: "Closest Framework (computed)", width: 140, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "cuec_justification", label: "Justification", width: 200 },
+    { key: "cuec_framework_alignment", label: "Framework Alignment (computed)", width: 160, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "cuec_framework_alignment_id", label: "Framework Alignment ID (computed)", width: 180, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+  ];
+  const columns = [...mainCols, ...hiddenCols];
+  const defaultVisibleCuecCols = [
+    "cuec_description",
+    "cuec_confidence",
+    "cuec_confidence_justification",
+    "control_strength",
+    "cuec_tsc_id",
+    "cuec_coso_id",
+    "cuec_justification"
+  ];
+
+  // Preprocess rows to format Confidence Justification
+  const processedHighConfCuecs = highConfCuecs.map(row => {
+    const newRow = { ...row };
+    if (typeof newRow.cuec_confidence === 'number') newRow.cuec_confidence = `${Math.round(newRow.cuec_confidence * 100)}%`;
+    if (typeof newRow.cuec_tsc_confidence_pct === 'number') newRow.cuec_tsc_confidence_pct = `${Math.round(newRow.cuec_tsc_confidence_pct)}%`;
+    if (typeof newRow.cuec_tsc_similarity === 'number') newRow.cuec_tsc_similarity = `${Math.round(newRow.cuec_tsc_similarity * 100)}%`;
+    return newRow;
+  });
+
+  return (
+    <>
+      <EditableTable
+        columns={columns}
+        rows={processedHighConfCuecs}
+        ignored={ignored}
+        onIgnore={(rowOrIdx: any) => {
+          const row = typeof rowOrIdx === 'number' ? processedHighConfCuecs[rowOrIdx] : rowOrIdx;
+          const origRow = highConfCuecs.find(r => r.id === row.id) || row;
+          onIgnoreRow(origRow);
+        }}
+        onConfirm={(row) => onConfirmRow(row)}
+        onEdit={(rowIdxOrRow: any, newRow: any) => {
+          const row = typeof rowIdxOrRow === 'number' ? processedHighConfCuecs[rowIdxOrRow] : newRow;
+          const origIdx = highConfCuecs.findIndex(r => r.id === row.id);
+          onEdit(newRow, origIdx >= 0 ? origIdx : rowIdxOrRow);
+        }}
+        onBatchEdit={(changes) => onBatchEdit(changes, highConfCuecs)}
+        recentlyChangedIds={recentlyChangedIds}
+        cellSx={{ whiteSpace: 'pre-line', overflow: 'visible', textOverflow: 'clip', wordBreak: 'break-word', padding: '4px 6px', fontSize: 12 }}
+        defaultVisibleColumns={defaultVisibleCuecCols}
+        storageKey={`report_cuecs_high`}
+        additionalButtons={additionalButtons}
+        actionsRenderer={(row) => (
+          <Tooltip title="Recompute TSC/COSO mapping">
+            <span>
+              <IconButton size="small" onClick={async () => {
+                try {
+                  setRecomputingIds(prev => new Set([...Array.from(prev), row.id]));
+                  await onRecompute(row);
+                } finally {
+                  setRecomputingIds(prev => { const n = new Set(prev); n.delete(row.id); return n; });
+                }
+              }} disabled={recomputingIds.has(row.id)}>
+                {recomputingIds.has(row.id) ? <CircularProgress size={14} /> : <RefreshIcon fontSize="small" />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
+      />
+      {lowConfCuecs.length > 0 && (
+        <Box sx={{ p: 1, ml: 3 }}>
+          <Button size="small" onClick={() => toggleShow("cuecs")}>{showLowConfidence["cuecs"] ? <ExpandLessIcon /> : <ExpandMoreIcon />} Show Low Confidence ({lowConfCuecs.length})</Button>
+          <Collapse in={showLowConfidence["cuecs"]}>
+            <EditableTable
+              columns={columns}
+              rows={lowConfCuecs}
+              ignored={ignored}
+              onIgnore={(rowOrIdx: any) => {
+                const row = typeof rowOrIdx === 'number' ? lowConfCuecs[rowOrIdx] : rowOrIdx;
+                onIgnoreRow(row);
+              }}
+              onConfirm={(row) => onConfirmRow(row)}
+              onEdit={(rowIdxOrRow: any, newRow: any) => {
+                const row = typeof rowIdxOrRow === 'number' ? lowConfCuecs[rowIdxOrRow] : newRow;
+                const origIdx = lowConfCuecs.findIndex(r => r.id === row.id);
+                handleEditCuec(newRow, origIdx >= 0 ? origIdx : rowIdxOrRow);
+              }}
+              onBatchEdit={(changes) => onBatchEdit(changes, lowConfCuecs)}
+              recentlyChangedIds={recentlyChangedIds}
+              cellSx={{ whiteSpace: 'pre-line', overflow: 'visible', textOverflow: 'clip', wordBreak: 'break-word', padding: '4px 6px', fontSize: 12 }}
+              storageKey={`report_cuecs_low`}
+              actionsRenderer={(row) => (
+                <Tooltip title="Recompute TSC/COSO mapping">
+                  <span>
+                    <IconButton size="small" onClick={async () => {
+                      try {
+                        setRecomputingIds(prev => new Set([...Array.from(prev), row.id]));
+                        await onRecompute(row);
+                      } finally {
+                        setRecomputingIds(prev => { const n = new Set(prev); n.delete(row.id); return n; });
+                      }
+                    }} disabled={recomputingIds.has(row.id)}>
+                      {recomputingIds.has(row.id) ? <CircularProgress size={14} /> : <RefreshIcon fontSize="small" />}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+            />
+          </Collapse>
+        </Box>
+      )}
+    </>
+  );
+}
+
+// TabPanel component with scroll position preservation
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+  scrollPositions: React.MutableRefObject<{[key: number]: number}>;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, scrollPositions, ...other } = props;
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Restore scroll position when tab becomes active
+    if (value === index && panelRef.current && scrollPositions.current[index] !== undefined) {
+      panelRef.current.scrollTop = scrollPositions.current[index];
+    }
+  }, [value, index, scrollPositions]);
+
+  useEffect(() => {
+    // Save scroll position when component unmounts or tab changes
+    return () => {
+      if (panelRef.current && value === index) {
+        scrollPositions.current[index] = panelRef.current.scrollTop;
+      }
+    };
+  }, [value, index, scrollPositions]);
+
+  return (
+    <div
+      ref={panelRef}
+      role="tabpanel"
+      hidden={value !== index}
+      id={`report-tabpanel-${index}`}
+      aria-labelledby={`report-tab-${index}`}
+      {...other}
+      style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}
+    >
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+}
+
+// Accessibility props for tabs
+function a11yProps(index: number) {
+  return {
+    id: `report-tab-${index}`,
+    'aria-controls': `report-tabpanel-${index}`,
+    'aria-label': `Tab ${index + 1}`,
+  };
+}
+
+const ReportPage: React.FC = () => {
+  console.log('🎨 ReportPage component rendering/re-rendering', new Date().toISOString());
+  
+  // All hooks at the top
+  const { scanId } = useParams<{ scanId: string }>();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [report, setReport] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [showLowConfidence, setShowLowConfidence] = useState<{ [key: string]: boolean }>({});
+  const [ignored, setIgnored] = useState<{ cuecs: Set<number>; controls: Set<number>; suborgs: Set<number> }>({ cuecs: new Set(), controls: new Set(), suborgs: new Set() });
+  const [history, setHistory] = useState<any[]>([]);
+  const [selectedScanId, setSelectedScanId] = useState<string | undefined>(scanId);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('socanalyzer_dark_mode') === 'true');
+  const theme = createTheme({ palette: { mode: darkMode ? 'dark' : 'light' } });
+  
+  // Tab state: initialize from URL param or localStorage, default to 0 (Summary)
+  const tabFromUrl = searchParams.get('tab');
+  const tabFromStorage = localStorage.getItem('socanalyzer_active_tab');
+  const initialTab = tabFromUrl ? parseInt(tabFromUrl, 10) : (tabFromStorage ? parseInt(tabFromStorage, 10) : 0);
+  const [activeTab, setActiveTab] = useState<number>(initialTab);
+  const tabScrollPositions = useRef<{[key: number]: number}>({});
+  
+  // Memoized CUEC deduplication to avoid recomputing on every render
+  const deduplicateCuecs = useMemo(() => {
+    return (cuecs: any[]) => {
+      const seen = new Set<string>();
+      return cuecs.filter(cuec => {
+        const key = `${cuec.cuec_id || cuec.id}-${cuec.cuec_description}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    };
+  }, []);
+  
+  const [frameworkCriteria, setFrameworkCriteria] = useState<any>(null);
+  const [executiveSummary, setExecutiveSummary] = useState<any>(null);
+  const [executiveSummaryStale, setExecutiveSummaryStale] = useState(false);
+  const [overviewEdit, setOverviewEdit] = useState(false);
+  const [cuecModalOpen, setCuecModalOpen] = useState(false);
+  const [selectedCuec, setSelectedCuec] = useState<any>(null);
+  const [overviewFields, setOverviewFields] = useState<{
+    company: string;
+    product: string;
+    coverageStart: string | null;
+    coverageEnd: string | null;
+    reportDate: string | null;
+    auditor: string;
+    scanDate: string | null;
+    isSoxVendor: boolean;
+  }>({
+    company: '',
+    product: '',
+    coverageStart: null,
+    coverageEnd: null,
+    reportDate: null,
+    auditor: '',
+    scanDate: null,
+    isSoxVendor: false,
+  });
+  const [helpOpen, setHelpOpen] = useState(false);
+  
+  /* PRESERVED FOR FUTURE USE: collapse state and toggle function for potential within-tab collapsible sections
+  const [collapsed, setCollapsed] = useState<{ [key: string]: boolean }>({
+    overview: true,
+    suborgs: true,
+    cuecs: true,
+    controls: true,
+    badchunks: true,
+  });
+  const toggleCollapse = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+  */
+  
+  const [executiveSummaryLoading, setExecutiveSummaryLoading] = useState(false);
+  
+  // Handle tab change with URL and localStorage persistence
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+    localStorage.setItem('socanalyzer_active_tab', newValue.toString());
+    setSearchParams({ tab: newValue.toString() });
+  };
+  const [recentlyChangedIds, setRecentlyChangedIds] = useState<Set<number>>(new Set());
+  const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'success' });
+  const showToast = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'success') => setToast({ open: true, message, severity });
+  const handleCloseToast = () => setToast(prev => ({ ...prev, open: false }));
+
+  // Add-row dialog state and form fields
+  const [addSuborgOpen, setAddSuborgOpen] = useState(false);
+  const [addCuecOpen, setAddCuecOpen] = useState(false);
+  const [addControlOpen, setAddControlOpen] = useState(false);
+  const [newSuborg, setNewSuborg] = useState<{ name: string; confidence?: string; third_party_description?: string; third_party_page_ref?: string }>({ name: '' });
+  const [newCuec, setNewCuec] = useState<{ cuec_description: string; cuec_confidence?: string; cuec_tsc_id?: string; cuec_coso_id?: string; control_strength?: string }>({ cuec_description: '' });
+  const [newControl, setNewControl] = useState<{ control_id?: string; control_desc?: string; control_tsc_id?: string; control_coso_id?: string; control_confidence?: string; control_page_ref?: string }>({});
+
+  // Global default confidence (persisted)
+  const [defaultConfidence, setDefaultConfidence] = useState<string>(() => localStorage.getItem('socanalyzer_default_confidence') ?? '95');
+  const [useDefaultConfidence, setUseDefaultConfidence] = useState<boolean>(() => (localStorage.getItem('socanalyzer_use_default_confidence') ?? 'true') !== 'false');
+  useEffect(() => { localStorage.setItem('socanalyzer_default_confidence', defaultConfidence); }, [defaultConfidence]);
+  useEffect(() => { localStorage.setItem('socanalyzer_use_default_confidence', useDefaultConfidence ? 'true' : 'false'); }, [useDefaultConfidence]);
+  // Prefill confidence on dialog open
+  useEffect(() => { if (addSuborgOpen && useDefaultConfidence) setNewSuborg(s => ({ ...s, confidence: defaultConfidence })); }, [addSuborgOpen, useDefaultConfidence, defaultConfidence]);
+  useEffect(() => { if (addCuecOpen && useDefaultConfidence) setNewCuec(s => ({ ...s, cuec_confidence: defaultConfidence })); }, [addCuecOpen, useDefaultConfidence, defaultConfidence]);
+  useEffect(() => { if (addControlOpen && useDefaultConfidence) setNewControl(s => ({ ...s, control_confidence: defaultConfidence })); }, [addControlOpen, useDefaultConfidence, defaultConfidence]);
+
+  // Keyboard navigation for tabs (Ctrl+PageUp/PageDown)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey) {
+        if (event.key === 'PageUp') {
+          event.preventDefault();
+          setActiveTab(prev => (prev > 0 ? prev - 1 : 5));
+        } else if (event.key === 'PageDown') {
+          event.preventDefault();
+          setActiveTab(prev => (prev < 5 ? prev + 1 : 0));
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Confidence modal state
+  const [confidenceModalOpen, setConfidenceModalOpen] = useState(false);
+  const [selectedControl, setSelectedControl] = useState<any>(null);
+  const openConfidenceModal = (control: any) => {
+    setSelectedControl(control);
+    setConfidenceModalOpen(true);
+  };
+  const closeConfidenceModal = () => {
+    setConfidenceModalOpen(false);
+    setSelectedControl(null);
+  };
+
+  useEffect(() => { localStorage.setItem('socanalyzer_dark_mode', darkMode ? 'true' : 'false'); }, [darkMode]);
+  useEffect(() => {
+    api.get(HISTORY_URL).then(res => setHistory(res.data));
+  }, []);
+  useEffect(() => {
+    if (!selectedScanId) return;
+    setLoading(true);
+    // Use longer timeout for initial report load (60 seconds instead of default 6)
+    api.get(`${API_URL}${selectedScanId}`, { timeout: 60000 })
+      .then(res => {
+        setReport(res.data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load report:', err);
+        setLoading(false);
+      });
+  }, [selectedScanId]);
+  useEffect(() => {
+    setSelectedScanId(scanId);
+  }, [scanId]);
+  useEffect(() => {
+    // Longer timeout for framework criteria (30 seconds)
+    api.get(FRAMEWORK_CRITERIA_URL, { timeout: 30000 })
+      .then(res => setFrameworkCriteria(res.data))
+      .catch(err => console.error('Failed to load framework criteria:', err));
+  }, []);
+  useEffect(() => {
+    if (!selectedScanId) return;
+    setExecutiveSummaryLoading(true);
+    // Longer timeout for executive summary (30 seconds) - should return cached version quickly
+    api.get(`${EXEC_SUMMARY_URL}${selectedScanId}`, { timeout: 30000 })
+      .then(res => {
+        setExecutiveSummary(res.data.executive_summary || null);
+        setExecutiveSummaryStale(res.data.is_stale || false);
+        setExecutiveSummaryLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load executive summary:', err);
+        setExecutiveSummaryLoading(false);
+      });
+  }, [selectedScanId]);
+  useEffect(() => {
+    if (!report) return;
+    const coverageStartDep = getCoverageStart(report);
+    const coverageEndDep = getCoverageEnd(report);
+    const reportDateDep = getReportDate(report);
+    const auditorDep = typeof report.auditor === 'string' ? report.auditor : (report.auditor?.name || report.auditor?.auditor || '');
+  const scanDateDep = getScanDate(report);
+    setOverviewFields({
+      company: typeof report.company === 'string' ? report.company : report.company?.name || '',
+      product: typeof report.product === 'string' ? report.product : report.product?.name || '',
+      coverageStart: coverageStartDep,
+      coverageEnd: coverageEndDep,
+      reportDate: reportDateDep,
+      auditor: auditorDep,
+      scanDate: scanDateDep,
+      isSoxVendor: report.is_sox_vendor || false,
+    });
+  }, [report]);
+
+  // Only after all hooks, do early returns
+  if (loading) return <Box sx={{ p: 4, textAlign: "center" }}><CircularProgress /></Box>;
+  if (!report || (typeof report === 'object' && Object.keys(report).length === 0)) {
+    return <Box sx={{ p: 4, color: 'red' }}>No report data found or report is empty/corrupt.</Box>;
+  }
+
+  // Now safe to access report properties
+  const coverageStartRaw = getCoverageStart(report);
+  const coverageEndRaw = getCoverageEnd(report);
+  const reportDateRaw = getReportDate(report);
+
+  // Dropdown for selecting scan
+  const handleScanChange = (event: any) => {
+    const newId = event.target.value;
+    setSelectedScanId(newId);
+    navigate(`/report/${newId}`);
+  };
+
+  // Helper to toggle low-confidence sections
+  const toggleShow = (key: string) => {
+    setShowLowConfidence(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Helper to filter by confidence (for show/hide low confidence)
+  const filterLowConfidence = (arr: any[], key = "confidence") => arr.filter(item => (item[key] ?? 1) < confidenceThreshold);
+  const filterHighConfidence = (arr: any[], key = "confidence") => arr.filter(item => (item[key] ?? 1) >= confidenceThreshold);
+
+  // Render subservice orgs (support both legacy and current keys)
+  const subOrgs = report.subservice_organizations || report.subservice_orgs || [];
+  // Duplicate name detection helpers (case-insensitive, trimmed)
+  const normalizeSoName = (s: string | null | undefined) => (s || '').trim().toLowerCase();
+  const lowConfSubOrgs = filterLowConfidence(subOrgs, "confidence");
+  const highConfSubOrgs = filterHighConfidence(subOrgs, "confidence");
+
+  // Compute duplicate counts based ONLY on high-confidence (non-ignored) suborgs
+  const highConfNameCounts = (() => {
+    const m = new Map<string, number>();
+    (highConfSubOrgs || []).forEach((so: any) => {
+      const key = normalizeSoName(so?.name);
+      if (!key) return;
+      m.set(key, (m.get(key) || 0) + 1);
+    });
+    return m;
+  })();
+  const isDuplicateSoName = (name: string | null | undefined) => {
+    const key = normalizeSoName(name);
+    return key ? ((highConfNameCounts.get(key) || 0) > 1) : false;
+  };
+  const hasAnyDuplicateSoNames = Array.from(highConfNameCounts.values()).some((c) => c > 1);
+
+  // --- Edit Handlers for EditableTable ---
+  // Note: Switch to optimistic updates (no full refetch)
+
+  // Utility: normalize percent-like values to 0..1 float
+  const normalizeConfidence = (val: any) => {
+    if (val == null) return val;
+    if (typeof val === 'number') {
+      // If a user typed 95, assume 95%
+      return val > 1 ? val / 100 : val;
+    }
+    if (typeof val === 'string') {
+      const s = val.trim();
+      if (s.endsWith('%')) {
+        const n = parseFloat(s.replace('%', ''));
+        return isNaN(n) ? undefined : n / 100;
+      }
+      const n = parseFloat(s);
+      if (isNaN(n)) return undefined;
+      return n > 1 ? n / 100 : n;
+    }
+    return undefined;
+  };
+
+  // Create handlers for Suborg, CUEC, Control
+  const handleCreateSuborg = async () => {
+    if (!selectedScanId) return;
+    const name = (newSuborg.name || '').trim();
+    if (!name) { showToast('Name is required', 'warning'); return; }
+    const payload: any = { name };
+    if (newSuborg.confidence !== undefined && newSuborg.confidence !== '') {
+      const norm = normalizeConfidence(newSuborg.confidence);
+      if (norm !== undefined) payload.confidence = norm;
+    }
+    if (newSuborg.third_party_description) payload.third_party_description = newSuborg.third_party_description;
+    if (newSuborg.third_party_page_ref) payload.third_party_page_ref = newSuborg.third_party_page_ref;
+    try {
+      const { data: created } = await api.post(`${API_URL}${selectedScanId}/suborgs`, payload);
+      setReport((prev: any) => {
+        if (!prev) return prev;
+        const pushTo = (arr: any[]) => ([...(arr || []), created]);
+        const next: any = { ...prev };
+        if (prev.subservice_organizations) next.subservice_organizations = pushTo(prev.subservice_organizations);
+        if (prev.subservice_orgs) next.subservice_orgs = pushTo(prev.subservice_orgs);
+        if (!prev.subservice_organizations && !prev.subservice_orgs) next.subservice_orgs = pushTo([]);
+        return next;
+      });
+      setAddSuborgOpen(false);
+      setNewSuborg({ name: '' });
+      showToast('Subservice org created', 'success');
+    } catch (e: any) {
+      console.error(e);
+      const msg = e?.response?.data || e?.message || 'Failed to create suborg';
+      showToast(typeof msg === 'string' ? msg : 'Failed to create suborg', 'error');
+    }
+  };
+
+  const handleCreateCuec = async () => {
+    if (!selectedScanId) return;
+    const desc = (newCuec.cuec_description || '').trim();
+    if (!desc) { showToast('Description is required', 'warning'); return; }
+    const payload: any = { cuec_description: desc };
+    if (newCuec.cuec_confidence !== undefined && newCuec.cuec_confidence !== '') {
+      const norm = normalizeConfidence(newCuec.cuec_confidence);
+      if (norm !== undefined) payload.cuec_confidence = norm;
+    }
+    if (newCuec.cuec_tsc_id) payload.cuec_tsc_id = newCuec.cuec_tsc_id;
+    if (newCuec.cuec_coso_id) payload.cuec_coso_id = newCuec.cuec_coso_id;
+    if (newCuec.control_strength) payload.control_strength = newCuec.control_strength;
+    try {
+      const { data: created } = await api.post(`${API_URL}${selectedScanId}/cuecs`, payload);
+      setReport((prev: any) => ({ ...prev, cuecs: [...(prev?.cuecs || []), created] }));
+      setAddCuecOpen(false);
+      setNewCuec({ cuec_description: '' });
+      showToast('CUEC created', 'success');
+    } catch (e: any) {
+      console.error(e);
+      const msg = e?.response?.data || e?.message || 'Failed to create CUEC';
+      showToast(typeof msg === 'string' ? msg : 'Failed to create CUEC', 'error');
+    }
+  };
+
+  const handleCreateControl = async () => {
+    if (!selectedScanId) return;
+    const hasDesc = (newControl.control_desc || '').trim().length > 0;
+    const hasId = (newControl.control_id || '').trim().length > 0;
+    if (!hasDesc && !hasId) { showToast('Control ID or Description required', 'warning'); return; }
+    const payload: any = {};
+    if (hasId) payload.control_id = (newControl.control_id || '').trim();
+    if (hasDesc) payload.control_desc = (newControl.control_desc || '').trim();
+    if (newControl.control_tsc_id) payload.control_tsc_id = newControl.control_tsc_id;
+    if (newControl.control_coso_id) payload.control_coso_id = newControl.control_coso_id;
+    if (newControl.control_page_ref) payload.control_page_ref = newControl.control_page_ref;
+    if (newControl.control_confidence !== undefined && newControl.control_confidence !== '') {
+      const norm = normalizeConfidence(newControl.control_confidence);
+      if (norm !== undefined) payload.control_confidence = norm;
+    }
+    try {
+      const { data: created } = await api.post(`${API_URL}${selectedScanId}/controls`, payload);
+      setReport((prev: any) => ({ ...prev, controls: [...(prev?.controls || []), created] }));
+      setAddControlOpen(false);
+      setNewControl({});
+      showToast('Control created', 'success');
+    } catch (e: any) {
+      console.error(e);
+      const msg = e?.response?.data || e?.message || 'Failed to create control';
+      showToast(typeof msg === 'string' ? msg : 'Failed to create control', 'error');
+    }
+  };
+
+  // Suborgs edit handler
+  const handleEditSuborg = async (row: any, idx: number) => {
+    const endpoint = row.id != null
+      ? `${API_URL}${selectedScanId}/suborgs/id/${encodeURIComponent(row.id)}`
+      : `${API_URL}${selectedScanId}/suborgs/${encodeURIComponent(row.name)}`;
+    // Only send allowed fields
+    const payload: any = {};
+    if (row.confidence !== undefined) {
+      const norm = normalizeConfidence(row.confidence);
+      if (norm !== undefined) payload.confidence = norm;
+    }
+    if (row.name !== undefined) payload.name = String(row.name || '').trim();
+  if (row.confidence_justification !== undefined) payload.confidence_justification = row.confidence_justification;
+    if (row.annotation !== undefined) payload.annotation = row.annotation;
+  if (row.third_party_description !== undefined) payload.third_party_description = row.third_party_description;
+  if (row.third_party_page_ref !== undefined) payload.third_party_page_ref = row.third_party_page_ref;
+    try {
+      await api.patch(endpoint, payload);
+        // Optimistic local update for suborgs in both possible keys
+        setReport((prev: any) => {
+          if (!prev) return prev;
+          const apply = (arr: any[]) => (arr || []).map((so: any) => {
+            const match = (row.id != null && so.id != null)
+              ? String(so.id) === String(row.id)
+              : String(so.name) === String(row.name);
+            return match ? { ...so, ...payload } : so;
+          });
+          const updatedA = apply(prev.subservice_organizations || prev.subservice_orgs || []);
+          const result: any = { ...prev };
+          if (prev.subservice_organizations) result.subservice_organizations = updatedA;
+          if (prev.subservice_orgs) result.subservice_orgs = updatedA;
+          return result;
+        });
+        showToast('Subservice org saved', 'success');
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const text = e?.response?.data;
+      if (status === 409) {
+        console.warn('Suborg name collision (409):', text);
+        showToast('Name already exists for this scan. Please choose a unique name (e.g., add a qualifier like region or environment).', 'warning');
+      } else {
+        console.error('Failed to save Subservice org row:', text || e);
+        showToast('Failed to save subservice org', 'error');
+      }
+    }
+  };
+
+  // Batch edit handler for Subservice Orgs (works with either high or low lists)
+  const handleBatchEditSuborgs = async (changes: { [rowIdx: number]: any }, rowsUsed: any[]) => {
+    try {
+      const entries = Object.entries(changes);
+      const savePromises = entries.map(async ([rowIdx, changedFields]) => {
+        const originalRow = rowsUsed[parseInt(rowIdx)];
+        if (!originalRow) return;
+        const suborgName = originalRow.id != null
+          ? `id/${encodeURIComponent(originalRow.id)}`
+          : `${encodeURIComponent(originalRow.name)}`;
+        // Only allow fields backend supports
+        const payload: any = {};
+        if (changedFields.confidence !== undefined) {
+          const norm = normalizeConfidence(changedFields.confidence);
+          if (norm !== undefined) payload.confidence = norm;
+        }
+        if (changedFields.name !== undefined) payload.name = String(changedFields.name || '').trim();
+        if (changedFields.confidence_justification !== undefined) payload.confidence_justification = changedFields.confidence_justification;
+  if (changedFields.annotation !== undefined) payload.annotation = changedFields.annotation;
+  if (changedFields.third_party_description !== undefined) payload.third_party_description = changedFields.third_party_description;
+  if (changedFields.third_party_page_ref !== undefined) payload.third_party_page_ref = changedFields.third_party_page_ref;
+        try {
+          await api.patch(`${API_URL}${selectedScanId}/suborgs/${suborgName}`, payload);
+          return { ok: true } as any;
+        } catch (err: any) {
+          err.status = err?.response?.status;
+          err.row = originalRow;
+          throw err;
+        }
+      });
+      const results = await Promise.allSettled(savePromises);
+      const succeededIdx = new Set<number>();
+      let hadConflict = false;
+      results.forEach((res, i) => {
+        if (res.status === 'fulfilled') succeededIdx.add(i);
+        else if ((res as any).reason && (res as any).reason.status === 409) hadConflict = true;
+      });
+      // Optimistic local update only for succeeded rows
+      setReport((prev: any) => {
+        if (!prev) return prev;
+        const apply = (arr: any[]) => (arr || []).map((so: any) => {
+          // find matching succeeded entries
+          for (let i = 0; i < entries.length; i++) {
+            if (!succeededIdx.has(i)) continue;
+            const [rowIdxStr, changedFields] = entries[i];
+            const orig = rowsUsed[parseInt(rowIdxStr)];
+            if (!orig) continue;
+            const match = (orig.id != null && so.id != null)
+              ? String(so.id) === String(orig.id)
+              : String(so.name) === String(orig.name);
+            if (!match) continue;
+            const payload: any = {};
+            if (changedFields.confidence !== undefined) {
+              const norm = normalizeConfidence(changedFields.confidence);
+              if (norm !== undefined) payload.confidence = norm;
+            }
+            if (changedFields.name !== undefined) payload.name = String(changedFields.name || '').trim();
+            if (changedFields.confidence_justification !== undefined) payload.confidence_justification = changedFields.confidence_justification;
+            if (changedFields.annotation !== undefined) payload.annotation = changedFields.annotation;
+            if (changedFields.third_party_description !== undefined) payload.third_party_description = changedFields.third_party_description;
+            if (changedFields.third_party_page_ref !== undefined) payload.third_party_page_ref = changedFields.third_party_page_ref;
+            return { ...so, ...payload };
+          }
+          return so;
+        });
+        const next: any = { ...prev };
+        if (prev.subservice_organizations) next.subservice_organizations = apply(prev.subservice_organizations);
+        if (prev.subservice_orgs) next.subservice_orgs = apply(prev.subservice_orgs);
+        return next;
+      });
+      const successCount = Array.from(succeededIdx).length;
+      const failCount = results.length - successCount;
+      if (failCount === 0) {
+        showToast('Subservice orgs updated', 'success');
+      } else if (hadConflict) {
+        showToast(`Some names already exist. Updated ${successCount}, ${failCount} failed. Please use unique names.`, 'warning');
+      } else {
+        showToast(`Updated ${successCount} subservice orgs. ${failCount} failed.`, 'warning');
+      }
+    } catch (e) {
+      console.error('Failed to batch save Suborgs', e);
+      showToast('Failed to update subservice orgs', 'error');
+    }
+  };
+
+  // Helper function for defensive parsing of framework mappings
+  const parseMapping = (mapping: any): Array<{id: string; confidence: number; reasoning: string; deviation?: string}> => {
+    if (Array.isArray(mapping)) return mapping;
+    if (typeof mapping === 'string') {
+      try {
+        const parsed = JSON.parse(mapping);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  // Helper function to process CUEC data for saving
+  const processCuecData = (row: any) => {
+    let newRow = { ...row };
+    
+    // If cuec_confidence_justification is present, re-stringify as JSON array
+    if (typeof newRow.cuec_confidence_justification === 'string') {
+      // Try to parse as array (split by comma or line break), then re-stringify
+      let arr: string[] = [];
+      try {
+        arr = JSON.parse(newRow.cuec_confidence_justification);
+        if (!Array.isArray(arr)) throw new Error();
+      } catch {
+        // Split by comma or line break, trim, remove empty
+        arr = newRow.cuec_confidence_justification
+          .split(/[\n,]/)
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 0);
+      }
+      newRow.cuec_confidence_justification = JSON.stringify(arr);
+    } else if (Array.isArray(newRow.cuec_confidence_justification)) {
+      newRow.cuec_confidence_justification = JSON.stringify(newRow.cuec_confidence_justification);
+    }
+    
+    // Convert percentage-like values to normalized numbers for database
+    if (typeof newRow.cuec_confidence === 'string') {
+      const s = newRow.cuec_confidence.trim();
+      if (s.endsWith('%')) {
+        const n = parseFloat(s.replace('%', ''));
+        if (!isNaN(n)) newRow.cuec_confidence = n / 100;
+      } else {
+        const n = parseFloat(s);
+        if (!isNaN(n)) newRow.cuec_confidence = n > 1 ? n / 100 : n;
+      }
+    } else if (typeof newRow.cuec_confidence === 'number') {
+      newRow.cuec_confidence = newRow.cuec_confidence > 1 ? newRow.cuec_confidence / 100 : newRow.cuec_confidence;
+    }
+    if (typeof newRow.cuec_tsc_confidence_pct === 'string' && newRow.cuec_tsc_confidence_pct.endsWith('%')) {
+      newRow.cuec_tsc_confidence_pct = parseFloat(newRow.cuec_tsc_confidence_pct.replace('%', ''));
+    }
+    if (typeof newRow.cuec_tsc_similarity === 'string' && newRow.cuec_tsc_similarity.endsWith('%')) {
+      newRow.cuec_tsc_similarity = parseFloat(newRow.cuec_tsc_similarity.replace('%', '')) / 100;
+    }
+    
+    // Only include fields backend supports for CUEC PATCH
+    const payload: any = {};
+    if (newRow.cuec_confidence !== undefined) payload.cuec_confidence = newRow.cuec_confidence;
+    if (newRow.cuec_confidence_justification !== undefined) payload.cuec_confidence_justification = newRow.cuec_confidence_justification;
+    if (newRow.annotation !== undefined) payload.annotation = newRow.annotation;
+    if (newRow.control_strength !== undefined) payload.control_strength = newRow.control_strength;
+    if (newRow.cuec_description !== undefined) payload.cuec_description = newRow.cuec_description;
+    if (newRow.cuec_gpt_reasoning !== undefined) payload.cuec_gpt_reasoning = newRow.cuec_gpt_reasoning;
+    if (newRow.cuec_justification !== undefined) payload.cuec_justification = newRow.cuec_justification;
+    return payload;
+  };
+
+  // CUECs edit handler with re-stringify for confidence justification (optimistic update)
+  const handleEditCuec = async (row: any, idx: number) => {
+    const processedRow = processCuecData(row);
+    try {
+      await api.patch(`${API_URL}${selectedScanId}/cuecs/${row.id}`, processedRow);
+        setReport((prev: any) => {
+          if (!prev) return prev;
+          const updatedCuecs = (prev.cuecs || []).map((c: any) => String(c.id) === String(row.id) ? { ...c, ...processedRow } : c);
+          return { ...prev, cuecs: updatedCuecs };
+        });
+        showToast('CUEC saved', 'success');
+    } catch (e: any) {
+      console.error('Failed to save CUEC row', e?.response?.data || e);
+      showToast('Failed to save CUEC', 'error');
+    }
+  };
+
+  // Batch edit handler for CUECs
+  const handleBatchEditCuec = async (changes: { [rowIdx: number]: any }, rowsUsed: any[]) => {
+    console.log('handleBatchEditCuec called with changes:', changes);
+    console.log('Rows used for batch edit:', rowsUsed.length);
+    
+    // Collect IDs of rows being changed
+    const changedIds = Object.entries(changes).map(([rowIdx, _]) => {
+      const row = rowsUsed[parseInt(rowIdx)];
+      return row?.id;
+    }).filter(Boolean);
+    
+    try {
+      const savePromises = Object.entries(changes).map(async ([rowIdx, changedFields]) => {
+        const originalRow = rowsUsed[parseInt(rowIdx)];
+        console.log('Processing rowIdx:', rowIdx, 'originalRow:', originalRow, 'changedFields:', changedFields);
+        
+        if (!originalRow) {
+          console.error('No original row found for index:', rowIdx);
+          return;
+        }
+        
+        // Only send the changed fields, not the entire object
+        const processedChanges = processCuecData(changedFields);
+        
+        console.log('Making PATCH request to:', `${API_URL}${selectedScanId}/cuecs/${originalRow.id}`);
+        console.log('With data (changed fields only):', processedChanges);
+        return api.patch(`${API_URL}${selectedScanId}/cuecs/${originalRow.id}`, processedChanges)
+          .then(r => r)
+          .catch(error => { console.error('PATCH request error:', error); throw error; });
+      });
+
+      console.log('Waiting for all save promises...');
+      await Promise.all(savePromises);
+      console.log('All PATCH requests completed');
+
+      // Optimistic local update of CUECs
+      setReport((prev: any) => {
+        if (!prev) return prev;
+        const updatedCuecs = (prev.cuecs || []).map((cuec: any) => {
+          const entry = Object.entries(changes).find(([rowIdx]) => {
+            const orig = rowsUsed[parseInt(rowIdx)];
+            return orig && String(orig.id) === String(cuec.id);
+          });
+          if (!entry) return cuec;
+          const [, changedFields] = entry;
+          const processedChanges = processCuecData(changedFields);
+          return { ...cuec, ...processedChanges };
+        });
+        return { ...prev, cuecs: updatedCuecs };
+      });
+
+      // Highlight the changed rows for 3 seconds
+      setRecentlyChangedIds(new Set(changedIds));
+      setTimeout(() => {
+        setRecentlyChangedIds(new Set());
+      }, 3000);
+      showToast('CUECs updated', 'success');
+    } catch (e) {
+      console.error('Failed to save batch changes', e);
+      showToast('Failed to update CUECs', 'error');
+    }
+  };
+
+  // Recompute mapping for a single CUEC via backend endpoint
+  const handleRecomputeCuec = async (row: any) => {
+    if (!selectedScanId) return;
+    try {
+      const resp = await api.post(`${API_URL}${selectedScanId}/cuecs/${row.id}/recompute_frameworks`);
+      const data = resp.data;
+      const upd = data?.cuec || {};
+      setReport((prev: any) => {
+        if (!prev) return prev;
+        const nextCuecs = (prev.cuecs || []).map((c: any) => {
+          if (String(c.id) !== String(row.id)) return c;
+          return {
+            ...c,
+            cuec_tsc_id: upd.cuec_tsc_id,
+            cuec_coso_id: upd.cuec_coso_id,
+            cuec_tsc_similarity: upd.cuec_tsc_similarity,
+            cuec_coso_similarity: upd.cuec_coso_similarity,
+            cuec_tsc_confidence_pct: upd.cuec_tsc_confidence_pct,
+            cuec_coso_confidence_pct: upd.cuec_coso_confidence_pct,
+            cuec_closest_framework: upd.cuec_closest_framework,
+            cuec_framework_alignment: upd.cuec_framework_alignment,
+            cuec_framework_alignment_id: upd.cuec_framework_alignment_id,
+          };
+        });
+        return { ...prev, cuecs: nextCuecs };
+      });
+      showToast('Recomputed CUEC mapping', 'success');
+    } catch (e: any) {
+      console.error(e);
+      showToast('Failed to recompute mapping', 'error');
+    }
+  };
+
+  // Recompute mapping for a single Control via backend endpoint
+  const handleRecomputeControl = async (row: any) => {
+    if (!selectedScanId) return;
+    try {
+      const resp = await api.post(`${API_URL}${selectedScanId}/controls/id/${row.id}/recompute_frameworks`);
+      const data = resp.data;
+      const upd = data?.control || {};
+      setReport((prev: any) => {
+        if (!prev) return prev;
+        const nextControls = (prev.controls || []).map((c: any) => {
+          if (String(c.id) !== String(row.id)) return c;
+          return {
+            ...c,
+            control_tsc_id: upd.control_tsc_id,
+            control_coso_id: upd.control_coso_id,
+            control_tsc_similarity: upd.control_tsc_similarity,
+            control_coso_similarity: upd.control_coso_similarity,
+            control_tsc_confidence_pct: upd.control_tsc_confidence_pct,
+            control_coso_confidence_pct: upd.control_coso_confidence_pct,
+            control_closest_framework: upd.control_closest_framework,
+          };
+        });
+        return { ...prev, controls: nextControls };
+      });
+      showToast('Recomputed control mapping', 'success');
+    } catch (e: any) {
+      console.error(e);
+      showToast('Failed to recompute control mapping', 'error');
+    }
+  };
+
+  // Render CUECs
+  const cuecs = report.cuecs || [];
+  const lowConfCuecs = filterLowConfidence(cuecs, "cuec_confidence");
+  const highConfCuecs = filterHighConfidence(cuecs, "cuec_confidence");
+
+  // Render Controls
+  const controls = report.controls || [];
+  const lowConfControls = controls.filter((ctrl: Control) => (ctrl.control_confidence ?? 1) < confidenceThreshold);
+  const highConfControls = controls.filter((ctrl: Control) => (ctrl.control_confidence ?? 1) >= confidenceThreshold);
+
+  // Helper for wide layout and small font
+  const wideBoxSx = { maxWidth: 'none', width: '100%', mx: 'auto', mt: 2, p: 2, fontSize: 12 };
+  const headingSx = { mt: 2, fontSize: 15, fontWeight: 'bold' };
+  // const subheadingSx = { fontSize: 15 }; // not used
+  const textSx = { fontSize: 12, fontFamily: 'Roboto, Arial, sans-serif' };
+
+  // Use centralized date formatter
+  const formatDate = formatDateSafe;
+
+  // Coverage period: prefer scan.coverage_start/coverage_end, fallback to report.coverage_period/start_date/end_date
+  const coverageStart = formatDate(coverageStartRaw);
+  const coverageEnd = formatDate(coverageEndRaw);
+
+  // Report date formatted
+  const reportDate = formatDate(reportDateRaw);
+
+  // Re-exported centralized function for timestamp formatting
+  const formatLocalDateWithTZ = (s: string | undefined | null) => formatLocalDateTimeWithTZ(s);
+
+  // Subservice Org columns
+  const subserviceOrgColumns = [
+    { key: "name", label: "Subservice Organization", width: 220, format: (v: any) => {
+      const s = String(v ?? '');
+      return isDuplicateSoName(s) ? `${s} (duplicate)` : s;
+    } },
+    { key: "confidence", label: "Confidence", width: 90, format: (v: any) => v !== undefined ? `${Math.round(Number(v) * 100)}%` : "" },
+    { key: "third_party_description", label: "Description", width: 220 },
+    { key: "third_party_page_ref", label: "Page Ref", width: 160 },
+    { key: "third_party_confidence", label: "Confidence %", width: 80, hidden: true, format: (v: any) => v !== undefined ? `${Math.round(Number(v) * 100)}%` : "" },
+    { key: "distance_from_so_keywords", label: "SO Distance", width: 80, hidden: true },
+    { key: "likely_so", label: "Likely SO", width: 80, hidden: true },
+    { key: "common_so", label: "Common SO", width: 80, hidden: true },
+    { key: "source_context", label: "Source Context", width: 120, hidden: true },
+    { key: "confidence_justification", label: "Confidence Justification", width: 300, editable: false, format: (v: any) => Array.isArray(v) ? v.join('\n') : (typeof v === 'string' ? v.replace(/,\s*/g, ',\n') : ''), cellSx: { whiteSpace: 'pre-line' } },
+    // Add any other new fields here
+  ];
+  const defaultVisibleSubOrgCols = [
+    "name",
+    "third_party_description",
+    "confidence",
+    "confidence_justification"
+  ];
+
+
+
+  // Helper: TSC/COSO coverage tables with missing ID detection
+  // Only include high-confidence, non-ignored controls in coverage
+  const highConfControlsForCoverage = controls.filter((ctrl: any) => 
+    (ctrl.control_confidence ?? 0) >= confidenceThreshold && 
+    !ignored.controls.has(ctrl.id)
+  );
+
+  // Collect all TSC/COSO IDs from controls (support both single-match and multi-match)
+  const tscIdsFromControls = new Set<string>();
+  const cosoIdsFromControls = new Set<string>();
+
+  highConfControlsForCoverage.forEach((ctrl: any) => {
+    // Single match (legacy)
+    if (ctrl.control_tsc_id) tscIdsFromControls.add(ctrl.control_tsc_id);
+    if (ctrl.control_coso_id) cosoIdsFromControls.add(ctrl.control_coso_id);
+    
+    // Multi-match arrays
+    if (ctrl.control_tsc_mappings?.length > 0) {
+      ctrl.control_tsc_mappings.forEach((m: any) => tscIdsFromControls.add(m.id));
+    }
+    if (ctrl.control_coso_mappings?.length > 0) {
+      ctrl.control_coso_mappings.forEach((m: any) => cosoIdsFromControls.add(m.id));
+    }
+  });
+
+  // Only include high-confidence, non-ignored CUECs in coverage
+  const highConfCuecsFiltered = cuecs.filter((cuec: any) => 
+    (cuec.cuec_confidence ?? 0) >= confidenceThreshold && 
+    !ignored.cuecs.has(cuec.id)
+  );
+
+  // Collect all TSC/COSO IDs from CUECs (support both single-match and multi-match)
+  const tscIdsFromCuecs = new Set<string>();
+  const cosoIdsFromCuecs = new Set<string>();
+
+  highConfCuecsFiltered.forEach((cuec: any) => {
+    // Single match (legacy)
+    if (cuec.cuec_tsc_id) tscIdsFromCuecs.add(cuec.cuec_tsc_id);
+    if (cuec.cuec_coso_id) cosoIdsFromCuecs.add(cuec.cuec_coso_id);
+    
+    // Multi-match arrays
+    if (cuec.cuec_tsc_mappings?.length > 0) {
+      cuec.cuec_tsc_mappings.forEach((m: any) => tscIdsFromCuecs.add(m.id));
+    }
+    if (cuec.cuec_coso_mappings?.length > 0) {
+      cuec.cuec_coso_mappings.forEach((m: any) => cosoIdsFromCuecs.add(m.id));
+    }
+  });
+
+  const tscIdsFound = tscIdsFromControls;
+  const cosoIdsFound = cosoIdsFromControls;
+  const tscIdsByCuecs = tscIdsFromCuecs;
+  const cosoIdsByCuecs = cosoIdsFromCuecs;
+  
+  // Helper function to search for missing framework IDs in extracted text
+  const findMissingFrameworkIds = (extractedText: string, foundIds: Set<string>, allIds: string[]): string[] => {
+    if (!extractedText) return [];
+    
+    const missingIds: string[] = [];
+    const variations = (id: string) => {
+      // Generate variations like CC1.1, CC.1.1, CC 1.1, etc.
+      const base = id.replace(/[.\s]/g, '');
+      return [
+        id,
+        id.replace('.', ' '),
+        id.replace(/(\d)\.(\d)/, '$1.$2'),
+        id.replace(/(\d)\.(\d)/, '$1 $2'),
+        base.replace(/(\w+)(\d+)(\d+)/, '$1.$2.$3'),
+        base.replace(/(\w+)(\d+)(\d+)/, '$1 $2.$3'),
+        base.replace(/(\w+)(\d+)(\d+)/, '$1.$2 $3'),
+        base.replace(/(\w+)(\d+)(\d+)/, '$1 $2 $3'),
+      ];
+    };
+    
+    for (const id of allIds) {
+      if (!foundIds.has(id)) {
+        // Check if any variation of this ID appears in the text
+        const idVariations = variations(id);
+        const found = idVariations.some(variation => {
+          const regex = new RegExp(`\\b${variation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+          return regex.test(extractedText);
+        });
+        
+        if (found) {
+          missingIds.push(id);
+        }
+      }
+    }
+    
+    return missingIds;
+  };
+
+  // Find missing IDs that appear in extracted text
+  const allTscIds = frameworkCriteria ? Object.values(frameworkCriteria.tsc).flat().map((crit: any) => crit.id) : [];
+  const allCosoIds = frameworkCriteria ? Object.values(frameworkCriteria.coso).flat().map((crit: any) => crit.id) : [];
+  const missingTscIds = findMissingFrameworkIds(report?.extracted_text || '', tscIdsFound, allTscIds);
+  const missingCosoIds = findMissingFrameworkIds(report?.extracted_text || '', cosoIdsFound, allCosoIds);
+
+  // Helper: Ignore row and persist for suborgs, cuecs, controls - UPDATED to set confidence to 0
+  const ignoreRow = async (row: any, type: 'suborgs' | 'cuecs' | 'controls') => {
+    console.log('🎯 ignoreRow called with:', { row, type, selectedScanId });
+    if (!selectedScanId) {
+      console.error('❌ No selectedScanId');
+      return;
+    }
+    
+    try {
+      let endpoint = '';
+      let updateData = {};
+      
+      if (type === 'suborgs') {
+        // Prefer stable id; fallback to name if id is unavailable
+        endpoint = row.id != null
+          ? `${API_URL}${selectedScanId}/suborgs/id/${encodeURIComponent(row.id)}`
+          : `${API_URL}${selectedScanId}/suborgs/${encodeURIComponent(row.name)}`;
+        updateData = {
+          confidence: 0,
+          confidence_justification: (row.confidence_justification || '') + '; Manually ignored in UI - confidence set to 0'
+        };
+      } else if (type === 'cuecs') {
+        // Use id as identifier for CUECs
+        const cuecId = row.id;
+        if (!cuecId) {
+          console.error('CUEC id not found in row:', row);
+          return;
+        }
+        endpoint = `${API_URL}${selectedScanId}/cuecs/${cuecId}`;
+        updateData = {
+          cuec_confidence: 0,
+          cuec_confidence_justification: (row.cuec_confidence_justification || '') + '; Manually ignored in UI - confidence set to 0'
+        };
+      } else if (type === 'controls') {
+        // Prefer numeric id to avoid duplicate control_id ambiguity
+        endpoint = row.id != null
+          ? `${API_URL}${selectedScanId}/controls/id/${encodeURIComponent(row.id)}`
+          : `${API_URL}${selectedScanId}/controls/${encodeURIComponent(row.control_id)}`;
+        updateData = {
+          control_confidence: 0,
+          confidence_calc: (row.confidence_calc || '') + '; Manually ignored in UI - confidence set to 0'
+        };
+      }
+
+      console.log('📤 Sending PATCH request:', { endpoint, updateData });
+      // Update in backend
+      try {
+        const patchResponse = await api.patch(endpoint, updateData);
+        console.log('✅ PATCH response:', patchResponse.status, patchResponse.data);
+      } catch (patchError: any) {
+        console.error('❌ PATCH request failed:', patchError);
+        console.error('Error details:', {
+          message: patchError.message,
+          response: patchError.response?.data,
+          status: patchError.response?.status
+        });
+        throw patchError; // Re-throw to be caught by outer catch
+      }
+
+      // OPTIMISTIC UPDATE: Update local state immediately without refetching
+      // This is faster and avoids backend timeout issues
+      console.log('🔄 Applying optimistic update to local state');
+      
+      if (type === 'controls') {
+        console.log('🔍 Looking for control to update. Target row:', { id: row.id, control_id: row.control_id });
+        
+        setReport((prev: any) => {
+          if (!prev) {
+            console.error('❌ No previous report state!');
+            return prev;
+          }
+          
+          console.log('📊 Current controls count:', prev.controls?.length);
+          
+          let matchCount = 0;
+          // Create new controls array with the updated control
+          const updatedControls = (prev.controls || []).map((ctrl: any, idx: number) => {
+            // Match by id (preferred) or control_id (fallback)
+            const isMatch = row.id != null
+              ? String(ctrl.id) === String(row.id)
+              : String(ctrl.control_id) === String(row.control_id);
+            
+            if (!isMatch) return ctrl;
+            
+            matchCount++;
+            // Update the matched control with new confidence
+            console.log(`📝 Match #${matchCount} - Updating control at index ${idx}:`, { 
+              id: ctrl.id, 
+              control_id: ctrl.control_id, 
+              old_confidence: ctrl.control_confidence, 
+              new_confidence: 0 
+            });
+            return {
+              ...ctrl,
+              control_confidence: 0,
+              confidence_calc: (updateData as any).confidence_calc
+            };
+          });
+          
+          console.log('✅ Controls array updated. Total controls:', updatedControls.length, 'Matches found:', matchCount);
+          
+          if (matchCount === 0) {
+            console.error('❌ NO MATCHES FOUND! Target was:', { id: row.id, control_id: row.control_id });
+            console.log('Sample of controls in state:', prev.controls?.slice(0, 3).map((c: any) => ({ id: c.id, control_id: c.control_id })));
+          }
+          
+          // CRITICAL: Return a completely NEW object to force React to detect the change
+          // We must create new references at every level
+          const newReport = {
+            ...prev,
+            controls: updatedControls,
+            // Add a timestamp to guarantee React sees this as a new object
+            _lastUpdate: Date.now()
+          };
+          console.log('🔄 Returning new report object with timestamp:', newReport._lastUpdate);
+          return newReport;
+        });
+        
+        // Force a small delay to ensure state has updated before showing success
+        setTimeout(() => {
+          console.log('✅ Toast shown after state update');
+          showToast('Control ignored', 'success');
+        }, 100);
+      } else if (type === 'cuecs') {
+        setReport((prev: any) => {
+          if (!prev) return prev;
+          const updatedCuecs = (prev.cuecs || []).map((c: any) => 
+            String(c.id) === String(row.id) 
+              ? { ...c, cuec_confidence: 0, cuec_confidence_justification: (updateData as any).cuec_confidence_justification }
+              : c
+          );
+          return { ...prev, cuecs: updatedCuecs };
+        });
+        showToast('CUEC ignored', 'success');
+      } else if (type === 'suborgs') {
+        setReport((prev: any) => {
+          if (!prev) return prev;
+          const updateArray = (arr: any[]) => (arr || []).map((so: any) => {
+            const isMatch = row.id != null
+              ? String(so.id) === String(row.id)
+              : String(so.name) === String(row.name);
+            return isMatch ? { ...so, confidence: 0, confidence_justification: (updateData as any).confidence_justification } : so;
+          });
+          const next: any = { ...prev };
+          if (prev.subservice_organizations) next.subservice_organizations = updateArray(prev.subservice_organizations);
+          if (prev.subservice_orgs) next.subservice_orgs = updateArray(prev.subservice_orgs);
+          return next;
+        });
+        showToast('Subservice org ignored', 'success');
+      }
+      console.log('═══════════════════════════════════════');
+      console.log('✅ ignoreRow completed successfully');
+      console.log('═══════════════════════════════════════');
+    } catch (error) {
+      console.error('═══════════════════════════════════════');
+      console.error(`❌ FATAL ERROR in ignoreRow for ${type}:`, error);
+      console.error('Error stack:', (error as any).stack);
+      console.error('═══════════════════════════════════════');
+      showToast(`Failed to update ${type}`, 'error');
+      throw error; // Re-throw to see in console
+    }
+  };
+
+  // Helper: Confirm row and persist for suborgs, cuecs, controls - sets confidence to 100%
+  const confirmRow = async (row: any, type: 'suborgs' | 'cuecs' | 'controls') => {
+    console.log('🎯 confirmRow called with:', { row, type, selectedScanId });
+    if (!selectedScanId) {
+      console.error('❌ No selectedScanId');
+      return;
+    }
+    
+    try {
+      let endpoint = '';
+      let updateData = {};
+      
+      if (type === 'suborgs') {
+        endpoint = row.id != null
+          ? `${API_URL}${selectedScanId}/suborgs/id/${encodeURIComponent(row.id)}`
+          : `${API_URL}${selectedScanId}/suborgs/${encodeURIComponent(row.name)}`;
+        updateData = {
+          confidence: 1.0,
+          confidence_justification: (row.confidence_justification || '') + '; Manually confirmed in UI - confidence set to 100%'
+        };
+      } else if (type === 'cuecs') {
+        const cuecId = row.id;
+        if (!cuecId) {
+          console.error('CUEC id not found in row:', row);
+          return;
+        }
+        endpoint = `${API_URL}${selectedScanId}/cuecs/${cuecId}`;
+        updateData = {
+          cuec_confidence: 1.0,
+          cuec_confidence_justification: (row.cuec_confidence_justification || '') + '; Manually confirmed in UI - confidence set to 100%'
+        };
+      } else if (type === 'controls') {
+        endpoint = row.id != null
+          ? `${API_URL}${selectedScanId}/controls/id/${encodeURIComponent(row.id)}`
+          : `${API_URL}${selectedScanId}/controls/${encodeURIComponent(row.control_id)}`;
+        updateData = {
+          control_confidence: 1.0,
+          confidence_calc: (row.confidence_calc || '') + '; Manually confirmed in UI - confidence set to 100%'
+        };
+      }
+
+      console.log('📤 Sending PATCH request:', { endpoint, updateData });
+      try {
+        const patchResponse = await api.patch(endpoint, updateData);
+        console.log('✅ PATCH response:', patchResponse.status, patchResponse.data);
+      } catch (patchError: any) {
+        console.error('❌ PATCH request failed:', patchError);
+        console.error('Error details:', {
+          message: patchError.message,
+          response: patchError.response?.data,
+          status: patchError.response?.status
+        });
+        throw patchError;
+      }
+
+      console.log('🔄 Applying optimistic update to local state');
+      
+      if (type === 'controls') {
+        console.log('🔍 Looking for control to update. Target row:', { id: row.id, control_id: row.control_id });
+        
+        setReport((prev: any) => {
+          if (!prev) {
+            console.error('❌ No previous report state!');
+            return prev;
+          }
+          
+          console.log('📊 Current controls count:', prev.controls?.length);
+          
+          let matchCount = 0;
+          const updatedControls = (prev.controls || []).map((ctrl: any, idx: number) => {
+            const isMatch = row.id != null
+              ? String(ctrl.id) === String(row.id)
+              : String(ctrl.control_id) === String(row.control_id);
+            
+            if (!isMatch) return ctrl;
+            
+            matchCount++;
+            console.log(`📝 Match #${matchCount} - Updating control at index ${idx}:`, { 
+              id: ctrl.id, 
+              control_id: ctrl.control_id, 
+              old_confidence: ctrl.control_confidence, 
+              new_confidence: 1.0 
+            });
+            return {
+              ...ctrl,
+              control_confidence: 1.0,
+              confidence_calc: (updateData as any).confidence_calc
+            };
+          });
+          
+          console.log('✅ Controls array updated. Total controls:', updatedControls.length, 'Matches found:', matchCount);
+          
+          if (matchCount === 0) {
+            console.error('❌ NO MATCHES FOUND! Target was:', { id: row.id, control_id: row.control_id });
+            console.log('Sample of controls in state:', prev.controls?.slice(0, 3).map((c: any) => ({ id: c.id, control_id: c.control_id })));
+          }
+          
+          const newReport = {
+            ...prev,
+            controls: updatedControls,
+            _lastUpdate: Date.now()
+          };
+          console.log('🔄 Returning new report object with timestamp:', newReport._lastUpdate);
+          return newReport;
+        });
+        
+        setRecentlyChangedIds(prev => {
+          const next = new Set(prev);
+          next.add(row.id);
+          setTimeout(() => {
+            setRecentlyChangedIds(p => {
+              const n = new Set(p);
+              n.delete(row.id);
+              return n;
+            });
+          }, 3000);
+          return next;
+        });
+        
+        setTimeout(() => {
+          console.log('✅ Toast shown after state update');
+          showToast('Control confirmed', 'success');
+        }, 100);
+      } else if (type === 'cuecs') {
+        setReport((prev: any) => {
+          if (!prev) return prev;
+          const updatedCuecs = (prev.cuecs || []).map((c: any) => 
+            String(c.id) === String(row.id) 
+              ? { ...c, cuec_confidence: 1.0, cuec_confidence_justification: (updateData as any).cuec_confidence_justification }
+              : c
+          );
+          return { ...prev, cuecs: updatedCuecs };
+        });
+        
+        setRecentlyChangedIds(prev => {
+          const next = new Set(prev);
+          next.add(row.id);
+          setTimeout(() => {
+            setRecentlyChangedIds(p => {
+              const n = new Set(p);
+              n.delete(row.id);
+              return n;
+            });
+          }, 3000);
+          return next;
+        });
+        
+        showToast('CUEC confirmed', 'success');
+      } else if (type === 'suborgs') {
+        setReport((prev: any) => {
+          if (!prev) return prev;
+          const updateArray = (arr: any[]) => (arr || []).map((so: any) => {
+            const isMatch = row.id != null
+              ? String(so.id) === String(row.id)
+              : String(so.name) === String(row.name);
+            return isMatch ? { ...so, confidence: 1.0, confidence_justification: (updateData as any).confidence_justification } : so;
+          });
+          const next: any = { ...prev };
+          if (prev.subservice_organizations) next.subservice_organizations = updateArray(prev.subservice_organizations);
+          if (prev.subservice_orgs) next.subservice_orgs = updateArray(prev.subservice_orgs);
+          return next;
+        });
+        
+        setRecentlyChangedIds(prev => {
+          const next = new Set(prev);
+          next.add(row.id);
+          setTimeout(() => {
+            setRecentlyChangedIds(p => {
+              const n = new Set(p);
+              n.delete(row.id);
+              return n;
+            });
+          }, 3000);
+          return next;
+        });
+        
+        showToast('Subservice org confirmed', 'success');
+      }
+      console.log('═══════════════════════════════════════');
+      console.log('✅ confirmRow completed successfully');
+      console.log('═══════════════════════════════════════');
+    } catch (error) {
+      console.error('═══════════════════════════════════════');
+      console.error(`❌ FATAL ERROR in confirmRow for ${type}:`, error);
+      console.error('Error stack:', (error as any).stack);
+      console.error('═══════════════════════════════════════');
+      showToast(`Failed to update ${type}`, 'error');
+      throw error;
+    }
+  };
+
+  // Only filter out confidence 0 from high confidence sections; keep them in low confidence sections
+  const filteredHighConfSubOrgs = highConfSubOrgs.filter((row: any) => (row.confidence ?? 1) > 0);
+  const filteredLowConfSubOrgs = lowConfSubOrgs; // Keep all low confidence items including 0 confidence
+  const filteredHighConfCuecs = highConfCuecs.filter((row: any) => (row.cuec_confidence ?? 1) > 0);
+  const tableData = filteredHighConfCuecs?.slice(0, 5)?.map((c: any) => ({id: c.id, control_strength: c.control_strength}));
+  console.log('Filtered CUEC data for table:', JSON.stringify(tableData, null, 2));
+  const filteredLowConfCuecs = lowConfCuecs; // Keep all low confidence items including 0 confidence
+  const filteredHighConfControls = highConfControls.filter((row: any) => (row.control_confidence ?? 1) > 0);
+  const filteredLowConfControls = lowConfControls; // Keep all low confidence items including 0 confidence
+
+  const handleOverviewFieldChange = (field: string, value: any) => {
+    setOverviewFields(prev => ({ ...prev, [field]: value }));
+  };
+
+  const saveOverviewFields = async () => {
+    if (!selectedScanId) return;
+    const resp = await api.patch(`${API_URL}${selectedScanId}/overview`, overviewFields);
+    setOverviewEdit(false);
+    if (resp && (resp.status >= 200 && resp.status < 300)) {
+      console.log('Overview fields saved');
+      showToast('Overview saved', 'success');
+      // Fetch updated executive summary status to check if it's now stale
+      const summaryResp = await api.get(`${API_URL}${selectedScanId}/executive_summary`);
+      if (summaryResp?.data) {
+        setExecutiveSummaryStale(summaryResp.data.is_stale || false);
+      }
+    } else {
+      console.error('Failed to save overview fields');
+      showToast('Failed to save overview', 'error');
+    }
+  };
+
+  // Donut chart data for TSC/COSO with CUEC and likely covered
+  const tscCoveredByControls = frameworkCriteria ? Object.values(frameworkCriteria.tsc).flat().filter((crit: any) => tscIdsFound.has(crit.id)).length : 0;
+  const tscCoveredByCuecs = frameworkCriteria ? Object.values(frameworkCriteria.tsc).flat().filter((crit: any) => !tscIdsFound.has(crit.id) && tscIdsByCuecs.has(crit.id)).length : 0;
+  const tscLikelyCovered = missingTscIds.filter((id: string) => !tscIdsFound.has(id) && !tscIdsByCuecs.has(id)).length;
+  const tscTotal = frameworkCriteria ? Object.values(frameworkCriteria.tsc).flat().length : 0;
+  const tscMissed = tscTotal - tscCoveredByControls - tscCoveredByCuecs - tscLikelyCovered;
+  
+  const cosoCoveredByControls = frameworkCriteria ? Object.values(frameworkCriteria.coso).flat().filter((crit: any) => cosoIdsFound.has(crit.id)).length : 0;
+  const cosoCoveredByCuecs = frameworkCriteria ? Object.values(frameworkCriteria.coso).flat().filter((crit: any) => !cosoIdsFound.has(crit.id) && cosoIdsByCuecs.has(crit.id)).length : 0;
+  const cosoLikelyCovered = missingCosoIds.filter((id: string) => !cosoIdsFound.has(id) && !cosoIdsByCuecs.has(id)).length;
+  const cosoTotal = frameworkCriteria ? Object.values(frameworkCriteria.coso).flat().length : 0;
+  const cosoMissed = cosoTotal - cosoCoveredByControls - cosoCoveredByCuecs - cosoLikelyCovered;
+  
+  const donutDataFourCategories = (controlsCovered: number, cuecsCovered: number, likelyCovered: number, missed: number) => [
+    { name: 'Covered', value: controlsCovered },
+    { name: 'CUEC', value: cuecsCovered },
+    { name: 'Likely Covered', value: likelyCovered },
+    { name: 'Missed', value: missed },
+  ];
+  const donutColorsFourCategories = ['#4caf50', '#9c27b0', '#ff9800', '#e57373']; // green, purple, orange, red
+
+  // Timeline data
+  const timelineEvents = [
+    { label: 'Coverage Start', date: coverageStart },
+    { label: 'Coverage End', date: coverageEnd },
+    { label: 'Report Date', date: reportDate },
+  ];
+
+  // Export helpers
+  function getCoverageStatus(frameworkId: any, controls: any[], idKey: string = 'control_tsc_id', missingIds: string[] = [], cuecIds: Set<string> = new Set()) {
+    const eqId = (a: any, b: any) => String(a ?? '').replace(/\s+/g, '').toUpperCase() === String(b ?? '').replace(/\s+/g, '').toUpperCase();
+    const covered = controls.some((ctrl: any) => eqId(ctrl[idKey], frameworkId));
+    const exception = controls.some((ctrl: any) => eqId(ctrl[idKey], frameworkId) && (ctrl.control_status || '').toLowerCase().includes('exception'));
+    const cuecCovered = cuecIds.has(frameworkId);
+    const likelyCovered = missingIds.includes(frameworkId);
+    
+    // Priority order: control > cuec > likely > missed
+    let coverageType = 'missed';
+    if (covered) {
+      coverageType = 'control';
+    } else if (cuecCovered) {
+      coverageType = 'cuec';
+    } else if (likelyCovered) {
+      coverageType = 'likely';
+    }
+    
+    return { covered, exception, cuecCovered, likelyCovered, coverageType };
+  }
+
+  // Handler for regenerating executive summary
+  const handleRegenerateExecutiveSummary = async () => {
+    console.log('🔄 Starting executive summary regeneration...');
+    setExecutiveSummaryLoading(true);
+    try {
+      console.log('📤 Calling POST /executive_summary to trigger regeneration...');
+      // POST endpoint now handles regeneration directly and returns the new summary
+      const response = await api.post(`${EXEC_SUMMARY_URL}${selectedScanId}`, {}, { timeout: 60000 });
+      const data = response.data;
+      console.log('✅ Regeneration complete: New summary received');
+      console.log('📊 Executive Summary Data:', data.executive_summary);
+      console.log('🔍 SOX fields check:', {
+        has_sox_objective: 'sox_objective' in (data.executive_summary || {}),
+        has_sox_assessors_conclusion: 'sox_assessors_conclusion' in (data.executive_summary || {}),
+        sox_objective_value: data.executive_summary?.sox_objective,
+        sox_conclusion_value: data.executive_summary?.sox_assessors_conclusion
+      });
+      setExecutiveSummary(data.executive_summary || null);
+      setExecutiveSummaryStale(data.is_stale || false);
+      showToast('Executive summary regenerated successfully', 'success');
+    } catch (error) {
+      console.error('❌ Error regenerating executive summary:', error);
+      showToast('Failed to regenerate executive summary', 'error');
+    }
+    setExecutiveSummaryLoading(false);
+    console.log('🏁 Executive summary regeneration complete');
+  };
+
+  // Format GPT executive summary to rich HTML, handling JSON structure + deviations
+  function formatExecutiveSummaryRich(summaryData: any): string {
+    console.log('🎨 formatExecutiveSummaryRich called with:', summaryData);
+    console.log('🔍 Has sox_objective:', 'sox_objective' in (summaryData || {}));
+    console.log('🔍 Has sox_assessors_conclusion:', 'sox_assessors_conclusion' in (summaryData || {}));
+    if (!summaryData) return '';
+    
+    // Attempt to parse JSON if the summary is a JSON string
+    if (typeof summaryData === 'string') {
+      const raw = summaryData.trim();
+      let cleaned = raw;
+      if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+      else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+      if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+      const looksLikeJson = cleaned.startsWith('{') && cleaned.endsWith('}');
+      if (looksLikeJson) {
+        try {
+          const parsed = JSON.parse(cleaned);
+          summaryData = parsed;
+        } catch {
+          // fall through to legacy string formatting
+        }
+      }
+    }
+
+    // If still a string (legacy format), handle it the old way
+    if (typeof summaryData === 'string') {
+      let text = summaryData;
+      // Bold **text** anywhere in the string
+      text = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+      // Extract sections by headings
+      const sectionRegex = /(?:About the Company|Key Findings|Areas of Concern|Recommendations)/gi;
+      const sections: Record<string, string> = {};
+      let current = '';
+      let buffer: string[] = [];
+    
+      // Continue with old string processing...
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const match = line.match(sectionRegex);
+        if (match) {
+          if (current && buffer.length > 0) {
+            sections[current] = buffer.join('\n').trim();
+          }
+          current = match[0];
+          buffer = [];
+        } else if (current) {
+          buffer.push(line);
+        }
+      }
+      if (current && buffer.length > 0) {
+        sections[current] = buffer.join('\n').trim();
+      }
+    
+      // Format sections, but split Recommendations into two blocks heuristically for layout
+      let html = '';
+      for (const [heading, content] of Object.entries(sections)) {
+        if (!content.trim()) continue;
+        if (/^Recommendations$/i.test(heading)) {
+          const lines = content.split(/\n+/).map(s => s.trim()).filter(Boolean);
+          const contractKeywords = /(contract|dpa|data processing agreement|sla|service level|audit right|right to audit|agreement|clause|obligation|amend|negotiate|penalt|indemn|liabilit|term|notice|consent)/i;
+          const riskKeywords = /(implement|monitor|segmentation|mfa|logging|minimiz|hardening|review|validate|backup|classification|restriction|alert|detect|configure|policy|procedure|control|test|assess|encrypt)/i;
+          const risk: string[] = [];
+          const contract: string[] = [];
+          lines.forEach(item => {
+            if (contractKeywords.test(item)) contract.push(item);
+            else if (riskKeywords.test(item)) risk.push(item);
+            else risk.push(item);
+          });
+          if (risk.length > 0) {
+            html += `<div class="exec-section"><h4>Recommendations — Risk Mitigations (Customer-Actionable)</h4><div class="exec-content"><ul>${risk.map(i => `<li>${i}</li>`).join('')}</ul></div></div>`;
+          }
+          if (contract.length > 0) {
+            html += `<div class="exec-section"><h4>Recommendations — Contract Enhancements</h4><div class="exec-content"><ul>${contract.map(i => `<li>${i}</li>`).join('')}</ul></div></div>`;
+          }
+        } else {
+          html += `<div class="exec-section"><h4>${heading}</h4><div class="exec-content">${content.replace(/\n/g, '<br>')}</div></div>`;
+        }
+      }
+      
+
+      
+      return html;
+    }
+    
+    // Handle new JSON format
+    let html = '';
+    
+    if (summaryData.about_company) {
+      html += `<div class="exec-section"><h4>About the Company</h4><div class="exec-content">${summaryData.about_company}</div></div>`;
+    }
+    
+    // SOX-specific Objective section
+    if (summaryData.sox_objective) {
+      console.log('✅ Adding SOX Objective section to HTML');
+      html += `<div class="exec-section"><h4>Objective (SOX Review)</h4><div class="exec-content">${summaryData.sox_objective}</div></div>`;
+    } else {
+      console.log('❌ No sox_objective found in summaryData');
+    }
+    
+    if (summaryData.key_findings && Array.isArray(summaryData.key_findings)) {
+      html += `<div class="exec-section"><h4>Key Findings</h4><div class="exec-content"><ul>`;
+      summaryData.key_findings.forEach((finding: string) => {
+        html += `<li>${finding}</li>`;
+      });
+      html += `</ul></div></div>`;
+    }
+    
+    if (summaryData.areas_of_concern && Array.isArray(summaryData.areas_of_concern)) {
+      html += `<div class="exec-section"><h4>Areas of Concern</h4><div class="exec-content"><ul>`;
+      summaryData.areas_of_concern.forEach((concern: string) => {
+        html += `<li>${concern}</li>`;
+      });
+      html += `</ul></div></div>`;
+    }
+    
+    // Show split recommendations if present; otherwise derive layout buckets from legacy list for display-only
+    let riskRecs = Array.isArray(summaryData.recommendations_risk_mitigations) ? summaryData.recommendations_risk_mitigations : [];
+    let contractRecs = Array.isArray(summaryData.recommendations_contract_enhancements) ? summaryData.recommendations_contract_enhancements : [];
+    if ((riskRecs.length === 0 && contractRecs.length === 0) && Array.isArray(summaryData.recommendations)) {
+      const legacy: string[] = summaryData.recommendations.filter((x: any) => typeof x === 'string');
+      const contractKeywords = /(contract|dpa|data processing agreement|sla|service level|audit right|right to audit|agreement|clause|obligation|amend|negotiate|penalt|indemn|liabilit|term|notice|consent)/i;
+      const riskKeywords = /(implement|monitor|segmentation|mfa|logging|minimiz|hardening|review|validate|backup|classification|restriction|alert|detect|configure|policy|procedure|control|test|assess|encrypt)/i;
+      const tmpRisk: string[] = [];
+      const tmpContract: string[] = [];
+      legacy.forEach((item: string) => {
+        if (contractKeywords.test(item)) tmpContract.push(item);
+        else if (riskKeywords.test(item)) tmpRisk.push(item);
+        else tmpRisk.push(item);
+      });
+      if (tmpRisk.length > 0 || tmpContract.length > 0) {
+        riskRecs = tmpRisk;
+        contractRecs = tmpContract;
+      }
+    }
+    if (riskRecs.length > 0 || contractRecs.length > 0) {
+      if (riskRecs.length > 0) {
+        html += `<div class="exec-section"><h4>Recommendations — Risk Mitigations (Customer-Actionable)</h4><div class="exec-content"><ul>`;
+        riskRecs.forEach((r: string) => { html += `<li>${r}</li>`; });
+        html += `</ul></div></div>`;
+      }
+      if (contractRecs.length > 0) {
+        html += `<div class="exec-section"><h4>Recommendations — Contract Enhancements</h4><div class="exec-content"><ul>`;
+        contractRecs.forEach((r: string) => { html += `<li>${r}</li>`; });
+        html += `</ul></div></div>`;
+      }
+    } else if (summaryData.recommendations && Array.isArray(summaryData.recommendations)) {
+      // Fallback to legacy single list
+      html += `<div class="exec-section"><h4>Recommendations</h4><div class="exec-content"><ul>`;
+      summaryData.recommendations.forEach((recommendation: string) => {
+        html += `<li>${recommendation}</li>`;
+      });
+      html += `</ul></div></div>`;
+    }
+
+    // SOX-specific Assessor's Conclusion section
+    if (summaryData.sox_assessors_conclusion) {
+      console.log('✅ Adding SOX Assessors Conclusion section to HTML');
+      const conclusion = summaryData.sox_assessors_conclusion;
+      html += `<div class="exec-section"><h4>Assessor's Conclusion (SOX Review)</h4><div class="exec-content">`;
+      
+      if (conclusion.adequacy) {
+        html += `<div style="margin-bottom: 12px;"><strong>Adequacy of Control Coverage:</strong><br>${conclusion.adequacy}</div>`;
+      }
+      
+      if (conclusion.operating_effectiveness) {
+        html += `<div style="margin-bottom: 12px;"><strong>Operating Effectiveness:</strong><br>${conclusion.operating_effectiveness}</div>`;
+      }
+      
+      if (conclusion.material_weaknesses) {
+        html += `<div style="margin-bottom: 12px;"><strong>Material Weaknesses:</strong><br>${conclusion.material_weaknesses}</div>`;
+      }
+      
+      html += `</div></div>`;
+    }
+    
+    // Optionally show unknown coverage gaps if provided
+    if (Array.isArray(summaryData.unknown_coverage_gaps) && summaryData.unknown_coverage_gaps.length > 0) {
+      html += `<div class="exec-section"><h4>Unknown Coverage Gaps</h4><div class="exec-content"><ul>`;
+      summaryData.unknown_coverage_gaps.forEach((g: string) => { html += `<li>${g}</li>`; });
+      html += `</ul></div></div>`;
+    }
+    
+    // Derive deviations from high-confidence controls (authoritative) and post-filter negatives
+    const negPatterns = [
+      /no\s+deviation(s)?\s+noted/i,
+      /no\s+exception(s)?\s+noted/i,
+      /none\s+noted/i,
+      /no\s+issues?\s+noted/i,
+      /no\s+finding(s)?/i,
+      /no\s+error(s)?\s+noted/i
+    ];
+    const isNegative = (s: string) => negPatterns.some(p => p.test((s || '').toLowerCase()));
+    const norm = (s: string) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    const computed: Array<{ control_id: string; deviation_summary: string }> = (filteredHighConfControls || [])
+      .filter((c: any) => c && c.has_deviation === true && typeof c.deviation_desc === 'string' && c.deviation_desc.trim())
+      .map((c: any) => ({ control_id: String(c.control_id), deviation_summary: String(c.deviation_desc) }));
+    const seen = new Set<string>();
+    const onlyDevs = computed
+      .filter((d: { control_id: string; deviation_summary: string }) => d.deviation_summary && !isNegative(d.deviation_summary))
+      .filter((d: { control_id: string; deviation_summary: string }) => { const k = `${String(d.control_id)}|${norm(String(d.deviation_summary))}`; if (seen.has(k)) return false; seen.add(k); return true; });
+    if (onlyDevs.length > 0) {
+      html += `<div class="exec-section"><h4>Deviations Noted</h4><div class="exec-content"><ul>`;
+      onlyDevs.forEach((deviation: any) => {
+        html += `<li><strong>${deviation.control_id}:</strong> ${deviation.deviation_summary}</li>`;
+      });
+      html += `</ul></div></div>`;
+    }
+    
+    return html;
+  }
+
+  // Helper to process control data for saving (convert percentage strings, restrict fields)
+  const processControlChanges = (changedFields: any) => {
+    const payload: any = {};
+    if (changedFields.control_confidence !== undefined) {
+      const v = changedFields.control_confidence;
+      payload.control_confidence = typeof v === 'string' && v.endsWith('%') ? parseFloat(v.replace('%', '')) / 100 : v;
+    }
+    // Confidence calculation is read-only; ignore edits here
+    if (changedFields.annotation !== undefined) payload.annotation = changedFields.annotation;
+    // New: allow deviation fields to be edited
+    if (changedFields.has_deviation !== undefined) payload.has_deviation = !!changedFields.has_deviation;
+    if (changedFields.deviation_desc !== undefined) payload.deviation_desc = changedFields.deviation_desc;
+    // New: allow text fields to be edited
+    if (changedFields.control_desc !== undefined) payload.control_desc = changedFields.control_desc;
+    if (changedFields.control_test !== undefined) payload.control_test = changedFields.control_test;
+    if (changedFields.control_test_results !== undefined) payload.control_test_results = changedFields.control_test_results;
+    if (changedFields.control_page_ref !== undefined) payload.control_page_ref = changedFields.control_page_ref;
+    return payload;
+  };
+
+  const handleBatchEditControls = async (changes: { [rowIdx: number]: any }, sectionRows: any[]) => {
+    try {
+      const savePromises = Object.entries(changes).map(async ([rowIdx, changedFields]) => {
+        const originalRow = sectionRows[parseInt(rowIdx)];
+        if (!originalRow) return;
+        const controlId = originalRow.id != null
+          ? `id/${encodeURIComponent(originalRow.id)}`
+          : `${encodeURIComponent(originalRow.control_id)}`;
+        const payload = processControlChanges(changedFields);
+        if (Object.keys(payload).length === 0) return;
+        return api.patch(`${API_URL}${selectedScanId}/controls/${controlId}`, payload).then(() => undefined);
+      });
+      await Promise.all(savePromises);
+      // Optimistic local update to avoid collapsing the entire controls section
+      setReport((prev: any) => {
+        if (!prev) return prev as any;
+        const updatedControls = (prev.controls || []).map((ctrl: any) => {
+          // Find a matching section row by id (preferred) or control_id
+          const matchIdx = Object.entries(changes).find(([rowIdx, _]) => {
+            const orig = sectionRows[parseInt(rowIdx)];
+            if (!orig) return false;
+            if (orig.id != null && ctrl.id != null) return String(ctrl.id) === String(orig.id);
+            return String(ctrl.control_id) === String(orig.control_id);
+          });
+          if (!matchIdx) return ctrl;
+          const [, changed] = matchIdx;
+          const payload = processControlChanges(changed);
+          if (Object.keys(payload).length === 0) return ctrl;
+          return { ...ctrl, ...payload };
+        });
+        return { ...prev, controls: updatedControls };
+      });
+      showToast('Controls updated', 'success');
+    } catch (e) {
+      console.error('Failed to batch save Controls', e);
+      showToast('Failed to update controls', 'error');
+    }
+  };
+
+  // Single row edit for controls (save to backend)
+  const handleEditControl = async (row: any, idx: number) => {
+    try {
+      const controlId = row.id != null
+        ? `id/${encodeURIComponent(row.id)}`
+        : `${encodeURIComponent(row.control_id)}`;
+      const payload = processControlChanges(row);
+      if (Object.keys(payload).length === 0) return;
+      await api.patch(`${API_URL}${selectedScanId}/controls/${controlId}`, payload);
+        // Optimistic local update to prevent full section reload/collapse
+        setReport((prev: any) => {
+          if (!prev) return prev as any;
+          const updatedControls = (prev.controls || []).map((ctrl: any) => {
+            const match = (row.id != null && ctrl.id != null)
+              ? String(ctrl.id) === String(row.id)
+              : String(ctrl.control_id) === String(row.control_id);
+            if (!match) return ctrl;
+            return { ...ctrl, ...payload };
+          });
+          return { ...prev, controls: updatedControls };
+        });
+        showToast('Control saved', 'success');
+    } catch (e: any) {
+      console.error('Failed to save control row', e?.response?.data || e);
+      showToast('Failed to save control', 'error');
+    }
+  };
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <div data-theme={darkMode ? 'dark' : 'light'} style={{ maxWidth: 1800, margin: '0 auto', padding: 16 }}>
+        {/* Top controls row: dark mode, scan dropdown, back button */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <FormControlLabel
+            control={<Switch checked={darkMode} onChange={() => setDarkMode(v => !v)} />}
+            label="Dark Mode"
+            sx={{ mr: 3 }}
+          />
+          {history.length > 0 && (
+            <FormControl sx={{ minWidth: 320, mr: 3 }} size="small">
+              <InputLabel id="scan-select-label" sx={textSx}>Select Scan</InputLabel>
+              <Select
+                labelId="scan-select-label"
+                value={selectedScanId || ''}
+                label="Select Scan"
+                onChange={handleScanChange}
+                sx={textSx}
+              >
+                {history.map(scan => (
+                  <MenuItem key={scan.id} value={scan.id} sx={textSx}>
+                    {scan.company ? `${scan.company} — ` : ''}{scan.timestamp ? formatLocalDateTimeWithTZ(scan.timestamp) : ''}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate('/')}
+            sx={{ minWidth: 180 }}
+          >
+            Back to Analyze
+          </Button>
+        </Box>
+        
+        {/* Help Dialog */}
+        <Dialog open={helpOpen} onClose={() => setHelpOpen(false)}>
+          <DialogTitle>Report Guide</DialogTitle>
+          <DialogContent>
+            <Typography variant="body1" sx={{ mb: 2, fontSize: 15 }}>
+              <b>How to interpret this report:</b><br />
+              - <b>Donut charts</b> show % of TSC and COSO criteria covered.<br />
+              - <b>Red rows</b> indicate deviations/exceptions.<br />
+              - <b>Timeline</b> shows coverage and report dates.<br />
+              - <b>Export</b> lets you download the report.<br />
+              - <b>Annotations</b> let you add notes to any row.<br />
+              - <b>Tooltips</b> explain columns and stats.<br />
+              - <b>Keyboard:</b> Ctrl+PageUp/PageDown to switch tabs.<br />
+            </Typography>
+          </DialogContent>
+        </Dialog>
+
+        {/* Tab Navigation */}
+        <Paper sx={{ mb: 2, p: 0 }}>
+          <Tabs 
+            value={activeTab} 
+            onChange={handleTabChange} 
+            variant="scrollable" 
+            scrollButtons="auto"
+            sx={{ borderBottom: 1, borderColor: 'divider' }}
+          >
+            <Tab icon={<SummarizeIcon />} label="Summary" {...a11yProps(0)} />
+            <Tab icon={<ListAltIcon />} label="Controls" {...a11yProps(1)} />
+            <Tab icon={<AssignmentIcon />} label="CUECs" {...a11yProps(2)} />
+            <Tab icon={<PieChartIcon />} label="Coverage" {...a11yProps(3)} />
+            <Tab icon={<BusinessIcon />} label="Subservice Orgs" {...a11yProps(4)} />
+            <Tab icon={<VerifiedIcon />} label="Verification" {...a11yProps(5)} />
+          </Tabs>
+        </Paper>
+
+        {/* Tab 0: Summary */}
+        <TabPanel value={activeTab} index={0} scrollPositions={tabScrollPositions}>
+          <IconButton sx={{ position: 'absolute', top: 8, right: 8 }} onClick={() => setHelpOpen(true)}><HelpOutlineIcon /></IconButton>
+          <Typography variant="h4" gutterBottom sx={{ fontSize: 22, mb: 2 }}>SOC 2 Summary</Typography>
+          {/* Overview Section */}
+          <Box sx={{ mb: 2 }}>
+                {overviewEdit ? (
+                  <>
+                    <TextField label="Audited Organization" value={overviewFields.company} onChange={e => handleOverviewFieldChange('company', e.target.value)} fullWidth sx={{ mb: 1 }} />
+                    <TextField label="Product" value={overviewFields.product} onChange={e => handleOverviewFieldChange('product', e.target.value)} fullWidth sx={{ mb: 1 }} />
+                    <TextField label="Coverage Start" value={overviewFields.coverageStart} onChange={e => handleOverviewFieldChange('coverageStart', e.target.value)} fullWidth sx={{ mb: 1 }} />
+                    <TextField label="Coverage End" value={overviewFields.coverageEnd} onChange={e => handleOverviewFieldChange('coverageEnd', e.target.value)} fullWidth sx={{ mb: 1 }} />
+                    <TextField label="Report Date" value={overviewFields.reportDate} onChange={e => handleOverviewFieldChange('reportDate', e.target.value)} fullWidth sx={{ mb: 1 }} />
+                    <TextField label="Auditor" value={overviewFields.auditor} onChange={e => handleOverviewFieldChange('auditor', e.target.value)} fullWidth sx={{ mb: 1 }} />
+                    <TextField label="Scan Date" value={overviewFields.scanDate} onChange={e => handleOverviewFieldChange('scanDate', e.target.value)} fullWidth sx={{ mb: 1 }} />
+                    <FormControlLabel 
+                      control={
+                        <Checkbox 
+                          checked={overviewFields.isSoxVendor} 
+                          onChange={e => handleOverviewFieldChange('isSoxVendor', e.target.checked)} 
+                        />
+                      } 
+                      label="SOX Vendor (subject to Sarbanes-Oxley compliance)" 
+                      sx={{ mb: 1 }}
+                    />
+                    <Box>
+                      <Button variant="contained" color="success" onClick={saveOverviewFields} sx={{ mt: 1, mr: 1 }}>Save</Button>
+                      <Button variant="outlined" color="secondary" onClick={() => setOverviewEdit(false)} sx={{ mt: 1 }}>Cancel</Button>
+                    </Box>
+                  </>
+                ) : (
+                  <>
+                    <Typography sx={textSx}><b>Audited Organization:</b> {overviewFields.company || '-'}</Typography>
+                    <Typography sx={textSx}><b>Product:</b> {overviewFields.product || '-'}</Typography>
+                    <Typography sx={textSx}><b>Coverage Period:</b> {coverageStart} to {coverageEnd}</Typography>
+                    <Typography sx={textSx}><b>Report Date:</b> {reportDate}</Typography>
+                    <Typography sx={textSx}><b>Auditor:</b> {overviewFields.auditor || '-'}</Typography>
+                    <Typography sx={textSx}><b>Scan Date:</b> {formatLocalDateWithTZ(overviewFields.scanDate)}</Typography>
+                    <Typography sx={textSx}><b>SOX Vendor:</b> {overviewFields.isSoxVendor ? 'Yes' : 'No'}</Typography>
+                    <Button variant="outlined" size="small" startIcon={<EditIcon />} onClick={() => setOverviewEdit(true)} sx={{ mt: 1 }}>Edit</Button>
+                  </>
+                )}
+              </Box>
+              {/* Regenerate button (full-width row above the two-column layout) */}
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<RefreshIcon />}
+                  onClick={handleRegenerateExecutiveSummary}
+                  disabled={executiveSummaryLoading}
+                >
+                  Regenerate Executive Summary
+                </Button>
+              </Box>
+
+              {/* Executive Summary + (Key Stats + Timeline) side-by-side */}
+              <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
+                {/* Left: Executive Summary */}
+                <Box sx={{ flex: 1, minWidth: 0 }} className="content-text">
+                  {/* Show warning when executive summary is stale */}
+                  {executiveSummaryStale && (
+                    <Box sx={{ mb: 1, p: 1.5, backgroundColor: theme.palette.mode === 'dark' ? '#665500' : '#fff3cd', border: '1px solid #ffc107', borderRadius: 1 }}>
+                      <Typography sx={{ fontSize: 13, fontWeight: 500, color: theme.palette.mode === 'dark' ? '#ffeb3b' : '#856404', display: 'flex', alignItems: 'center' }}>
+                        <WarningIcon sx={{ fontSize: 18, mr: 0.5 }} />
+                        This executive summary may be outdated due to recent changes. Click "Regenerate Executive Summary" above to update it with the latest data.
+                      </Typography>
+                    </Box>
+                  )}
+                  <Box className="exec-summary-box content-text">
+                    {executiveSummaryLoading ? (
+                      <CircularProgress size={20} />
+                    ) : (
+                      executiveSummary ? (
+                        <div className="exec-summary-html" dangerouslySetInnerHTML={{ __html: formatExecutiveSummaryRich(executiveSummary) }} />
+                      ) : (
+                        <Typography sx={{ fontStyle: 'italic', color: '#888' }}>No executive summary available. Click 'Regenerate Executive Summary' to generate one.</Typography>
+                      )
+                    )}
+                  </Box>
+                </Box>
+                {/* Right: Key Stats above Timeline (stacked) */}
+                <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, mt: 1 }}>
+                  <div className="key-stats-title">Key Stats</div>
+                  {/* Key Stats */}
+                  <Box className="key-stats-row">
+                    <Box className="key-stats-half key-stats-left">
+                      <div className="key-stats-label">Subservice Organizations</div>
+                      <div className="key-stats-value suborgs-color">{filteredHighConfSubOrgs ? filteredHighConfSubOrgs.length : 0}</div>
+                      <div className="key-stats-label">CUECs</div>
+                      <div className="key-stats-value cuecs-color">{filteredHighConfCuecs ? filteredHighConfCuecs.length : 0}</div>
+                      <div className="key-stats-label">Controls Assessed</div>
+                      <div className="key-stats-value controls-color">{filteredHighConfControls ? filteredHighConfControls.length : 0}</div>
+                    </Box>
+                  </Box>
+                  {/* Timeline (compact SVG) */}
+                  <Box className="key-stats-row" sx={{ mt: 2, justifyContent: 'center' }}>
+                    <Box className="key-stats-half key-stats-right" sx={{ alignItems: 'center' }}>
+                      <div className="timeline-heading">Timeline</div>
+                      <CompactTimeline events={timelineEvents as any} width={420} boxWidth={280} pillFill="#e6c5f5" textFill="#2b2b2b" />
+                    </Box>
+                  </Box>
+                </Box>
+              </Box>
+              {/* TSC/COSO Row (split in half, improved donut/table layout) */}
+              <Box className="tsc-coso-row">
+                {/* TSC Half */}
+                <Box className="tsc-coso-half">
+                  <div className="tsc-coso-donut-title">TSC Coverage</div>
+                  <div className="tsc-coso-donut-wrapper">
+                                                              <PieChart width={140} height={140}>
+                      <Pie data={donutDataFourCategories(tscCoveredByControls, tscCoveredByCuecs, tscLikelyCovered, tscMissed)} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={38} outerRadius={60} label={false}>
+                        {donutDataFourCategories(tscCoveredByControls, tscCoveredByCuecs, tscLikelyCovered, tscMissed).map((entry: any, idx: number) => <Cell key={idx} fill={donutColorsFourCategories[idx]} />)}
+                      </Pie>
+                      <RechartsTooltip formatter={(value: any, name: any) => [`${value} items`, name]} />
+                    </PieChart>
+                    <div className="tsc-coso-donut-legend">
+                      <span className="legend-covered" /> Covered
+                      <span className="legend-cuec" style={{ backgroundColor: '#9c27b0' }} /> CUEC
+                      <span className="legend-likely-covered" style={{ backgroundColor: '#ff9800' }} /> Likely Covered
+                      <span className="legend-missing" /> Missed
+                    </div>
+                  </div>
+                  <div className="tsc-coso-donut-value">{tscCoveredByControls + tscCoveredByCuecs}/{tscTotal} ({(((tscCoveredByControls + tscCoveredByCuecs)/tscTotal)*100).toFixed(0)}%)</div>
+                  {/* TSC Checklist Table: use CONTROL_TSC_SECTIONS and TSC_CRITERIA */}
+                  <div className="tsc-coso-align-heading">TSC Alignment</div>
+                  {Object.entries(CONTROL_TSC_SECTIONS).map(([section, tscIds]) => (
+                    <div key={section} className="tsc-coso-section-block">
+                      <div className="tsc-coso-section-title">{section}</div>
+                      <table className="tsc-coso-table">
+                        <thead>
+                          <tr>
+                            <th>TSC ID</th>
+                            <th>Description</th>
+                            <th>Covered</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tscIds.map((tscId) => {
+                            const crit = TSC_CRITERIA.find(c => c.id === tscId);
+                            const { exception, coverageType } = getCoverageStatus(tscId, highConfControlsForCoverage, 'control_tsc_id', missingTscIds, tscIdsByCuecs);
+                            
+                            // Collect controls that map to this criterion
+                            const mappedControls = highConfControlsForCoverage.filter((c: any) => {
+                              if (String(c?.control_tsc_id ?? '').replace(/\s+/g, '').toUpperCase() === String(tscId).replace(/\s+/g, '').toUpperCase()) {
+                                return true;
+                              }
+                              const tscMappings = parseMapping(c.control_tsc_mappings || []);
+                              if (tscMappings.length > 0) {
+                                return tscMappings.some((m: any) => m.id === tscId);
+                              }
+                              return false;
+                            });
+                            
+                            // Collect CUECs that map to this criterion
+                            const mappedCuecs = highConfCuecsFiltered.filter((cuec: any) => {
+                              if (cuec.cuec_tsc_id === tscId) return true;
+                              const tscMappings = parseMapping(cuec.cuec_tsc_mappings || []);
+                              if (tscMappings.length > 0) {
+                                return tscMappings.some((m: any) => m.id === tscId);
+                              }
+                              return false;
+                            });
+                            
+                            const devList = (highConfControlsForCoverage || [])
+                              .filter((c: any) => String(c?.control_tsc_id ?? '').replace(/\s+/g, '').toUpperCase() === String(tscId).replace(/\s+/g, '').toUpperCase() && c.has_deviation === true && typeof c.deviation_desc === 'string' && c.deviation_desc.trim())
+                              .map((c: any) => c.deviation_desc);
+                            const hasDev = devList.length > 0;
+                            return (
+                              <tr key={tscId} className={(exception || hasDev) ? 'tsc-coso-row-exception' : ''}>
+                                <td>{tscId}</td>
+                                <td>
+                                  {hasDev ? (
+                                    <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{(devList || []).join('\n')}</span>}>
+                                      <span>{crit ? crit.description : ''}</span>
+                                    </Tooltip>
+                                  ) : (
+                                    crit ? crit.description : ''
+                                  )}
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                                    {coverageType === 'control' ? (
+                                      <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 18 }} />
+                                    ) : coverageType === 'cuec' ? (
+                                      <Tooltip title="Covered by CUEC">
+                                        <AssignmentIcon sx={{ color: '#9c27b0', fontSize: 18 }} />
+                                      </Tooltip>
+                                    ) : coverageType === 'likely' ? (
+                                      <Tooltip title="Likely covered under another control - found in extracted text">
+                                        <WarningIcon sx={{ color: '#ff9800', fontSize: 18 }} />
+                                      </Tooltip>
+                                    ) : (
+                                      <CancelIcon sx={{ color: '#e57373', fontSize: 18 }} />
+                                    )}
+                                    {mappedControls.length > 0 && (
+                                      <Tooltip 
+                                        title={
+                                          <Box sx={{ p: 0.5 }}>
+                                            <strong>Controls ({mappedControls.length}):</strong>
+                                            <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                                              {mappedControls.map((c: any) => (
+                                                <li key={c.id}>{c.control_id || `Control ${c.id}`}</li>
+                                              ))}
+                                            </ul>
+                                          </Box>
+                                        }
+                                      >
+                                        <InfoOutlinedIcon sx={{ color: '#1976d2', fontSize: 16, cursor: 'pointer' }} />
+                                      </Tooltip>
+                                    )}
+                                    {mappedCuecs.length > 0 && (
+                                      <Tooltip 
+                                        title={
+                                          <Box sx={{ p: 0.5 }}>
+                                            <strong>CUECs ({mappedCuecs.length}):</strong>
+                                            <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                                              {deduplicateCuecs(mappedCuecs).map((cuec: any) => (
+                                                <li 
+                                                  key={cuec.id}
+                                                  style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                                  onClick={() => {
+                                                    setSelectedCuec(cuec);
+                                                    setCuecModalOpen(true);
+                                                  }}
+                                                >
+                                                  {(cuec.cuec_description || cuec.cuec_id || `CUEC ${cuec.id}`).substring(0, 60)}
+                                                  {((cuec.cuec_description || '').length > 60) ? '...' : ''}
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </Box>
+                                        }
+                                      >
+                                        <AssignmentIcon sx={{ color: '#9c27b0', fontSize: 16, cursor: 'pointer' }} />
+                                      </Tooltip>
+                                    )}
+                                  </Box>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </Box>
+                {/* COSO Half */}
+                <Box className="tsc-coso-half">
+                  <div className="tsc-coso-donut-title">COSO Coverage</div>
+                  <div className="tsc-coso-donut-wrapper">
+                    <PieChart width={140} height={140}>
+                      <Pie data={donutDataFourCategories(cosoCoveredByControls, cosoCoveredByCuecs, cosoLikelyCovered, cosoMissed)} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={38} outerRadius={60} label={false}>
+                        {donutDataFourCategories(cosoCoveredByControls, cosoCoveredByCuecs, cosoLikelyCovered, cosoMissed).map((entry: any, idx: number) => <Cell key={idx} fill={donutColorsFourCategories[idx]} />)}
+                      </Pie>
+                      <RechartsTooltip formatter={(value: any, name: any) => [`${value} items`, name]} />
+                    </PieChart>
+                    <div className="tsc-coso-donut-legend">
+                      <span className="legend-covered" /> Covered
+                      <span className="legend-cuec" style={{ backgroundColor: '#9c27b0' }} /> CUEC
+                      <span className="legend-likely-covered" style={{ backgroundColor: '#ff9800' }} /> Likely Covered
+                      <span className="legend-missing" /> Missed
+                    </div>
+                  </div>
+                  <div className="tsc-coso-donut-value">{cosoCoveredByControls + cosoCoveredByCuecs}/{cosoTotal} ({(((cosoCoveredByControls + cosoCoveredByCuecs)/cosoTotal)*100).toFixed(0)}%)</div>
+                  <div className="tsc-coso-align-heading">COSO Alignment</div>
+                  {frameworkCriteria && frameworkCriteria.coso && (
+                    Object.entries(frameworkCriteria.coso).map(([section, criteria]) => (
+                      <div key={section} className="tsc-coso-section-block">
+                        <div className="tsc-coso-section-title">{section}</div>
+                        <table className="tsc-coso-table">
+                          <thead>
+                            <tr>
+                              <th>COSO ID</th>
+                              <th>Description</th>
+                              <th>Covered</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(criteria as any[]).map((crit: any, idx: number) => {
+                              const { exception, coverageType } = getCoverageStatus(crit.id, highConfControlsForCoverage, 'control_coso_id', missingCosoIds, cosoIdsByCuecs);
+                              
+                              // Collect controls that map to this criterion
+                              const mappedControls = highConfControlsForCoverage.filter((c: any) => {
+                                if (String(c?.control_coso_id ?? '') === String(crit.id)) {
+                                  return true;
+                                }
+                                const cosoMappings = parseMapping(c.control_coso_mappings || []);
+                                if (cosoMappings.length > 0) {
+                                  return cosoMappings.some((m: any) => m.id === String(crit.id));
+                                }
+                                return false;
+                              });
+                              
+                              // Collect CUECs that map to this criterion
+                              const mappedCuecs = highConfCuecsFiltered.filter((cuec: any) => {
+                                if (cuec.cuec_coso_id === crit.id) return true;
+                                const cosoMappings = parseMapping(cuec.cuec_coso_mappings || []);
+                                if (cosoMappings.length > 0) {
+                                  return cosoMappings.some((m: any) => m.id === String(crit.id));
+                                }
+                                return false;
+                              });
+                              
+                              const devList = (highConfControlsForCoverage || []).filter((c: any) => String(c.control_coso_id) === String(crit.id) && c.has_deviation === true && typeof c.deviation_desc === 'string' && c.deviation_desc.trim()).map((c: any) => c.deviation_desc);
+                              const hasDev = devList.length > 0;
+                              return (
+                                <tr key={crit.id} className={(exception || hasDev) ? 'tsc-coso-row-exception' : ''}>
+                                  <td>{crit.id}</td>
+                                  <td>
+                                    {hasDev ? (
+                                      <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{(devList || []).join('\n')}</span>}>
+                                        <span>{crit.description}</span>
+                                      </Tooltip>
+                                    ) : (
+                                      crit.description
+                                    )}
+                                  </td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                                      {coverageType === 'control' ? (
+                                        <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 18 }} />
+                                      ) : coverageType === 'cuec' ? (
+                                        <Tooltip title="Covered by CUEC">
+                                          <AssignmentIcon sx={{ color: '#9c27b0', fontSize: 18 }} />
+                                        </Tooltip>
+                                      ) : coverageType === 'likely' ? (
+                                        <Tooltip title="Likely covered under another control - found in extracted text">
+                                          <WarningIcon sx={{ color: '#ff9800', fontSize: 18 }} />
+                                        </Tooltip>
+                                      ) : (
+                                        <CancelIcon sx={{ color: '#e57373', fontSize: 18 }} />
+                                      )}
+                                      {mappedControls.length > 0 && (
+                                        <Tooltip 
+                                          title={
+                                            <Box sx={{ p: 0.5 }}>
+                                              <strong>Controls ({mappedControls.length}):</strong>
+                                              <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                                                {mappedControls.map((c: any) => (
+                                                  <li key={c.id}>{c.control_id || `Control ${c.id}`}</li>
+                                                ))}
+                                              </ul>
+                                            </Box>
+                                          }
+                                        >
+                                          <InfoOutlinedIcon sx={{ color: '#1976d2', fontSize: 16, cursor: 'pointer' }} />
+                                        </Tooltip>
+                                      )}
+                                      {mappedCuecs.length > 0 && (
+                                        <Tooltip 
+                                          title={
+                                            <Box sx={{ p: 0.5 }}>
+                                              <strong>CUECs ({mappedCuecs.length}):</strong>
+                                              <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                                                {deduplicateCuecs(mappedCuecs).map((cuec: any) => (
+                                                  <li 
+                                                    key={cuec.id}
+                                                    style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                                    onClick={() => {
+                                                      setSelectedCuec(cuec);
+                                                      setCuecModalOpen(true);
+                                                    }}
+                                                  >
+                                                    {(cuec.cuec_description || cuec.cuec_id || `CUEC ${cuec.id}`).substring(0, 60)}
+                                                    {((cuec.cuec_description || '').length > 60) ? '...' : ''}
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </Box>
+                                          }
+                                        >
+                                          <AssignmentIcon sx={{ color: '#9c27b0', fontSize: 16, cursor: 'pointer' }} />
+                                        </Tooltip>
+                                      )}
+                                    </Box>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))
+                  )}
+                </Box>
+              </Box>
+        </TabPanel>
+
+
+
+        {/* Tab 4: Subservice Organizations */}
+        <TabPanel value={activeTab} index={4} scrollPositions={tabScrollPositions}>
+          <Typography variant="h5" gutterBottom sx={{ fontSize: 18, mb: 2 }}>Subservice Organizations</Typography>
+                {hasAnyDuplicateSoNames && (
+                  <Box sx={{ mb: 1, p: 1, backgroundColor: theme.palette.mode === 'dark' ? '#665500' : '#fff3cd', border: '1px solid #ffc107', borderRadius: 1 }}>
+                    <Typography sx={{ fontSize: 12, color: theme.palette.mode === 'dark' ? '#ffeb3b' : '#856404', display: 'flex', alignItems: 'center' }}>
+                      <WarningIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                      Duplicate subservice organization names exist in this scan. Duplicates are allowed. Edits target rows by ID, so duplicate names are safe. If helpful, add a qualifier (e.g., region or environment) to disambiguate.
+                    </Typography>
+                  </Box>
+                )}
+              <Box className={`sticky-table-container ${darkMode ? 'dark-mode' : 'light-mode'}`}>
+                <EditableTable
+                  columns={subserviceOrgColumns}
+                  defaultVisibleColumns={defaultVisibleSubOrgCols}
+                  rows={filteredHighConfSubOrgs}
+                  ignored={ignored.suborgs}
+                  onIgnore={(row) => ignoreRow(row, 'suborgs')}
+                  onConfirm={(row) => confirmRow(row, 'suborgs')}
+                  onEdit={(rowIdx: number, newRow: any) => handleEditSuborg(newRow, rowIdx)}
+                  onBatchEdit={(changes: any, displayRows: any[]) => handleBatchEditSuborgs(changes, displayRows)}
+                  tableSx={{ width: '100%', tableLayout: 'fixed' }}
+                  cellSx={{ whiteSpace: 'pre-line', overflow: 'visible', textOverflow: 'clip', wordBreak: 'break-word', fontSize: 10, fontFamily: 'Roboto, Arial, sans-serif' }}
+                  additionalButtons={
+                    <Button variant="outlined" size="small" onClick={() => setAddSuborgOpen(true)}>Add Subservice Org</Button>
+                  }
+                />
+              </Box>
+              {filteredLowConfSubOrgs.length > 0 && (
+                <Box sx={{ p: 1, ml: 3 }}>
+                  <Button size="small" onClick={() => toggleShow("suborgs")}>{showLowConfidence["suborgs"] ? <ExpandLessIcon /> : <ExpandMoreIcon />} Show Low Confidence ({filteredLowConfSubOrgs.length})</Button>
+                </Box>
+              )}
+              {filteredLowConfSubOrgs.length > 0 && showLowConfidence["suborgs"] && (
+                  <Collapse in={showLowConfidence["suborgs"]}>
+                    <Box className={`sticky-table-container ${darkMode ? 'dark-mode' : 'light-mode'}`}>
+                      <EditableTable
+                        columns={subserviceOrgColumns}
+                        defaultVisibleColumns={defaultVisibleSubOrgCols}
+                        rows={filteredLowConfSubOrgs}
+                        ignored={ignored.suborgs}
+                        onIgnore={(row) => ignoreRow(row, 'suborgs')}
+                        onConfirm={(row) => confirmRow(row, 'suborgs')}
+                        onEdit={(rowIdx: number, newRow: any) => handleEditSuborg(newRow, rowIdx)}
+                        onBatchEdit={(changes: any, displayRows: any[]) => handleBatchEditSuborgs(changes, displayRows)}
+                        tableSx={{ width: '100%', tableLayout: 'fixed' }}
+                        cellSx={{ whiteSpace: 'pre-line', overflow: 'visible', textOverflow: 'clip', wordBreak: 'break-word', fontSize: 10, fontFamily: 'Roboto, Arial, sans-serif' }}
+                      />
+                    </Box>
+                  </Collapse>
+              )}
+              <Typography sx={{ mt: 1, fontStyle: "italic", fontSize: 11 }}>
+              Confidence: High confidence (≥ {Math.round(confidenceThreshold * 100)}%) shown by default. 
+              Low confidence items (including ignored items with 0% confidence) available in "Show Low Confidence" section.
+            </Typography>
+        </TabPanel>
+
+        {/* Tab 2: CUECs - MOVED FROM BELOW */}
+        <TabPanel value={activeTab} index={2} scrollPositions={tabScrollPositions}>
+          <Typography variant="h5" gutterBottom sx={{ fontSize: 18, mb: 2 }}>Complementary User Entity Controls</Typography>
+          <Box className={`sticky-table-container ${darkMode ? 'dark-mode' : 'light-mode'}`}>
+            <CuecsTable
+                highConfCuecs={filteredHighConfCuecs}
+                ignored={ignored.cuecs}
+                setIgnored={setIgnored}
+                onEdit={handleEditCuec}
+                onBatchEdit={handleBatchEditCuec}
+                recentlyChangedIds={recentlyChangedIds}
+                lowConfCuecs={filteredLowConfCuecs}
+                showLowConfidence={showLowConfidence}
+                toggleShow={toggleShow}
+                handleEditCuec={handleEditCuec}
+                onIgnoreRow={(row) => ignoreRow(row, 'cuecs')}
+                onConfirmRow={(row) => confirmRow(row, 'cuecs')}
+                onRecompute={handleRecomputeCuec}
+                additionalButtons={
+                  <Button variant="outlined" size="small" onClick={() => setAddCuecOpen(true)}>Add CUEC</Button>
+                }
+              />
+          </Box>
+          <Typography sx={{ fontStyle: "italic", fontSize: 11, mt: 1 }}>
+            Confidence: High confidence (≥ {Math.round(confidenceThreshold * 100)}%) shown by default. 
+            Low confidence items (including ignored items with 0% confidence) available in "Show Low Confidence" section.
+          </Typography>
+        </TabPanel>
+
+        {/* Tab 1: Controls - MOVED FROM BELOW */}
+        <TabPanel value={activeTab} index={1} scrollPositions={tabScrollPositions}>
+          <Typography variant="h5" gutterBottom sx={{ fontSize: 18, mb: 2 }}>Controls</Typography>
+          <Box className={`sticky-table-container ${darkMode ? 'dark-mode' : 'light-mode'}`}>
+            <ControlsTable
+                controls={filteredHighConfControls}
+                ignored={ignored.controls}
+                setIgnored={setIgnored}
+                onEdit={(row, idx) => handleEditControl(row, idx)}
+                onBatchEdit={(changes: any, sectionRows: any[]) => handleBatchEditControls(changes, sectionRows)}
+                onRecompute={handleRecomputeControl}
+                onIgnore={(row) => ignoreRow(row, 'controls')}
+                onConfirm={(row) => confirmRow(row, 'controls')}
+                onOpenConfidenceModal={openConfidenceModal}
+                additionalButtons={
+                  <Button variant="outlined" size="small" onClick={() => setAddControlOpen(true)}>Add Control</Button>
+                }
+              />
+          </Box>
+          {filteredLowConfControls.length > 0 && (
+                <Box sx={{ p: 1, ml: 3 }}>
+                  <Button size="small" onClick={() => toggleShow("controls")}>{showLowConfidence["controls"] ? <ExpandLessIcon /> : <ExpandMoreIcon />} Show Low Confidence ({filteredLowConfControls.length})</Button>
+                </Box>
+              )}
+              {showLowConfidence["controls"] && (
+                <Collapse in={showLowConfidence["controls"]}>
+                  <Box className={`sticky-table-container ${darkMode ? 'dark-mode' : 'light-mode'}`}>
+                    <ControlsTable
+                      controls={filteredLowConfControls}
+                    ignored={ignored.controls}
+                    setIgnored={setIgnored}
+                    onEdit={(row, idx) => handleEditControl(row, idx)}
+                    onBatchEdit={(changes: any, sectionRows: any[]) => handleBatchEditControls(changes, sectionRows)}
+                    onRecompute={handleRecomputeControl}
+                    onIgnore={(row) => ignoreRow(row, 'controls')}
+                    onConfirm={(row) => confirmRow(row, 'controls')}
+                    onOpenConfidenceModal={openConfidenceModal}
+                  />
+                  </Box>
+                </Collapse>
+              )}
+              <Typography sx={{ fontStyle: "italic", fontSize: 11 }}>
+                Controls are grouped by status and TSC section. High confidence (≥ {Math.round(confidenceThreshold * 100)}%) shown by default.
+                Low confidence items (including ignored items with 0% confidence) available in "Show Low Confidence" section.
+              </Typography>
+        </TabPanel>
+
+        {/* Tab 3: Coverage - WILL BE FILLED WITH TSC/COSO CHARTS FROM SUMMARY */}
+        <TabPanel value={activeTab} index={3} scrollPositions={tabScrollPositions}>
+          <Typography variant="h5" gutterBottom sx={{ fontSize: 18, mb: 2 }}>TSC & COSO Coverage</Typography>
+          <Typography sx={{ fontSize: 14, fontStyle: 'italic', color: '#666', mb: 2 }}>
+            Coverage charts and criteria tables will be moved here from the Summary tab.
+          </Typography>
+        </TabPanel>
+
+        {/* Tab 5: Verification & Bad Chunks */}
+        <TabPanel value={activeTab} index={5} scrollPositions={tabScrollPositions}>
+          <Typography variant="h5" gutterBottom sx={{ fontSize: 18, mb: 2 }}>Verification & Bad Chunks</Typography>
+
+          {/* Verification Section */}
+          {selectedScanId && (
+            <VerificationSection 
+              scanId={selectedScanId} 
+              onRefresh={async () => {
+                // Refresh report data after verification
+                const res = await api.get(`${API_URL}${selectedScanId}`);
+                setReport(res.data);
+              }}
+            />
+          )}
+
+          {/* Bad Chunks (Persisted) Section */}
+          <Box>
+            {/* Bad chunks are always visible in this tab - no collapse needed */}
+              {(() => {
+                const bc = report.bad_chunks || {};
+                const cuecBad = Array.isArray(bc.cuecs) ? bc.cuecs : [];
+                const ctrlBad = Array.isArray(bc.controls) ? bc.controls : [];
+                const soBad = Array.isArray(bc.subservice_orgs) ? bc.subservice_orgs : [];
+                const total = cuecBad.length + ctrlBad.length + soBad.length;
+                if (total === 0) {
+                  return (
+                    <Typography sx={{ fontSize: 12, fontStyle: 'italic', color: '#666', mb: 1 }}>No bad chunks were recorded for this scan.</Typography>
+                  );
+                }
+                const Section = ({ title, items }: { title: string, items: any[] }) => (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography sx={{ fontWeight: 600, fontSize: 13, mb: 0.5 }}>{title} ({items.length})</Typography>
+                    <Box sx={{ border: '1px solid #ddd', borderRadius: 1, maxHeight: 420, overflow: 'auto', p: 1 }}>
+                      <div style={{ minWidth: 800 }}>
+                        {items.map((chunk: any, i: number) => (
+                          <Box key={i} sx={{ mb: 1, p: 1, background: theme.palette.mode === 'dark' ? theme.palette.grey[800] : '#fafafa', border: `1px solid ${theme.palette.divider}`, borderRadius: 1 }}>
+                            <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+{JSON.stringify(chunk, null, 2)}
+                            </pre>
+                          </Box>
+                        ))}
+                      </div>
+                    </Box>
+                  </Box>
+                );
+                return (
+                  <>
+                    {cuecBad.length > 0 && <Section title="CUEC Extractor" items={cuecBad} />}
+                    {ctrlBad.length > 0 && <Section title="Controls Extractor" items={ctrlBad} />}
+                    {soBad.length > 0 && <Section title="Subservice Orgs Extractor" items={soBad} />}
+                  </>
+                );
+              })()}
+        </TabPanel>
+
+      </div>
+      
+      {/* Dialogs and Modals - outside main content */}
+      {/* Add Subservice Org Dialog */}
+      <Dialog open={addSuborgOpen} onClose={() => setAddSuborgOpen(false)}>
+        <DialogTitle>Add Subservice Organization</DialogTitle>
+        <DialogContent sx={{ minWidth: 420 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <FormControlLabel control={<Checkbox size="small" checked={useDefaultConfidence} onChange={e => setUseDefaultConfidence(e.target.checked)} />} label={<span style={{ fontSize: 12 }}>Auto-fill confidence</span>} />
+            <TextField size="small" label="Default (%)" sx={{ width: 120 }} value={defaultConfidence} onChange={e => setDefaultConfidence(e.target.value)} />
+          </Box>
+          <TextField label="Name" fullWidth sx={{ mt: 1 }} value={newSuborg.name} onChange={e => setNewSuborg(s => ({ ...s, name: e.target.value }))} />
+          <TextField label="Confidence (e.g., 95% or 0.95)" fullWidth sx={{ mt: 1 }} value={newSuborg.confidence ?? ''} onChange={e => setNewSuborg(s => ({ ...s, confidence: e.target.value }))} />
+          <TextField label="Description" fullWidth sx={{ mt: 1 }} value={newSuborg.third_party_description ?? ''} onChange={e => setNewSuborg(s => ({ ...s, third_party_description: e.target.value }))} />
+          <TextField label="Page Ref" fullWidth sx={{ mt: 1 }} value={newSuborg.third_party_page_ref ?? ''} onChange={e => setNewSuborg(s => ({ ...s, third_party_page_ref: e.target.value }))} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddSuborgOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleCreateSuborg}>Create</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add CUEC Dialog */}
+      <Dialog open={addCuecOpen} onClose={() => setAddCuecOpen(false)}>
+        <DialogTitle>Add CUEC</DialogTitle>
+        <DialogContent sx={{ minWidth: 520 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <FormControlLabel control={<Checkbox size="small" checked={useDefaultConfidence} onChange={e => setUseDefaultConfidence(e.target.checked)} />} label={<span style={{ fontSize: 12 }}>Auto-fill confidence</span>} />
+            <TextField size="small" label="Default (%)" sx={{ width: 120 }} value={defaultConfidence} onChange={e => setDefaultConfidence(e.target.value)} />
+          </Box>
+          <TextField label="Description" fullWidth sx={{ mt: 1 }} value={newCuec.cuec_description} onChange={e => setNewCuec(s => ({ ...s, cuec_description: e.target.value }))} />
+          <TextField label="Confidence (e.g., 95% or 0.95)" fullWidth sx={{ mt: 1 }} value={newCuec.cuec_confidence ?? ''} onChange={e => setNewCuec(s => ({ ...s, cuec_confidence: e.target.value }))} />
+          <TextField label="TSC ID (e.g., CC1.1)" fullWidth sx={{ mt: 1 }} value={newCuec.cuec_tsc_id ?? ''} onChange={e => setNewCuec(s => ({ ...s, cuec_tsc_id: e.target.value }))} />
+          <TextField label="COSO ID" fullWidth sx={{ mt: 1 }} value={newCuec.cuec_coso_id ?? ''} onChange={e => setNewCuec(s => ({ ...s, cuec_coso_id: e.target.value }))} />
+          <TextField label="Control Strength" fullWidth sx={{ mt: 1 }} value={newCuec.control_strength ?? ''} onChange={e => setNewCuec(s => ({ ...s, control_strength: e.target.value }))} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddCuecOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleCreateCuec}>Create</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add Control Dialog */}
+      <Dialog open={addControlOpen} onClose={() => setAddControlOpen(false)}>
+        <DialogTitle>Add Control</DialogTitle>
+        <DialogContent sx={{ minWidth: 520 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <FormControlLabel control={<Checkbox size="small" checked={useDefaultConfidence} onChange={e => setUseDefaultConfidence(e.target.checked)} />} label={<span style={{ fontSize: 12 }}>Auto-fill confidence</span>} />
+            <TextField size="small" label="Default (%)" sx={{ width: 120 }} value={defaultConfidence} onChange={e => setDefaultConfidence(e.target.value)} />
+          </Box>
+          <TextField label="Control ID" fullWidth sx={{ mt: 1 }} value={newControl.control_id ?? ''} onChange={e => setNewControl(s => ({ ...s, control_id: e.target.value }))} />
+          <TextField label="Description" fullWidth sx={{ mt: 1 }} value={newControl.control_desc ?? ''} onChange={e => setNewControl(s => ({ ...s, control_desc: e.target.value }))} />
+          <TextField label="TSC ID (e.g., CC1.1)" fullWidth sx={{ mt: 1 }} value={newControl.control_tsc_id ?? ''} onChange={e => setNewControl(s => ({ ...s, control_tsc_id: e.target.value }))} />
+          <TextField label="COSO ID" fullWidth sx={{ mt: 1 }} value={newControl.control_coso_id ?? ''} onChange={e => setNewControl(s => ({ ...s, control_coso_id: e.target.value }))} />
+          <TextField label="Confidence (e.g., 95% or 0.95)" fullWidth sx={{ mt: 1 }} value={newControl.control_confidence ?? ''} onChange={e => setNewControl(s => ({ ...s, control_confidence: e.target.value }))} />
+          <TextField label="Page Ref" fullWidth sx={{ mt: 1 }} value={newControl.control_page_ref ?? ''} onChange={e => setNewControl(s => ({ ...s, control_page_ref: e.target.value }))} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddControlOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleCreateControl}>Create</Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={2500}
+        onClose={handleCloseToast}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={handleCloseToast} severity={toast.severity} variant="filled" sx={{ width: '100%' }}>
+          {toast.message}
+        </Alert>
+      </Snackbar>
+      
+      {/* Confidence Modal */}
+      <ConfidenceModal 
+        open={confidenceModalOpen}
+        control={selectedControl}
+        onClose={closeConfidenceModal}
+      />
+      
+      {/* CUEC Details Modal */}
+      <CuecDetailsModal 
+        open={cuecModalOpen} 
+        cuec={selectedCuec} 
+        onClose={() => setCuecModalOpen(false)} 
+      />
+    </ThemeProvider>
+  );
+}
+
+export default ReportPage;
+
+// Utility to group and sort controls by status, then tsc_section, then seq
+interface Control {
+  control_id: number;
+  control_status?: string;
+  control_tsc_section?: string;
+  control_seq?: number;
+  [key: string]: any;
+}
+
+interface ControlsTableProps {
+  controls: Control[];
+  ignored: Set<number>;
+  setIgnored: React.Dispatch<React.SetStateAction<any>>;
+  onEdit: (row: Control, idx: number) => void;
+  onBatchEdit?: (changes: { [rowIdx: number]: any }, sectionRows: any[]) => void;
+  onRecompute: (row: any) => Promise<void>;
+  onIgnore?: (row: any) => void;
+  onConfirm?: (row: any) => void;
+  additionalButtons?: React.ReactNode;
+  onOpenConfidenceModal?: (control: any) => void;
+}
+
+export function ControlsTable({ controls, ignored, setIgnored, onEdit, onBatchEdit, onRecompute, onIgnore, onConfirm, additionalButtons, onOpenConfidenceModal }: ControlsTableProps) {
+  const [recomputingIds, setRecomputingIds] = React.useState<Set<number>>(new Set());
+  
+  // Detect duplicate control IDs
+  const duplicateControlIds = React.useMemo(() => {
+    const idCounts = new Map<string, number>();
+    controls.forEach(ctrl => {
+      const controlId = ctrl.control_id;
+      if (controlId) {
+        const idStr = String(controlId); // Convert to string to handle both string and number types
+        idCounts.set(idStr, (idCounts.get(idStr) || 0) + 1);
+      }
+    });
+    const duplicates = new Set<string>();
+    idCounts.forEach((count, id) => {
+      if (count > 1) {
+        duplicates.add(id);
+      }
+    });
+    return duplicates;
+  }, [controls]);
+  
+  const mainCols = [
+    { key: "control_id", label: "Control ID", width: 80 },
+    { key: "control_desc", label: "Description", width: 320 },
+    { key: "control_test", label: "Test", width: 320 },
+    { key: "control_test_results", label: "Test Results", width: 160 },
+    { key: "has_deviation", label: "Deviation?", width: 90, format: (v: any) => v ? 'Yes' : '' },
+    { key: "deviation_desc", label: "Deviation Summary", width: 240 },
+    { 
+      key: "control_confidence", 
+      label: "Confidence", 
+      width: 100,
+      render: (row: any) => (
+        <ConfidenceTooltip 
+          control={row} 
+          onClick={() => onOpenConfidenceModal?.(row)}
+        >
+          <span style={{ cursor: 'pointer' }}>
+            {typeof row.control_confidence === 'number' 
+              ? `${Math.round(row.control_confidence * 100)}%`
+              : row.control_confidence}
+          </span>
+        </ConfidenceTooltip>
+      )
+    },
+    { 
+      key: "control_tsc_id", 
+      label: "TSC ID (computed)", 
+      width: 140, 
+      editable: false, 
+      headerInfo: "Computed — read-only. Use Recompute to refresh. Icon shows multi-match details.", 
+      render: (row: any) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <span>{row.control_tsc_id || ''}</span>
+          {row.control_tsc_mappings && row.control_tsc_mappings.length > 0 && (
+            <FrameworkMappingInfo 
+              mappings={row.control_tsc_mappings} 
+              type="tsc" 
+              controlId={row.control_id}
+            />
+          )}
+        </Box>
+      )
+    },
+    { key: "control_tsc_similarity", label: "TSC Similarity (computed)", width: 130, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "control_seq", label: "Seq", width: 80 },
+    { key: "control_page_ref", label: "Page Ref", width: 80 },
+  ];
+  const hiddenCols = [
+    { key: "control_closest_framework", label: "Closest Framework (computed)", width: 130, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "control_line_ref", label: "Line Ref", width: 80 },
+    { key: "control_tsc_section", label: "TSC Section (computed)", width: 180, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "control_coso_section", label: "COSO Section (computed)", width: 180, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "control_tsc_confidence_pct", label: "TSC Conf. % (computed)", width: 120, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { 
+      key: "control_coso_id", 
+      label: "COSO ID (computed)", 
+      width: 140, 
+      editable: false, 
+      headerInfo: "Computed — read-only. Use Recompute to refresh. Icon shows multi-match details.", 
+      render: (row: any) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <span>{row.control_coso_id || ''}</span>
+          {row.control_coso_mappings && row.control_coso_mappings.length > 0 && (
+            <FrameworkMappingInfo 
+              mappings={row.control_coso_mappings} 
+              type="coso" 
+              controlId={row.control_id}
+            />
+          )}
+        </Box>
+      )
+    },
+    { key: "control_coso_confidence_pct", label: "COSO Conf. % (computed)", width: 130, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "control_coso_similarity", label: "COSO Similarity (computed)", width: 130, editable: false, headerInfo: "Computed — read-only. Use Recompute to refresh." },
+    { key: "control_soc_domain", label: "SOC Domain", width: 100 },
+    { key: "merged_to_control_id", label: "Merged To", width: 80 },
+    { key: "control_gpt_opinion", label: "GPT Opinion", width: 80 },
+    { key: "control_gpt_reasoning", label: "GPT Reasoning", width: 80, editable: false },
+    { key: "confidence_calc", label: "Confidence Calc", width: 300, hidden: false, editable: false, format: (v: any) => Array.isArray(v) ? v.join('\n') : (typeof v === 'string' ? v.replace(/,\s*/g, ',\n') : ''), cellSx: { whiteSpace: 'pre-line' } },
+  ];
+  const columns = [...mainCols, ...hiddenCols];
+  const defaultVisibleControlCols = [
+    "control_id",
+    "control_desc",
+    "control_test",
+    "control_test_results",
+    "has_deviation",
+    "control_confidence"
+  ];
+
+  // Preprocess rows to format Similarity as percentages (keep control_confidence as number for tooltip/modal)
+  const processedControls = controls.map(row => {
+    const newRow = { ...row };
+    // Keep control_confidence as number for ConfidenceTooltip/ConfidenceModal
+    if (typeof newRow.control_tsc_similarity === 'number') newRow.control_tsc_similarity = `${Math.round(newRow.control_tsc_similarity * 100)}%`;
+    return newRow;
+  });
+
+  // Controls displayed in single ungrouped table (TSC grouping removed for cleaner UI)
+
+
+
+  // Local handleIgnore - call parent's onIgnore if provided
+  const handleIgnore = (row: any, idx: number, type: string) => {
+    console.log('═══════════════════════════════════════');
+    console.log('🔘 BUTTON CLICKED! ControlsTable handleIgnore called');
+    console.log('Row data received:', { 
+      control_id: row.control_id, 
+      id: row.id,
+      control_confidence: row.control_confidence,
+      control_desc: row.control_desc?.substring(0, 50)
+    });
+    console.log('Index:', idx, 'Type:', type);
+    console.log('Has onIgnore prop?', !!onIgnore);
+    console.log('Full row object:', row);
+    console.log('═══════════════════════════════════════');
+    
+    if (onIgnore) {
+      console.log('✅ Calling parent onIgnore function NOW with row:', row.control_id, row.id);
+      onIgnore(row);
+      console.log('✅ Parent onIgnore function called successfully');
+    } else {
+      console.log('⚠️ No onIgnore provided, using fallback');
+      // Fallback to old behavior if onIgnore not provided
+      const newRow = { ...row, confidence: 0, cuec_confidence: 0, control_confidence: 0 };
+      onEdit(newRow, idx);
+    }
+  };
+
+  return (
+    <EditableTable
+      rows={processedControls}
+      columns={columns}
+      ignored={ignored}
+      recentlyChangedIds={new Set()}
+      onIgnore={(rowOrIdx: number | any) => {
+        const row = typeof rowOrIdx === 'number' ? processedControls[rowOrIdx] : rowOrIdx;
+        if (row) handleIgnore(row, row.id || rowOrIdx, 'controls');
+      }}
+      onConfirm={onConfirm ? (row: any) => onConfirm(row) : undefined}
+      onEdit={(rowIdxOrRow: any, newRow: any) => {
+        const row = typeof rowIdxOrRow === 'number' ? processedControls[rowIdxOrRow] : newRow;
+        const parentIdx = controls.findIndex((r: any) => r.id === row.id);
+        onEdit(newRow, parentIdx >= 0 ? parentIdx : rowIdxOrRow);
+      }}
+      onBatchEdit={onBatchEdit ? (changes: any, displayRows: any[]) => {
+        // Map sorted display indices back to parent array indices using row.id
+        const mappedChanges: { [parentIdx: number]: any } = {};
+        Object.keys(changes).forEach((sortedIdxStr) => {
+          const sortedIdx = parseInt(sortedIdxStr, 10);
+          const row = displayRows[sortedIdx];
+          if (row) {
+            const parentIdx = controls.findIndex((r: any) => r.id === row.id);
+            if (parentIdx >= 0) {
+              mappedChanges[parentIdx] = changes[sortedIdxStr];
+            }
+          }
+        });
+        onBatchEdit(mappedChanges, controls);
+      } : undefined}
+      duplicateIds={duplicateControlIds}
+      tableSx={{ width: '100%' }}
+      cellSx={{ whiteSpace: 'pre-line', overflow: 'visible', textOverflow: 'clip', wordBreak: 'break-word', padding: '4px 6px', fontSize: 12 }}
+      defaultVisibleColumns={defaultVisibleControlCols}
+      storageKey="report_controls_all"
+      additionalButtons={additionalButtons}
+      actionsRenderer={(row) => (
+        <Tooltip title="Recompute TSC/COSO mapping">
+          <span>
+            <IconButton size="small" onClick={async () => {
+              try {
+                setRecomputingIds(prev => new Set([...Array.from(prev), row.id]));
+                await onRecompute(row);
+              } finally {
+                setRecomputingIds(prev => { const n = new Set(prev); n.delete(row.id); return n; });
+              }
+            }} disabled={recomputingIds.has(row.id)}>
+              {recomputingIds.has(row.id) ? <CircularProgress size={14} /> : <RefreshIcon fontSize="small" />}
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
+    />
+  );
+}
+
+// --- TSC CRITERIA and SECTION MAPPING (copy from backend config.py) ---
+const TSC_CRITERIA = [
+  { id: "CC1.1", description: "The entity demonstrates a commitment to integrity and ethical values." },
+  { id: "CC2.1", description: "The board of directors demonstrates independence from management and exercises oversight of the development and performance of internal control." },
+  { id: "CC3.1", description: "Management establishes, with board oversight, structures, reporting lines, and appropriate authorities and responsibilities in the pursuit of objectives." },
+  { id: "CC4.1", description: "The entity demonstrates a commitment to attract, develop, and retain competent individuals in alignment with objectives." },
+  { id: "CC5.1", description: "The entity holds individuals accountable for their internal control responsibilities in the pursuit of objectives." },
+  { id: "CC6.1", description: "The entity specifies objectives with sufficient clarity to enable the identification and assessment of risks relating to objectives." },
+  { id: "CC6.2", description: "The entity identifies risks to the achievement of its objectives across the entity and analyzes risks as a basis for determining how the risks should be managed." },
+  { id: "CC6.3", description: "The entity considers the potential for fraud in assessing risks to the achievement of objectives." },
+  { id: "CC6.4", description: "The entity identifies and assesses changes that could significantly impact the system of internal control." },
+  { id: "CC7.1", description: "The entity selects and develops control activities that contribute to the mitigation of risks to the achievement of objectives to acceptable levels." },
+  { id: "CC7.2", description: "The entity selects and develops general control activities over technology to support the achievement of objectives." },
+  { id: "CC7.3", description: "The entity deploys control activities through policies that establish what is expected and procedures that put policies into action." },
+  { id: "CC8.1", description: "The entity obtains or generates and uses relevant, quality information to support the functioning of internal control." },
+  { id: "CC8.2", description: "The entity internally communicates information, including objectives and responsibilities for internal control, necessary to support the functioning of internal control." },
+  { id: "CC8.3", description: "The entity communicates with external parties regarding matters affecting the functioning of internal control." },
+  { id: "CC9.1", description: "The entity selects, develops, and performs ongoing and/or separate evaluations to ascertain whether the components of internal control are present and functioning." },
+  { id: "CC9.2", description: "The entity evaluates and communicates internal control deficiencies in a timely manner to those parties responsible for taking corrective action, including senior management and the board of directors, as appropriate." },
+  { id: "C1.1", description: "The entity identifies and manages the inventory of information assets." },
+  { id: "C1.2", description: "The entity restricts logical access to information assets and protected information to authorized personnel." },
+  { id: "C1.3", description: "The entity authorizes, designs, develops, or acquires, configures, documents, tests, approves, and implements system changes." },
+  { id: "C1.4", description: "The entity restricts physical access to information assets and protected information to authorized personnel." },
+  { id: "C1.5", description: "The entity implements controls to prevent, detect, and mitigate security events." },
+  { id: "C1.6", description: "The entity implements controls to prevent, detect, and mitigate security incidents." },
+  { id: "C1.7", description: "The entity implements controls to prevent, detect, and mitigate unauthorized disclosure of protected information." },
+  { id: "C1.8", description: "The entity implements controls to prevent, detect, and mitigate unauthorized destruction of protected information." },
+  { id: "C1.9", description: "The entity implements controls to prevent, detect, and mitigate unauthorized use of protected information." },
+  { id: "A1.1", description: "The entity implements controls to protect the availability of information assets." },
+  { id: "A1.2", description: "The entity implements controls to prevent, detect, and mitigate availability incidents." },
+  { id: "P1.1", description: "The entity implements controls to protect the privacy of personal information." },
+  { id: "P2.1", description: "The entity provides notice to data subjects about its privacy practices." },
+  { id: "P3.1", description: "The entity provides data subjects with choices regarding the collection, use, and disclosure of personal information." },
+  { id: "P3.2", description: "The entity obtains explicit consent from data subjects for the collection, use, and disclosure of personal information." },
+  { id: "P4.1", description: "The entity collects and uses personal information for purposes identified in the entity's privacy notice." },
+  { id: "P5.1", description: "The entity provides data subjects with access to their personal information for review and correction." },
+  { id: "P6.1", description: "The entity discloses personal information to third parties only for purposes identified in the entity's privacy notice." },
+  { id: "P7.1", description: "The entity implements controls to protect the quality and integrity of personal information." },
+  { id: "P8.1", description: "The entity implements controls to protect the retention and disposal of personal information." },
+  { id: "P9.1", description: "The entity implements controls to protect the transfer of personal information." },
+  { id: "P10.1", description: "The entity implements controls to protect the monitoring and enforcement of privacy practices." },
+  { id: "Conf1.1", description: "The entity identifies and maintains confidential information to meet the entity's objectives." },
+  { id: "Conf1.2", description: "The entity disposes of confidential information to meet the entity's objectives." },
+  { id: "Conf1.3", description: "The entity protects confidential information from unauthorized disclosure." },
+  { id: "Conf1.4", description: "The entity protects confidential information from unauthorized use." },
+  { id: "PI1.1", description: "The entity defines processing specifications to meet the entity's objectives." },
+  { id: "PI1.2", description: "The entity implements controls to achieve processing objectives and detect and correct processing errors." },
+  { id: "PI1.3", description: "The entity implements controls to protect processing from unauthorized modification." },
+  { id: "PI1.4", description: "The entity implements controls to ensure system output is complete, accurate, and timely." },
+  { id: "PI1.5", description: "The entity implements controls to protect the integrity of system processing." },
+];
+
+const CONTROL_TSC_SECTIONS: { [section: string]: string[] } = {
+  "Control Environment (CC1.1 - CC1.5)": ["CC1.1", "CC2.1", "CC3.1", "CC4.1", "CC5.1"],
+  "Risk Assessment (CC6.1 - CC6.4)": ["CC6.1", "CC6.2", "CC6.3", "CC6.4"],
+  "Control Activities (CC7.1 - CC7.3)": ["CC7.1", "CC7.2", "CC7.3"],
+  "Information & Communication (CC8.1 - CC8.3)": ["CC8.1", "CC8.2", "CC8.3"],
+  "Monitoring Activities (CC9.1 - CC9.2)": ["CC9.1", "CC9.2"],
+  "Common Criteria - Security (C1.1 - C1.9)": ["C1.1", "C1.2", "C1.3", "C1.4", "C1.5", "C1.6", "C1.7", "C1.8", "C1.9"],
+  "Availability (A1.1 - A1.2)": ["A1.1", "A1.2"],
+  "Privacy (P1.1 - P10.1)": ["P1.1", "P2.1", "P3.1", "P3.2", "P4.1", "P5.1", "P6.1", "P7.1", "P8.1", "P9.1", "P10.1"],
+  "Confidentiality (Conf1.1 - Conf1.4)": ["Conf1.1", "Conf1.2", "Conf1.3", "Conf1.4"],
+  "Processing Integrity (PI1.1 - PI1.5)": ["PI1.1", "PI1.2", "PI1.3", "PI1.4", "PI1.5"]
+};
+
+
