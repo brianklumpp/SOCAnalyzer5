@@ -60,6 +60,9 @@ services:
         ipv4_address: 172.20.0.4  # Fixed IP for redis
 
   backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     image: socanalyzer-backend:${VERSION:-latest}
     container_name: socanalyzer-backend
     restart: unless-stopped
@@ -126,6 +129,9 @@ services:
         ipv4_address: 172.20.0.5  # Fixed IP for backend
 
   frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     image: socanalyzer-frontend:${VERSION:-latest}
     container_name: socanalyzer-frontend
     restart: unless-stopped
