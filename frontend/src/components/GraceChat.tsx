@@ -20,6 +20,7 @@ import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { solidigmColors } from '../theme/solidigmTheme';
+import { APP_CONFIG } from '../config';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -30,8 +31,6 @@ interface Message {
 interface GraceChatProps {
   scanId: number;
 }
-
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const GraceChat: React.FC<GraceChatProps> = ({ scanId }) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -52,7 +51,7 @@ const GraceChat: React.FC<GraceChatProps> = ({ scanId }) => {
 
   const loadHistory = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/grace/${scanId}/history`);
+      const response = await axios.get(APP_CONFIG.apiUrl(`/grace/${scanId}/history`));
       const history = response.data.messages || [];
       setMessages(history.map((msg: any) => ({
         role: msg.role,
@@ -80,7 +79,7 @@ const GraceChat: React.FC<GraceChatProps> = ({ scanId }) => {
     setError(null);
 
     try {
-      const response = await axios.post(`${API_BASE}/grace/${scanId}/message`, {
+      const response = await axios.post(APP_CONFIG.apiUrl(`/grace/${scanId}/message`), {
         message: input.trim(),
         conversation_history: messages.map(m => ({
           role: m.role,

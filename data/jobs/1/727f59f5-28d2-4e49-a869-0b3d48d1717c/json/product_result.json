@@ -1,0 +1,7 @@
+{
+  "product": "Application Platform as a Service (APaaS)",
+  "confidence": 0.95,
+  "raw_gpt_responses": [
+    "{\n  \"product\": \"Application Platform as a Service (APaaS)\",\n  \"confidence\": 0.95,\n  \"explanation\": \"The SOC report explicitly states that the system in scope for this SOC 1 examination is the 'Application Platform as a Service (APaaS),' which includes the Now Platform and Stream Connect for Apache Kafka. This scope is defined in multiple clear statements such as the management assertion and the description of the service organization's system.\"\n}"
+  ]
+}

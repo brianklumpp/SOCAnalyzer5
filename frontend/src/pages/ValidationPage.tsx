@@ -38,8 +38,7 @@ import {
   Info as InfoIcon
 } from '@mui/icons-material';
 import axios from 'axios';
-
-const API_BASE = 'http://localhost:8000';
+import { APP_CONFIG } from '../config';
 
 interface Scan {
   scan_id: string;

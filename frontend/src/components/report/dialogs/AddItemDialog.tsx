@@ -8,8 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Box, Checkbox, FormControlLabel, Tabs, Tab, Alert, CircularProgress } from '@mui/material';
 import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { APP_CONFIG } from '../../../config';
 
 type ResourceType = 'suborg' | 'cuec' | 'control';
 
