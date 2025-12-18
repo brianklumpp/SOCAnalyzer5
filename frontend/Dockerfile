@@ -19,9 +19,9 @@ RUN npm run build
 
 # Production stage with nginx
 FROM nginx:alpine AS prod
-# Cache buster 2025-12-18
+# Cache buster 2025-12-18-v2
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/build /usr/share/nginx/html
 EXPOSE 3000
 CMD ["nginx", "-g", "daemon off;"]
 
