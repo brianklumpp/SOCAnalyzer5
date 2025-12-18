@@ -1,7 +1,7 @@
 """Reset admin user password."""
 import asyncio
 import sys
-from backend.app.database import async_session_maker
+from backend.app.database import AsyncSessionLocal
 from backend.app.models import User
 from backend.app.auth.security import get_password_hash
 from sqlalchemy import select
@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 async def main():
     """Reset admin password to Admin1234!"""
-    async with async_session_maker() as db:
+    async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.username == 'admin'))
         admin = result.scalars().first()
         
