@@ -19,6 +19,11 @@ COPY . ./
 ENV NODE_ENV=production
 ENV VITE_API_BASE=
 ENV VITE_WS_BASE=
+# Debug: Print environment to verify
+RUN echo "=== Build Environment ===" && \
+    echo "NODE_ENV=$NODE_ENV" && \
+    echo "VITE_API_BASE=$VITE_API_BASE" && \
+    echo "VITE_WS_BASE=$VITE_WS_BASE"
 # Vite build is fast and efficient - no memory issues!
 RUN npm run build && ls -la /app/build && echo "Build directory contents:" && ls -la /app/build/ || echo "Build failed!"
 
