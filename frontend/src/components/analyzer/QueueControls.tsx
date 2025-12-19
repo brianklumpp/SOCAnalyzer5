@@ -180,7 +180,14 @@ const QueueControls: React.FC<QueueControlsProps> = ({
 
   return (
     <>
-      <Paper sx={{ p: 2, mb: 3 }}>
+      <Paper sx={{ 
+        p: 2, 
+        mb: 3,
+        bgcolor: 'rgba(0, 43, 92, 0.08)',
+        border: '2px solid',
+        borderColor: 'rgba(0, 43, 92, 0.3)',
+        borderRadius: 2,
+      }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
           {/* Queue Stats */}
           <Box flex={1}>
@@ -224,16 +231,16 @@ const QueueControls: React.FC<QueueControlsProps> = ({
           sx={{
             mt: 2,
             border: '2px dashed',
-            borderColor: isDragging ? 'primary.main' : 'divider',
+            borderColor: isDragging ? 'rgb(79, 0, 181)' : 'rgba(0, 43, 92, 0.4)',
             borderRadius: 2,
             p: 3,
             textAlign: 'center',
             cursor: 'pointer',
             transition: 'all 0.2s',
-            bgcolor: isDragging ? 'action.hover' : 'transparent',
+            bgcolor: isDragging ? 'rgba(79, 0, 181, 0.12)' : 'rgba(0, 43, 92, 0.05)',
             '&:hover': {
-              borderColor: 'primary.main',
-              bgcolor: 'action.hover',
+              borderColor: 'rgb(79, 0, 181)',
+              bgcolor: 'rgba(0, 43, 92, 0.08)',
             },
           }}
           onClick={() => setBatchDialogOpen(true)}
