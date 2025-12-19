@@ -1,18 +1,21 @@
 // Centralized frontend configuration
-// Pulls values from environment variables and provides helpers for URLs
+// Uses runtime detection instead of build-time environment variables
+// This avoids issues with Vite env var resolution
 
-// Frontend runs on port 3000, backend API runs on port 8000
-// In production, use empty string (relative URLs) so nginx can proxy
-// In development, use localhost:8000 for direct backend access
+// Detect if running in development (Vite dev server on port 5173 or localhost)
+const isDev = typeof window !== 'undefined' && 
+  (window.location.port === '5173' || window.location.hostname === 'localhost');
 
-// Explicitly check for production mode first to avoid any environment variable issues
-const API_BASE = import.meta.env.MODE === 'production' 
-  ? (import.meta.env.VITE_API_BASE ?? '')  // Use empty string in production (nginx proxy)
-  : (import.meta.env.VITE_API_BASE || 'http://localhost:8000');  // Use localhost in dev
+// In development: use localhost:8000
+// In production: use empty string (relative URLs) for nginx to proxy
+const API_BASE = isDev ? 'http://localhost:8000' : '';
 
-const WS_BASE = import.meta.env.VITE_WS_BASE 
-  ? import.meta.env.VITE_WS_BASE 
-  : API_BASE.replace(/^https?:/i, (proto) => proto.toLowerCase() === 'https:' ? 'wss:' : 'ws:');
+// Construct WebSocket base from current page URL in production
+const WS_BASE = isDev 
+  ? 'ws://localhost:8000'
+  : (typeof window !== 'undefined' 
+      ? window.location.protocol.replace('http', 'ws') + '//' + window.location.host 
+      : '');
 
 export const APP_CONFIG = {
   API_BASE,
