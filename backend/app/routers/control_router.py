@@ -136,7 +136,8 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
         if justification_note:
             prev = getattr(ctrl, "edit_log", "") or ""
             sep = ",\n" if prev else ""
-            ctrl.edit_log = f"{prev}{sep}{justification_note}"
+            now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
+            ctrl.edit_log = f"{prev}{sep}{justification_note} by {current_user.username} ({now})"
         
         # Mark executive summary stale
         await mark_executive_summary_stale(scan_id, db)
