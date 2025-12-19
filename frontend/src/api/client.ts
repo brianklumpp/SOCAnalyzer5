@@ -24,6 +24,11 @@ export const getAccessToken = (): string | null => {
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
+    console.log('[AXIOS REQUEST]', {
+      url: config.url,
+      baseURL: config.baseURL,
+      fullURL: axios.getUri(config)
+    });
     if (currentAccessToken && config.headers) {
       config.headers.Authorization = `Bearer ${currentAccessToken}`;
     }
