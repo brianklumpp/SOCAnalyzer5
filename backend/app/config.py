@@ -152,7 +152,7 @@ TSC_ANOMALY_MIN_THRESHOLD = int(os.getenv("TSC_ANOMALY_MIN_THRESHOLD", "5"))
 
 # Control Merge Suggestions Configuration
 # Enable/disable automated merging after extraction (set to "false" to disable)
-ENABLE_AUTO_MERGE = os.getenv("ENABLE_AUTO_MERGE", "true").lower() == "true"
+ENABLE_AUTO_MERGE = os.getenv("ENABLE_AUTO_MERGE", "false").lower() == "true"
 # Minimum confidence score (0.0-1.0) to suggest merging duplicate controls
 MERGE_SUGGESTION_MIN_CONFIDENCE = float(os.getenv("MERGE_SUGGESTION_MIN_CONFIDENCE", "0.50"))
 # Maximum number of merge suggestions to return per request
