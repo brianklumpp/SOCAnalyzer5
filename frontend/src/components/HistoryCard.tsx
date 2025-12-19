@@ -203,7 +203,9 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
       sx={{
         width: '100%',
         height: '100%',
-        minHeight: 300,  // Increased from 220 to ensure all content fits
+        minHeight: 'fit-content',
+        display: 'flex',
+        flexDirection: 'column',
         cursor: 'pointer',
         transition: 'all 0.3s ease-in-out',
         elevation: 3,
@@ -218,7 +220,15 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
       }}
       elevation={3}
     >
-      <CardContent sx={{ p: 2, pb: 2, '&:last-child': { pb: 2 }, position: 'relative' }}>
+      <CardContent sx={{ 
+        p: 2, 
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        '&:last-child': { pb: 2 }, 
+        position: 'relative',
+        overflow: 'visible',
+      }}>
         {/* Delete Button */}
         <IconButton
           onClick={handleDeleteClick}
@@ -361,7 +371,16 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
         </Box>
 
         {/* Filename and Report Type */}
-        <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px solid ${solidigmColors.lightGray}`, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Box sx={{ 
+          mt: 'auto',
+          pt: 1.5, 
+          borderTop: `1px solid ${solidigmColors.lightGray}`, 
+          display: 'flex', 
+          gap: 1, 
+          flexWrap: 'wrap', 
+          alignItems: 'center',
+          minHeight: 32,
+        }}>
           <Chip
             icon={<BusinessIcon sx={{ fontSize: '0.875rem' }} />}
             label={scan.filename}
