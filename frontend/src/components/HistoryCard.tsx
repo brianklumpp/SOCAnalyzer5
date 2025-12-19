@@ -203,7 +203,7 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
       sx={{
         width: '100%',
         height: '100%',
-        minHeight: 220,
+        minHeight: 300,  // Increased from 220 to ensure all content fits
         cursor: 'pointer',
         transition: 'all 0.3s ease-in-out',
         elevation: 3,

@@ -23,7 +23,7 @@ interface VirtualHistoryGridProps {
 
 // Grid spacing and sizing - Fixed 2 columns
 const GRID_CONFIG = {
-  CARD_HEIGHT: 260,
+  CARD_HEIGHT: 340,  // Increased from 260 to accommodate all content
   HORIZONTAL_SPACING: 24,
   VERTICAL_SPACING: 24,
   PADDING: 16,
