@@ -23,6 +23,10 @@ export const APP_CONFIG = {
   },
   // Helper to build an API URL if absolute needed (prefer using the axios client)
   apiUrl: (path: string) => {
+    if (!API_BASE) {
+      // Return relative URL when API_BASE is undefined
+      return path.startsWith('/') ? path : `/${path}`;
+    }
     const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
     const p = path.startsWith('/') ? path : `/${path}`;
     return `${base}${p}`;
