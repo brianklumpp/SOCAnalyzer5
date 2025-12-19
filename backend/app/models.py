@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, Lar
 import datetime
 from datetime import timezone
 import enum
-from backend.app.base import Base
+from .base import Base
 
 # Helper function for timezone-aware current time
 def get_local_now():
