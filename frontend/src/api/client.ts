@@ -37,10 +37,23 @@ class FetchClient {
     
     console.log('[FETCH REQUEST]', method, fullURL);
 
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      ...(fetchOptions.headers || {}),
-    };
+    // Prepare headers
+    const headers: HeadersInit = {};
+    
+    // Don't set Content-Type for FormData - browser will set it with boundary
+    const isFormData = data instanceof FormData;
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json';
+    }
+    
+    // Add custom headers (but don't override Content-Type for FormData)
+    if (fetchOptions.headers) {
+      Object.entries(fetchOptions.headers).forEach(([key, value]) => {
+        if (!(isFormData && key.toLowerCase() === 'content-type')) {
+          headers[key] = value;
+        }
+      });
+    }
 
     if (currentAccessToken) {
       headers['Authorization'] = `Bearer ${currentAccessToken}`;
@@ -53,7 +66,7 @@ class FetchClient {
       const response = await fetch(fullURL, {
         method,
         headers,
-        body: data ? (typeof data === 'string' ? data : JSON.stringify(data)) : undefined,
+        body: data ? (isFormData ? data : (typeof data === 'string' ? data : JSON.stringify(data))) : undefined,
         signal: controller.signal,
         ...fetchOptions,
       });
