@@ -703,7 +703,25 @@ const ReportPage: React.FC = () => {
               <Button 
                 variant="outlined" 
                 startIcon={<PictureAsPdfIcon />}
-                onClick={() => window.open(`/api/pdf/${selectedScanId}`, '_blank')}
+                onClick={async () => {
+                  try {
+                    // Fetch PDF with authentication
+                    const response = await api.get(`/pdf/${selectedScanId}`, {
+                      responseType: 'blob'
+                    });
+                    
+                    // Create blob URL and open in new tab
+                    const blob = new Blob([response.data], { type: 'application/pdf' });
+                    const blobUrl = URL.createObjectURL(blob);
+                    window.open(blobUrl, '_blank');
+                    
+                    // Clean up blob URL after a delay
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+                  } catch (err) {
+                    console.error('Failed to open PDF:', err);
+                    alert('Failed to open PDF. Please try again.');
+                  }
+                }}
                 sx={{ mr: 2 }}
               >
                 View PDF

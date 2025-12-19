@@ -134,11 +134,16 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
         return 0;
       });
       const filteredRows = sortedRows.filter(row =>
-        columns.every(col =>
-          filters[col.key]
-            ? String(row[col.key] ?? '').toLowerCase().includes(filters[col.key].toLowerCase())
-            : true
-        )
+        columns.every(col => {
+          if (!filters[col.key]) return true;
+          
+          // Use formatted value if format function exists, otherwise use raw value
+          const displayValue = col.format 
+            ? String(col.format(row[col.key], row) ?? '')
+            : String(row[col.key] ?? '');
+          
+          return displayValue.toLowerCase().includes(filters[col.key].toLowerCase());
+        })
       );
       onBatchEdit(batchChanges, filteredRows);
       setBatchChanges({});
@@ -207,11 +212,16 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
 
   // Filtering
   const filteredRows = sortedRows.filter(row =>
-    columns.every(col =>
-      filters[col.key]
-        ? String(row[col.key] ?? '').toLowerCase().includes(filters[col.key].toLowerCase())
-        : true
-    )
+    columns.every(col => {
+      if (!filters[col.key]) return true;
+      
+      // Use formatted value if format function exists, otherwise use raw value
+      const displayValue = col.format 
+        ? String(col.format(row[col.key], row) ?? '')
+        : String(row[col.key] ?? '');
+      
+      return displayValue.toLowerCase().includes(filters[col.key].toLowerCase());
+    })
   );
 
   // Column resize handler
