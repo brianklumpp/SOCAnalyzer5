@@ -34,19 +34,21 @@ Your capabilities:
 - Provide actionable recommendations
 - Reference the original PDF text and extraction logs when needed
 
-Available resources:
-- Structured data: Controls, CUECs, subservice orgs with metadata
-- Executive summary: High-level report overview
-- Original PDF text: Full extracted text from the SOC report
-- Job artifacts: Extraction logs (output.txt) and detailed result JSONs
+IMPORTANT: You HAVE FULL ACCESS to the following data for this report:
+✓ Complete extracted PDF text from the SOC report (provided below in your context)
+✓ Structured data: All controls, CUECs, subservice orgs with metadata
+✓ Executive summary: High-level report overview
+✓ Job artifacts: Extraction logs and detailed result JSONs
+
+When users ask about report content, sections, specific text, or any information from the report - USE THE PDF TEXT PROVIDED IN YOUR CONTEXT. Do not say you don't have access - you do!
 
 Guidelines:
 - Be concise and specific - cite control IDs, CUEC numbers, and page references
 - When discussing risks or deviations, highlight severity and business impact
 - If asked about extraction issues, reference the output.txt logs
-- If you don't have information, say so clearly
 - Use bullet points for lists, tables for comparisons
 - Prioritize clarity over formality
+- Always reference the PDF text when answering questions about report content
 
 Available data context:
 {context_description}
@@ -293,25 +295,27 @@ Current user question: {user_message}
 
 Please provide a helpful, accurate response based on the scan context provided."""
         
-        # Intelligently add resources based on question content
+        # Always include a substantial portion of PDF text (unless requesting full context)
         user_message_lower = user_message.lower()
         
-        # Add PDF text for questions about report content/sections
-        if any(keyword in user_message_lower for keyword in ['section', 'report text', 'pdf', 'page', 'quote', 'exact', 'what does', 'find in']):
-            if context.get('extracted_text'):
-                # Provide a sample of PDF text (first 5000 chars)
-                pdf_sample = context['extracted_text'][:5000]
-                full_prompt += f"\n\n[PDF Text Sample - First 5000 characters]:\n{pdf_sample}\n(Note: Full text available upon request)"
+        if context.get('extracted_text') and not include_full_context:
+            # Include first 10000 characters by default for better coverage
+            pdf_sample = context['extracted_text'][:10000]
+            full_prompt += f"\n\n=== EXTRACTED PDF TEXT (First 10,000 characters) ===\n{pdf_sample}\n\n(Note: This is a portion of the full report text. You can reference any part of this text to answer user questions.)"
+        elif context.get('extracted_text') and include_full_context:
+            # Include more text when full context requested
+            pdf_sample = context['extracted_text'][:50000]
+            full_prompt += f"\n\n=== EXTRACTED PDF TEXT (First 50,000 characters) ===\n{pdf_sample}\n"
         
         # Add extraction logs for questions about processing/errors
         if any(keyword in user_message_lower for keyword in ['extraction', 'error', 'log', 'processing', 'failed', 'issue', 'problem']):
             if context.get('job_artifacts', {}).get('output_txt'):
-                full_prompt += f"\n\n[Extraction Logs - Last portion]:\n{context['job_artifacts']['output_txt'][-3000:]}"
+                full_prompt += f"\n\n=== EXTRACTION LOGS (Last portion) ===\n{context['job_artifacts']['output_txt'][-3000:]}\n"
         
-        # Add executive summary for high-level questions
+        # Add executive summary for overview questions
         if any(keyword in user_message_lower for keyword in ['summary', 'overview', 'about', 'describe']):
             if context.get('executive_summary'):
-                full_prompt += f"\n\n[Executive Summary]:\n{json.dumps(context['executive_summary'], indent=2)}"
+                full_prompt += f"\n\n=== EXECUTIVE SUMMARY ===\n{json.dumps(context['executive_summary'], indent=2)}\n"
         
         # Add detailed context if requested (for complex queries)
         if include_full_context:
