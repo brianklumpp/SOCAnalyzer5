@@ -1274,8 +1274,8 @@ def get_page_for_line(lines, line_num):
     For example, if line 100 has '=== PAGE 5 ===' and line 101 has the control, the control is on page 5.
     """
     page = 1
-    # Iterate up to (but not including) the target line to find the preceding page marker
-    for i in range(min(line_num - 1, len(lines))):
+    # Iterate up to and including the line before the target line to find the preceding page marker
+    for i in range(min(line_num, len(lines))):
         if lines[i].startswith('=== PAGE '):
             try:
                 page = int(lines[i].split()[2])
