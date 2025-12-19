@@ -53,7 +53,7 @@ class FetchClient {
       const response = await fetch(fullURL, {
         method,
         headers,
-        body: data ? JSON.stringify(data) : undefined,
+        body: data ? (typeof data === 'string' ? data : JSON.stringify(data)) : undefined,
         signal: controller.signal,
         ...fetchOptions,
       });
