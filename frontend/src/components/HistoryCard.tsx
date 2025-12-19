@@ -221,11 +221,10 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
       elevation={3}
     >
       <CardContent sx={{ 
-        p: 2, 
-        flex: 1,
+        p: 1.5, 
         display: 'flex',
         flexDirection: 'column',
-        '&:last-child': { pb: 2 }, 
+        '&:last-child': { pb: 1.5 }, 
         position: 'relative',
         overflow: 'visible',
       }}>
@@ -253,9 +252,9 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
-            mb: 1.5,
-            pb: 1.5,
+            gap: 1,
+            mb: 1,
+            pb: 1,
             borderBottom: `2px solid ${solidigmColors.purple}`,
           }}
         >
@@ -306,7 +305,7 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
         </Box>
 
         {/* Scan Details */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {/* Coverage Period */}
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
             <CalendarIcon
@@ -372,14 +371,13 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
 
         {/* Filename and Report Type */}
         <Box sx={{ 
-          mt: 1.5,
-          pt: 1.5, 
+          mt: 1,
+          pt: 1, 
           borderTop: `1px solid ${solidigmColors.lightGray}`, 
           display: 'flex', 
           gap: 1, 
           flexWrap: 'wrap', 
           alignItems: 'center',
-          minHeight: 32,
         }}>
           <Chip
             icon={<BusinessIcon sx={{ fontSize: '0.875rem' }} />}
