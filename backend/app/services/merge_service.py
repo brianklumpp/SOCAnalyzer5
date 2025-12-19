@@ -12,6 +12,7 @@ from sqlalchemy.future import select
 from ..models import Control, CUEC, SubserviceOrg, Scan
 from ..gpt_client import gpt_extract
 from .. import config as cfg
+from ..utils.audit import mark_system_update
 
 
 async def automated_cleanup(scan_id: int, db) -> Optional[Dict[str, int]]:
@@ -57,6 +58,7 @@ async def automated_cleanup(scan_id: int, db) -> Optional[Dict[str, int]]:
                 ctrl.control_confidence = 0.1
                 note = "\\nAutomated cleanup: Extraction error - no valid control_id extracted"
                 ctrl.confidence_calc = (ctrl.confidence_calc or "") + note
+                mark_system_update(ctrl, "Extraction error flagged - missing control_id")
                 db.add(ctrl)
                 cleanup_stats["extraction_errors_flagged"] += 1
         

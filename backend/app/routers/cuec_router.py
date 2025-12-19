@@ -171,11 +171,26 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...
             prev_log = getattr(cuec, "edit_log", "") or ""
             sep = ",\n" if prev_log else ""
             cuec.edit_log = f"{prev_log}{sep}{justification_note} [{datetime.now().isoformat()}]"
+        
+        # Update audit fields
+        cuec.updated_at = datetime.now()
+        cuec.updated_by_user_id = current_user.id
+        
         # Mark executive summary stale
         await mark_executive_summary_stale(scan_id, db)
         db.add(cuec)
         await db.commit()
         await db.refresh(cuec)
+        
+        # Get username for updated_by
+        updated_by_username = None
+        if cuec.updated_by_user_id:
+            from ..models import User
+            user_result = await db.execute(select(User).where(User.id == cuec.updated_by_user_id))
+            user = user_result.scalar_one_or_none()
+            if user:
+                updated_by_username = user.username
+        
         return {
             "id": cuec.id,
             "cuec_description": cuec.cuec_description,
@@ -186,7 +201,9 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...
             "annotation": cuec.annotation,
             "control_strength": cuec.control_strength,
             "cuec_gpt_reasoning": cuec.cuec_gpt_reasoning,
-            "cuec_justification": cuec.cuec_justification
+            "cuec_justification": cuec.cuec_justification,
+            "updated_at": cuec.updated_at.isoformat() if cuec.updated_at else None,
+            "updated_by": updated_by_username or "System" if cuec.updated_at and not cuec.updated_by_user_id else updated_by_username
         }
     except Exception as e:
         await db.rollback()

@@ -247,10 +247,22 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
             sep = ",\n" if prev else ""
             ctrl.edit_log = f"{prev}{sep}{justification_note}"
         
+        # Update audit fields
+        ctrl.updated_at = datetime.datetime.utcnow()
+        ctrl.updated_by_user_id = current_user.id
+        
         await mark_executive_summary_stale(scan_id, db)
         db.add(ctrl)
         await db.commit()
         await db.refresh(ctrl)
+        
+        # Get username for updated_by
+        updated_by_username = None
+        if ctrl.updated_by_user_id:
+            user_result = await db.execute(select(User).where(User.id == ctrl.updated_by_user_id))
+            user = user_result.scalar_one_or_none()
+            if user:
+                updated_by_username = user.username
         
         return {
             "id": ctrl.id,
@@ -269,7 +281,9 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
             "primary_confidence": ctrl.primary_confidence,
             "control_page_refs": ctrl.control_page_refs,
             "has_deviation": ctrl.has_deviation,
-            "deviation_desc": ctrl.deviation_desc
+            "deviation_desc": ctrl.deviation_desc,
+            "updated_at": ctrl.updated_at.isoformat() if ctrl.updated_at else None,
+            "updated_by": updated_by_username or "System" if ctrl.updated_at and not ctrl.updated_by_user_id else updated_by_username
         }
     except Exception as e:
         await db.rollback()

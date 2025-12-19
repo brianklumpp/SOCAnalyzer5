@@ -88,6 +88,7 @@ def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
 async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update subservice org by database ID."""
     try:
+        from datetime import datetime
         logging.info(f"PATCH suborg by id: scan_id={scan_id}, suborg_id={suborg_id}, payload={payload}")
         row = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.id == suborg_id, SubserviceOrg.scan_id == scan_id))).scalar_one_or_none()
         if not row:
@@ -96,10 +97,24 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, An
         if isinstance(payload, dict) and "name" in payload and payload["name"] is not None:
             payload["name"] = str(payload["name"]).strip()
         _suborg_apply_changes(row, payload or {})
+        
+        # Update audit fields
+        row.updated_at = datetime.utcnow()
+        row.updated_by_user_id = current_user.id
+        
         await mark_executive_summary_stale(scan_id, db)
         db.add(row)
         await db.commit()
         await db.refresh(row)
+        
+        # Get username for updated_by
+        updated_by_username = None
+        if row.updated_by_user_id:
+            user_result = await db.execute(select(User).where(User.id == row.updated_by_user_id))
+            user = user_result.scalar_one_or_none()
+            if user:
+                updated_by_username = user.username
+        
         return {
             "id": row.id,
             "name": row.name,
@@ -109,7 +124,9 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, An
             "analyst_notes": row.analyst_notes,
             "annotation": row.annotation,
             "third_party_description": row.third_party_description,
-            "third_party_page_ref": row.third_party_page_ref
+            "third_party_page_ref": row.third_party_page_ref,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_by": updated_by_username or "System" if row.updated_at and not row.updated_by_user_id else updated_by_username
         }
     except HTTPException:
         raise
@@ -123,6 +140,7 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, An
 async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update subservice org by name (legacy endpoint, prefer ID-based endpoint)."""
     try:
+        from datetime import datetime
         logging.info(f"PATCH suborg by name: scan_id={scan_id}, name={suborg_name}, payload={payload}")
         q = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id, SubserviceOrg.name == suborg_name))).scalars().all()
         if not q:
@@ -135,10 +153,24 @@ async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str
         if isinstance(payload, dict) and "name" in payload and payload["name"] is not None:
             payload["name"] = str(payload["name"]).strip()
         _suborg_apply_changes(row, payload or {})
+        
+        # Update audit fields
+        row.updated_at = datetime.utcnow()
+        row.updated_by_user_id = current_user.id
+        
         await mark_executive_summary_stale(scan_id, db)
         db.add(row)
         await db.commit()
         await db.refresh(row)
+        
+        # Get username for updated_by
+        updated_by_username = None
+        if row.updated_by_user_id:
+            user_result = await db.execute(select(User).where(User.id == row.updated_by_user_id))
+            user = user_result.scalar_one_or_none()
+            if user:
+                updated_by_username = user.username
+        
         return {
             "id": row.id,
             "name": row.name,
@@ -146,6 +178,12 @@ async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str
             "confidence_justification": row.confidence_justification,
             "edit_log": row.edit_log,
             "analyst_notes": row.analyst_notes,
+            "annotation": row.annotation,
+            "third_party_description": row.third_party_description,
+            "third_party_page_ref": row.third_party_page_ref,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_by": updated_by_username or "System" if row.updated_at and not row.updated_by_user_id else updated_by_username
+        }
             "annotation": row.annotation,
             "third_party_description": row.third_party_description,
             "third_party_page_ref": row.third_party_page_ref

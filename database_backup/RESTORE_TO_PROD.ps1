@@ -29,6 +29,16 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "✅ Database restored" -ForegroundColor Green
 Write-Host ""
 
+# Step 2.5: Run migrations to add audit tracking
+Write-Host "[2.5/3] Running database migrations..." -ForegroundColor Yellow
+docker-compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "⚠️  Warning: Migrations may have failed" -ForegroundColor Yellow
+} else {
+    Write-Host "✅ Migrations complete" -ForegroundColor Green
+}
+Write-Host ""
+
 # Step 3: Start backend
 Write-Host "[3/3] Starting backend..." -ForegroundColor Yellow
 docker-compose -f docker-compose.prod.yml start backend

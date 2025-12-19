@@ -153,6 +153,10 @@ class CUEC(Base):
     analyst_notes = Column(Text)  # Analyst notes for manual annotations
     edit_log = Column(Text)  # Log of manual edits made to this CUEC
     control_strength = Column(String(32))  # High, Medium, Low
+    
+    # Audit fields for tracking manual edits
+    updated_at = Column(DateTime)  # Timestamp of last update
+    updated_by_user_id = Column(Integer, ForeignKey('users.id'))  # User who last updated this CUEC
 
 class SubserviceOrg(Base):
     __tablename__ = "subservice_org"
@@ -170,11 +174,12 @@ class SubserviceOrg(Base):
     confidence_justification = Column(Text)
     third_party_controls = Column(JSON)
     annotation = Column(Text)
-    analyst_notes = Column(Text)
-    edit_log = Column(Text)
-    annotation = Column(Text)
     analyst_notes = Column(Text)  # Analyst notes for manual annotations
     edit_log = Column(Text)  # Log of manual edits made to this subservice org
+    
+    # Audit fields for tracking manual edits
+    updated_at = Column(DateTime)  # Timestamp of last update
+    updated_by_user_id = Column(Integer, ForeignKey('users.id'))  # User who last updated this subservice org
 
 class Product(Base):
     __tablename__ = "product"
