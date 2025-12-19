@@ -96,7 +96,13 @@ class FetchClient {
         throw error;
       }
 
-      const responseData = await response.json();
+      // Handle different response types
+      let responseData;
+      if (options.responseType === 'blob') {
+        responseData = await response.blob();
+      } else {
+        responseData = await response.json();
+      }
       return { data: responseData, status: response.status, statusText: response.statusText };
     } catch (error: any) {
       clearTimeout(timeoutId);
