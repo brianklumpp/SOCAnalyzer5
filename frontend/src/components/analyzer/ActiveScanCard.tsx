@@ -117,7 +117,7 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
   return (
     <Card
       sx={{
-        minHeight: 220,
+        minHeight: 180,
         position: 'relative',
         cursor: onClick ? 'pointer' : 'default',
         transition: 'all 0.2s',
@@ -130,10 +130,10 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
       }}
       onClick={() => onClick?.(jobId)}
     >
-      <CardContent>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
         {/* GPT Service Warning Banner */}
         {gptServiceWarning && (
-          <Alert severity="warning" sx={{ mb: 2 }}>
+          <Alert severity="warning" sx={{ mb: 1, py: 0.5 }}>
             <strong>⚠️ GPT Service Degraded</strong>
             <br />
             The AI service is experiencing issues. Retries are happening automatically.
@@ -142,7 +142,7 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
 
         {/* Error Banner */}
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert severity="error" sx={{ mb: 1, py: 0.5 }}>
             <strong>Analysis Failed</strong>
             <br />
             {error}
@@ -150,10 +150,10 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
         )}
 
         {/* Header: Filename, Status, and Actions */}
-        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
+        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
           <Box flex={1} mr={1}>
             <Tooltip title={filename}>
-              <Typography variant="h6" noWrap sx={{ fontWeight: 600 }}>
+              <Typography variant="subtitle1" noWrap sx={{ fontWeight: 600, fontSize: '1rem' }}>
                 {filename}
               </Typography>
             </Tooltip>
@@ -248,12 +248,12 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
         </Box>
 
         {/* Overall Progress */}
-        <Box mb={2}>
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
-            <Typography variant="body2" color="text.secondary" fontWeight={500}>
+        <Box mb={1}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.25}>
+            <Typography variant="caption" color="text.secondary" fontWeight={500}>
               Overall Progress
             </Typography>
-            <Typography variant="body2" fontWeight={600} color="primary">
+            <Typography variant="caption" fontWeight={600} color="primary">
               {progress}%
             </Typography>
           </Box>
@@ -261,7 +261,7 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
             variant="determinate"
             value={progress}
             sx={{
-              height: 8,
+              height: 6,
               borderRadius: 1,
               backgroundColor: 'action.hover',
               '& .MuiLinearProgress-bar': {
@@ -271,14 +271,14 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
           />
         </Box>
 
-        <Divider sx={{ my: 2 }} />
+        <Divider sx={{ my: 1 }} />
 
         {/* Report Information Section */}
-        <Box mb={2}>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontWeight: 600 }}>
+        <Box mb={1}>
+          <Typography variant="caption" color="text.secondary" gutterBottom sx={{ fontWeight: 600, fontSize: '0.8rem' }}>
             📄 Report Information
           </Typography>
-          <Stack spacing={1} sx={{ mt: 1 }}>
+          <Stack spacing={0.5} sx={{ mt: 0.5 }}>
             {identifiedEntities?.report_type && (
               <Box display="flex" alignItems="center" gap={0.5}>
                 <AssessmentIcon fontSize="small" sx={{ color: 'text.secondary' }} />

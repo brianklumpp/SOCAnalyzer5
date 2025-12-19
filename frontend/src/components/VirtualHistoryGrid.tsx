@@ -21,13 +21,13 @@ interface VirtualHistoryGridProps {
   containerHeight?: number;
 }
 
-// Grid spacing and sizing - Fixed 2 columns
+// Grid spacing and sizing - Fixed 3 columns
 const GRID_CONFIG = {
   CARD_HEIGHT: 340,  // Increased from 260 to accommodate all content
-  HORIZONTAL_SPACING: 16,
-  VERTICAL_SPACING: 16,
+  HORIZONTAL_SPACING: 12,
+  VERTICAL_SPACING: 12,
   PADDING: 16,
-  COLUMN_COUNT: 2,  // Fixed to 2 columns
+  COLUMN_COUNT: 3,  // Changed to 3 columns
 };
 
 /**

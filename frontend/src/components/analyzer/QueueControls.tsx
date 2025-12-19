@@ -180,60 +180,64 @@ const QueueControls: React.FC<QueueControlsProps> = ({
 
   return (
     <>
-      <Paper sx={{ 
-        p: 2, 
-        mb: 3,
-        bgcolor: 'rgba(0, 43, 92, 0.08)',
-        border: '2px solid',
-        borderColor: 'rgba(0, 43, 92, 0.3)',
-        borderRadius: 2,
-      }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
-          {/* Queue Stats */}
-          <Box flex={1}>
-            <Typography variant="h6" gutterBottom>
-              Scan Queue
-            </Typography>
-            <Stack direction="row" spacing={1}>
-              <Chip
-                label={`${queueLength} in queue`}
-                color={queueLength > 0 ? 'primary' : 'default'}
-                size="small"
-              />
-              {stats?.total_failed !== undefined && stats.total_failed > 0 && (
+      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' } }}>
+        {/* Queue Stats and Controls */}
+        <Paper sx={{ 
+          p: 1.5,
+          flex: 1,
+          bgcolor: 'rgba(0, 43, 92, 0.08)',
+          border: '2px solid',
+          borderColor: 'rgba(0, 43, 92, 0.3)',
+          borderRadius: 2,
+        }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center">
+            {/* Queue Stats */}
+            <Box flex={1}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '1rem', mb: 0.5 }}>
+                Scan Queue
+              </Typography>
+              <Stack direction="row" spacing={1}>
                 <Chip
-                  label={`${stats.total_failed} failed`}
-                  color="error"
+                  label={`${queueLength} in queue`}
+                  color={queueLength > 0 ? 'primary' : 'default'}
                   size="small"
-                  variant="outlined"
                 />
-              )}
-            </Stack>
-          </Box>
+                {stats?.total_failed !== undefined && stats.total_failed > 0 && (
+                  <Chip
+                    label={`${stats.total_failed} failed`}
+                    color="error"
+                    size="small"
+                    variant="outlined"
+                  />
+                )}
+              </Stack>
+            </Box>
 
-          {/* Control Buttons */}
-          <Stack direction="row" spacing={1}>
-            <Tooltip title={isPaused ? 'Start processing queue' : 'Pause queue processing'}>
-              <Button
-                variant="contained"
-                startIcon={isPaused ? <PlayArrowIcon /> : <PauseIcon />}
-                onClick={handlePauseResume}
-                color={isPaused ? 'success' : 'warning'}
-              >
-                {isPaused ? 'Start Queue' : 'Pause Queue'}
-              </Button>
-            </Tooltip>
+            {/* Control Buttons */}
+            <Stack direction="row" spacing={1}>
+              <Tooltip title={isPaused ? 'Start processing queue' : 'Pause queue processing'}>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={isPaused ? <PlayArrowIcon /> : <PauseIcon />}
+                  onClick={handlePauseResume}
+                  color={isPaused ? 'success' : 'warning'}
+                >
+                  {isPaused ? 'Start' : 'Pause'}
+                </Button>
+              </Tooltip>
+            </Stack>
           </Stack>
-        </Stack>
+        </Paper>
         
         {/* Drag-and-Drop Zone */}
-        <Box
+        <Paper
           sx={{
-            mt: 2,
+            flex: 1,
             border: '2px dashed',
             borderColor: isDragging ? 'rgb(79, 0, 181)' : 'rgba(0, 43, 92, 0.4)',
             borderRadius: 2,
-            p: 3,
+            p: 2,
             textAlign: 'center',
             cursor: 'pointer',
             transition: 'all 0.2s',
@@ -249,15 +253,15 @@ const QueueControls: React.FC<QueueControlsProps> = ({
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          <UploadFileIcon sx={{ fontSize: 40, color: isDragging ? 'primary.main' : 'text.secondary', mb: 1 }} />
-          <Typography variant="body1" sx={{ fontWeight: 500, mb: 0.5 }}>
+          <UploadFileIcon sx={{ fontSize: 32, color: isDragging ? 'primary.main' : 'text.secondary', mb: 0.5 }} />
+          <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.25, fontSize: '0.875rem' }}>
             {isDragging ? 'Drop PDFs to upload' : 'Drop PDFs here to queue'}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Or click to select files for batch upload
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+            Or click to select files
           </Typography>
-        </Box>
-      </Paper>
+        </Paper>
+      </Box>
 
       {/* Batch Upload Dialog */}
       <Dialog
