@@ -68,6 +68,9 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
         if (obj.colWidths && typeof obj.colWidths === 'object') setColWidths(obj.colWidths);
         if (obj.visibleCols && Array.isArray(obj.visibleCols)) setVisibleCols(new Set(obj.visibleCols));
         if (obj.colOrder && Array.isArray(obj.colOrder)) setColOrder(obj.colOrder);
+        if (obj.sortCol !== undefined) setSortCol(obj.sortCol);
+        if (obj.sortDir) setSortDir(obj.sortDir);
+        if (obj.filters && typeof obj.filters === 'object') setFilters(obj.filters);
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,10 +82,17 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
     try {
       localStorage.setItem(
         `table_prefs:${storageKey}`,
-        JSON.stringify({ colWidths, visibleCols: Array.from(visibleCols), colOrder })
+        JSON.stringify({ 
+          colWidths, 
+          visibleCols: Array.from(visibleCols), 
+          colOrder, 
+          sortCol, 
+          sortDir, 
+          filters 
+        })
       );
     } catch {}
-  }, [colWidths, visibleCols, colOrder, storageKey]);
+  }, [colWidths, visibleCols, colOrder, sortCol, sortDir, filters, storageKey]);
 
   // Update column widths when columns prop changes
   useEffect(() => {

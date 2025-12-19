@@ -116,19 +116,21 @@ export const SplitViewLayout: React.FC<SplitViewLayoutProps> = ({
   }
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Control Bar */}
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+      {/* Floating Control Bar */}
       <Box
         sx={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
           gap: 1,
-          p: 1,
           bgcolor: 'background.paper',
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          flexShrink: 0
+          boxShadow: 3,
+          borderRadius: 1,
+          p: 0.5,
+          zIndex: 1100
         }}
       >
         <Tooltip title={orientation === 'horizontal' ? 'Switch to Vertical Split' : 'Switch to Horizontal Split'}>
@@ -145,7 +147,7 @@ export const SplitViewLayout: React.FC<SplitViewLayoutProps> = ({
       </Box>
 
       {/* Split View Panels */}
-      <Box sx={{ flex: 1, overflow: 'hidden', minHeight: 0, position: 'relative' }}>
+      <Box sx={{ height: '100%', overflow: 'hidden', position: 'relative' }}>
         <PanelGroup direction={orientation === 'horizontal' ? 'horizontal' : 'vertical'}>
           {/* Table Panel */}
           <Panel defaultSize={50} minSize={30} maxSize={80} style={{ overflow: 'hidden', position: 'relative' }}>
@@ -155,9 +157,7 @@ export const SplitViewLayout: React.FC<SplitViewLayoutProps> = ({
                 width: '100%',
                 overflow: 'auto', 
                 bgcolor: 'background.default', 
-                pt: 2,
-                px: 2,
-                pb: 0,
+                p: 2,
                 position: 'relative',
                 zIndex: 1,
                 pointerEvents: 'auto'
