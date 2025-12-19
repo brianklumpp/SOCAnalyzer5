@@ -2,16 +2,13 @@ import axios from 'axios';
 import { APP_CONFIG } from '../config';
 
 // Centralized Axios client configured from APP_CONFIG
-// Force absolute URL construction using window.location.origin to avoid any URL resolution issues
-const baseURL = APP_CONFIG.API_BASE || (typeof window !== 'undefined' ? window.location.origin : '');
-
 export const api = axios.create({
-  baseURL: baseURL,
+  baseURL: APP_CONFIG.API_BASE,
   timeout: 120000, // 120 seconds for slow database queries and GPT processing
 });
 
 // Debug logging
-console.log('[AXIOS] baseURL configured as:', api.defaults.baseURL);
+console.log('[AXIOS] baseURL configured as:', api.defaults.baseURL || '(empty string)');
 
 // Function to set access token (called from AuthContext)
 let currentAccessToken: string | null = null;

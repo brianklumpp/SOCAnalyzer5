@@ -1,17 +1,13 @@
 // Centralized frontend configuration
-// Uses Vite define constant injected at build time
+// HARDCODED for production - no build-time variables
 
-declare const __API_BASE__: string;
+// ALWAYS use empty string for production (nginx handles proxying)
+const API_BASE = '';
 
-// Use the build-time constant defined in vite.config.ts
-const API_BASE = typeof __API_BASE__ !== 'undefined' ? __API_BASE__ : '';
-
-// Construct WebSocket base from API_BASE or current location
-const WS_BASE = API_BASE 
-  ? API_BASE.replace(/^http/, 'ws')
-  : (typeof window !== 'undefined' 
-      ? window.location.protocol.replace('http', 'ws') + '//' + window.location.host 
-      : '');
+// Construct WebSocket base from current page location
+const WS_BASE = typeof window !== 'undefined' 
+  ? window.location.protocol.replace('http', 'ws') + '//' + window.location.host 
+  : '';
 
 // Debug logging
 console.log('[CONFIG] API_BASE:', API_BASE || '(empty string)', 'WS_BASE:', WS_BASE);
