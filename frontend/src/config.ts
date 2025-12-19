@@ -1,8 +1,8 @@
 // Centralized frontend configuration
 // HARDCODED for production - no build-time variables
 
-// ALWAYS use empty string for production (nginx handles proxying)
-const API_BASE = '';
+// Use undefined instead of empty string to force axios relative URL behavior
+const API_BASE = undefined as unknown as string;
 
 // Construct WebSocket base from current page location
 const WS_BASE = typeof window !== 'undefined' 
@@ -10,7 +10,7 @@ const WS_BASE = typeof window !== 'undefined'
   : '';
 
 // Debug logging
-console.log('[CONFIG] API_BASE:', API_BASE || '(empty string)', 'WS_BASE:', WS_BASE);
+console.log('[CONFIG] API_BASE:', API_BASE, 'WS_BASE:', WS_BASE);
 
 export const APP_CONFIG = {
   API_BASE,

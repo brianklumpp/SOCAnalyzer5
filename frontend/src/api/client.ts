@@ -1,14 +1,121 @@
-import axios from 'axios';
 import { APP_CONFIG } from '../config';
 
-// Centralized Axios client configured from APP_CONFIG
-export const api = axios.create({
-  baseURL: APP_CONFIG.API_BASE,
-  timeout: 120000, // 120 seconds for slow database queries and GPT processing
-});
+// Native fetch-based API client (no axios)
+// This avoids any axios URL resolution issues
 
-// Debug logging
-console.log('[AXIOS] baseURL configured as:', api.defaults.baseURL || '(empty string)');
+class FetchClient {
+  private baseURL: string;
+  private timeout: number;
+
+  constructor(baseURL: string = '', timeout: number = 120000) {
+    this.baseURL = baseURL;
+    this.timeout = timeout;
+    console.log('[FETCH CLIENT] Initialized with baseURL:', baseURL || '(empty - relative URLs)');
+  }
+
+  private buildURL(url: string, params?: Record<string, any>): string {
+    // Always use relative URLs - let nginx handle proxying
+    const path = url.startsWith('/') ? url : `/${url}`;
+    
+    if (params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.append(key, String(value));
+        }
+      });
+      const queryString = searchParams.toString();
+      return queryString ? `${path}?${queryString}` : path;
+    }
+    
+    return path;
+  }
+
+  private async request(method: string, url: string, options: any = {}) {
+    const { params, data, ...fetchOptions } = options;
+    const fullURL = this.buildURL(url, params);
+    
+    console.log('[FETCH REQUEST]', method, fullURL);
+
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...(fetchOptions.headers || {}),
+    };
+
+    if (currentAccessToken) {
+      headers['Authorization'] = `Bearer ${currentAccessToken}`;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(fullURL, {
+        method,
+        headers,
+        body: data ? JSON.stringify(data) : undefined,
+        signal: controller.signal,
+        ...fetchOptions,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.status === 401 && !fetchOptions._retry) {
+        // Handle token refresh
+        if (refreshTokenCallback) {
+          const success = await refreshTokenCallback();
+          if (success) {
+            return this.request(method, url, { ...options, _retry: true });
+          }
+        }
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+      }
+
+      if (!response.ok) {
+        const error: any = new Error(`HTTP ${response.status}: ${response.statusText}`);
+        error.response = {
+          status: response.status,
+          statusText: response.statusText,
+          data: await response.json().catch(() => ({})),
+        };
+        throw error;
+      }
+
+      const responseData = await response.json();
+      return { data: responseData, status: response.status, statusText: response.statusText };
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout');
+      }
+      throw error;
+    }
+  }
+
+  get(url: string, config?: any) {
+    return this.request('GET', url, config);
+  }
+
+  post(url: string, data?: any, config?: any) {
+    return this.request('POST', url, { ...config, data });
+  }
+
+  put(url: string, data?: any, config?: any) {
+    return this.request('PUT', url, { ...config, data });
+  }
+
+  patch(url: string, data?: any, config?: any) {
+    return this.request('PATCH', url, { ...config, data });
+  }
+
+  delete(url: string, config?: any) {
+    return this.request('DELETE', url, config);
+  }
+}
+
+export const api = new FetchClient(APP_CONFIG.API_BASE);
 
 // Function to set access token (called from AuthContext)
 let currentAccessToken: string | null = null;
