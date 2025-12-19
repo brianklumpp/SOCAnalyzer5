@@ -125,6 +125,7 @@ services:
       - ./data:/app/data
       - ./certs:/certs:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./.env:/app/.env
     networks:
       socanalyzer-network:
         ipv4_address: 172.20.0.5  # Fixed IP for backend
