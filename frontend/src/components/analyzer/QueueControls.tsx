@@ -153,9 +153,7 @@ const QueueControls: React.FC<QueueControlsProps> = ({
       const priorities = files.map(f => f.priority.toString()).join(',');
       formData.append('priorities', priorities);
 
-      const response = await api.post('/analyze/batch', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const response = await api.post('/analyze/batch', formData);
 
       const { queued_count, errors } = response.data;
       
