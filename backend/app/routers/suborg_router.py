@@ -29,7 +29,7 @@ ALLOWED_SUBORG_FIELDS = {
 }
 
 
-def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
+def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any], current_user):
     """Apply changes to subservice org fields."""
     from datetime import datetime
     import logging
@@ -96,7 +96,7 @@ async def patch_suborg_by_id(scan_id: int, suborg_id: int, payload: Dict[str, An
         # If renaming, trim whitespace but allow duplicates (extractors may produce duplicates intentionally)
         if isinstance(payload, dict) and "name" in payload and payload["name"] is not None:
             payload["name"] = str(payload["name"]).strip()
-        _suborg_apply_changes(row, payload or {})
+        _suborg_apply_changes(row, payload or {}, current_user)
         
         # Update audit fields
         row.updated_at = datetime.utcnow()
@@ -152,7 +152,7 @@ async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str
         # If renaming, trim whitespace; duplicates are allowed. Keep legacy-name-route 409 only for ambiguity on selection.
         if isinstance(payload, dict) and "name" in payload and payload["name"] is not None:
             payload["name"] = str(payload["name"]).strip()
-        _suborg_apply_changes(row, payload or {})
+        _suborg_apply_changes(row, payload or {}, current_user)
         
         # Add username to edit_log if changes were made
         if row.edit_log and not row.edit_log.endswith(f"by {current_user.username}"):
