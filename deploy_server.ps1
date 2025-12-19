@@ -69,7 +69,7 @@ NODE_ENV=production
 BACKEND_URL=http://backend:8000
 FRONTEND_URL=http://localhost:3000
 SECRET_KEY=change_this_secret
-ALLOWED_ORIGINS=http://localhost:3000
+ALLOWED_ORIGINS=*
 "@ | Out-File -FilePath ".env" -Encoding UTF8
     Write-Host "   .env created - EDIT WITH YOUR SETTINGS!" -ForegroundColor Yellow
     Read-Host "Press Enter after editing .env"

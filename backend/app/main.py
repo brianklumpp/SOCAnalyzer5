@@ -102,9 +102,12 @@ async def suppress_noisy_access_logs(request: Request, call_next):
     return await call_next(request)
 
 # Enable CORS for frontend (move this up to the first app instance)
+# ALLOWED_ORIGINS can be comma-separated list like "http://localhost:3000,http://10.74.214.9:3000"
+allowed_origins_str = os.getenv('ALLOWED_ORIGINS', '*')
+allowed_origins = allowed_origins_str.split(',') if allowed_origins_str != '*' else ['*']
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for local development
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
