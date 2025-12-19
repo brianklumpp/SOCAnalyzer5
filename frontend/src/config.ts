@@ -4,10 +4,15 @@
 // Frontend runs on port 3000, backend API runs on port 8000
 // In production, use empty string (relative URLs) so nginx can proxy
 // In development, use localhost:8000 for direct backend access
-const API_BASE = import.meta.env.VITE_API_BASE !== undefined 
-  ? import.meta.env.VITE_API_BASE 
-  : (import.meta.env.MODE === 'production' ? '' : 'http://localhost:8000');
-const WS_BASE = import.meta.env.VITE_WS_BASE || API_BASE.replace(/^https?:/i, (proto) => proto.toLowerCase() === 'https:' ? 'wss:' : 'ws:');
+
+// Explicitly check for production mode first to avoid any environment variable issues
+const API_BASE = import.meta.env.MODE === 'production' 
+  ? (import.meta.env.VITE_API_BASE ?? '')  // Use empty string in production (nginx proxy)
+  : (import.meta.env.VITE_API_BASE || 'http://localhost:8000');  // Use localhost in dev
+
+const WS_BASE = import.meta.env.VITE_WS_BASE 
+  ? import.meta.env.VITE_WS_BASE 
+  : API_BASE.replace(/^https?:/i, (proto) => proto.toLowerCase() === 'https:' ? 'wss:' : 'ws:');
 
 export const APP_CONFIG = {
   API_BASE,
