@@ -14,6 +14,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 COPY . ./
+# Set production environment variables for Vite build
+# Empty VITE_API_BASE means use relative URLs (nginx proxy)
+ENV NODE_ENV=production
+ENV VITE_API_BASE=
+ENV VITE_WS_BASE=
 # Vite build is fast and efficient - no memory issues!
 RUN npm run build && ls -la /app/build && echo "Build directory contents:" && ls -la /app/build/ || echo "Build failed!"
 
