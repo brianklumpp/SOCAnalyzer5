@@ -202,8 +202,6 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
       onClick={handleClick}
       sx={{
         width: '100%',
-        height: '100%',
-        minHeight: 'fit-content',
         display: 'flex',
         flexDirection: 'column',
         cursor: 'pointer',
