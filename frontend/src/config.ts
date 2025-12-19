@@ -17,6 +17,12 @@ const WS_BASE = isDev
       ? window.location.protocol.replace('http', 'ws') + '//' + window.location.host 
       : '');
 
+// Debug logging
+if (typeof window !== 'undefined') {
+  console.log('[CONFIG] hostname:', window.location.hostname, 'port:', window.location.port);
+  console.log('[CONFIG] isDev:', isDev, 'API_BASE:', API_BASE || '(empty string)');
+}
+
 export const APP_CONFIG = {
   API_BASE,
   WS_BASE,

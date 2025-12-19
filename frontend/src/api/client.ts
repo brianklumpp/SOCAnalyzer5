@@ -7,6 +7,9 @@ export const api = axios.create({
   timeout: 120000, // 120 seconds for slow database queries and GPT processing
 });
 
+// Debug logging
+console.log('[AXIOS] baseURL configured as:', api.defaults.baseURL || '(empty string)');
+
 // Function to set access token (called from AuthContext)
 let currentAccessToken: string | null = null;
 
