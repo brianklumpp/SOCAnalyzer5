@@ -97,7 +97,7 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
             existing = ctrl.edit_log or ""
             separator = "\n" if existing and not existing.endswith("\n") else ""
-            ctrl.edit_log = f"{existing}{separator}Analyst notes updated {now}"
+            ctrl.edit_log = f"{existing}{separator}Analyst notes updated by {current_user.username} ({now})"
         elif "confidence_calc" in data:
             ctrl.confidence_calc = data["confidence_calc"]
         # Note: edit_log is auto-generated only, skip if sent from frontend
@@ -208,7 +208,7 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
             now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
             existing = ctrl.edit_log or ""
             separator = "\n" if existing and not existing.endswith("\n") else ""
-            ctrl.edit_log = f"{existing}{separator}Analyst notes updated {now}"
+            ctrl.edit_log = f"{existing}{separator}Analyst notes updated by {current_user.username} ({now})"
         elif "confidence_calc" in data:
             ctrl.confidence_calc = data["confidence_calc"]
         # Note: edit_log is auto-generated only, skip if sent from frontend

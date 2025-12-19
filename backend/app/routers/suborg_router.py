@@ -72,11 +72,11 @@ def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
                 sep = ",\n" if prev_log else ""
                 timestamp = datetime.now().isoformat()
                 
-                # Format the log message based on field type (username will be added by the endpoint)
+                # Format the log message with username
                 if k == "analyst_notes":
-                    log_msg = f"Analyst notes updated [{timestamp}]"
+                    log_msg = f"Analyst notes updated by {current_user.username} [{timestamp}]"
                 elif k == "confidence":
-                    log_msg = f"UI edit: confidence {old_value} -> {new_value} [{timestamp}]"
+                    log_msg = f"UI edit: confidence {old_value} -> {new_value} by {current_user.username} [{timestamp}]"
                 else:
                     log_msg = f"UI edit: {k} updated [{timestamp}]"
                 

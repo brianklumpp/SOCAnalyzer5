@@ -156,7 +156,7 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...
             cuec.analyst_notes = data["analyst_notes"]
             prev_log = getattr(cuec, "edit_log", "") or ""
             sep = ",\n" if prev_log else ""
-            cuec.edit_log = f"{prev_log}{sep}Analyst notes updated [{datetime.now().isoformat()}]"
+            cuec.edit_log = f"{prev_log}{sep}Analyst notes updated by {current_user.username} [{datetime.now().isoformat()}]"
         if "control_strength" in data:
             cuec.control_strength = data["control_strength"]
         # New: allow editing CUEC text fields
@@ -263,7 +263,7 @@ async def patch_cuec_by_tsc(scan_id: int, cuec_tsc_id: str, data: Dict[str, Any]
             cuec.analyst_notes = data["analyst_notes"]
             prev_log = getattr(cuec, "edit_log", "") or ""
             sep = ",\n" if prev_log else ""
-            cuec.edit_log = f"{prev_log}{sep}Analyst notes updated [{datetime.now().isoformat()}]"
+            cuec.edit_log = f"{prev_log}{sep}Analyst notes updated by {current_user.username} [{datetime.now().isoformat()}]"
         if "control_strength" in data:
             cuec.control_strength = data["control_strength"]
         if "cuec_description" in data:
