@@ -372,7 +372,7 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
 
         {/* Filename and Report Type */}
         <Box sx={{ 
-          mt: 'auto',
+          mt: 1.5,
           pt: 1.5, 
           borderTop: `1px solid ${solidigmColors.lightGray}`, 
           display: 'flex', 
