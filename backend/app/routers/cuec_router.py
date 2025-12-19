@@ -170,7 +170,8 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...
         if justification_note:
             prev_log = getattr(cuec, "edit_log", "") or ""
             sep = ",\n" if prev_log else ""
-            cuec.edit_log = f"{prev_log}{sep}{justification_note} [{datetime.now().isoformat()}]"
+            now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+            cuec.edit_log = f"{prev_log}{sep}{justification_note} by {current_user.username} ({now})"
         
         # Update audit fields
         cuec.updated_at = datetime.now()

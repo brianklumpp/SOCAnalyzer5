@@ -72,7 +72,7 @@ def _suborg_apply_changes(suborg: SubserviceOrg, data: Dict[str, Any]):
                 sep = ",\n" if prev_log else ""
                 timestamp = datetime.now().isoformat()
                 
-                # Format the log message based on field type
+                # Format the log message based on field type (username will be added by the endpoint)
                 if k == "analyst_notes":
                     log_msg = f"Analyst notes updated [{timestamp}]"
                 elif k == "confidence":
@@ -153,6 +153,12 @@ async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str
         if isinstance(payload, dict) and "name" in payload and payload["name"] is not None:
             payload["name"] = str(payload["name"]).strip()
         _suborg_apply_changes(row, payload or {})
+        
+        # Add username to edit_log if changes were made
+        if row.edit_log and not row.edit_log.endswith(f"by {current_user.username}"):
+            # Replace the last timestamp with username + timestamp
+            import re
+            row.edit_log = re.sub(r'\[([^\]]+)\]$', f'by {current_user.username} (\\1)', row.edit_log)
         
         # Update audit fields
         row.updated_at = datetime.utcnow()

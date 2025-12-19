@@ -245,7 +245,8 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
         if justification_note:
             prev = getattr(ctrl, "edit_log", "") or ""
             sep = ",\n" if prev else ""
-            ctrl.edit_log = f"{prev}{sep}{justification_note}"
+            now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
+            ctrl.edit_log = f"{prev}{sep}{justification_note} by {current_user.username} ({now})"
         
         # Update audit fields
         ctrl.updated_at = datetime.datetime.utcnow()
