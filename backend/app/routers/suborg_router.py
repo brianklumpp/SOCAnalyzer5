@@ -190,10 +190,6 @@ async def patch_suborg_by_name(scan_id: int, suborg_name: str, payload: Dict[str
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
             "updated_by": updated_by_username or "System" if row.updated_at and not row.updated_by_user_id else updated_by_username
         }
-            "annotation": row.annotation,
-            "third_party_description": row.third_party_description,
-            "third_party_page_ref": row.third_party_page_ref
-        }
     except HTTPException:
         raise
     except Exception as e:
