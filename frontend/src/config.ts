@@ -1,27 +1,20 @@
 // Centralized frontend configuration
-// Uses runtime detection instead of build-time environment variables
-// This avoids issues with Vite env var resolution
+// Uses Vite define constant injected at build time
 
-// Detect if running in development (Vite dev server on port 5173 or localhost)
-const isDev = typeof window !== 'undefined' && 
-  (window.location.port === '5173' || window.location.hostname === 'localhost');
+declare const __API_BASE__: string;
 
-// In development: use localhost:8000
-// In production: use empty string (relative URLs) for nginx to proxy
-const API_BASE = isDev ? 'http://localhost:8000' : '';
+// Use the build-time constant defined in vite.config.ts
+const API_BASE = typeof __API_BASE__ !== 'undefined' ? __API_BASE__ : '';
 
-// Construct WebSocket base from current page URL in production
-const WS_BASE = isDev 
-  ? 'ws://localhost:8000'
+// Construct WebSocket base from API_BASE or current location
+const WS_BASE = API_BASE 
+  ? API_BASE.replace(/^http/, 'ws')
   : (typeof window !== 'undefined' 
       ? window.location.protocol.replace('http', 'ws') + '//' + window.location.host 
       : '');
 
 // Debug logging
-if (typeof window !== 'undefined') {
-  console.log('[CONFIG] hostname:', window.location.hostname, 'port:', window.location.port);
-  console.log('[CONFIG] isDev:', isDev, 'API_BASE:', API_BASE || '(empty string)');
-}
+console.log('[CONFIG] API_BASE:', API_BASE || '(empty string)', 'WS_BASE:', WS_BASE);
 
 export const APP_CONFIG = {
   API_BASE,
