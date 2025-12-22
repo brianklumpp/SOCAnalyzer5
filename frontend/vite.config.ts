@@ -18,16 +18,18 @@ export default defineConfig(({ mode }) => ({
     host: '0.0.0.0',  // Listen on all interfaces for Docker
     port: 3000,
     proxy: {
-      '/api': {
-        target: 'http://backend:8000',  // Use Docker network hostname
+      // Proxy all backend API routes to backend container
+      // Pattern matches all registered FastAPI routers (see backend/app/main.py)
+      // Routes: analyze, report, controls, cuecs, suborgs, deviations, executive_summary,
+      //         baseline, config, auth, users, grace, history, settings, framework_criteria,
+      //         pdf, docker, test, validate, help, diag
+      '^/(analyze|report|controls|cuecs|suborgs|deviations|executive_summary|baseline|config|auth|users|grace|history|settings|framework_criteria|pdf|docker|test|validate|help|diag)': {
+        target: 'http://backend:8000',
         changeOrigin: true,
       },
-      '/auth': {
-        target: 'http://backend:8000',  // Use Docker network hostname
-        changeOrigin: true,
-      },
+      // WebSocket connection for real-time scan progress
       '/ws': {
-        target: 'ws://backend:8000',  // Use Docker network hostname
+        target: 'ws://backend:8000',
         ws: true,
       },
     },
