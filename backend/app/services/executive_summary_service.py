@@ -96,19 +96,24 @@ async def generate_executive_summary(scan_id: int, db: AsyncSession) -> Dict[str
     
     is_sox_vendor = getattr(scan_row, 'is_sox_vendor', False)
     
+    # Get all controls, then filter to high-confidence non-duplicates
     controls = (await db.execute(select(Control).where(Control.scan_id == scan_id))).scalars().all()
     high_conf_controls = [
         ctrl for ctrl in controls
         if isinstance(getattr(ctrl, 'control_confidence', 0), (int, float)) 
         and getattr(ctrl, 'control_confidence', 0) >= 0.89
+        and not getattr(ctrl, 'is_duplicate_instance', False)  # Exclude duplicates
     ]
+    
+    # Only use high-confidence non-duplicates for statistics and coverage
+    controls_for_stats = high_conf_controls
     cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
     suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
     
-    # Build framework coverage tables from framework_mappings
+    # Build framework coverage tables from framework_mappings (using high-confidence non-duplicates only)
     tsc_ids_found = set()
     coso_ids_found = set()
-    for ctrl in controls:
+    for ctrl in controls_for_stats:
         if ctrl.framework_mappings:
             if "TSC" in ctrl.framework_mappings:
                 for mapping in ctrl.framework_mappings["TSC"]:
@@ -192,8 +197,7 @@ async def generate_executive_summary(scan_id: int, db: AsyncSession) -> Dict[str
         prompt = f"""You are an expert SOC 2 auditor conducting a SOX compliance review. Based on the following SOC 2 report data, provide a comprehensive executive summary for SOX compliance assessment.
 
 Report Statistics:
-- Total Controls: {len(controls)}
-- High-Confidence Controls (≥0.89): {len(high_conf_controls)}
+- Controls Identified: {len(controls_for_stats)} (high-confidence, non-duplicate controls)
 - Subservice Organizations: {suborg_count}
 - Complementary User Entity Controls (CUECs): {cuec_count}
 
@@ -234,8 +238,7 @@ Note: Keep each item concise (1-2 sentences). Focus on SOX compliance and financ
         prompt = f"""You are an expert SOC 2 auditor. Based on the following SOC 2 report data, provide a comprehensive executive summary.
 
 Report Statistics:
-- Total Controls: {len(controls)}
-- High-Confidence Controls (≥0.89): {len(high_conf_controls)}
+- Controls Identified: {len(controls_for_stats)} (high-confidence, non-duplicate controls)
 - Subservice Organizations: {suborg_count}
 - Complementary User Entity Controls (CUECs): {cuec_count}
 
