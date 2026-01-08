@@ -63,8 +63,6 @@ async def create_cuec(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends
         cuec = CUEC(
             scan_id=scan_id,
             cuec_description=desc,
-            cuec_tsc_id=str(data.get("cuec_tsc_id") or "") or None,
-            cuec_coso_id=str(data.get("cuec_coso_id") or "") or None,
             cuec_confidence=conf,
             control_strength=(data.get("control_strength") or None),
             cuec_confidence_justification=initial_justification,
@@ -81,8 +79,6 @@ async def create_cuec(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends
         return {
             "id": cuec.id,
             "cuec_description": cuec.cuec_description,
-            "cuec_tsc_id": cuec.cuec_tsc_id,
-            "cuec_coso_id": cuec.cuec_coso_id,
             "cuec_confidence": cuec.cuec_confidence,
             "control_strength": cuec.control_strength,
             "cuec_confidence_justification": cuec.cuec_confidence_justification,
@@ -91,6 +87,10 @@ async def create_cuec(scan_id: int, data: Dict[str, Any] = Body(...), db=Depends
             "annotation": cuec.annotation,
             "analyst_notes": cuec.analyst_notes,
             "edit_log": cuec.edit_log,
+            "framework_mappings": cuec.framework_mappings,
+            "primary_framework": cuec.primary_framework,
+            "primary_criterion_id": cuec.primary_criterion_id,
+            "primary_confidence": cuec.primary_confidence,
         }
     except HTTPException:
         raise
