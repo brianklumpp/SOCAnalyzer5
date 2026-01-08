@@ -865,7 +865,7 @@ const ReportPage: React.FC = () => {
               onOpenMappingDetails={handleOpenMappingDetails}
               darkMode={darkMode}
               tocPageOffset={report?.toc_page_offset}
-              refreshReport={refreshReport}
+              refreshReport={handleRefreshReport}
             />
           </TabPanel>
 
@@ -887,7 +887,7 @@ const ReportPage: React.FC = () => {
               darkMode={darkMode}
               theme={theme}
               tocPageOffset={report?.toc_page_offset}
-              refreshReport={refreshReport}
+              refreshReport={handleRefreshReport}
             />
           </TabPanel>
 
