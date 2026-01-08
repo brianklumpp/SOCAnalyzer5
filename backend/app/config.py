@@ -602,6 +602,7 @@ The statement describes what users must DO, even if phrased indirectly:
 - Section titled "Complementary User Entity Controls" → Likely CUECs, but still verify each statement
 - Framework citation (CC X.X) in CUEC section → Likely CUEC, but verify user action exists
 - Prescriptive language (must/should/need to) directed at users → Likely CUEC
+- **Numbered list items** under CUEC headings → Each numbered item is typically a separate CUEC, extract ALL items
 
 ### The Key Question:
 **"If I'm the customer/client, does this tell me something I must DO or be responsible for?"**
@@ -654,11 +655,12 @@ For each potential CUEC, your **cuec_gpt_reasoning** MUST answer these questions
 ## Extraction Rules
 
 1. **Extract conservatively**: Only extract statements that CLEARLY assign user responsibility. Precision over recall.
-2. Use your best judgment for **cuec_gpt_opinion**:
+2. **IMPORTANT - Numbered Lists**: When you encounter a numbered or bulleted list under a CUEC heading (e.g., "Control Objective", "User Entity Controls"), extract EVERY list item that describes a user responsibility. Do not skip items - each is typically a distinct CUEC.
+3. Use your best judgment for **cuec_gpt_opinion**:
    - "Yes" = Confident this is a CUEC (clear user responsibility)
    - "No" = This is NOT a CUEC (vendor/system control)
    - "Maybe" = Borderline (unclear responsibility)
-3. For each CUEC, extract:
+4. For each CUEC, extract:
    - cuec_description: full CUEC statement
    - cuec_line_ref: integer line number where found
    - cuec_gpt_opinion: "Yes", "No", or "Maybe"
@@ -667,12 +669,12 @@ For each potential CUEC, your **cuec_gpt_reasoning** MUST answer these questions
    - cuec_framework_alignment: "COSO", "AICPA_TSC", "COSO or AICPA_TSC", or "Undetermined"
    - cuec_framework_alignment_id: COSO or AICPA TSC ID if determinable, else null
    - cuec_justification: brief rationale for framework alignment
-4. For clearly non-CUEC statements you considered, optionally output in "excluded" array:
+5. For clearly non-CUEC statements you considered, optionally output in "excluded" array:
    - excluded_description: the statement
    - excluded_reason: short reason (e.g., "Vendor control", "System action", "Product description")
-5. Do not fabricate IDs or frameworks. Use null for missing data.
-6. Return one JSON object with a "cuecs" array (and optionally an "excluded" array).
-7. No markdown, commentary, or text outside JSON.
+6. Do not fabricate IDs or frameworks. Use null for missing data.
+7. Return one JSON object with a "cuecs" array (and optionally an "excluded" array).
+8. No markdown, commentary, or text outside JSON.
 
 ## Output Example
 {{
