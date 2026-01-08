@@ -479,15 +479,18 @@ def extract_cuecs(report_type: str = "SOC2", job_paths: Optional[Dict[str, Path]
                 gptlog.write(f'CHUNK {idx} ATTEMPT {attempt+1} PROMPT:\n{prompt}\nRESPONSE:\n{response}\n---\n')
             logging.debug(f'Chunk {idx} attempt {attempt+1} response: {response}')
             logging.info(f'Chunk {idx} attempt {attempt+1} GPT response length: {len(response) if response else 0}')
-            # Heuristic: consider response truncated if it ends with an open array/object or is very close to max length
+            # Heuristic: consider response truncated if it ends with an open array/object
+            # DO NOT use length as truncation indicator - long responses can be valid/complete!
             is_truncated = False
             if response:
                 resp_strip = response.strip()
+                # Only check for syntactic truncation indicators
                 if resp_strip.endswith(',') or resp_strip.endswith('[') or resp_strip.endswith('{') or resp_strip.endswith('...'):
                     is_truncated = True
-                # Also, if response is very long (e.g., >3500 chars), likely truncated
-                if len(resp_strip) > 3500:
+                # Additional check: incomplete JSON structure
+                elif resp_strip.count('{') != resp_strip.count('}') or resp_strip.count('[') != resp_strip.count(']'):
                     is_truncated = True
+                    logging.warning(f"Chunk {idx} attempt {attempt+1}: Unbalanced brackets detected, marking as truncated")
             if not response or not is_truncated:
                 break
             # If truncated and chunk is still large, split and retry
