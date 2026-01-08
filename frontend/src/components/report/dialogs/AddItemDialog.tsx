@@ -158,7 +158,7 @@ export const AddItemDialog = React.memo(function AddItemDialog({
         requestData.has_deviation = true;
       }
       
-      const response = await axios.post(`${API_URL}/report/${scanId}/preview-frameworks`, requestData);
+      const response = await axios.post(APP_CONFIG.apiUrl(`/report/${scanId}/preview-frameworks`), requestData);
       setPreviewData(response.data);
       setPreviewCacheTime(now);
     } catch (error: any) {
@@ -192,7 +192,7 @@ export const AddItemDialog = React.memo(function AddItemDialog({
       };
 
       // Use 130-second timeout for GPT extraction (backend has 120s timeout + margin)
-      const response = await axios.post(`${API_URL}/report/${scanId}/extract-entity`, {
+      const response = await axios.post(APP_CONFIG.apiUrl(`/report/${scanId}/extract-entity`), {
         entity_type: entityTypeMap[type],
         search_text: searchText,
         force_multi_extract: forceMultiExtract,
