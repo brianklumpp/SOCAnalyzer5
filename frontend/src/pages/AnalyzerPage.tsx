@@ -749,7 +749,7 @@ const AnalyzerPage: React.FC = () => {
       <Box data-theme={darkMode ? 'dark' : 'light'} sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
         <UserMenu title="SOC Report Analyzer" />
         
-        <Box sx={{ maxWidth: 1400, mx: "auto", mt: 2, p: 2 }}>
+        <Box sx={{ maxWidth: 1400, mx: "auto", mt: 1, p: 1.5 }}>
           {/* Completed scans notification banner */}
           {showCompletedBanner && completedWhileAway.length > 0 && (
             <Alert 
@@ -786,19 +786,19 @@ const AnalyzerPage: React.FC = () => {
             </Alert>
           )}
           
-          <Paper sx={{ p: 2, mb: 2 }}>
+          <Paper sx={{ p: 1.5, mb: 1.5 }}>
           {/* Finalized banner + quick summary counts if available */}
           {statusInfo?.finalized && (
-            <Alert severity="info" sx={{ mb: 2 }}>
+            <Alert severity="info" sx={{ mb: 1, py: 0.5 }}>
               This job was finalized from existing artifacts on disk. Some sections may reflect prior extractor runs.
             </Alert>
           )}
           {/* Report type auto-detection notice */}
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 0.75 }}>
             <Tooltip title="Report type (SOC 1/SOC 2, Type 1/Type 2) will be automatically detected using GPT analysis. You'll be asked to confirm if confidence is below 85%.">
-              <InfoOutlinedIcon fontSize="small" color="action" />
+              <InfoOutlinedIcon fontSize="small" color="action" sx={{ fontSize: '1rem' }} />
             </Tooltip>
-            <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
+            <Typography variant="body2" sx={{ color: theme.palette.text.secondary, fontSize: '0.8rem' }}>
               Report type will be automatically detected
             </Typography>
           </Box>
@@ -807,8 +807,8 @@ const AnalyzerPage: React.FC = () => {
           </Paper>
           
           {/* Scan Queue Section - Always visible */}
-          <Paper sx={{ p: 2, mt: 2, mb: 2 }}>
-            <Typography variant="h6" sx={{ mb: 1.5 }}>
+          <Paper sx={{ p: 1.5, mt: 1.5, mb: 1.5 }}>
+            <Typography variant="h6" sx={{ mb: 1, fontSize: '1.1rem' }}>
               Scan Queue {queuePaused && <Chip label="PAUSED" color="warning" size="small" sx={{ ml: 1 }} />}
             </Typography>
             
@@ -861,13 +861,13 @@ const AnalyzerPage: React.FC = () => {
           </Paper>
           
           {/* Scan History Section */}
-          <Paper sx={{ p: 2, mt: 2, mb: 2 }}>
-            <Typography variant="h6" sx={{ mb: 1.5 }}>
+          <Paper sx={{ p: 1.5, mt: 1.5, mb: 1.5 }}>
+            <Typography variant="h6" sx={{ mb: 1, fontSize: '1.1rem' }}>
               Scan History
             </Typography>
             
             {/* Search and Filter Controls */}
-            <Box sx={{ display: 'flex', gap: 2, mb: 1.5 }}>
+            <Box sx={{ display: 'flex', gap: 1.5, mb: 1 }}>
               <TextField
                 label="Search by filename"
                 variant="outlined"

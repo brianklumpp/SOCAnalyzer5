@@ -124,6 +124,7 @@ export const controlColumns = (
       </ConfidenceTooltip>
     )
   },
+  { key: "confidence_calc", label: "Confidence Calculation", width: 300, editable: false, cellSx: { whiteSpace: 'pre-wrap', fontSize: '0.85rem' } },
   { 
     key: "framework_mappings", 
     label: "Framework Mappings", 
