@@ -735,8 +735,8 @@ const AnalyzerPage: React.FC = () => {
 
   useEffect(() => { localStorage.setItem('socanalyzer_dark_mode', darkMode ? 'true' : 'false'); }, [darkMode]);
 
-  // Handle delete scan
-  const handleDeleteScan = async (scanId: number | string) => {
+  // Handle delete scan - memoized to prevent VirtualHistoryGrid re-renders
+  const handleDeleteScan = useCallback(async (scanId: number | string) => {
     try {
       await api.delete(`/report/${scanId}`);
       // Refresh history after deletion
@@ -747,7 +747,12 @@ const AnalyzerPage: React.FC = () => {
       console.error('[DELETE_SCAN] Error deleting scan:', error);
       // You could add a snackbar/toast notification here if desired
     }
-  };
+  }, []);
+
+  // Handle scan click - memoized to prevent VirtualHistoryGrid re-renders
+  const handleScanClick = useCallback((scanId: number | string) => {
+    navigate(`/app/report/${scanId}`);
+  }, [navigate]);
 
   // Filter history based on search and report type
   const filteredHistory = useMemo(() => {
@@ -922,7 +927,7 @@ const AnalyzerPage: React.FC = () => {
             ) : (
               <VirtualHistoryGrid
                 scans={filteredHistory}
-                onScanClick={(scanId) => navigate(`/app/report/${scanId}`)}
+                onScanClick={handleScanClick}
                 onDeleteScan={handleDeleteScan}
               />
             )}

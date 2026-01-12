@@ -180,4 +180,13 @@ export const VirtualHistoryGrid: React.FC<VirtualHistoryGridProps> = ({
   );
 };
 
-export default VirtualHistoryGrid;
+export default React.memo(VirtualHistoryGrid, (prevProps, nextProps) => {
+  // Only re-render if scans array reference or callbacks changed
+  return (
+    prevProps.scans === nextProps.scans &&
+    prevProps.onScanClick === nextProps.onScanClick &&
+    prevProps.onDeleteScan === nextProps.onDeleteScan &&
+    prevProps.containerWidth === nextProps.containerWidth &&
+    prevProps.containerHeight === nextProps.containerHeight
+  );
+});
