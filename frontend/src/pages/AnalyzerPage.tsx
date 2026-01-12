@@ -13,7 +13,7 @@ import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DescriptionIcon from "@mui/icons-material/Description";
 import { VirtualHistoryGrid } from '../components';
-import { ActiveScanCard, QueueControls } from '../components/analyzer';
+import { ActiveScanCard, QueueControls, HistorySection } from '../components/analyzer';
 import { lightTheme, darkTheme, solidigmColors } from '../theme/solidigmTheme';
 import HelpDialog from '../components/HelpDialog';
 import UserMenu from '../components/auth/UserMenu';
@@ -779,6 +779,15 @@ const AnalyzerPage: React.FC = () => {
     navigate(`/app/report/${scanId}`);
   }, [navigate]);
 
+  // Memoize search/filter callbacks to prevent HistorySection re-renders
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+
+  const handleFilterChange = useCallback((filter: string) => {
+    setReportTypeFilter(filter);
+  }, []);
+
   // Filter history based on search and report type
   const filteredHistory = useMemo(() => {
     return history.filter(scan => {
@@ -917,50 +926,16 @@ const AnalyzerPage: React.FC = () => {
             )}
           </Paper>
           
-          {/* Scan History Section */}
-          <Paper sx={{ p: 1.5, mt: 1.5, mb: 1.5 }}>
-            <Typography variant="h6" sx={{ mb: 1, fontSize: '1.1rem' }}>
-              Scan History
-            </Typography>
-            
-            {/* Search and Filter Controls */}
-            <Box sx={{ display: 'flex', gap: 1.5, mb: 1 }}>
-              <TextField
-                label="Search by filename"
-                variant="outlined"
-                size="small"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                sx={{ flexGrow: 1 }}
-              />
-              <FormControl size="small" sx={{ minWidth: 150 }}>
-                <InputLabel>Report Type</InputLabel>
-                <Select
-                  value={reportTypeFilter}
-                  label="Report Type"
-                  onChange={(e) => setReportTypeFilter(e.target.value)}
-                >
-                  <MenuItem value="All">All</MenuItem>
-                  <MenuItem value="SOC1">SOC 1</MenuItem>
-                  <MenuItem value="SOC2">SOC 2</MenuItem>
-                  <MenuItem value="COMBINED">Combined</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-            
-            {/* History Grid */}
-            {historyLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : (
-              <VirtualHistoryGrid
-                scans={filteredHistory}
-                onScanClick={handleScanClick}
-                onDeleteScan={handleDeleteScan}
-              />
-            )}
-          </Paper>
+          {/* Scan History Section - Memoized to prevent re-renders */}
+          <HistorySection
+            history={history}
+            historyLoading={historyLoading}
+            searchQuery={searchQuery}
+            reportTypeFilter={reportTypeFilter}
+            onSearchChange={handleSearchChange}
+            onFilterChange={handleFilterChange}
+            onDeleteScan={handleDeleteScan}
+          />
           
           {/* Snackbar for cancel */}
           <Snackbar open={openCancelSnackbar} autoHideDuration={4000} onClose={() => setOpenCancelSnackbar(false)}>
