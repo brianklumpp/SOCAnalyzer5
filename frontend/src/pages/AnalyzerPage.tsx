@@ -98,6 +98,9 @@ const AnalyzerPage: React.FC = () => {
   // Partial controls progressive state
   const [partialControls, setPartialControls] = useState<any[] | null>(null);
   const [partialCompletionPct, setPartialCompletionPct] = useState<number | null>(null);
+  
+  // Separate state for volatile progress data to avoid re-rendering history
+  const [scanProgress, setScanProgress] = useState<Record<string, any>>({});
   // Completed scans notification
   const [completedWhileAway, setCompletedWhileAway] = useState<ScanResult[]>([]);
   const [showCompletedBanner, setShowCompletedBanner] = useState(false);
@@ -469,6 +472,9 @@ const AnalyzerPage: React.FC = () => {
       const queueRes = await api.get('/analyze/queue');
       
       if (queueRes.data && Array.isArray(queueRes.data.scans)) {
+        // Separate: core queue data vs volatile progress data
+        const progressData: Record<string, any> = {};
+        
         // Enhance queue data with real-time progress for running scans
         const enrichedScans = await Promise.all(
           queueRes.data.scans.map(async (scan: any) => {
@@ -478,9 +484,8 @@ const AnalyzerPage: React.FC = () => {
                 const statusRes = await api.get(`/analyze/status_min/${scan.job_id}`);
                 const status = statusRes.data;
                 
-                // Merge progress data into scan
-                return {
-                  ...scan,
+                // Store progress data separately
+                progressData[scan.job_id] = {
                   progress: status.progress || 0,
                   elapsedSeconds: status.elapsed_seconds || 0,
                   identifiedEntities: status.identified_entities || {},
@@ -491,6 +496,9 @@ const AnalyzerPage: React.FC = () => {
                   error: status.error,
                   gptServiceWarning: status.gpt_service_warning
                 };
+                
+                // Return scan with just stable data (no volatile fields)
+                return scan;
               } catch (err) {
                 // If status fetch fails, return scan as-is
                 console.warn(`[AnalyzerPage] Failed to fetch status for ${scan.job_id}:`, err);
@@ -500,6 +508,9 @@ const AnalyzerPage: React.FC = () => {
             return scan;
           })
         );
+        
+        // Update progress data separately (doesn't trigger history re-render)
+        setScanProgress(progressData);
         
         // Check if any scans have completed - use functional setState to get current value
         setQueuedScans(previousScans => {
@@ -529,10 +540,24 @@ const AnalyzerPage: React.FC = () => {
             scan.status === 'queued' || scan.status === 'running'
           );
           
-          // Only update if queue data actually changed to prevent unnecessary re-renders
-          if (JSON.stringify(previousScans) !== JSON.stringify(activeScans)) {
+          // Smart comparison: only update if structural changes (not just progress/elapsed time)
+          // Compare job_ids, statuses, and filenames to detect actual queue changes
+          const hasStructuralChange = (
+            previousScans.length !== activeScans.length ||
+            previousScans.some((prev: any, idx: number) => {
+              const current = activeScans[idx];
+              return !current || 
+                     prev.job_id !== current.job_id || 
+                     prev.status !== current.status ||
+                     prev.filename !== current.filename;
+            })
+          );
+          
+          if (hasStructuralChange) {
             return activeScans;
           }
+          
+          // No structural change - just progress updates, keep previous reference to avoid re-render
           return previousScans;
         });
         
@@ -851,33 +876,37 @@ const AnalyzerPage: React.FC = () => {
             {/* Active/Queued Scans */}
             {queuedScans.length > 0 ? (
               <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {queuedScans.map((scan, idx) => (
-                  <ActiveScanCard
-                    key={scan.job_id}
-                    jobId={scan.job_id}
-                    filename={scan.filename}
-                    reportType={scan.report_type || 'Unknown'}
-                    status={scan.status}
-                    priority={scan.priority}
-                    position={idx}
-                    progress={scan.progress || 0}
-                    elapsedSeconds={scan.elapsedSeconds}
-                    identifiedEntities={scan.identifiedEntities}
-                    detectedSubtype={scan.detectedSubtype}
-                    reportDate={scan.reportDate}
-                    coveragePeriod={scan.coveragePeriod}
-                    counters={scan.counters}
-                    error={scan.error}
-                    gptServiceWarning={scan.gptServiceWarning}
-                    onCancel={handleCancelScan}
-                    onPause={handlePauseScan}
-                    onResume={handleResumeScan}
-                    onClick={(jobId) => {
-                      // Navigate to scan details or focus on it
-                      console.log('Clicked scan:', jobId);
-                    }}
-                  />
-                ))}
+                {queuedScans.map((scan, idx) => {
+                  // Merge in progress data from separate state
+                  const progressInfo = scanProgress[scan.job_id] || {};
+                  return (
+                    <ActiveScanCard
+                      key={scan.job_id}
+                      jobId={scan.job_id}
+                      filename={scan.filename}
+                      reportType={scan.report_type || 'Unknown'}
+                      status={scan.status}
+                      priority={scan.priority}
+                      position={idx}
+                      progress={progressInfo.progress || 0}
+                      elapsedSeconds={progressInfo.elapsedSeconds}
+                      identifiedEntities={progressInfo.identifiedEntities}
+                      detectedSubtype={progressInfo.detectedSubtype}
+                      reportDate={progressInfo.reportDate}
+                      coveragePeriod={progressInfo.coveragePeriod}
+                      counters={progressInfo.counters}
+                      error={progressInfo.error}
+                      gptServiceWarning={progressInfo.gptServiceWarning}
+                      onCancel={handleCancelScan}
+                      onPause={handlePauseScan}
+                      onResume={handleResumeScan}
+                      onClick={(jobId) => {
+                        // Navigate to scan details or focus on it
+                        console.log('Clicked scan:', jobId);
+                      }}
+                    />
+                  );
+                })}
               </Box>
             ) : (
               <Box sx={{ mt: 2, p: 2, textAlign: 'center', color: 'text.secondary' }}>
