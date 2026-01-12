@@ -493,30 +493,27 @@ const AnalyzerPage: React.FC = () => {
           })
         );
         
-        // Check if any scans have completed (transitioned from running to completed)
-        const previousScans = queuedScans;
-        const newlyCompleted = enrichedScans.filter((scan: any) => 
-          scan.status === 'completed' && 
-          previousScans.find((prev: any) => prev.job_id === scan.job_id && prev.status === 'running')
-        );
-        
-        // If any scans just completed, refresh history to show them
-        if (newlyCompleted.length > 0) {
-          console.log(`[AnalyzerPage] ${newlyCompleted.length} scan(s) completed, refreshing history`);
-          try {
-            const historyRes = await api.get(HISTORY_URL);
-            setHistory(historyRes.data);
-          } catch (historyErr) {
-            console.error('[AnalyzerPage] Failed to refresh history:', historyErr);
+        // Check if any scans have completed - use functional setState to get current value
+        setQueuedScans(previousScans => {
+          const newlyCompleted = enrichedScans.filter((scan: any) => 
+            scan.status === 'completed' && 
+            previousScans.find((prev: any) => prev.job_id === scan.job_id && prev.status === 'running')
+          );
+          
+          // If any scans just completed, refresh history to show them
+          if (newlyCompleted.length > 0) {
+            console.log(`[AnalyzerPage] ${newlyCompleted.length} scan(s) completed, refreshing history`);
+            api.get(HISTORY_URL)
+              .then(historyRes => setHistory(historyRes.data))
+              .catch(historyErr => console.error('[AnalyzerPage] Failed to refresh history:', historyErr));
           }
-        }
+          
+          // Filter out completed/failed/cancelled scans - they should only appear in history
+          return enrichedScans.filter((scan: any) => 
+            scan.status === 'queued' || scan.status === 'running'
+          );
+        });
         
-        // Filter out completed/failed/cancelled scans - they should only appear in history
-        const activeScans = enrichedScans.filter((scan: any) => 
-          scan.status === 'queued' || scan.status === 'running'
-        );
-        
-        setQueuedScans(activeScans);
         setQueuePaused(queueRes.data.is_paused || false);
       }
       
@@ -527,7 +524,7 @@ const AnalyzerPage: React.FC = () => {
     } catch (err) {
       console.error('[AnalyzerPage] Failed to fetch queue data:', err);
     }
-  }, [queuedScans]); // Only depend on queuedScans for newly completed scan detection
+  }, []); // No dependencies - function is stable across renders
 
   const handleCancelScan = async (scanJobId: string) => {
     try {
