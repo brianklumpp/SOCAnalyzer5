@@ -48,6 +48,7 @@ async def broadcast_queue_update():
 async def analyze_pdf_bg(
     file: UploadFile = File(...), 
     report_type: str = Form(None),
+    password: str = Form(None),
     db=Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -57,11 +58,12 @@ async def analyze_pdf_bg(
     Args:
         file: PDF file to analyze
         report_type: Report type - "SOC1", "SOC2", or "COMBINED" (default: None for auto-detection)
+        password: Optional password for encrypted PDFs
         
     Returns:
         {"job_id": str} - Job ID for polling status
     """
-    logging.error(f"[DEBUG /analyze/] Received report_type='{report_type}', file={file.filename}")
+    logging.error(f"[DEBUG /analyze/] Received report_type='{report_type}', password={'***' if password else None}, file={file.filename}")
     import uuid
     import shutil
     
@@ -101,6 +103,7 @@ async def analyze_pdf_bg(
         "checklist": [],
         "filename": filename,
         "report_type": report_type,
+        "password": password,  # Store password in job metadata (will be used during extraction)
         "start_time": time.time(),
         "identified_entities": {},
         "counters": {
@@ -130,6 +133,7 @@ async def analyze_pdf_bg(
             filename=filename,
             pdf_path=temp_pdf_path,
             report_type=report_type,
+            password=password,
             priority=10  # Normal priority
         )
         logging.info(f"[QUEUE] Added scan to queue: job_id={job_id}, position={position}")
@@ -140,7 +144,7 @@ async def analyze_pdf_bg(
         from ..main import run_analysis_job
         thread = threading.Thread(
             target=run_analysis_job, 
-            args=(job_id, temp_pdf_path, filename, report_type, db, current_user.id),
+            args=(job_id, temp_pdf_path, filename, report_type, db, current_user.id, False, password),
             name=f"DirectScan-{job_id[:8]}"
         )
         thread.daemon = True
@@ -153,7 +157,7 @@ async def analyze_pdf_bg(
         from ..main import run_analysis_job
         thread = threading.Thread(
             target=run_analysis_job, 
-            args=(job_id, temp_pdf_path, filename, report_type, db, current_user.id),
+            args=(job_id, temp_pdf_path, filename, report_type, db, current_user.id, False, password),
             name=f"DirectScan-{job_id[:8]}"
         )
         thread.daemon = True
@@ -775,6 +779,7 @@ async def batch_upload_scans(
     files: list[UploadFile] = File(...),
     report_types: Optional[str] = Form(None),  # Comma-separated list
     priorities: Optional[str] = Form(None),  # Comma-separated list of ints
+    passwords: Optional[str] = Form(None),  # Comma-separated list of passwords
     db=Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -787,6 +792,8 @@ async def batch_upload_scans(
                      Example: "SOC1,SOC2,,SOC1" (empty means auto-detect)
         priorities: Comma-separated list of priorities (1=high, 2=medium, 3=low)
                    Example: "1,2,1,3"
+        passwords: Comma-separated list of PDF passwords (empty strings for no password)
+                  Example: "pwd1,,pwd3," (empty means no password)
         
     Returns:
         {
@@ -818,6 +825,12 @@ async def batch_upload_scans(
             priority_list = []
     priority_list = priority_list + [2] * (len(files) - len(priority_list))  # Pad with medium priority
     
+    # Parse passwords
+    password_list = []
+    if passwords:
+        password_list = [pwd if pwd else None for pwd in passwords.split(',')]
+    password_list = password_list + [None] * (len(files) - len(password_list))  # Pad with None
+    
     temp_dir = "data/tmp"
     os.makedirs(temp_dir, exist_ok=True)
     
@@ -836,6 +849,7 @@ async def batch_upload_scans(
             filename = file.filename if file.filename else f"uploaded_{idx}.pdf"
             report_type = report_type_list[idx]
             priority = priority_list[idx]
+            password = password_list[idx]
             
             # Save file to temp location
             job_id = str(uuid.uuid4())
@@ -854,6 +868,7 @@ async def batch_upload_scans(
                 "checklist": [],
                 "filename": filename,
                 "report_type": report_type,
+                "password": password,
                 "start_time": time.time(),
                 "pdf_path": temp_pdf_path,
                 "priority": priority,
@@ -881,7 +896,8 @@ async def batch_upload_scans(
                 filename=filename,
                 pdf_path=temp_pdf_path,
                 report_type=report_type,
-                priority=priority
+                priority=priority,
+                password=password
             )
             
             queued_jobs.append({

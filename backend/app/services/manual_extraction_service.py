@@ -76,21 +76,33 @@ def parse_page_ranges(pages_str: str) -> List[int]:
     return sorted(list(pages))
 
 
-def extract_text_from_pages(pdf_bytes: bytes, page_numbers: List[int]) -> str:
+def extract_text_from_pages(pdf_bytes: bytes, page_numbers: List[int], password: str = None) -> str:
     """
     Extract text from specific pages of a PDF.
     
     Args:
         pdf_bytes: PDF file bytes
         page_numbers: List of 1-indexed page numbers to extract
+        password: Optional password for encrypted PDFs
         
     Returns:
         Concatenated text from specified pages
+        
+    Raises:
+        ValueError: If PDF is encrypted and password is invalid
     """
     try:
         import fitz  # PyMuPDF
         
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        # Open PDF with password if provided
+        if password:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            if doc.is_encrypted and not doc.authenticate(password):
+                logger.error(f"[MANUAL_EXTRACT] Failed to decrypt PDF with provided password")
+                doc.close()
+                raise ValueError("Invalid PDF password - please check your password and try again")
+        else:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         extracted_text = []
         
         for page_num in page_numbers:

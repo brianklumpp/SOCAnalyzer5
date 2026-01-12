@@ -488,7 +488,7 @@ def _run_metadata_extractors_sequential(
 
 def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json', report_type='SOC2', 
                       progress_callback=None, checklist_callback=None, job_id=None, 
-                      executor=None, progress_tracker=None, job_paths=None):
+                      executor=None, progress_tracker=None, job_paths=None, password=None):
     # Reset GPT tracking at start of analysis
     from .gpt_tracker import reset_tracking, get_usage_summary
     reset_tracking()
@@ -507,6 +507,10 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         logger.info(f"[PARALLEL_EXEC] Parallel execution ENABLED (max_workers={executor.max_workers if hasattr(executor, 'max_workers') else 'unknown'})")
     else:
         logger.info("[PARALLEL_EXEC] Parallel execution DISABLED (running sequentially)")
+    
+    # Log PDF password status
+    if password:
+        logger.info(f"[JOB {job_id}] PDF password provided - will attempt decryption")
     
     # Track start time for elapsed_seconds
     import time
@@ -634,7 +638,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         from .pdf_handler import extract_embedded_files, flatten_pdf
         
         temp_extract_dir = os.path.join(os.path.dirname(pdf_path), 'extracted')
-        embedded_pdfs = extract_embedded_files(pdf_path, temp_extract_dir)
+        embedded_pdfs = extract_embedded_files(pdf_path, temp_extract_dir, password=password)
         
         if embedded_pdfs:
             logger.info(f"Found {len(embedded_pdfs)} embedded PDF(s), using first one: {embedded_pdfs[0]}")
@@ -655,7 +659,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         # Try flattening first, then fall back to original if it fails
         update_progress(5, "Preprocessing PDF...")
         flattened_path = pdf_path.replace('.pdf', '_flattened.pdf')
-        flatten_success = flatten_pdf(pdf_path, flattened_path)
+        flatten_success = flatten_pdf(pdf_path, flattened_path, password=password)
         
         if flatten_success and os.path.exists(flattened_path):
             logger.info(f"Using flattened PDF for extraction: {flattened_path}")
@@ -666,7 +670,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         
         # Always (re)generate section_results.json before running extractors
         update_progress(10, "Extracting text from PDF...")
-        extract_text_from_pdf(extraction_path, OUTPUT_TEXT_FILE)
+        extract_text_from_pdf(extraction_path, OUTPUT_TEXT_FILE, password=password)
         logger.debug(f"Extracted text to {OUTPUT_TEXT_FILE}")
         
         # Clean up flattened PDF after extraction

@@ -21,7 +21,7 @@ def load_api_key():
     load_dotenv()
     return os.getenv('OPENAI_API_KEY')
 
-def extract_embedded_files(input_path, output_dir):
+def extract_embedded_files(input_path, output_dir, password=None):
     """
     Extract embedded/attached files from a PDF.
     Many protected PDFs embed the actual content as an attachment.
@@ -29,9 +29,13 @@ def extract_embedded_files(input_path, output_dir):
     Args:
         input_path: Path to the input PDF
         output_dir: Directory to save extracted files
+        password: Optional password for encrypted PDFs
         
     Returns:
         list: Paths to extracted PDF files (empty if none found)
+        
+    Raises:
+        ValueError: If PDF is encrypted and password is invalid
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -45,7 +49,15 @@ def extract_embedded_files(input_path, output_dir):
     try:
         logger.error(f"[PDF_EMBED] Checking for embedded files in: {input_path}")
         
-        doc = fitz.open(input_path)
+        # Open PDF with password if provided
+        if password:
+            doc = fitz.open(input_path)
+            if doc.is_encrypted and not doc.authenticate(password):
+                logger.error(f"[PDF_EMBED] Failed to decrypt PDF with provided password")
+                doc.close()
+                raise ValueError("Invalid PDF password - please check your password and try again")
+        else:
+            doc = fitz.open(input_path)
         
         # Get list of embedded files
         embedded_files = doc.embfile_names()
@@ -105,7 +117,7 @@ def extract_embedded_files(input_path, output_dir):
         return []
 
 
-def flatten_pdf(input_path, output_path):
+def flatten_pdf(input_path, output_path, password=None):
     """
     Attempt to unlock/flatten a PDF by removing form fields, JavaScript, and encryption.
     This tries to expose hidden content without converting to images.
@@ -113,9 +125,13 @@ def flatten_pdf(input_path, output_path):
     Args:
         input_path: Path to the input PDF
         output_path: Path to save the flattened PDF
+        password: Optional password for encrypted PDFs
         
     Returns:
         bool: True if successful, False otherwise
+        
+    Raises:
+        ValueError: If PDF is encrypted and password is invalid
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -129,8 +145,15 @@ def flatten_pdf(input_path, output_path):
     try:
         logger.error(f"[PDF_FLATTEN] Processing PDF: {input_path}")
         
-        # Open the source PDF
-        doc = fitz.open(input_path)
+        # Open the source PDF with password if provided
+        if password:
+            doc = fitz.open(input_path)
+            if doc.is_encrypted and not doc.authenticate(password):
+                logger.error(f"[PDF_FLATTEN] Failed to decrypt PDF with provided password")
+                doc.close()
+                raise ValueError("Invalid PDF password - please check your password and try again")
+        else:
+            doc = fitz.open(input_path)
         
         logger.error(f"[PDF_FLATTEN] PDF has {len(doc)} pages, encrypted={doc.is_encrypted}")
         
@@ -250,7 +273,7 @@ def is_legal_agreement_page(text):
     return weak_indicator_count >= 2
 
 
-def extract_text_from_pdf(pdf_path, output_path):
+def extract_text_from_pdf(pdf_path, output_path, password=None):
     """
     Extracts all text from a PDF file and writes it to a text file.
     Maintains pagination by inserting a page break marker between pages.
@@ -262,6 +285,10 @@ def extract_text_from_pdf(pdf_path, output_path):
     Args:
         pdf_path (str): Path to the PDF file.
         output_path (str): Path to the output text file.
+        password (str, optional): Password for encrypted PDFs.
+        
+    Raises:
+        ValueError: If PDF is encrypted and password is invalid
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -270,7 +297,16 @@ def extract_text_from_pdf(pdf_path, output_path):
         import fitz  # pymupdf
     except ImportError:
         raise ImportError("pymupdf (fitz) is required for PDF extraction. Please install it with 'pip install pymupdf'.")
-    doc = fitz.open(pdf_path)
+    
+    # Open PDF with password if provided
+    if password:
+        doc = fitz.open(pdf_path)
+        if doc.is_encrypted and not doc.authenticate(password):
+            logger.error(f"[PDF_EXTRACT] Failed to decrypt PDF with provided password")
+            doc.close()
+            raise ValueError("Invalid PDF password - please check your password and try again")
+    else:
+        doc = fitz.open(pdf_path)
     logger.info(f"Extracting text from PDF: {pdf_path} ({len(doc)} pages)")
     
     # First pass: detect and skip legal agreement pages at the beginning

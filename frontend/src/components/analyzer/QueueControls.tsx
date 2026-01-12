@@ -43,6 +43,7 @@ interface FileToUpload {
   file: File;
   reportType: string;
   priority: number;
+  password?: string;  // Optional PDF password
 }
 
 const QueueControls: React.FC<QueueControlsProps> = ({
@@ -78,7 +79,8 @@ const QueueControls: React.FC<QueueControlsProps> = ({
     const newFiles: FileToUpload[] = selectedFiles.map(file => ({
       file,
       reportType: 'Auto', // Default to auto-detect
-      priority: 2 // Default to medium priority
+      priority: 10, // Normal priority
+      password: ''  // Empty password by default
     }));
     setFiles(prev => [...prev, ...newFiles]);
   };
@@ -114,7 +116,8 @@ const QueueControls: React.FC<QueueControlsProps> = ({
       const newFiles: FileToUpload[] = droppedFiles.map(file => ({
         file,
         reportType: 'Auto',
-        priority: 2
+        priority: 2,
+        password: ''  // Empty password by default
       }));
       setFiles(prev => [...prev, ...newFiles]);
       setBatchDialogOpen(true);
@@ -127,7 +130,7 @@ const QueueControls: React.FC<QueueControlsProps> = ({
   };
 
   // Update file settings
-  const handleUpdateFile = (index: number, field: 'reportType' | 'priority', value: string | number) => {
+  const handleUpdateFile = (index: number, field: 'reportType' | 'priority' | 'password', value: string | number) => {
     setFiles(prev => prev.map((f, i) => i === index ? { ...f, [field]: value } : f));
   };
 
@@ -152,6 +155,10 @@ const QueueControls: React.FC<QueueControlsProps> = ({
       // Add priorities (comma-separated)
       const priorities = files.map(f => f.priority.toString()).join(',');
       formData.append('priorities', priorities);
+      
+      // Add passwords (comma-separated, empty string for no password)
+      const passwords = files.map(f => f.password || '').join(',');
+      formData.append('passwords', passwords);
 
       const response = await api.post('/analyze/batch', formData);
 
@@ -310,7 +317,7 @@ const QueueControls: React.FC<QueueControlsProps> = ({
               </Typography>
               {files.map((fileItem, index) => (
                 <Paper key={index} variant="outlined" sx={{ p: 2, mb: 1 }}>
-                  <Stack direction="row" spacing={2} alignItems="center">
+                  <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
                     {/* Filename */}
                     <Box flex={1}>
                       <Typography variant="body2" noWrap>
@@ -361,6 +368,19 @@ const QueueControls: React.FC<QueueControlsProps> = ({
                       <DeleteIcon />
                     </IconButton>
                   </Stack>
+                  
+                  {/* Password Field (optional) */}
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="password"
+                    label="PDF Password (optional)"
+                    value={fileItem.password || ''}
+                    onChange={(e) => handleUpdateFile(index, 'password', e.target.value)}
+                    disabled={uploading}
+                    placeholder="Leave blank if no password"
+                    sx={{ mt: 1 }}
+                  />
                 </Paper>
               ))}
             </Box>

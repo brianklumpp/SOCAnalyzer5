@@ -892,14 +892,14 @@ def _result_counts_from_disk() -> Dict[str, int]:
 
 # (Removed duplicate earlier definition of _build_combined_results_from_disk; keeping the comprehensive version below.)
 
-def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=None, resume=False):
+def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=None, resume=False, password=None):
     import logging
     import asyncio
     import threading
     import time
     start_time = time.time()
     
-    logging.error(f"[DEBUG run_analysis_job] ENTRY - Thread: {threading.current_thread().name}, job_id={job_id}, report_type='{report_type}', type={type(report_type)}, user_id={user_id}, resume={resume}")
+    logging.error(f"[DEBUG run_analysis_job] ENTRY - Thread: {threading.current_thread().name}, job_id={job_id}, report_type='{report_type}', type={type(report_type)}, user_id={user_id}, resume={resume}, password={'***' if password else None}")
     logging.error(f"[DEBUG run_analysis_job] Condition check - not resume: {not resume}, not report_type: {not report_type}, cfg.REPORT_TYPE_AUTO_DETECT: {cfg.REPORT_TYPE_AUTO_DETECT}")
     
     # Mark scan as running in queue
@@ -1244,7 +1244,8 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
             job_id=job_id,
             executor=executor,
             progress_tracker=progress_tracker,
-            job_paths=job_paths
+            job_paths=job_paths,
+            password=password
         )
         
         # Check if analysis failed and returned an error

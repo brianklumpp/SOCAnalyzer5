@@ -47,6 +47,7 @@ class QueuedScan:
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     error: Optional[str] = None
+    password: Optional[str] = None  # PDF password for encrypted files
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -64,6 +65,7 @@ class QueuedScan:
         data.setdefault('started_at', None)
         data.setdefault('completed_at', None)
         data.setdefault('error', None)
+        data.setdefault('password', None)
         return cls(**data)
 
 
@@ -114,7 +116,8 @@ class ScanQueue:
                 filename: str,
                 pdf_path: str,
                 report_type: Optional[str] = None,
-                priority: int = 10) -> int:
+                priority: int = 10,
+                password: Optional[str] = None) -> int:
         """
         Add a scan to the queue.
         
@@ -124,6 +127,7 @@ class ScanQueue:
             pdf_path: Path to saved PDF
             report_type: Optional report type (auto-detect if None)
             priority: Queue priority (0=highest, 10=normal, 99=lowest)
+            password: Optional PDF password for encrypted files
             
         Returns:
             Queue position (0 = will start immediately)
@@ -135,7 +139,8 @@ class ScanQueue:
             report_type=report_type,
             priority=priority,
             status=ScanQueueStatus.QUEUED,
-            queued_at=datetime.now().isoformat()
+            queued_at=datetime.now().isoformat(),
+            password=password
         )
         
         # Store scan metadata in Redis
@@ -563,7 +568,7 @@ def _queue_worker():
                         # Start processing thread
                         thread = threading.Thread(
                             target=run_analysis_job,
-                            args=(scan.job_id, scan.pdf_path, scan.filename, scan.report_type, None, 1),  # db=None, user_id=1
+                            args=(scan.job_id, scan.pdf_path, scan.filename, scan.report_type, None, 1, False, scan.password),  # db=None, user_id=1, resume=False, password
                             name=f"ScanWorker-{scan.job_id[:8]}"
                         )
                         thread.daemon = True

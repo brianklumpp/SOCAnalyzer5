@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo } from "react";
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import CountUp from 'react-countup';
 import api from "../api/client";
@@ -456,7 +456,7 @@ const AnalyzerPage: React.FC = () => {
   };
 
   // Queue management functions
-  const fetchQueueData = async () => {
+  const fetchQueueData = useCallback(async () => {
     try {
       const queueRes = await api.get('/analyze/queue');
       
@@ -527,7 +527,7 @@ const AnalyzerPage: React.FC = () => {
     } catch (err) {
       console.error('[AnalyzerPage] Failed to fetch queue data:', err);
     }
-  };
+  }, [queuedScans]); // Only depend on queuedScans for newly completed scan detection
 
   const handleCancelScan = async (scanJobId: string) => {
     try {
@@ -558,10 +558,14 @@ const AnalyzerPage: React.FC = () => {
 
   // Poll queue data periodically
   useEffect(() => {
+    console.log('[AnalyzerPage] Starting queue polling interval');
     fetchQueueData(); // Initial fetch
     const interval = setInterval(fetchQueueData, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      console.log('[AnalyzerPage] Cleaning up queue polling interval');
+      clearInterval(interval);
+    };
+  }, [fetchQueueData]); // Depend on fetchQueueData callback
 
   // Override handleUpload for background job
   const handleUpload = async () => {
