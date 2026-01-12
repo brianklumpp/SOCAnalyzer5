@@ -525,9 +525,15 @@ const AnalyzerPage: React.FC = () => {
           }
           
           // Filter out completed/failed/cancelled scans - they should only appear in history
-          return enrichedScans.filter((scan: any) => 
+          const activeScans = enrichedScans.filter((scan: any) => 
             scan.status === 'queued' || scan.status === 'running'
           );
+          
+          // Only update if queue data actually changed to prevent unnecessary re-renders
+          if (JSON.stringify(previousScans) !== JSON.stringify(activeScans)) {
+            return activeScans;
+          }
+          return previousScans;
         });
         
         setQueuePaused(queueRes.data.is_paused || false);
