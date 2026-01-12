@@ -388,10 +388,18 @@ const AnalyzerPage: React.FC = () => {
         } else if (data.type === "extractor_status" && Array.isArray(data.extractors)) {
           setExtractorChecklist(data.extractors);
         } else if (data.type === "queue_update") {
-          // Refresh history when queue updates
+          // Refresh history when queue updates (only if data changed)
           console.log('[AnalyzerPage] Queue update detected, refreshing history');
           api.get(HISTORY_URL)
-            .then(res => setHistory(res.data))
+            .then(res => {
+              setHistory(prevHistory => {
+                // Only update if data actually changed
+                if (JSON.stringify(prevHistory) !== JSON.stringify(res.data)) {
+                  return res.data;
+                }
+                return prevHistory;
+              });
+            })
             .catch(err => console.error('Failed to refresh history:', err));
         }
       } catch (e) {
@@ -504,7 +512,15 @@ const AnalyzerPage: React.FC = () => {
           if (newlyCompleted.length > 0) {
             console.log(`[AnalyzerPage] ${newlyCompleted.length} scan(s) completed, refreshing history`);
             api.get(HISTORY_URL)
-              .then(historyRes => setHistory(historyRes.data))
+              .then(historyRes => {
+                setHistory(prevHistory => {
+                  // Only update if data actually changed
+                  if (JSON.stringify(prevHistory) !== JSON.stringify(historyRes.data)) {
+                    return historyRes.data;
+                  }
+                  return prevHistory;
+                });
+              })
               .catch(historyErr => console.error('[AnalyzerPage] Failed to refresh history:', historyErr));
           }
           
