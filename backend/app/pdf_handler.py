@@ -21,6 +21,70 @@ def load_api_key():
     load_dotenv()
     return os.getenv('OPENAI_API_KEY')
 
+def decrypt_and_save_pdf(input_path, output_path, password=None):
+    """
+    Decrypt a password-protected PDF and save the decrypted version.
+    
+    If the PDF is encrypted and a password is provided, this function authenticates
+    and saves a decrypted copy. If the PDF is not encrypted, it simply copies the file.
+    This ensures the stored PDF does not require re-authentication.
+    
+    Args:
+        input_path: Path to the encrypted PDF file
+        output_path: Path to save the decrypted PDF
+        password: Optional password for encrypted PDFs
+        
+    Returns:
+        str: Path to the decrypted PDF (output_path)
+        
+    Raises:
+        ValueError: If PDF is encrypted and password is invalid
+    """
+    import logging
+    import shutil
+    logger = logging.getLogger(__name__)
+    
+    try:
+        import fitz  # pymupdf
+    except ImportError:
+        logger.error("PyMuPDF (fitz) is required for PDF decryption")
+        # Fallback: just copy the file
+        shutil.copy(input_path, output_path)
+        return output_path
+    
+    try:
+        logger.info(f"[PDF_DECRYPT] Opening PDF: {input_path}")
+        doc = fitz.open(input_path)
+        
+        # Check if PDF is encrypted
+        if doc.is_encrypted:
+            logger.info(f"[PDF_DECRYPT] PDF is encrypted, attempting authentication")
+            
+            if password and doc.authenticate(password):
+                logger.info(f"[PDF_DECRYPT] Successfully authenticated with provided password")
+            elif doc.authenticate(""):
+                # Try empty password (some PDFs are "secured" but not password-protected)
+                logger.info(f"[PDF_DECRYPT] Authenticated with empty password")
+            else:
+                logger.error(f"[PDF_DECRYPT] Failed to decrypt PDF with provided password")
+                doc.close()
+                raise ValueError("Invalid PDF password - please check your password and try again")
+        else:
+            logger.info(f"[PDF_DECRYPT] PDF is not encrypted")
+        
+        # Save decrypted PDF
+        doc.save(output_path, garbage=4, deflate=True, clean=True)
+        doc.close()
+        logger.info(f"[PDF_DECRYPT] Saved decrypted PDF to {output_path}")
+        
+        return output_path
+        
+    except Exception as e:
+        logger.error(f"[PDF_DECRYPT] Error decrypting PDF: {e}")
+        # Fallback: copy original file
+        shutil.copy(input_path, output_path)
+        return output_path
+
 def extract_embedded_files(input_path, output_dir, password=None):
     """
     Extract embedded/attached files from a PDF.

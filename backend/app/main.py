@@ -1322,9 +1322,30 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                 tmpf.flush()
                 tmp_path = tmpf.name
             
+            # Decrypt PDF before storing in database (if password was provided)
+            pdf_path_for_db = temp_pdf_path
+            if password:
+                try:
+                    from .pdf_handler import decrypt_and_save_pdf
+                    decrypted_pdf_path = temp_pdf_path.replace('.pdf', '_decrypted.pdf')
+                    decrypt_and_save_pdf(temp_pdf_path, decrypted_pdf_path, password)
+                    pdf_path_for_db = decrypted_pdf_path
+                    logging.error(f"[PDF_DECRYPT] Created decrypted PDF for database storage: {decrypted_pdf_path}")
+                except Exception as decrypt_err:
+                    logging.error(f"[PDF_DECRYPT] Failed to decrypt PDF for storage, using original: {decrypt_err}")
+            
             # Insert into database with PDF path for storage
-            summary = insert_extracted_data(tmp_path, pdf_path=temp_pdf_path, job_id=job_id, user_id=user_id)
+            summary = insert_extracted_data(tmp_path, pdf_path=pdf_path_for_db, job_id=job_id, user_id=user_id)
             logging.error(f"[SUCCESS] Database insertion completed: {summary}")
+            
+            # Clean up decrypted temp file if created
+            if password and pdf_path_for_db != temp_pdf_path:
+                try:
+                    import os
+                    os.unlink(pdf_path_for_db)
+                    logging.info(f"[CLEANUP] Deleted decrypted temp file: {pdf_path_for_db}")
+                except Exception as cleanup_err:
+                    logging.error(f"[CLEANUP] Failed to delete decrypted temp file: {cleanup_err}")
             
             # Calculate and store elapsed_seconds and completion status
             elapsed_seconds = time.time() - start_time
