@@ -58,6 +58,7 @@ const QueueControls: React.FC<QueueControlsProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [dragCounter, setDragCounter] = useState(0); // Track drag depth
 
   // Handle pause/resume
   const handlePauseResume = async () => {
@@ -85,17 +86,24 @@ const QueueControls: React.FC<QueueControlsProps> = ({
     setFiles(prev => [...prev, ...newFiles]);
   };
 
-  // Handle drag-and-drop events
+  // Handle drag-and-drop events with counter to prevent flicker
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setDragCounter(prev => prev + 1);
     setIsDragging(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    setDragCounter(prev => {
+      const newCount = prev - 1;
+      if (newCount === 0) {
+        setIsDragging(false);
+      }
+      return newCount;
+    });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -106,6 +114,7 @@ const QueueControls: React.FC<QueueControlsProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setDragCounter(0); // Reset counter
     setIsDragging(false);
 
     const droppedFiles = Array.from(e.dataTransfer.files).filter(
