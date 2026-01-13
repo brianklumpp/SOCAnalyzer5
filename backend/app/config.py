@@ -162,6 +162,55 @@ AUTO_MERGE_MIN_CONFIDENCE = float(os.getenv("AUTO_MERGE_MIN_CONFIDENCE", "0.70")
 # Chunk boundary detection - characters near chunk boundary to flag
 CHUNK_BOUNDARY_BUFFER = int(os.getenv("CHUNK_BOUNDARY_BUFFER", "100"))
 
+# AI-Enhanced Merge Strategy Configuration
+# Strategy for consolidating duplicate control data: "longest" | "ai_enhanced" | "preview_required"
+MERGE_STRATEGY = os.getenv("MERGE_STRATEGY", "ai_enhanced")
+# Trigger AI consolidation if descriptions differ by more than this percentage (0.0-1.0)
+MERGE_AI_MIN_DIFF_THRESHOLD = float(os.getenv("MERGE_AI_MIN_DIFF_THRESHOLD", "0.15"))
+# Always preserve all bullet points from both descriptions when merging
+MERGE_PRESERVE_ALL_BULLETS = os.getenv("MERGE_PRESERVE_ALL_BULLETS", "true").lower() == "true"
+# Apply AI merge to test procedures (if false, uses longest value)
+MERGE_AI_INCLUDE_TEST_PROCEDURES = os.getenv("MERGE_AI_INCLUDE_TEST_PROCEDURES", "true").lower() == "true"
+# Minimum confidence to auto-apply AI merge without review (0.0-1.0)
+MERGE_AI_AUTO_APPLY_THRESHOLD = float(os.getenv("MERGE_AI_AUTO_APPLY_THRESHOLD", "0.85"))
+
+# AI Control Merge Consolidation Prompt
+MERGE_CONSOLIDATION_PROMPT = """You are merging duplicate SOC 2 controls with ID "{control_id}" for field: {field_name}.
+
+{instances_text}
+
+Task: Create a consolidated {field_label} that:
+1. Preserves ALL unique information from all instances
+2. Removes redundant duplicated content
+3. Maintains professional audit language and structure
+4. Keeps bullet/numbered list structure if present
+5. Combines complementary details intelligently
+6. Flags if instances represent fundamentally different controls (should NOT be merged)
+
+Guidelines:
+- If one instance has additional bullet points not in others, include them
+- If test procedures differ, combine them logically (e.g., "Test A OR Test B")
+- If descriptions have different wording for same concept, use clearest version
+- Preserve all page references and specific details
+- Maintain consistent formatting (bullets, numbering)
+
+Return ONLY valid JSON (no markdown, no extra text):
+{{
+  "consolidated_text": "the merged {field_label} here",
+  "is_truly_duplicate": true,
+  "merge_rationale": "brief explanation of merge logic (e.g., 'Combined 3 bullet points from Instance 1 with 2 additional points from Instance 2')",
+  "preserved_from_instance_1": ["key unique point 1", "key unique point 2"],
+  "preserved_from_instance_2": ["key unique point 1", "key unique point 2"],
+  "confidence": 0.95,
+  "requires_review": false
+}}
+
+CRITICAL: If instances represent fundamentally different controls (different objectives, incompatible tests), set:
+- is_truly_duplicate=false
+- confidence=0.0
+- merge_rationale explaining why they should NOT be merged
+"""
+
 # Performance Optimization Configuration (Non-Threading)
 # Defer deviation summary generation to on-demand (saves ~2-5 GPT calls per control with deviations)
 # Summaries can be generated later via /controls/{id}/generate_deviation_summary

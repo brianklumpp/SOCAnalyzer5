@@ -614,6 +614,212 @@ async def suggest_control_merges(scan_id: int, db) -> Dict[str, Any]:
         return {"error": str(e), "suggestions": [], "total_suggested": 0}
 
 
+async def intelligently_merge_field(
+    field_name: str,
+    controls: List[Control],
+    use_ai: bool = True
+) -> Dict[str, Any]:
+    """
+    Merge field values using tiered strategy (Tier 1: Exact/Substring, Tier 2: Bullets, Tier 3: AI).
+    
+    Tier 1: Fast exact match and substring detection
+    Tier 2: Structural bullet merging with preservation
+    Tier 3: AI-powered consolidation for complex cases
+    
+    Args:
+        field_name: Name of Control model field to merge
+        controls: List of Control objects to consolidate
+        use_ai: Enable AI consolidation (respects MERGE_STRATEGY config)
+        
+    Returns:
+        Dictionary with:
+            - consolidated_value: The merged text
+            - strategy_used: Which tier/method was applied
+            - confidence: 0.0-1.0 merge confidence
+            - rationale: Explanation of merge decision
+            - preview_required: True if human review recommended
+            - ai_response: Raw AI response (if Tier 3 used)
+    """
+    from ..utils.text_analysis import (
+        extract_bullets, is_substring_match, calculate_text_difference,
+        has_bullet_structure, merge_bullet_lists
+    )
+    from .. import config as cfg
+    
+    # Get all non-null values for this field
+    values = [(c, getattr(c, field_name)) for c in controls if getattr(c, field_name, None)]
+    
+    if not values:
+        return {
+            "consolidated_value": None,
+            "strategy_used": "none",
+            "confidence": 1.0,
+            "rationale": "No values to merge",
+            "preview_required": False
+        }
+    
+    if len(values) == 1:
+        return {
+            "consolidated_value": values[0][1],
+            "strategy_used": "single_value",
+            "confidence": 1.0,
+            "rationale": "Only one control has this field",
+            "preview_required": False
+        }
+    
+    # Extract just the text values
+    texts = [v[1] for v in values]
+    
+    # TIER 1: Exact Match Detection
+    if all(t.strip() == texts[0].strip() for t in texts):
+        return {
+            "consolidated_value": texts[0],
+            "strategy_used": "exact_match",
+            "confidence": 1.0,
+            "rationale": "All instances have identical text",
+            "preview_required": False
+        }
+    
+    # TIER 1: Substring Detection
+    is_subset, longer_text = is_substring_match(texts[0], texts[1]) if len(texts) == 2 else (False, "")
+    if is_subset and longer_text:
+        # Verify with remaining texts if more than 2
+        if len(texts) > 2:
+            all_subsets = all(is_substring_match(longer_text, t)[0] for t in texts[2:])
+            if all_subsets:
+                return {
+                    "consolidated_value": longer_text,
+                    "strategy_used": "substring",
+                    "confidence": 0.95,
+                    "rationale": "One description is a superset containing all others",
+                    "preview_required": False
+                }
+        else:
+            return {
+                "consolidated_value": longer_text,
+                "strategy_used": "substring",
+                "confidence": 0.95,
+                "rationale": "One description contains the other as a substring",
+                "preview_required": False
+            }
+    
+    # TIER 2: Structural Analysis (Bullet Merging)
+    if cfg.MERGE_PRESERVE_ALL_BULLETS and all(has_bullet_structure(t) for t in texts):
+        # Extract bullets from all instances
+        all_bullets = [extract_bullets(t) for t in texts]
+        
+        # Check if it's just ordering differences
+        sets = [set(bullets) for bullets in all_bullets]
+        if len(sets) > 1 and sets[0] == sets[1]:
+            # Same bullets, different order - use first instance's order
+            return {
+                "consolidated_value": texts[0],
+                "strategy_used": "bullet_reorder",
+                "confidence": 0.90,
+                "rationale": "Same bullet points in different order",
+                "preview_required": False
+            }
+        
+        # Merge bullets intelligently
+        merged_bullets = all_bullets[0]
+        for bullets in all_bullets[1:]:
+            merged_bullets = merge_bullet_lists(merged_bullets, bullets)
+        
+        # Reconstruct with original bullet style from first instance
+        sample_text = texts[0]
+        bullet_char = '•' if '•' in sample_text else '-' if ' - ' in sample_text else '•'
+        consolidated = '\n'.join(f"{bullet_char} {bullet}" for bullet in merged_bullets)
+        
+        return {
+            "consolidated_value": consolidated,
+            "strategy_used": "bullet_merge",
+            "confidence": 0.85,
+            "rationale": f"Merged {len(all_bullets)} bullet lists, preserving {len(merged_bullets)} unique points",
+            "preview_required": len(merged_bullets) > sum(len(b) for b in all_bullets) * 0.6  # Review if >60% growth
+        }
+    
+    # Check if AI merge is disabled or not needed
+    if not use_ai or cfg.MERGE_STRATEGY == "longest":
+        longest = max(texts, key=len)
+        return {
+            "consolidated_value": longest,
+            "strategy_used": "longest",
+            "confidence": 0.70,
+            "rationale": "Using longest value (AI merge disabled)",
+            "preview_required": True
+        }
+    
+    # Calculate difference to decide if AI is worth it
+    diff = calculate_text_difference(texts[0], texts[1])
+    if diff < cfg.MERGE_AI_MIN_DIFF_THRESHOLD:
+        # Very similar, just use longer
+        longer = texts[0] if len(texts[0]) > len(texts[1]) else texts[1]
+        return {
+            "consolidated_value": longer,
+            "strategy_used": "minimal_difference",
+            "confidence": 0.85,
+            "rationale": f"Texts differ by only {diff*100:.1f}%, using longer version",
+            "preview_required": False
+        }
+    
+    # TIER 3: AI-Powered Consolidation
+    try:
+        # Build context for GPT
+        instances_text = ""
+        for idx, (ctrl, text) in enumerate(values, 1):
+            pages = ctrl.control_page_refs or []
+            instances_text += f"\n### Instance {idx} (DB ID: {ctrl.id}, Pages: {pages})\n{text}\n"
+        
+        # Use configured prompt from config.py
+        field_label = field_name.replace('_', ' ')
+        prompt = cfg.MERGE_CONSOLIDATION_PROMPT.format(
+            control_id=controls[0].control_id,
+            field_name=field_name,
+            field_label=field_label,
+            instances_text=instances_text
+        )
+
+        response = await gpt_extract(prompt, model="gpt-4", max_tokens=3000)
+        
+        # Parse GPT response
+        import json
+        result = json.loads(response)
+        
+        if not result.get("is_truly_duplicate", True):
+            # AI detected these should NOT be merged
+            logging.error(f"[AI-MERGE] AI determined controls are not duplicates: {result.get('merge_rationale')}")
+            longest = max(texts, key=len)
+            return {
+                "consolidated_value": longest,
+                "strategy_used": "ai_rejected",
+                "confidence": 0.0,
+                "rationale": f"AI analysis: {result.get('merge_rationale', 'Not truly duplicate controls')}",
+                "preview_required": True,
+                "ai_response": result
+            }
+        
+        return {
+            "consolidated_value": result["consolidated_text"],
+            "strategy_used": "ai_consolidation",
+            "confidence": result.get("confidence", 0.80),
+            "rationale": result.get("merge_rationale", "AI-powered intelligent consolidation"),
+            "preview_required": result.get("requires_review", False) or result.get("confidence", 0.80) < cfg.MERGE_AI_AUTO_APPLY_THRESHOLD,
+            "ai_response": result
+        }
+        
+    except Exception as e:
+        logging.error(f"[AI-MERGE] Error in AI consolidation: {e}", exc_info=True)
+        # Fallback to longest
+        longest = max(texts, key=len)
+        return {
+            "consolidated_value": longest,
+            "strategy_used": "ai_error_fallback",
+            "confidence": 0.70,
+            "rationale": f"AI merge failed ({str(e)}), using longest value",
+            "preview_required": True
+        }
+
+
 async def merge_controls_action(
     scan_id: int,
     primary_control_id: Optional[int],
@@ -667,21 +873,61 @@ async def merge_controls_action(
         logging.error(f"[MERGE] Selected primary control {primary.id} (desc_len={len(primary.control_desc or '')}, conf={primary.control_confidence})")
         logging.error(f"[MERGE] Secondaries to merge: {[c.id for c in secondaries]}")
         
-        # Helper function to get longest non-null value
-        def get_longest(field_name):
-            values = [getattr(c, field_name) for c in all_controls if getattr(c, field_name, None)]
-            return max(values, key=len) if values else None
-        
         # Helper function to get highest value
         def get_max(field_name):
             values = [getattr(c, field_name) for c in all_controls if getattr(c, field_name, None) is not None]
             return max(values) if values else None
         
-        # Consolidate data into primary from all controls
-        primary.control_desc = get_longest('control_desc') or primary.control_desc
-        primary.control_test = get_longest('control_test') or primary.control_test
-        primary.control_test_results = get_longest('control_test_results') or primary.control_test_results
-        primary.deviation_desc = get_longest('deviation_desc') or primary.deviation_desc
+        # Import config to check merge strategy
+        from .. import config as cfg
+        use_ai_merge = cfg.MERGE_STRATEGY == "ai_enhanced"
+        
+        # Consolidate data into primary from all controls using intelligent merge
+        merge_metadata = {}
+        
+        # Merge control_desc
+        desc_result = await intelligently_merge_field('control_desc', all_controls, use_ai=use_ai_merge)
+        primary.control_desc = desc_result['consolidated_value'] or primary.control_desc
+        merge_metadata['control_desc'] = {
+            'strategy': desc_result['strategy_used'],
+            'confidence': desc_result['confidence'],
+            'rationale': desc_result['rationale']
+        }
+        logging.error(f"[MERGE] control_desc: {desc_result['strategy_used']} (confidence: {desc_result['confidence']:.2f})")
+        
+        # Merge control_test (if config includes test procedures)
+        if cfg.MERGE_AI_INCLUDE_TEST_PROCEDURES:
+            test_result = await intelligently_merge_field('control_test', all_controls, use_ai=use_ai_merge)
+            primary.control_test = test_result['consolidated_value'] or primary.control_test
+            merge_metadata['control_test'] = {
+                'strategy': test_result['strategy_used'],
+                'confidence': test_result['confidence'],
+                'rationale': test_result['rationale']
+            }
+            logging.error(f"[MERGE] control_test: {test_result['strategy_used']} (confidence: {test_result['confidence']:.2f})")
+        else:
+            # Fallback to longest
+            test_values = [c.control_test for c in all_controls if c.control_test]
+            primary.control_test = max(test_values, key=len) if test_values else primary.control_test
+            merge_metadata['control_test'] = {'strategy': 'longest', 'confidence': 0.70, 'rationale': 'AI merge disabled for test procedures'}
+        
+        # Merge control_test_results
+        results_result = await intelligently_merge_field('control_test_results', all_controls, use_ai=use_ai_merge)
+        primary.control_test_results = results_result['consolidated_value'] or primary.control_test_results
+        merge_metadata['control_test_results'] = {
+            'strategy': results_result['strategy_used'],
+            'confidence': results_result['confidence'],
+            'rationale': results_result['rationale']
+        }
+        
+        # Merge deviation_desc
+        deviation_result = await intelligently_merge_field('deviation_desc', all_controls, use_ai=use_ai_merge)
+        primary.deviation_desc = deviation_result['consolidated_value'] or primary.deviation_desc
+        merge_metadata['deviation_desc'] = {
+            'strategy': deviation_result['strategy_used'],
+            'confidence': deviation_result['confidence'],
+            'rationale': deviation_result['rationale']
+        }
         
         # Preserve has_deviation flag - set to True if ANY control has a deviation
         has_any_deviation = any(getattr(c, 'has_deviation', False) for c in all_controls)
@@ -772,7 +1018,8 @@ async def merge_controls_action(
             "consolidation_details": {
                 "selected_primary": f"ID {primary.id} (desc_len={len(primary.control_desc or '')}, conf={primary.control_confidence})",
                 "consolidated_fields": ["control_desc", "control_test", "control_test_results", "deviation_desc", "has_deviation", "control_page_refs", "control_confidence"]
-            }
+            },
+            "merge_metadata": merge_metadata
         }
         
     except Exception as e:
