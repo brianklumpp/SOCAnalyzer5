@@ -17,7 +17,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import MergeIcon from '@mui/icons-material/MergeType';
 import LinkIcon from '@mui/icons-material/Link';
-import axios from 'axios';
+import api from '../../../api/client';
 import { APP_CONFIG } from '../../../config';
 
 interface MergeSuggestion {
@@ -83,7 +83,7 @@ export const MergeSuggestionsPanel: React.FC<MergeSuggestionsPanelProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(APP_CONFIG.apiUrl(`/report/${scanId}/controls/suggest-merges`));
+      const response = await api.get(`/report/${scanId}/controls/suggest-merges`);
       setSuggestions(response.data.suggestions || []);
     } catch (err: any) {
       console.error('Failed to fetch merge suggestions:', err);
@@ -104,7 +104,7 @@ export const MergeSuggestionsPanel: React.FC<MergeSuggestionsPanelProps> = ({
   const handleMerge = async (suggestion: MergeSuggestion) => {
     setMerging(prev => new Set([...Array.from(prev), suggestion.candidate_db_id]));
     try {
-      await axios.post(APP_CONFIG.apiUrl(`/report/${scanId}/controls/merge`), {
+      await api.post(`/report/${scanId}/controls/merge`, {
         primary_control_id: suggestion.primary_db_id,
         merge_control_ids: [suggestion.candidate_db_id]
       });
@@ -131,7 +131,7 @@ export const MergeSuggestionsPanel: React.FC<MergeSuggestionsPanelProps> = ({
   const handleLinkInstances = async (suggestion: MergeSuggestion) => {
     setMerging(prev => new Set([...Array.from(prev), suggestion.candidate_db_id]));
     try {
-      await axios.post(APP_CONFIG.apiUrl(`/report/${scanId}/controls/link_instances`), {
+      await api.post(`/report/${scanId}/controls/link_instances`, {
         control_ids: [suggestion.primary_db_id, suggestion.candidate_db_id],
         duplicate_type: suggestion.duplicate_type || 'CRITERIA_VARIANT',
         user_note: `Linked via merge suggestions panel - ${suggestion.rationale || 'criteria variant detected'}`
@@ -199,7 +199,7 @@ export const MergeSuggestionsPanel: React.FC<MergeSuggestionsPanelProps> = ({
     // Mark as reviewed/dismissed - persist to backend to prevent showing in future scans
     setMerging(prev => new Set([...Array.from(prev), suggestion.candidate_db_id]));
     try {
-      await axios.post(APP_CONFIG.apiUrl(`/report/${scanId}/controls/dismiss_merge_suggestion`), {
+      await api.post(`/report/${scanId}/controls/dismiss_merge_suggestion`, {
         control_ids: [suggestion.primary_db_id, suggestion.candidate_db_id],
         reason: `User reviewed ${suggestion.duplicate_type || 'duplicate'} suggestion and accepted as separate controls`
       });
