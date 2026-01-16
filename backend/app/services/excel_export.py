@@ -1007,12 +1007,8 @@ Title:"""
                 self.logger.info(f"[EXCEL_EXPORT] User metadata written to B12: {metadata_text}")
             
             # Convert executive summary JSON to plain text
-            # Prefer executive_summary_json if available (newer format), fall back to executive_summary
-            summary_data = None
-            if hasattr(scan, 'executive_summary_json') and scan.executive_summary_json:
-                summary_data = scan.executive_summary_json
-            elif scan.executive_summary:
-                summary_data = scan.executive_summary
+            # The executive_summary field is already JSON type in the database
+            summary_data = scan.executive_summary if scan.executive_summary else None
             
             summary_text = self._format_executive_summary_for_excel(summary_data)
             
