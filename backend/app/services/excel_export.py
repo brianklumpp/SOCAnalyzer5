@@ -1124,17 +1124,32 @@ Title:"""
             else:
                 sections.append("Recommendations\n" + to_text(recs))
         
-        # Handle risk mitigations
-        if summary_data.get('risk_mitigations'):
-            sections.append("Recommendations — Risk Mitigations (Customer-Actionable)\n" + to_text(summary_data['risk_mitigations']))
+        # Handle risk mitigations (check both field names for compatibility)
+        if summary_data.get('recommendations_risk_mitigations') or summary_data.get('risk_mitigations'):
+            value = summary_data.get('recommendations_risk_mitigations') or summary_data.get('risk_mitigations')
+            sections.append("Recommendations — Risk Mitigations (Customer-Actionable)\n" + to_text(value))
         
-        # Handle contract enhancements
-        if summary_data.get('contract_enhancements'):
-            sections.append("Recommendations — Contract Enhancements\n" + to_text(summary_data['contract_enhancements']))
+        # Handle contract enhancements (check both field names for compatibility)
+        if summary_data.get('recommendations_contract_enhancements') or summary_data.get('contract_enhancements'):
+            value = summary_data.get('recommendations_contract_enhancements') or summary_data.get('contract_enhancements')
+            sections.append("Recommendations — Contract Enhancements\n" + to_text(value))
         
-        # Handle assessor's conclusion
-        if summary_data.get('assessors_conclusion'):
-            sections.append("Assessor's Conclusion (SOX Review)\n" + to_text(summary_data['assessors_conclusion']))
+        # Handle assessor's conclusion (may be dict or string)
+        assessors_conclusion = summary_data.get('sox_assessors_conclusion') or summary_data.get('assessors_conclusion')
+        if assessors_conclusion:
+            if isinstance(assessors_conclusion, dict):
+                # Format the structured SOX conclusion
+                conclusion_parts = []
+                if assessors_conclusion.get('adequacy'):
+                    conclusion_parts.append(f"Control Adequacy: {assessors_conclusion['adequacy']}")
+                if assessors_conclusion.get('operating_effectiveness'):
+                    conclusion_parts.append(f"Operating Effectiveness: {assessors_conclusion['operating_effectiveness']}")
+                if assessors_conclusion.get('material_weaknesses'):
+                    conclusion_parts.append(f"Material Weaknesses: {assessors_conclusion['material_weaknesses']}")
+                if conclusion_parts:
+                    sections.append("Assessor's Conclusion (SOX Review)\n" + "\n\n".join(conclusion_parts))
+            else:
+                sections.append("Assessor's Conclusion (SOX Review)\n" + to_text(assessors_conclusion))
         
         # Handle deviations noted
         if summary_data.get('deviations_noted'):
