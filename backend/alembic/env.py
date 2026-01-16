@@ -26,6 +26,12 @@ from backend.app.base import Base  # noqa: E402
 
 config = context.config
 
+# Ensure script_location is set (critical for container environment)
+if not config.get_main_option("script_location"):
+    # When config_file_name is None or script_location missing, set it manually
+    alembic_dir = os.path.join(os.path.dirname(__file__))
+    config.set_main_option("script_location", alembic_dir)
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
