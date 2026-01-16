@@ -305,9 +305,13 @@ section_log_paths = {
     'Control_Descriptions': str(PROJECT_ROOT / 'data/logs/control_descriptions.log')
 }
 
-# Initialize log files
+# Initialize log files (ignore permission errors)
 for path in section_log_paths.values():
-    with open(path, 'w', encoding='utf-8'):
+    try:
+        with open(path, 'w', encoding='utf-8'):
+            pass
+    except (PermissionError, OSError):
+        # If we can't write section logs, they'll be skipped
         pass
 
 # Function to get logger for a specific section
@@ -317,9 +321,13 @@ def get_section_logger(section_name):
         return None
     logger = logging.getLogger(section_name)
     if not logger.hasHandlers():
-        file_handler = logging.FileHandler(log_path, encoding='utf-8')
-        file_handler.setFormatter(logging.Formatter(log_format))
-        logger.addHandler(file_handler)
+        try:
+            file_handler = logging.FileHandler(log_path, encoding='utf-8')
+            file_handler.setFormatter(logging.Formatter(log_format))
+            logger.addHandler(file_handler)
+        except (PermissionError, OSError):
+            # Fall back to root logger if file creation fails
+            pass
     logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
     return logger
 
