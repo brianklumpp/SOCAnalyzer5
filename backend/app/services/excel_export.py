@@ -39,8 +39,9 @@ class ExcelExportService:
     
     def _safe_write_cell(self, ws, row: int, col: int, value: any) -> None:
         """
-        Safely write to a cell, handling merged cells by writing only to top-left cell.
+        Safely write to a cell, handling merged cells and sanitizing text.
         Skips writing to merged cells that aren't the top-left cell of the range.
+        Removes control characters that openpyxl can't write to Excel.
         """
         try:
             cell = ws.cell(row, col)
@@ -48,6 +49,11 @@ class ExcelExportService:
                 # Skip writing to merged cells that aren't the master cell
                 self.logger.debug(f"[EXCEL_EXPORT] Skipping write to merged cell at ({row}, {col})")
                 return
+            
+            # Sanitize string values to remove control characters
+            if isinstance(value, str):
+                value = self._clean_text_for_excel(value)
+            
             cell.value = value
         except AttributeError as e:
             if "MergedCell" in str(e):
@@ -1097,16 +1103,21 @@ Title:"""
     
     def _clean_text_for_excel(self, text: str) -> str:
         """
-        Clean text for Excel display - remove markdown, HTML tags, etc.
+        Clean text for Excel display - remove markdown, HTML tags, and control characters.
         """
         if not text:
             return ""
+        
+        import re
+        
+        # Remove control characters (ASCII 0-31 except tab, newline, carriage return)
+        # These cause openpyxl to fail with "cannot be used in worksheets"
+        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F]', '', text)
         
         # Remove markdown bold **text**
         text = text.replace('**', '')
         
         # Remove HTML tags
-        import re
         text = re.sub(r'<[^>]+>', '', text)
         
         # Remove markdown code blocks
