@@ -2415,28 +2415,6 @@ async def get_partial_controls(job_id: str, min_pct: float = 20.0, limit: int = 
         logging.error(f"[/analyze/controls_partial] error: {e}\n{traceback.format_exc()}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# Set up backend error logging
-import pathlib
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-os.makedirs(PROJECT_ROOT / 'data/logs', exist_ok=True)
-backend_log_path = str(PROJECT_ROOT / 'data/logs/backend_errors.log')
-# Clear the log file at startup
-with open(backend_log_path, 'w', encoding='utf-8'):
-    pass
-# Set up a human-readable log format
-log_format = '\n%(asctime)s | %(levelname)s | %(module)s | %(message)s\n' + ('-'*80)
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.ERROR)
-# Remove all handlers first (avoid duplicate logs on reload)
-for handler in root_logger.handlers[:]:
-    root_logger.removeHandler(handler)
-file_handler = logging.FileHandler(backend_log_path, encoding='utf-8')
-file_handler.setFormatter(logging.Formatter(log_format))
-root_logger.addHandler(file_handler)
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(logging.Formatter(log_format))
-root_logger.addHandler(stream_handler)
-
 ## (Removed duplicate FastAPI app definition and CORS middleware)
 WEBSOCKET_CLIENTS = set()
 @app.websocket("/ws")
