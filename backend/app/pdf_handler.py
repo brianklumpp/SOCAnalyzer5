@@ -410,31 +410,103 @@ def extract_text_from_pdf(pdf_path, output_path, password=None):
     email_regex = REGEX_PATTERNS['email']
     time_regex = REGEX_PATTERNS['time']
     
-    # Collect patterns per page (only from non-skipped pages)
+    # First pass: Collect patterns per page (only from non-skipped pages)
+    # Look for both specific patterns (dates/emails) AND arbitrary repeated lines
     for page_num in range(start_page, len(doc)):
         text = doc[page_num].get_text() or ""   # type: ignore[attr-defined]
         patterns = set()
+        
+        # Collect regex-based patterns (dates, emails, times)
         for regex in [date_regex, email_regex, time_regex]:
             for match in re.findall(regex, text):
                 patterns.add(match.strip())
+        
+        # Also collect lines that might be watermarks (short, non-empty, alphanumeric)
+        # This catches things like "term-token-XXX", "Confidential", company names, etc.
+        for line in text.splitlines():
+            line_stripped = line.strip()
+            # Consider lines that are:
+            # - Between 10-80 chars (not too short, not too long)
+            # - Mostly alphanumeric or common punctuation
+            # - Not likely to be normal content
+            if 10 <= len(line_stripped) <= 80:
+                # Skip lines that look like normal sentences (have spaces, lowercase, punctuation)
+                if not re.search(r'[a-z].*\s.*[a-z]', line_stripped):
+                    patterns.add(line_stripped)
+        
         page_patterns.append(patterns)
+    
     # Count pattern occurrences across pages
     pattern_counter = collections.Counter()
     for patterns in page_patterns:
         pattern_counter.update(patterns)
     num_pages = len(page_patterns)
-    # Identify patterns that appear on >80% of pages
+    
+    # Identify patterns that appear on >80% of pages as watermarks
     watermark_patterns = set([
         pat for pat, count in pattern_counter.items() if count / num_pages > 0.8
     ])
+    
+    if watermark_patterns:
+        logger.info(f"Detected {len(watermark_patterns)} watermark patterns appearing on >80% of pages")
+    
     # Now extract and filter text (starting from start_page)
     for i in range(start_page, len(doc)):
-        # Use "text" layout mode for better date/prose handling
-        # The "blocks" method can break dates across blocks, causing extraction failures
-        # The "text" method preserves natural line flow and is better for continuous prose
         try:
-            # Use basic text extraction (preserves natural layout)
+            # Step 1: Extract text using default mode
             text = doc[i].get_text() or ""   # type: ignore[attr-defined]
+            
+            # Step 2: Remove detected watermarks FIRST
+            if watermark_patterns:
+                for watermark in watermark_patterns:
+                    text = text.replace(str(watermark), '')
+            
+            # Step 3: Check if page has minimal content after watermark removal
+            # If < 40 chars, try blocks mode
+            if len(text.strip()) < 40:
+                logger.warning(f"Page {i+1} has minimal text after watermark removal ({len(text.strip())} chars), trying 'blocks' mode")
+                try:
+                    blocks = doc[i].get_text("blocks")  # type: ignore[attr-defined]
+                    block_text = "\n".join([block[4] for block in blocks if len(block) > 4 and isinstance(block[4], str)])
+                    # Remove watermarks from block text too
+                    if watermark_patterns:
+                        for watermark in watermark_patterns:
+                            block_text = block_text.replace(str(watermark), '')
+                    
+                    if len(block_text.strip()) > len(text.strip()):
+                        text = block_text
+                        logger.info(f"Page {i+1}: blocks mode extracted {len(block_text.strip())} chars after watermark removal")
+                except Exception as block_err:
+                    logger.warning(f"Page {i+1} blocks extraction failed: {block_err}")
+            
+            # Step 4: If still < 40 chars, try OCR (page is likely a scanned image)
+            if len(text.strip()) < 40:
+                logger.warning(f"Page {i+1} still has minimal text ({len(text.strip())} chars), attempting OCR extraction")
+                try:
+                    import pytesseract
+                    from PIL import Image
+                    import io
+                    
+                    page = doc[i]  # type: ignore[index]
+                    # Convert page to high-res image for OCR
+                    pix = page.get_pixmap(dpi=300)  # Higher DPI for better OCR accuracy
+                    
+                    # Convert pixmap to PIL Image
+                    img_data = pix.tobytes("png")
+                    img = Image.open(io.BytesIO(img_data))
+                    
+                    # Run Tesseract OCR
+                    ocr_text = pytesseract.image_to_string(img, lang='eng')
+                    
+                    if len(ocr_text.strip()) > len(text.strip()):
+                        text = ocr_text
+                        logger.info(f"Page {i+1}: OCR extracted {len(ocr_text.strip())} chars from image-based page")
+                    else:
+                        logger.warning(f"Page {i+1}: OCR returned minimal text ({len(ocr_text.strip())} chars)")
+                except ImportError:
+                    logger.warning(f"Page {i+1}: pytesseract not available for OCR, page content will be minimal")
+                except Exception as ocr_err:
+                    logger.warning(f"Page {i+1}: OCR extraction failed: {ocr_err}")
         except Exception as e:
             # Fallback to empty string on error
             logger.warning(f"Page {i+1} text extraction failed: {e}")

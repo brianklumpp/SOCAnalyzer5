@@ -15,16 +15,35 @@ def load_json(path):
         return json.load(f)
 
 def extract_text_for_pages(txt_lines, page_numbers):
+    """Extract all lines between the first and last page in page_numbers."""
+    if not page_numbers:
+        return ''
+    
     result = []
-    current_page = 1
+    current_page = None
+    min_page = min(page_numbers)
+    max_page = max(page_numbers)
+    capturing = False
+    
     for line in txt_lines:
+        # Check if this line is a page marker
         if line.strip().startswith('=== PAGE '):
             try:
                 current_page = int(line.strip().split()[2])
+                # Start capturing when we hit the min page
+                if current_page == min_page:
+                    capturing = True
+                # Stop capturing after we've collected all lines from max page
+                # and hit the next page marker
+                elif current_page > max_page:
+                    break
             except Exception:
-                continue
-        if current_page in page_numbers:
+                pass
+        
+        # Capture all lines while we're in range
+        if capturing:
             result.append(line)
+    
     return ''.join(result)
 
 def extract_text_for_lines(txt_lines, start_line, end_line):
@@ -314,11 +333,10 @@ def extract_coverage_period(job_paths=None, job_id=None):
         try:
             # Handle markdown code blocks from GPT
             response_clean = response.strip()
-            if response_clean.startswith('```'):
-                # Extract JSON from markdown code block (handle with or without newline before closing ```)
-                json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
-                if json_match:
-                    response_clean = json_match.group(1).strip()
+            # Try to extract JSON from markdown code block (regardless of position in response)
+            json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+            if json_match:
+                response_clean = json_match.group(1).strip()
             
             data = json.loads(response_clean)
             result['type'] = data.get('type')

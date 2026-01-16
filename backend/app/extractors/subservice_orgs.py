@@ -25,16 +25,35 @@ def extract_text_for_lines(txt_lines, start_line, end_line):
     return ''.join(txt_lines[start_line-1:end_line])
 
 def extract_text_for_pages(txt_lines, page_numbers):
+    """Extract all lines between the first and last page in page_numbers."""
+    if not page_numbers:
+        return ''
+    
     result = []
-    current_page = 1
+    current_page = None
+    min_page = min(page_numbers)
+    max_page = max(page_numbers)
+    capturing = False
+    
     for line in txt_lines:
+        # Check if this line is a page marker
         if line.strip().startswith('=== PAGE '):
             try:
                 current_page = int(line.strip().split()[2])
+                # Start capturing when we hit the min page
+                if current_page == min_page:
+                    capturing = True
+                # Stop capturing after we've collected all lines from max page
+                # and hit the next page marker
+                elif current_page > max_page:
+                    break
             except Exception:
-                continue
-        if current_page in page_numbers:
+                pass
+        
+        # Capture all lines while we're in range
+        if capturing:
             result.append(line)
+    
     return ''.join(result)
 
 def chunk_text_with_overlap(text, chunk_size, overlap):
