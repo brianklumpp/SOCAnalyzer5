@@ -1,5 +1,9 @@
-# Exclude large data directories
-data/
+# Exclude large data directories (but keep template)
+data/jobs/
+data/json/
+data/logs/
+data/output/
+data/tmp/
 backups/
 database_backup/
 soc1_reports/
