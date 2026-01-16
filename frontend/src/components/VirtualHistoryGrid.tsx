@@ -23,7 +23,7 @@ interface VirtualHistoryGridProps {
 
 // Grid spacing and sizing - Fixed 3 columns
 const GRID_CONFIG = {
-  CARD_HEIGHT: 340,  // Increased from 260 to accommodate all content
+  CARD_HEIGHT: 370,  // Increased to accommodate Product field and all content
   HORIZONTAL_SPACING: 12,
   VERTICAL_SPACING: 12,
   PADDING: 16,
@@ -113,7 +113,7 @@ export const VirtualHistoryGrid: React.FC<VirtualHistoryGridProps> = ({
         }}
       >
         <HistoryCard 
-          scan={scan} 
+          scan={scan} // Ensure product field is included in scan data
           onDelete={onDeleteScan}
         />
       </div>

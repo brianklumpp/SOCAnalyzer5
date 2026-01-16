@@ -17,13 +17,13 @@ import { ActiveScanCard, QueueControls, HistorySection } from '../components/ana
 import { lightTheme, darkTheme, solidigmColors } from '../theme/solidigmTheme';
 import HelpDialog from '../components/HelpDialog';
 import UserMenu from '../components/auth/UserMenu';
+import { AxiosResponse } from 'axios';
+import { ScanData } from '../components/HistoryCard';
 
-
-type ScanResult = {
-  id: number | string;
+// Define ScanResult type to align with expected structure
+interface ScanResult extends ScanData {
   timestamp: string;
-  filename: string;
-  results: any;
+  results: any[]; // Replace 'any' with the actual type if known
 };
 
 type Settings = {
@@ -145,31 +145,23 @@ const AnalyzerPage: React.FC = () => {
   useEffect(() => {
     setHistoryLoading(true);
     api.get(HISTORY_URL)
-      .then(res => {
-        const historyData = res.data;
+      .then((res: { data: ScanResult[] }) => {
+        const historyData = res.data.map((scan) => ({
+          ...scan,
+          product: scan.product || 'Unknown Product',
+          timestamp: scan.timestamp || '',
+          results: scan.results || [],
+        }));
         setHistory(historyData);
         setHistoryLoading(false);
-        
-        // Check for scans completed while user was logged out
-        const lastLoginStr = localStorage.getItem('last_login_timestamp');
-        if (lastLoginStr && historyData.length > 0) {
-          const lastLogin = new Date(lastLoginStr);
-          const now = new Date();
-          
-          // Find scans completed between last login and now
-          const completed = historyData.filter((scan: ScanResult) => {
-            const scanTime = new Date(scan.timestamp);
-            return scanTime > lastLogin && scanTime <= now;
-          });
-          
-          if (completed.length > 0) {
-            setCompletedWhileAway(completed);
-            setShowCompletedBanner(true);
-          }
-        }
       })
-      .catch(() => setHistoryLoading(false));
-    api.get(SETTINGS_URL).then(res => setSettings(res.data)).catch(() => {});
+      .catch((err: any) => {
+        console.error('Failed to fetch scan history:', err);
+        setHistoryLoading(false);
+      });
+    api.get(SETTINGS_URL)
+      .then((res: { data: any }) => setSettings(res.data))
+      .catch((err: unknown) => console.error('Failed to fetch settings:', err));
   }, []);
 
   // F1 keyboard shortcut for help
@@ -345,7 +337,16 @@ const AnalyzerPage: React.FC = () => {
           setLoading(false);
           setJobId(null);
           // Refresh history after scan
-          api.get(HISTORY_URL).then(res => setHistory(res.data)).catch(() => {});
+          api.get(HISTORY_URL).then((res: { data: ScanResult[] }) => {
+            const historyData = res.data.map((scan) => ({
+              ...scan,
+              product: scan.product || 'Unknown Product',
+              timestamp: scan.timestamp || '',
+              results: scan.results || [],
+            }));
+            setHistory(historyData);
+          })
+          .catch((err: any) => console.error('Failed to refresh history:', err));
           // Clear checklist from localStorage on completion
           localStorage.removeItem('socanalyzer_checklist');
           return;
@@ -394,16 +395,16 @@ const AnalyzerPage: React.FC = () => {
           // Refresh history when queue updates (only if data changed)
           console.log('[AnalyzerPage] Queue update detected, refreshing history');
           api.get(HISTORY_URL)
-            .then(res => {
-              setHistory(prevHistory => {
-                // Only update if data actually changed
-                if (JSON.stringify(prevHistory) !== JSON.stringify(res.data)) {
-                  return res.data;
-                }
-                return prevHistory;
-              });
+            .then((res: { data: ScanResult[] }) => {
+              const historyData = res.data.map((scan) => ({
+                ...scan,
+                product: scan.product || 'Unknown Product',
+                timestamp: scan.timestamp || '',
+                results: scan.results || [],
+              }));
+              setHistory(historyData);
             })
-            .catch(err => console.error('Failed to refresh history:', err));
+            .catch((err: any) => console.error('Failed to refresh history:', err));
         }
       } catch (e) {
         // Ignore malformed messages
@@ -523,16 +524,16 @@ const AnalyzerPage: React.FC = () => {
           if (newlyCompleted.length > 0) {
             console.log(`[AnalyzerPage] ${newlyCompleted.length} scan(s) completed, refreshing history`);
             api.get(HISTORY_URL)
-              .then(historyRes => {
-                setHistory(prevHistory => {
-                  // Only update if data actually changed
-                  if (JSON.stringify(prevHistory) !== JSON.stringify(historyRes.data)) {
-                    return historyRes.data;
-                  }
-                  return prevHistory;
-                });
+              .then((res: { data: ScanResult[] }) => {
+                const historyData = res.data.map((scan) => ({
+                  ...scan,
+                  product: scan.product || 'Unknown Product',
+                  timestamp: scan.timestamp || '',
+                  results: scan.results || [],
+                }));
+                setHistory(historyData);
               })
-              .catch(historyErr => console.error('[AnalyzerPage] Failed to refresh history:', historyErr));
+              .catch((err: any) => console.error('Failed to refresh history:', err));
           }
           
           // Filter out completed/failed/cancelled scans - they should only appear in history
@@ -600,16 +601,15 @@ const AnalyzerPage: React.FC = () => {
     }
   };
 
-  // Poll queue data periodically
+  // Polling interval for queue data
   useEffect(() => {
-    console.log('[AnalyzerPage] Starting queue polling interval');
-    fetchQueueData(); // Initial fetch
-    const interval = setInterval(fetchQueueData, 5000); // Poll every 5 seconds
-    return () => {
-      console.log('[AnalyzerPage] Cleaning up queue polling interval');
-      clearInterval(interval);
-    };
-  }, [fetchQueueData]); // Depend on fetchQueueData callback
+    const interval = setInterval(() => {
+      if (jobId) {
+        fetchQueueData();
+      }
+    }, POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, [jobId, fetchQueueData]);
 
   // Override handleUpload for background job
   const handleUpload = async () => {

@@ -22,8 +22,8 @@ export default defineConfig(({ mode }) => ({
       // Pattern matches all registered FastAPI routers (see backend/app/main.py)
       // Routes: analyze, report, controls, cuecs, suborgs, deviations, executive_summary,
       //         baseline, config, auth, users, grace, history, settings, framework_criteria,
-      //         pdf, docker, test, validate, help, diag
-      '^/(analyze|report|controls|cuecs|suborgs|deviations|executive_summary|baseline|config|auth|users|grace|history|settings|framework_criteria|pdf|docker|test|validate|help|diag)': {
+      //         pdf, docker, test, validate, help, diag, export
+      '^/(analyze|report|controls|cuecs|suborgs|deviations|executive_summary|baseline|config|auth|users|grace|history|settings|framework_criteria|pdf|docker|test|validate|help|diag|export)': {
         target: 'http://backend:8000',
         changeOrigin: true,
       },

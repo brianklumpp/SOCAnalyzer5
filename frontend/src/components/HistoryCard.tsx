@@ -49,6 +49,7 @@ export interface ScanData {
   scan_timestamp?: string;
   created_at?: string;
   elapsed_seconds?: number | null;
+  product?: string; // Add optional product field
 }
 
 interface HistoryCardProps {
@@ -197,6 +198,8 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
     setDeleteDialogOpen(false);
   };
 
+  const product = scan.product || 'Unknown Product'; // Default if product is not provided
+
   return (
     <Card
       onClick={handleClick}
@@ -304,6 +307,21 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({ scan, onDelete }) => {
 
         {/* Scan Details */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          {/* Product Info */}
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
+            <BusinessIcon
+              sx={{ color: solidigmColors.purple, fontSize: '1rem', mt: 0.25 }}
+            />
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography variant="caption" sx={{ fontSize: '0.7rem', lineHeight: 1.2, color: solidigmColors.mediumGray, display: 'block' }}>
+                Product
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: '0.8rem', lineHeight: 1.3, fontWeight: 500 }}>
+                {product}
+              </Typography>
+            </Box>
+          </Box>
+
           {/* Coverage Period */}
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
             <CalendarIcon

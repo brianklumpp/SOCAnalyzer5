@@ -152,10 +152,10 @@ export const controlColumns = (
   { key: "control_gpt_opinion", label: "GPT Opinion", width: 80, hidden: true },
   { key: "control_gpt_reasoning", label: "GPT Reasoning", width: 350, editable: false, hidden: true },
   { 
-    key: "confidence_calc", 
+    key: "confidence_justification", 
     label: "Confidence Justification", 
     width: 300, 
-    hidden: false, 
+    hidden: true, 
     editable: false, 
     format: (v: any) => {
       if (!v) return '';

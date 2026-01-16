@@ -37,6 +37,7 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import WarningIcon from '@mui/icons-material/Warning';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import DescriptionIcon from '@mui/icons-material/Description';
 import IconButton from '@mui/material/IconButton';
 import { lightTheme, darkTheme, solidigmColors } from '../theme/solidigmTheme';
 
@@ -229,6 +230,9 @@ const ReportPage: React.FC = () => {
     setToast({ open: true, message, severity });
   }, []);
   const handleCloseToast = useCallback(() => setToast(prev => ({ ...prev, open: false })), []);
+
+  // Excel export loading state
+  const [excelExporting, setExcelExporting] = useState(false);
 
   // Resource CRUD hooks
   const { handleEdit, handleBatchEdit, handleIgnore, handleConfirm, handleRecompute, handleRecomputeAllHighConfidence, handleToggleDeviation } = useResourceCRUD({
@@ -739,6 +743,75 @@ const ReportPage: React.FC = () => {
             >
               <HelpOutlineIcon />
             </IconButton>
+
+            {/* Export to Excel Button */}
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={excelExporting ? <CircularProgress size={16} /> : <DescriptionIcon />}
+              disabled={excelExporting}
+              onClick={async () => {
+                try {
+                  setExcelExporting(true);
+                  console.log('[Excel Export] Starting export for scan:', selectedScanId);
+                  
+                  // Fetch Excel file with authentication
+                  const response = await api.get(`/export/excel/${selectedScanId}`, {
+                    responseType: 'blob'
+                  });
+                  
+                  console.log('[Excel Export] Response received:', response);
+                  console.log('[Excel Export] Response status:', response.status);
+                  console.log('[Excel Export] Response headers:', response.headers);
+                  
+                  // Check if response is actually an Excel file
+                  const contentType = response.headers?.['content-type'] || response.headers?.contentType;
+                  console.log('[Excel Export] Content-Type:', contentType);
+                  
+                  if (contentType && !contentType.includes('spreadsheet') && !contentType.includes('octet-stream')) {
+                    // Likely an error message
+                    const text = await response.data.text();
+                    console.error('[Excel Export] Unexpected content type:', contentType, 'Content:', text);
+                    alert(`Failed to export Excel: ${text.substring(0, 200)}`);
+                    return;
+                  }
+                  
+                  // Create blob and download
+                  const blob = new Blob([response.data], { 
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                  });
+                  
+                  console.log('[Excel Export] Blob created, size:', blob.size);
+                  
+                  const url = URL.createObjectURL(blob);
+                  
+                  // Create temporary link and trigger download
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `SOC_Analysis_Report_${selectedScanId}.xlsx`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  
+                  // Clean up blob URL
+                  setTimeout(() => URL.revokeObjectURL(url), 100);
+                  
+                  console.log('[Excel Export] Download triggered successfully');
+                  showToast('Excel file exported successfully', 'success');
+                } catch (err: any) {
+                  console.error('[Excel Export] Error:', err);
+                  console.error('[Excel Export] Error response:', err.response);
+                  const errorMsg = err.message || 'Unknown error';
+                  showToast(`Failed to export Excel file: ${errorMsg}`, 'error');
+                } finally {
+                  setExcelExporting(false);
+                }
+              }}
+              sx={{ mr: 1, fontSize: '0.75rem', py: 0.5 }}
+              title="Export to Excel"
+            >
+              {excelExporting ? 'Exporting...' : 'Excel'}
+            </Button>
 
             {/* Company Logo */}
             {selectedScanId && history.find((h: any) => h.id.toString() === selectedScanId)?.logo_url && (

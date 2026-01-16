@@ -15,6 +15,11 @@ AUTO_CREATE_SCHEMA = os.getenv("AUTO_CREATE_SCHEMA", "true").lower() == "true"
 RUN_MIGRATIONS_ON_START = os.getenv("RUN_MIGRATIONS_ON_START", "false").lower() == "true"
 ALEMBIC_INI_PATH = os.getenv("ALEMBIC_INI_PATH", str(pathlib.Path(__file__).resolve().parents[1] / 'alembic.ini'))
 
+# Frontend URL configuration for Excel export links
+FRONTEND_HOST = os.getenv("FRONTEND_HOST", "localhost")  # Use "10.74.214.9" for production
+FRONTEND_PORT = os.getenv("FRONTEND_PORT", "3000")
+FRONTEND_URL = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}"
+
 # Logging configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 EXCLUDE_ACCESS_LOG_PATHS = [s.strip() for s in os.getenv("EXCLUDE_ACCESS_LOG_PATHS", "/analyze/status").split(",") if s.strip()]
@@ -3160,6 +3165,22 @@ Missing Data Items: {missing_data_summary}
 
 Write a brief bulleted list (max 250 characters) of items requiring attention.
 Return ONLY the list text, no JSON or additional formatting.""",
+
+    'excel_export_cuec_title': """Generate a concise 1-3 word title for this complementary user entity control description.
+
+Description: {description}
+
+Write ONLY a short, professional title (1-3 words maximum).
+Examples: "Access Controls", "Data Backup", "Security Monitoring"
+Return ONLY the title, no quotes or additional formatting.""",
+
+    'excel_export_subservice_relevance': """Write a brief 1-sentence statement explaining why this subservice organization is relevant to the audit.
+
+Subservice Organization: {name}
+Description: {description}
+
+Write a professional, concise statement (max 120 characters) explaining the relevance.
+Return ONLY the statement text, no JSON or additional formatting.""",
 }
 
 # --- Entity Extraction from Context Prompt ---

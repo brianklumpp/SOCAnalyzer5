@@ -292,7 +292,7 @@ async def export_to_excel(scan_id: int, db=Depends(get_db), current_user: User =
         
         # Generate Excel report
         service = ExcelExportService()
-        excel_file = await service.generate_report(scan_id, db)
+        excel_file = await service.generate_report(scan_id, db, current_user)
         
         # Get scan for filename
         result = await db.execute(select(Scan).where(Scan.id == scan_id))

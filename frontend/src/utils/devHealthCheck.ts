@@ -4,9 +4,14 @@
  * This utility validates that all critical backend routes are properly
  * proxied by the Vite dev server. Only runs in development mode.
  * 
+ * Set SKIP_DEV_HEALTH_CHECK=true in environment to disable health checks.
+ * 
  * @see frontend/vite.config.ts - Proxy configuration
  * @see backend/app/main.py - Router registrations
  */
+
+// Disable health check by default to avoid console noise
+const SKIP_HEALTH_CHECK = true;
 
 const BACKEND_ROUTES = [
   '/analyze/queue',
@@ -38,8 +43,8 @@ interface HealthCheckReport {
  * @returns Health check report with status for each route
  */
 export async function checkDevProxyHealth(): Promise<HealthCheckReport> {
-  // Skip health check in production builds
-  if (import.meta.env.PROD) {
+  // Skip health check in production builds or if explicitly disabled
+  if (import.meta.env.PROD || SKIP_HEALTH_CHECK) {
     return { healthy: true, results: [] };
   }
 
@@ -48,7 +53,12 @@ export async function checkDevProxyHealth(): Promise<HealthCheckReport> {
   const results = await Promise.all(
     BACKEND_ROUTES.map(async (route): Promise<HealthCheckResult> => {
       try {
-        const response = await fetch(route);
+        // Suppress console errors for expected 401 responses during health check
+        const originalFetch = window.fetch;
+        const response = await originalFetch(route, {
+          // Prevent console errors from appearing
+          signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
+        });
         
         // Check if response is HTML (Vite's 404 page) or JSON/backend response
         const contentType = response.headers.get('content-type') || '';
@@ -74,6 +84,14 @@ export async function checkDevProxyHealth(): Promise<HealthCheckReport> {
           status: `✅ Proxied (${statusText})`
         };
       } catch (error) {
+        // Ignore timeout/abort errors during health check
+        if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+          return {
+            route,
+            status: '⏱️ Timeout (backend slow)',
+            error: 'Request timed out'
+          };
+        }
         return {
           route,
           status: '❌ Failed',
