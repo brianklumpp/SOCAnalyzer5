@@ -1267,8 +1267,11 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
             
             end_offset = sum(len(l) + 1 for l in text_lines[:end_line])
             
-            # Calculate end_TOC_page_ref using the consistent global offset
-            end_toc_page = end_page - global_page_offset
+            # Calculate end_TOC_page_ref and end_DOC_page_ref
+            # end_page is the first page of the NEXT section, so the last page of current section is end_page - 1
+            last_page_of_section = end_page - 1 if (i + 1 < len(gpt_sections)) else end_page
+            end_toc_page = last_page_of_section - global_page_offset
+            end_doc_page = last_page_of_section
             
             section_dict = {
                 'topic': topic,
@@ -1283,7 +1286,7 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                 'type': 'mapped',
                 'level': 'section',
                 'end_TOC_page_ref': end_toc_page,
-                'end_DOC_page_ref': end_page,
+                'end_DOC_page_ref': end_doc_page,
                 'end_line': end_line,
                 'end_offset': end_offset
             }
