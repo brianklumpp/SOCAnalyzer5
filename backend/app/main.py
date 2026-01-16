@@ -270,9 +270,13 @@ import pathlib
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 os.makedirs(PROJECT_ROOT / 'data/logs', exist_ok=True)
 backend_log_path = str(PROJECT_ROOT / 'data/logs/backend_errors.log')
-# Clear the log file at startup
-with open(backend_log_path, 'w', encoding='utf-8'):
-    pass
+# Clear the log file at startup (ignore permission errors in production)
+try:
+    with open(backend_log_path, 'w', encoding='utf-8'):
+        pass
+except (PermissionError, OSError):
+    # If we can't write to the log file (e.g., volume permission issues), log to stderr only
+    backend_log_path = None
 # Set up a human-readable log format
 log_format = '\n%(asctime)s | %(levelname)s | %(module)s | %(message)s\n' + ('-'*80)
 root_logger = logging.getLogger()
@@ -281,9 +285,14 @@ root_logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 # Remove all handlers first (avoid duplicate logs on reload)
 for handler in root_logger.handlers[:]:
     root_logger.removeHandler(handler)
-file_handler = logging.FileHandler(backend_log_path, encoding='utf-8')
-file_handler.setFormatter(logging.Formatter(log_format))
-root_logger.addHandler(file_handler)
+# Add file handler only if we have write permission
+if backend_log_path:
+    try:
+        file_handler = logging.FileHandler(backend_log_path, encoding='utf-8')
+        file_handler.setFormatter(logging.Formatter(log_format))
+        root_logger.addHandler(file_handler)
+    except (PermissionError, OSError):
+        pass  # Fall back to stream handler only
 stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(logging.Formatter(log_format))
 root_logger.addHandler(stream_handler)
