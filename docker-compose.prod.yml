@@ -61,8 +61,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     image: socanalyzer-backend:${VERSION:-latest}
     container_name: socanalyzer-backend
     restart: unless-stopped
