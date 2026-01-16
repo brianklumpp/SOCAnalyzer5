@@ -655,8 +655,15 @@ async def get_partial_controls(job_id: str, min_pct: float = 20.0, limit: int = 
     
     try:
         import os, json
-        path = str(cfg.CONTROL_JSON_PATH)
-        if not os.path.exists(path):
+        from pathlib import Path
+        
+        # Use job-isolated path
+        scan_id = job.get('scan_id', 1)
+        job_dir = Path(cfg.PROJECT_ROOT) / 'data' / 'jobs' / str(scan_id) / job_id
+        json_dir = job_dir / 'json'
+        path = json_dir / 'controls.json'
+        
+        if not path.exists():
             return {"controls": [], "count": 0, "completion_pct": 0.0, "estimated_total": None}
         
         controls = []
