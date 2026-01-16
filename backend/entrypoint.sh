@@ -59,10 +59,9 @@ if [ ! -z "$DATABASE_URL_SYNC" ]; then
         
         # Run database migrations
         echo "Running database migrations..."
-        cd /app/backend
-        alembic upgrade head
-        MIGRATION_EXIT_CODE=$?
         cd /app
+        alembic -c backend/alembic.ini upgrade head
+        MIGRATION_EXIT_CODE=$?
         
         if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
             echo "  ✓ Database migrations completed successfully"
