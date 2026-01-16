@@ -18,6 +18,7 @@ import {
   Settings as SettingsIcon,
   AdminPanelSettings,
   Person,
+  Queue as QueueIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -47,6 +48,11 @@ const UserMenu: React.FC<UserMenuProps> = ({ title = 'SOC Analyzer' }) => {
   const handleSettings = () => {
     handleMenuClose();
     navigate('/app-settings');
+  };
+
+  const handleQueue = () => {
+    handleMenuClose();
+    navigate('/queue');
   };
 
   const handleAdminPanel = () => {
@@ -126,6 +132,13 @@ const UserMenu: React.FC<UserMenuProps> = ({ title = 'SOC Analyzer' }) => {
               <SettingsIcon fontSize="small" />
             </ListItemIcon>
             <ListItemText>Settings</ListItemText>
+          </MenuItem>
+          
+          <MenuItem onClick={handleQueue}>
+            <ListItemIcon>
+              <QueueIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Job Queue</ListItemText>
           </MenuItem>
           
           {isAdmin && (

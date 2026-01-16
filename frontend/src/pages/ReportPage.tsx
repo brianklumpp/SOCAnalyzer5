@@ -684,54 +684,6 @@ const ReportPage: React.FC = () => {
               Back
             </Button>
 
-            <FormControl size="small" sx={{ minWidth: 200, mr: 2 }}>
-              <InputLabel>Scan</InputLabel>
-              <Select
-                value={history.length > 0 && selectedScanId ? selectedScanId : ''}
-                label="Scan"
-                onChange={e => {
-                  const newId = e.target.value;
-                  setSelectedScanId(newId);
-                  navigate(`/report/${newId}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`);
-                }}
-              >
-                {history.map((h: any) => (
-                  <MenuItem key={h.id} value={h.id.toString()}>
-                    {h.company ? `${h.company} - ` : ''}{h.filename || h.product || 'Unknown'} - {formatLocalDateTimeWithTZ(h.timestamp)}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {report?.filename && (
-              <Button 
-                variant="outlined" 
-                startIcon={<PictureAsPdfIcon />}
-                onClick={async () => {
-                  try {
-                    // Fetch PDF with authentication
-                    const response = await api.get(`/pdf/${selectedScanId}`, {
-                      responseType: 'blob'
-                    });
-                    
-                    // Create blob URL and open in new tab
-                    const blob = new Blob([response.data], { type: 'application/pdf' });
-                    const blobUrl = URL.createObjectURL(blob);
-                    window.open(blobUrl, '_blank');
-                    
-                    // Clean up blob URL after a delay
-                    setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
-                  } catch (err) {
-                    console.error('Failed to open PDF:', err);
-                    alert('Failed to open PDF. Please try again.');
-                  }
-                }}
-                sx={{ mr: 2 }}
-              >
-                View PDF
-              </Button>
-            )}
-
             <Box sx={{ flexGrow: 1 }} />
 
             {/* Help Button */}
@@ -810,8 +762,40 @@ const ReportPage: React.FC = () => {
               sx={{ mr: 1, fontSize: '0.75rem', py: 0.5 }}
               title="Export to Excel"
             >
-              {excelExporting ? 'Exporting...' : 'Excel'}
+              {excelExporting ? 'Exporting...' : 'Excel Export'}
             </Button>
+
+            {/* View PDF Button */}
+            {report?.filename && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<PictureAsPdfIcon />}
+                onClick={async () => {
+                  try {
+                    // Fetch PDF with authentication
+                    const response = await api.get(`/pdf/${selectedScanId}`, {
+                      responseType: 'blob'
+                    });
+                    
+                    // Create blob URL and open in new tab
+                    const blob = new Blob([response.data], { type: 'application/pdf' });
+                    const blobUrl = URL.createObjectURL(blob);
+                    window.open(blobUrl, '_blank');
+                    
+                    // Clean up blob URL after a delay
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+                  } catch (err) {
+                    console.error('Failed to open PDF:', err);
+                    showToast('Failed to open PDF. Please try again.', 'error');
+                  }
+                }}
+                sx={{ mr: 1, fontSize: '0.75rem', py: 0.5 }}
+                title="View PDF"
+              >
+                View PDF
+              </Button>
+            )}
 
             {/* Company Logo */}
             {selectedScanId && history.find((h: any) => h.id.toString() === selectedScanId)?.logo_url && (

@@ -119,24 +119,32 @@ export const ReportCoverageTab = React.memo(function ReportCoverageTab({
     });
     
     // Calculate coverage for each criterion
-    let coveredByControls = 0;
+    const uniquelyCovered = new Set<string>();
     let coveredByCuecs = 0;
     let likelyCovered = 0;
-    let missed = 0;
     const missingIds: string[] = [];
     
     Object.values(fw.sections).forEach(criteria => {
       criteria.forEach(crit => {
-        if (idsFound.has(crit.id)) {
-          coveredByControls++;
-        } else if (idsByCuecs.has(crit.id)) {
+        const isCoveredByControl = idsFound.has(crit.id);
+        const isCoveredByCuec = idsByCuecs.has(crit.id);
+        
+        if (isCoveredByControl || isCoveredByCuec) {
+          uniquelyCovered.add(crit.id);
+        }
+        
+        if (isCoveredByCuec) {
           coveredByCuecs++;
-        } else {
-          missed++;
+        }
+        
+        if (!isCoveredByControl && !isCoveredByCuec) {
           missingIds.push(crit.id);
         }
       });
     });
+    
+    const coveredByControls = uniquelyCovered.size;
+    const missed = total - coveredByControls;
     
     return { total, coveredByControls, coveredByCuecs, likelyCovered, missed, idsFound, idsByCuecs, missingIds };
   };
@@ -193,14 +201,14 @@ export const ReportCoverageTab = React.memo(function ReportCoverageTab({
             </div>
           </div>
           <div className="tsc-coso-donut-value">
-            {stats.coveredByControls + stats.coveredByCuecs}/{stats.total} ({stats.total > 0 ? (((stats.coveredByControls + stats.coveredByCuecs)/stats.total)*100).toFixed(0) : 0}%)
+            {stats.coveredByControls}/{stats.total} ({stats.total > 0 ? ((stats.coveredByControls/stats.total)*100).toFixed(0) : 0}%)
           </div>
 
           {/* Framework Alignment Tables */}
           <div className="tsc-coso-align-heading">{fw.display_name} Alignment</div>
           {Object.entries(fw.sections).map(([section, criteria], sectionIndex) => {
             // Calculate section statistics
-            let sectionCoveredByControls = 0;
+            const criteriaWithMappings = new Set<string>();
             let sectionCoveredByCuecs = 0;
             let sectionDeviations = 0;
             
@@ -208,7 +216,11 @@ export const ReportCoverageTab = React.memo(function ReportCoverageTab({
               const isCovered = stats.idsFound.has(crit.id);
               const isCuecCovered = stats.idsByCuecs.has(crit.id);
               
-              if (isCovered) sectionCoveredByControls++;
+              // Track unique criteria that have at least one mapping (control or CUEC)
+              if (isCovered || isCuecCovered) {
+                criteriaWithMappings.add(crit.id);
+              }
+              
               if (isCuecCovered) sectionCoveredByCuecs++;
               
               // Check for deviations in mapped controls
@@ -224,7 +236,7 @@ export const ReportCoverageTab = React.memo(function ReportCoverageTab({
             });
             
             const sectionTotal = criteria.length;
-            const sectionMapped = sectionCoveredByControls + sectionCoveredByCuecs;
+            const sectionMapped = criteriaWithMappings.size;
             
             return (
               <Accordion key={section} defaultExpanded={sectionIndex === 0} sx={{ mb: 1, boxShadow: 1 }}>

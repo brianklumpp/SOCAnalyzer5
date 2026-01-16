@@ -796,6 +796,10 @@ Title:"""
             # Define word wrap alignment
             wrap_alignment = Alignment(wrap_text=True, vertical='top')
             
+            # Pre-generate all relevance statements in parallel
+            all_orgs = high_conf_orgs + low_conf_orgs
+            relevance_map = self._generate_batch_subservice_relevance(all_orgs)
+            
             # LOW CONFIDENCE SECTION FIRST (starting at A14) to maintain cell references
             if low_conf_orgs:
                 # Insert rows for low confidence orgs (need len-1 extra rows since row 14 exists)
@@ -818,8 +822,8 @@ Title:"""
                     # Column D: Description
                     self._safe_write_cell(ws, row, 4, org.third_party_description or "")
                     
-                    # Column E: Relevance (GPT-generated)
-                    relevance = self._generate_subservice_relevance(org.name, org.third_party_description)
+                    # Column E: Relevance (pre-generated)
+                    relevance = relevance_map.get(org.name, "")
                     self._safe_write_cell(ws, row, 5, relevance)
                     
                     # Apply formatting to columns A-E
@@ -863,8 +867,8 @@ Title:"""
                     # Column D: Description
                     self._safe_write_cell(ws, row, 4, org.third_party_description or "")
                     
-                    # Column E: Relevance (GPT-generated)
-                    relevance = self._generate_subservice_relevance(org.name, org.third_party_description)
+                    # Column E: Relevance (pre-generated)
+                    relevance = relevance_map.get(org.name, "")
                     self._safe_write_cell(ws, row, 5, relevance)
                     
                     # Columns F, G, H: Blank with blue fill
@@ -910,22 +914,49 @@ Title:"""
         if not name:
             return ""
         
-        try:
-            relevance = self._call_gpt_safe(
-                'excel_export_subservice_relevance',
-                extractor_name='excel_export_subservice_relevance',
-                name=name or "the service provider",
-                description=description[:200] if description else "third-party services"
-            )
-            
-            if relevance and len(relevance) > 0:
-                return relevance.strip()
-            
-        except Exception as e:
-            self.logger.debug(f"[EXCEL_EXPORT] GPT relevance generation failed: {e}")
-        
-        # Fallback: generic statement
+        # Skip GPT call for performance - use fallback directly
         return f"{name} provides third-party services relevant to the control environment."
+    
+    def _generate_batch_subservice_relevance(self, orgs: list) -> dict:
+        """
+        Generate relevance statements for multiple orgs in parallel using ThreadPoolExecutor.
+        Returns a dict mapping org.name -> relevance statement.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        relevance_map = {}
+        
+        def generate_one(org):
+            name = org.name
+            desc = org.third_party_description
+            try:
+                relevance = self._call_gpt_safe(
+                    'excel_export_subservice_relevance',
+                    extractor_name='excel_export_subservice_relevance',
+                    name=name or "the service provider",
+                    description=desc[:200] if desc else "third-party services"
+                )
+                
+                if relevance and len(relevance) > 0:
+                    return (name, relevance.strip())
+            except Exception as e:
+                self.logger.debug(f"[EXCEL_EXPORT] GPT relevance generation failed for {name}: {e}")
+            
+            return (name, f"{name} provides third-party services relevant to the control environment.")
+        
+        # Run all GPT calls in parallel with max 5 concurrent threads
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(generate_one, org): org for org in orgs}
+            for future in as_completed(futures):
+                try:
+                    name, relevance = future.result()
+                    relevance_map[name] = relevance
+                except Exception as e:
+                    org = futures[future]
+                    self.logger.error(f"[EXCEL_EXPORT] Error generating relevance for {org.name}: {e}")
+                    relevance_map[org.name] = f"{org.name} provides third-party services relevant to the control environment."
+        
+        return relevance_map
     
     def _format_control_ids(self, control_ids) -> str:
         """Format control_ids JSON array as comma-separated string."""
@@ -976,7 +1007,14 @@ Title:"""
                 self.logger.info(f"[EXCEL_EXPORT] User metadata written to B12: {metadata_text}")
             
             # Convert executive summary JSON to plain text
-            summary_text = self._format_executive_summary_for_excel(scan.executive_summary)
+            # Prefer executive_summary_json if available (newer format), fall back to executive_summary
+            summary_data = None
+            if hasattr(scan, 'executive_summary_json') and scan.executive_summary_json:
+                summary_data = scan.executive_summary_json
+            elif scan.executive_summary:
+                summary_data = scan.executive_summary
+            
+            summary_text = self._format_executive_summary_for_excel(summary_data)
             
             if not summary_text:
                 summary_text = "No executive summary available."
@@ -1089,6 +1127,22 @@ Title:"""
                     sections.append("Recommendations\n" + "\n\n".join(rec_text))
             else:
                 sections.append("Recommendations\n" + to_text(recs))
+        
+        # Handle risk mitigations
+        if summary_data.get('risk_mitigations'):
+            sections.append("Recommendations — Risk Mitigations (Customer-Actionable)\n" + to_text(summary_data['risk_mitigations']))
+        
+        # Handle contract enhancements
+        if summary_data.get('contract_enhancements'):
+            sections.append("Recommendations — Contract Enhancements\n" + to_text(summary_data['contract_enhancements']))
+        
+        # Handle assessor's conclusion
+        if summary_data.get('assessors_conclusion'):
+            sections.append("Assessor's Conclusion (SOX Review)\n" + to_text(summary_data['assessors_conclusion']))
+        
+        # Handle deviations noted
+        if summary_data.get('deviations_noted'):
+            sections.append("Deviations Noted\n" + to_text(summary_data['deviations_noted']))
         
         if summary_data.get('deviations_summary'):
             sections.append("Deviations Summary\n" + to_text(summary_data['deviations_summary']))

@@ -4,8 +4,11 @@
 FROM node:18-alpine AS dev
 WORKDIR /app
 COPY package*.json ./
+COPY entrypoint-dev.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 RUN npm ci --legacy-peer-deps
 EXPOSE 3000
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["npm", "start", "--", "--host", "0.0.0.0"]
 
 # Build stage with Vite

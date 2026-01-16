@@ -1,0 +1,39 @@
+# Exclude large data directories
+data/
+backups/
+database_backup/
+soc1_reports/
+soc2_reports/
+archive/
+logs/
+*.log
+
+# Exclude Python cache and env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+
+# Exclude git
+.git/
+.gitignore
+
+# Exclude node_modules from being copied (will be installed during build)
+**/node_modules/
+
+# Exclude Docker files
+docker-compose*.yml
+*.ps1
+
+# Exclude docs and test files (not needed in image)
+docs/
+test_scripts/
+*.md
+
+# Exclude frontend src during backend build
+frontend/src/
+frontend/public/
+frontend/node_modules/

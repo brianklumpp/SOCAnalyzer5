@@ -11,6 +11,7 @@ const ValidationPage = lazy(() => import("./pages/ValidationPage").then(module =
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const JobQueuePage = lazy(() => import("./pages/JobQueuePage"));
 
 // Redirect component that preserves :scanId param
 const ReportRedirect: React.FC = () => {
@@ -35,6 +36,8 @@ const Router: React.FC = () => (
         {/* Protected routes */}
         <Route path="/" element={<ProtectedRoute><AnalyzerPage /></ProtectedRoute>} />
         <Route path="/app/analyzer" element={<ProtectedRoute><AnalyzerPage /></ProtectedRoute>} />
+        <Route path="/app/queue" element={<ProtectedRoute><JobQueuePage /></ProtectedRoute>} />
+        <Route path="/queue" element={<ProtectedRoute><JobQueuePage /></ProtectedRoute>} />
         <Route path="/app/report/:scanId" element={<ProtectedRoute><ReportPage /></ProtectedRoute>} />
         <Route path="/report/:scanId" element={<ReportRedirect />} />
         <Route path="/app-settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

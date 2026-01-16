@@ -641,19 +641,61 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         embedded_pdfs = extract_embedded_files(pdf_path, temp_extract_dir, password=password)
         
         if embedded_pdfs:
-            logger.info(f"Found {len(embedded_pdfs)} embedded PDF(s), using first one: {embedded_pdfs[0]}")
-            # Store embedded PDF for serving in split view
+            # Use GPT to determine which PDF is the actual SOC report
+            # (Some reports have cover sheet as main + embedded report, others have report as main + embedded supplements)
+            import fitz
+            from .gpt_client import gpt_extract
             try:
-                with open(embedded_pdfs[0], 'rb') as f:
-                    embedded_pdf_bytes = f.read()
-                standardized_results["embedded_pdf_file"] = embedded_pdf_bytes
-                standardized_results["embedded_pdf_filename"] = os.path.basename(embedded_pdfs[0])
-                logger.info(f"Stored embedded PDF ({len(embedded_pdf_bytes)} bytes) for split view")
+                # Extract first page text from both PDFs
+                main_doc = fitz.open(pdf_path)
+                main_pages = len(main_doc)
+                main_first_page = main_doc[0].get_text()[:2000]  # First 2000 chars
+                main_doc.close()
+                
+                embedded_doc = fitz.open(embedded_pdfs[0])
+                embedded_pages = len(embedded_doc)
+                embedded_first_page = embedded_doc[0].get_text()[:2000]
+                embedded_doc.close()
+                
+                # Ask GPT which one is the actual report
+                prompt = f"""You are analyzing two PDFs to determine which is the actual SOC 1 or SOC 2 audit report.
+
+PDF A (Main file, {main_pages} pages):
+{main_first_page}
+
+PDF B (Embedded file, {embedded_pages} pages):
+{embedded_first_page}
+
+Which PDF appears to be the actual SOC audit report (vs a cover letter, terms of use, or supplementary document)?
+
+Respond with ONLY the letter (A or B) and a brief reason (max 20 words).
+Format: X - reason"""
+
+                response = gpt_extract(
+                    prompt=prompt,
+                    extractor_name="embedded_pdf_selection"
+                )
+                
+                choice = response.strip().upper()[0] if response else 'A'
+                logger.info(f"GPT selection: {response.strip()}")
+                
+                if choice == 'B':
+                    logger.info(f"Using embedded PDF based on GPT analysis")
+                    # Store embedded PDF for serving in split view
+                    try:
+                        with open(embedded_pdfs[0], 'rb') as f:
+                            embedded_pdf_bytes = f.read()
+                        standardized_results["embedded_pdf_file"] = embedded_pdf_bytes
+                        standardized_results["embedded_pdf_filename"] = os.path.basename(embedded_pdfs[0])
+                        logger.info(f"Stored embedded PDF ({len(embedded_pdf_bytes)} bytes) for split view")
+                    except Exception as e:
+                        logger.error(f"Failed to store embedded PDF: {e}")
+                    # Use the embedded PDF as the source
+                    pdf_path = embedded_pdfs[0]
+                else:
+                    logger.info(f"Using main PDF based on GPT analysis (embedded appears to be supplementary)")
             except Exception as e:
-                logger.error(f"Failed to store embedded PDF: {e}")
-            # Use the first embedded PDF as the source
-            pdf_path = embedded_pdfs[0]
-            # Note: We'll clean this up later
+                logger.error(f"Failed to analyze PDFs with GPT: {e}, using main PDF")
         
         # Check if PDF needs flattening (has interactive elements or protected content)
         # Try flattening first, then fall back to original if it fails
