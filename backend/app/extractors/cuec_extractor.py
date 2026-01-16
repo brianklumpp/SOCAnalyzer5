@@ -310,17 +310,18 @@ def extract_cuecs(report_type: str = "SOC2", job_paths: Optional[Dict[str, Path]
     chunk_line_refs = []
     chunks = []
     if desc_section:
-        start_line = desc_section.get('start_line')
-        end_line = desc_section.get('end_line')
-        if start_line and end_line:
-            text_with_refs = extract_text_for_lines(txt_lines, start_line, end_line)
-            logging.info(f"[DEBUG] Extracted text length: {len(text_with_refs)} | Preview: {text_with_refs[:300]}")
-        elif desc_section.get('DOC_page_ref') is not None and desc_section.get('end_DOC_page_ref') is not None:
+        # Prefer page-based extraction over line-based for better content coverage
+        if desc_section.get('DOC_page_ref') is not None and desc_section.get('end_DOC_page_ref') is not None:
             start = desc_section['DOC_page_ref']
             end = desc_section['end_DOC_page_ref']
             pages = list(range(start, end + 1))
             text_with_refs = extract_text_for_pages_with_refs(txt_lines, pages)
             logging.info(f"[DEBUG] Extracted text (by pages) length: {len(text_with_refs)} | Preview: {str(text_with_refs)[:300]}")
+        elif desc_section.get('start_line') and desc_section.get('end_line'):
+            start_line = desc_section['start_line']
+            end_line = desc_section['end_line']
+            text_with_refs = extract_text_for_lines(txt_lines, start_line, end_line)
+            logging.info(f"[DEBUG] Extracted text length: {len(text_with_refs)} | Preview: {text_with_refs[:300]}")
         else:
             logging.error('DOC_page_ref or end_DOC_page_ref is None for description section.')
     # Add chunking debug log
@@ -1167,7 +1168,14 @@ def consolidate_cuecs_with_gpt(cuec_list, min_batch_size=1, bad_chunks=None):
     with open(gpt_log_path, 'a', encoding='utf-8') as gptlog:
         gptlog.write(f"\n--- CUEC CONSOLIDATION RESPONSE ---\n{response}\n")
     try:
-        data = json.loads(response)
+        # Handle markdown code blocks from GPT
+        response_clean = response.strip()
+        if response_clean.startswith('```'):
+            json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+            if json_match:
+                response_clean = json_match.group(1).strip()
+        
+        data = json.loads(response_clean)
         if isinstance(data, list):
             return data
         if isinstance(data, dict):

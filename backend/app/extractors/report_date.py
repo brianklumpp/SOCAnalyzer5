@@ -55,19 +55,24 @@ def extract_report_date(job_paths=None, job_id=None):
     auditor_section = next((s for s in section_results if s.get('topic') == 'Service_Auditor_Report'), None)
     if not auditor_section:
         logger.info(f"[JOB {job_id}] No Service_Auditor_Report section found. Falling back to full-document scan for report date.")
-    start_line = auditor_section.get('start_line') if auditor_section else None
-    end_line = auditor_section.get('end_line') if auditor_section else None
+    
     with open(pdf_txt_path, 'r', encoding='utf-8') as f:
         txt_lines = f.readlines()
-    if start_line and end_line:
-        text = extract_text_for_lines(txt_lines, start_line, end_line)
-    elif auditor_section and auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
+    
+    # Prefer page-based extraction over line-based for better content coverage
+    if auditor_section and auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
         start = auditor_section['DOC_page_ref']
         end = auditor_section['end_DOC_page_ref']
         pages = list(range(start, end + 1))
         text = extract_text_for_pages(txt_lines, pages)
+        logger.info(f"[JOB {job_id}] Extracted text from pages {start}-{end} ({len(text)} chars)")
+    elif auditor_section and auditor_section.get('start_line') and auditor_section.get('end_line'):
+        start_line = auditor_section['start_line']
+        end_line = auditor_section['end_line']
+        text = extract_text_for_lines(txt_lines, start_line, end_line)
+        logger.info(f"[JOB {job_id}] Extracted text from lines {start_line}-{end_line} ({len(text)} chars)")
     else:
-        logger.info(f"[JOB {job_id}] DOC_page_ref or end_DOC_page_ref is None for auditor section. Using entire document for GPT-only extraction context.")
+        logger.info(f"[JOB {job_id}] No valid section boundaries. Using entire document for GPT-only extraction context.")
         with open(pdf_txt_path, 'r', encoding='utf-8') as f2:
             text = f2.read()
     # Primary path: GPT extraction on last lines of the auditor section

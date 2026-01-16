@@ -207,7 +207,14 @@ def extract_auditor_with_validation(text: str, company_line: str) -> Tuple[Optio
             
             # Parse JSON array of company names
             try:
-                companies = json.loads(response)
+                # Handle markdown code blocks from GPT
+                response_clean = response.strip()
+                if response_clean.startswith('```'):
+                    json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+                    if json_match:
+                        response_clean = json_match.group(1).strip()
+                
+                companies = json.loads(response_clean)
                 if isinstance(companies, list):
                     all_companies.extend(companies)
                     debug_log.write(f"Chunk {idx + 1}: Found {len(companies)} companies\n")
@@ -480,7 +487,14 @@ def _extract_from_control_section(debug_log) -> Optional[str]:
         response = gpt_extract(prompt, 'auditor_extractor')
         debug_log.write(f"Control section GPT response: {response}\n")
         
-        data = json.loads(response)
+        # Handle markdown code blocks from GPT
+        response_clean = response.strip()
+        if response_clean.startswith('```'):
+            json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+            if json_match:
+                response_clean = json_match.group(1).strip()
+        
+        data = json.loads(response_clean)
         auditor = data.get('auditor')
         confidence = float(data.get('confidence', 0))
         reasoning = data.get('reasoning', '')
@@ -518,7 +532,14 @@ def _infer_auditor_from_context(text: str, debug_log) -> Optional[str]:
         response = gpt_extract(inference_prompt, 'auditor_extractor')
         debug_log.write(f"Context inference GPT response: {response}\n")
         
-        data = json.loads(response)
+        # Handle markdown code blocks from GPT
+        response_clean = response.strip()
+        if response_clean.startswith('```'):
+            json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+            if json_match:
+                response_clean = json_match.group(1).strip()
+        
+        data = json.loads(response_clean)
         inferred_firm = data.get('auditor')
         confidence = float(data.get('confidence', 0))
         reasoning = data.get('reasoning', '')
@@ -595,17 +616,9 @@ def extract_auditor_from_report(job_paths=None, job_id=None):
     text_sections = [pages_1_5_text]
     
     # Append Service_Auditor_Report section if found (deduplicate by line indices)
+    # Prefer page-based extraction over line-based for better content coverage
     if auditor_section:
-        start_line = auditor_section.get('start_line')
-        end_line = auditor_section.get('end_line')
-        if start_line and end_line:
-            # Check for overlap
-            section_indices = set(range(start_line - 1, end_line))
-            new_indices = section_indices - line_indices
-            if new_indices:
-                text_sections.append(extract_text_for_lines(txt_lines, start_line, end_line))
-                line_indices.update(section_indices)
-        elif auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
+        if auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
             start_page = auditor_section['DOC_page_ref']
             end_page = auditor_section['end_DOC_page_ref']
             # Add section pages (deduplicate)
@@ -624,8 +637,17 @@ def extract_auditor_from_report(job_paths=None, job_id=None):
             if new_indices:
                 text_sections.append(extract_text_for_pages(txt_lines, list(range(start_page, end_page + 1))))
                 line_indices.update(section_text_indices)
+        elif auditor_section.get('start_line') and auditor_section.get('end_line'):
+            # Fallback to line-based extraction
+            start_line = auditor_section['start_line']
+            end_line = auditor_section['end_line']
+            section_indices = set(range(start_line - 1, end_line))
+            new_indices = section_indices - line_indices
+            if new_indices:
+                text_sections.append(extract_text_for_lines(txt_lines, start_line, end_line))
+                line_indices.update(section_indices)
         else:
-            logger.info(f'[JOB {job_id}] DOC_page_ref or end_DOC_page_ref is None for auditor section. Using full document text for context.')
+            logger.info(f'[JOB {job_id}] No valid section boundaries for auditor section. Using full document text for context.')
             # Fallback to full document text
             with open(pdf_txt_path, 'r', encoding='utf-8') as f2:
                 text_sections.append(f2.read())
@@ -691,7 +713,15 @@ def confirm_auditor_with_followup(auditor_name: str, text: str) -> Tuple[Optiona
     try:
         if not response:
             raise ValueError('No response from GPT')
-        data = json.loads(response)
+        
+        # Handle markdown code blocks from GPT
+        response_clean = response.strip()
+        if response_clean.startswith('```'):
+            json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+            if json_match:
+                response_clean = json_match.group(1).strip()
+        
+        data = json.loads(response_clean)
         is_auditor = data.get('is_auditor', False)
         confidence = float(data.get('confidence', 0))
         explanation = data.get('explanation', '')

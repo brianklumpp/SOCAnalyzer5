@@ -215,7 +215,14 @@ If no management response is found, return found: false.
         logger.error(f"[MGMT EXTRACT] GPT raw response: {response[:500] if response else 'None'}")
         
         import json
-        result = json.loads(response)
+        # Handle markdown code blocks from GPT
+        response_clean = response.strip()
+        if response_clean.startswith('```'):
+            json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+            if json_match:
+                response_clean = json_match.group(1).strip()
+        
+        result = json.loads(response_clean)
         logger.error(f"[MGMT EXTRACT] GPT result: found={result.get('found')}, confidence={result.get('confidence')}")
         
         if result.get('found') and result.get('response_text'):
@@ -313,7 +320,14 @@ If no matching response is found, return found: false.
         )
         
         import json
-        result = json.loads(response)
+        # Handle markdown code blocks from GPT
+        response_clean = response.strip()
+        if response_clean.startswith('```'):
+            json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+            if json_match:
+                response_clean = json_match.group(1).strip()
+        
+        result = json.loads(response_clean)
         
         if result.get('found') and result.get('response_text'):
             confidence = float(result.get('confidence', 0))

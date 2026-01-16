@@ -62,13 +62,23 @@ def deduce_dates_from_candidates(txt_lines, section_results, job_id=None):
         logger.warning(f"{log_prefix}No Management_Assertion or Service_Auditor_Report sections found for date deduction")
         return None
     
-    # Extract all dates from sections
+    # Extract all dates from sections (prefer page-based over line-based)
     all_dates = []
     for section in sections_to_scan:
-        start_line = section.get('start_line')
-        end_line = section.get('end_line')
-        if start_line and end_line:
+        text = None
+        
+        # Prefer page-based extraction for better content coverage
+        if section.get('DOC_page_ref') is not None and section.get('end_DOC_page_ref') is not None:
+            start_page = section['DOC_page_ref']
+            end_page = section['end_DOC_page_ref']
+            pages = list(range(start_page, end_page + 1))
+            text = extract_text_for_pages(txt_lines, pages)
+        elif section.get('start_line') and section.get('end_line'):
+            start_line = section['start_line']
+            end_line = section['end_line']
             text = extract_text_for_lines(txt_lines, start_line, end_line)
+        
+        if text:
             # Find dates using regex
             date_pattern = r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b'
             matches = re.finditer(date_pattern, text, re.IGNORECASE)
