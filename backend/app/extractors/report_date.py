@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from .. import config
@@ -72,6 +73,22 @@ def extract_report_date(job_paths=None, job_id=None):
     # Primary path: GPT extraction on last lines of the auditor section
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     last_lines = '\n'.join(lines[-5:])
+    
+    # Debug: Save the extracted text
+    debug_path = str(job_paths['temp_dir'] / 'report_date_debug.txt')
+    with open(debug_path, 'w', encoding='utf-8') as debug_file:
+        debug_file.write(f"Auditor section info:\n")
+        if auditor_section:
+            debug_file.write(f"  DOC_page_ref: {auditor_section.get('DOC_page_ref')}\n")
+            debug_file.write(f"  end_DOC_page_ref: {auditor_section.get('end_DOC_page_ref')}\n")
+            debug_file.write(f"  start_line: {auditor_section.get('start_line')}\n")
+            debug_file.write(f"  end_line: {auditor_section.get('end_line')}\n")
+        debug_file.write(f"\nTotal text length: {len(text)}\n")
+        debug_file.write(f"Total lines: {len(lines)}\n")
+        debug_file.write(f"\nLast 5 lines sent to GPT:\n{last_lines}\n")
+        debug_file.write(f"\n\nFull text (first 5000 chars):\n{text[:5000]}\n")
+        debug_file.write(f"\n\nFull text (last 5000 chars):\n{text[-5000:]}\n")
+    
     prompt = config.REPORT_DATE_EXTRACTION_PROMPT.format(text=last_lines)
     response = gpt_extract(prompt, 'report_date_extractor')
     result = {'report_date': None, 'explanation': '', 'raw_gpt_response': response}

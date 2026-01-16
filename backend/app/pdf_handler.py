@@ -1251,8 +1251,21 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
             
             # Determine end boundaries (next section or document end)
             if i + 1 < len(gpt_sections):
-                next_doc_page = gpt_sections[i+1].get('doc_page')
-                next_toc_page = gpt_sections[i+1].get('toc_page')
+                next_sec = gpt_sections[i+1]
+                next_toc_page = next_sec.get('toc_page')
+                next_doc_page_raw = next_sec.get('doc_page')
+                
+                # Apply global offset correction to next section's doc_page
+                if next_toc_page is not None and next_doc_page_raw is not None:
+                    next_section_offset = next_doc_page_raw - next_toc_page
+                    if next_section_offset != global_page_offset and global_page_offset != 0:
+                        next_doc_page = next_toc_page + global_page_offset
+                        logger.debug(f"[SECTION_DETECT] Corrected next section doc_page from {next_doc_page_raw} to {next_doc_page}")
+                    else:
+                        next_doc_page = next_doc_page_raw
+                else:
+                    next_doc_page = next_doc_page_raw
+                
                 # Use doc_page from next section, fallback to toc_page if null
                 end_page = next_doc_page if next_doc_page else (next_toc_page if next_toc_page else total_pages)
                 # Find end line
