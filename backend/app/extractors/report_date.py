@@ -80,13 +80,21 @@ def extract_report_date(job_paths=None, job_id=None):
         result['explanation'] = 'No response from GPT.'
     else:
         try:
-            data = json.loads(response)
+            # Handle markdown code blocks from GPT
+            response_clean = response.strip()
+            if response_clean.startswith('```'):
+                # Extract JSON from markdown code block (handle with or without newline before closing ```)
+                json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+                if json_match:
+                    response_clean = json_match.group(1).strip()
+            
+            data = json.loads(response_clean)
             result['report_date'] = data.get('report_date')
             result['explanation'] = data.get('explanation', '')
         except Exception as e:
-            logger.info(f'[JOB {job_id}] Failed to parse GPT response: {response} | Error: {e}')
+            logger.info(f'[JOB {job_id}] Failed to parse GPT response: {response[:200]}... | Error: {e}')
             result['explanation'] = f'Failed to parse GPT response: {e}'
-    # Fallback: heuristic search (disabled by default – see config.ALLOW_REGEX_FALLBACKS)
+    # Fallback: heuristic search (always enabled for report_date - critical field)
     def _parse_month_date(s):
         try:
             import datetime as _dt
@@ -102,7 +110,8 @@ def extract_report_date(job_paths=None, job_id=None):
             return None
         return None
 
-    if not result.get('report_date') and getattr(config, 'ALLOW_REGEX_FALLBACKS', False):
+    if not result.get('report_date'):
+        logger.info(f'[JOB {job_id}] GPT extraction failed, trying regex fallback for report_date')
         # Look farther back than the last 5 lines to be safe
         tail = '\n'.join(lines[-50:]) if lines else text
         matches = list(re.finditer(r"([A-Za-z]+\s+\d{1,2},\s+\d{4})", tail))

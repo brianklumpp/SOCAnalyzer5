@@ -1208,6 +1208,9 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                 topic = 'Service_Auditor_Report'
             elif 'management' in section_lower and ('assertion' in section_lower or 'statement' in section_lower):
                 topic = 'Management_Assertion'
+            elif 'assertion' in section_lower and 'of' in section_lower:
+                # Handle patterns like "Assertion of Amazon Web Services" (Management Assertion)
+                topic = 'Management_Assertion'
             elif 'description' in section_lower and 'system' in section_lower:
                 topic = 'Description_of_System'
             elif 'control' in section_lower:

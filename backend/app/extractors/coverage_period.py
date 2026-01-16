@@ -305,10 +305,10 @@ def extract_coverage_period(job_paths=None, job_id=None):
             # Handle markdown code blocks from GPT
             response_clean = response.strip()
             if response_clean.startswith('```'):
-                # Extract JSON from markdown code block
-                json_match = re.search(r'```(?:json)?\s*\n(.*?)\n```', response_clean, re.DOTALL)
+                # Extract JSON from markdown code block (handle with or without newline before closing ```)
+                json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
                 if json_match:
-                    response_clean = json_match.group(1)
+                    response_clean = json_match.group(1).strip()
             
             data = json.loads(response_clean)
             result['type'] = data.get('type')
@@ -338,6 +338,36 @@ def extract_coverage_period(job_paths=None, job_id=None):
             logger.info(f'[JOB {job_id}] Failed to parse GPT response: {e}')
             logger.debug(f'[JOB {job_id}] Raw response: {response[:500]}...')
             result['explanation'] = f'Failed to parse GPT response: {e}'
+    
+    # Regex fallback: Try to extract date ranges directly if GPT failed completely
+    if not result.get('start_date') and not result.get('end_date') and not result.get('as_of_date'):
+        logger.info(f'[JOB {job_id}] GPT extraction returned no dates, trying regex fallback for coverage period')
+        import datetime as _dt
+        
+        # Look for date range patterns like "January 1, 2023 to December 31, 2023"
+        date_range_pattern = r'([A-Za-z]+\s+\d{1,2},?\s+\d{4})\s+(?:to|through|-)\s+([A-Za-z]+\s+\d{1,2},?\s+\d{4})'
+        matches = list(re.finditer(date_range_pattern, first_lines, re.IGNORECASE))
+        
+        if matches:
+            # Use the first match found
+            match = matches[0]
+            start_str = match.group(1)
+            end_str = match.group(2)
+            
+            try:
+                # Parse dates (handle both "January 1, 2023" and "January 1 2023")
+                start_str_clean = start_str.replace(',', '')
+                end_str_clean = end_str.replace(',', '')
+                start_date = _dt.datetime.strptime(start_str_clean, '%B %d %Y').strftime('%Y-%m-%d')
+                end_date = _dt.datetime.strptime(end_str_clean, '%B %d %Y').strftime('%Y-%m-%d')
+                
+                result['start_date'] = start_date
+                result['end_date'] = end_date
+                result['type'] = 'Type 2'  # Assume Type 2 for date ranges
+                result['explanation'] = 'Extracted via regex fallback (date range pattern)'
+                logger.info(f'[JOB {job_id}] Regex fallback found coverage period: {start_date} to {end_date}')
+            except Exception as parse_error:
+                logger.warning(f'[JOB {job_id}] Failed to parse regex-matched dates: {parse_error}')
     
     # Deduction fallback: Try temporal rule-based deduction if GPT failed or incomplete
     # Consider GPT extraction incomplete if:
