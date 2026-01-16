@@ -1,5 +1,9 @@
 import { APP_CONFIG } from '../config';
 
+// Token management (must be defined before FetchClient uses them)
+let currentAccessToken: string | null = null;
+let refreshTokenCallback: (() => Promise<boolean>) | null = null;
+
 // Native fetch-based API client (no axios)
 // This avoids any axios URL resolution issues
 
@@ -133,10 +137,6 @@ class FetchClient {
     return this.request('DELETE', url, config);
   }
 }
-
-// Token management (needs to be defined before FetchClient uses them)
-let currentAccessToken: string | null = null;
-let refreshTokenCallback: (() => Promise<boolean>) | null = null;
 
 export const setAccessToken = (token: string | null) => {
   currentAccessToken = token;
