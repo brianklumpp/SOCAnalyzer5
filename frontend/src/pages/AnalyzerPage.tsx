@@ -611,13 +611,16 @@ const AnalyzerPage: React.FC = () => {
 
   // Polling interval for queue data
   useEffect(() => {
+    // Always poll queue data, even without an active jobId
+    // This ensures the queue updates after uploads and shows all queued scans
+    fetchQueueData(); // Initial fetch
+    
     const interval = setInterval(() => {
-      if (jobId) {
-        fetchQueueData();
-      }
+      fetchQueueData();
     }, POLL_INTERVAL);
+    
     return () => clearInterval(interval);
-  }, [jobId, fetchQueueData]);
+  }, [fetchQueueData]); // Removed jobId dependency - always poll queue
 
   // Override handleUpload for background job
   const handleUpload = async () => {
