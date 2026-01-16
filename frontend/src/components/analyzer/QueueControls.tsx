@@ -57,6 +57,7 @@ const QueueControls: React.FC<QueueControlsProps> = ({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [uploadComplete, setUploadComplete] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragCounter, setDragCounter] = useState(0); // Track drag depth
 
@@ -150,6 +151,7 @@ const QueueControls: React.FC<QueueControlsProps> = ({
     setUploading(true);
     setUploadError(null);
     setUploadSuccess(null);
+    setUploadComplete(false);
 
     try {
       const formData = new FormData();
@@ -175,8 +177,10 @@ const QueueControls: React.FC<QueueControlsProps> = ({
       
       if (errors && errors.length > 0) {
         setUploadError(`${queued_count} files queued, ${errors.length} failed: ${errors.join(', ')}`);
+        setUploadComplete(true);
       } else {
         setUploadSuccess(`Successfully queued ${queued_count} scan${queued_count > 1 ? 's' : ''}`);
+        setUploadComplete(true);
       }
 
       // Clear files and close dialog after successful upload
@@ -184,11 +188,13 @@ const QueueControls: React.FC<QueueControlsProps> = ({
         setFiles([]);
         setBatchDialogOpen(false);
         setUploadSuccess(null);
+        setUploadComplete(false);
         onQueueUpdate();
       }, 2000);
 
     } catch (error: any) {
       setUploadError(error.response?.data?.detail || 'Failed to upload files');
+      setUploadComplete(true);
     } finally {
       setUploading(false);
     }
@@ -405,13 +411,13 @@ const QueueControls: React.FC<QueueControlsProps> = ({
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setBatchDialogOpen(false)} disabled={uploading}>
+          <Button onClick={() => setBatchDialogOpen(false)} disabled={uploading || uploadComplete}>
             Cancel
           </Button>
           <Button
             onClick={handleBatchUpload}
             variant="contained"
-            disabled={files.length === 0 || uploading}
+            disabled={files.length === 0 || uploading || uploadComplete}
           >
             Upload {files.length > 0 && `(${files.length})`}
           </Button>
