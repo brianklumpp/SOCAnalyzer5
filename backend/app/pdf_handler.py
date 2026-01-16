@@ -1177,6 +1177,17 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                     continue
         
         # Convert each GPT section to legacy format
+        # Calculate global page offset from the first section with valid data
+        # This ensures consistent offset across all sections
+        global_page_offset = 0
+        for sec in gpt_sections:
+            toc = sec.get('toc_page')
+            doc = sec.get('doc_page')
+            if toc is not None and doc is not None:
+                global_page_offset = doc - toc
+                logger.info(f"[SECTION_DETECT] Using global page offset: {global_page_offset} (from section '{sec.get('name')}')")
+                break
+        
         for i, gpt_sec in enumerate(gpt_sections):
             section_name = gpt_sec.get('name', '')
             toc_page = gpt_sec.get('toc_page')
@@ -1188,6 +1199,12 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
                 toc_page = doc_page if doc_page else 1
             if doc_page is None:
                 doc_page = toc_page if toc_page else 1
+            
+            # If this section's offset differs from global, correct it using global offset
+            section_offset = doc_page - toc_page
+            if section_offset != global_page_offset and global_page_offset != 0:
+                logger.warning(f"[SECTION_DETECT] Section '{section_name}' has inconsistent offset ({section_offset} vs global {global_page_offset}), correcting DOC_page_ref")
+                doc_page = toc_page + global_page_offset
             
             # Validate and log significant offsets
             offset_diff = abs(doc_page - toc_page)
@@ -1250,9 +1267,8 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
             
             end_offset = sum(len(l) + 1 for l in text_lines[:end_line])
             
-            # Calculate end_TOC_page_ref by maintaining the same offset
-            page_offset = doc_page - toc_page
-            end_toc_page = end_page - page_offset
+            # Calculate end_TOC_page_ref using the consistent global offset
+            end_toc_page = end_page - global_page_offset
             
             section_dict = {
                 'topic': topic,
