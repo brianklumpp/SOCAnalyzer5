@@ -94,7 +94,7 @@ def extract_report_date(job_paths=None, job_id=None):
         except Exception as e:
             logger.info(f'[JOB {job_id}] Failed to parse GPT response: {response[:200]}... | Error: {e}')
             result['explanation'] = f'Failed to parse GPT response: {e}'
-    # Fallback: heuristic search (always enabled for report_date - critical field)
+    # Fallback: heuristic search (disabled by default – see config.ALLOW_REGEX_FALLBACKS)
     def _parse_month_date(s):
         try:
             import datetime as _dt
@@ -110,8 +110,7 @@ def extract_report_date(job_paths=None, job_id=None):
             return None
         return None
 
-    if not result.get('report_date'):
-        logger.info(f'[JOB {job_id}] GPT extraction failed, trying regex fallback for report_date')
+    if not result.get('report_date') and getattr(config, 'ALLOW_REGEX_FALLBACKS', False):
         # Look farther back than the last 5 lines to be safe
         tail = '\n'.join(lines[-50:]) if lines else text
         matches = list(re.finditer(r"([A-Za-z]+\s+\d{1,2},\s+\d{4})", tail))
