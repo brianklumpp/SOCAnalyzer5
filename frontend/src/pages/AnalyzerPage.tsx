@@ -203,13 +203,17 @@ const AnalyzerPage: React.FC = () => {
 
   // Poll job status
   useEffect(() => {
-    console.log('[AnalyzerPage] Polling useEffect running. jobId:', jobId);
+    console.log('[AnalyzerPage] Polling useEffect running. jobId:', jobId, 'loading:', loading);
     if (!jobId) {
       console.log("[AnalyzerPage] No jobId, polling not started.");
       return;
     }
-    // let cancelled = false; // Removed unused variable
+    
+    let pollActive = true;
+    
     const poll = async () => {
+      if (!pollActive) return;
+      
       console.log(`[AnalyzerPage] Polling job status for jobId: ${jobId}`);
       try {
         // First hit ultra-light endpoint (now includes counts & checklist)
@@ -352,12 +356,16 @@ const AnalyzerPage: React.FC = () => {
           return;
         }
         // Not done, keep polling
-        pollTimeoutRef.current = setTimeout(poll, POLL_INTERVAL);
+        if (pollActive) {
+          pollTimeoutRef.current = setTimeout(poll, POLL_INTERVAL);
+        }
       } catch (err: any) {
         // Treat Axios timeout specially as transient to avoid clearing job prematurely
         if (err?.code === 'ECONNABORTED') {
           console.warn('[AnalyzerPage] status_min timeout, treating as transient and retrying');
-          pollTimeoutRef.current = setTimeout(poll, 2000);
+          if (pollActive) {
+            pollTimeoutRef.current = setTimeout(poll, 2000);
+          }
           return;
         }
         setError(err.message || 'Polling error');
@@ -368,10 +376,10 @@ const AnalyzerPage: React.FC = () => {
     };
     poll();
     return () => {
-      // cancelled = true; // Removed unused variable
+      pollActive = false;
       if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     };
-  }, [jobId]);
+  }, [jobId, loading]); // Added loading to dependency array to restart polling if needed
 
   // WebSocket for real-time progress (FastAPI native)
   useEffect(() => {
