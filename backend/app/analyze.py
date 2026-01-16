@@ -2008,21 +2008,26 @@ Format: X - reason"""
         standardized_results['sections'] = results.get('sections', [])
         # --- VALIDATION AND LOGGING ---
         log_path = str(config.LOGS_DIR / 'backend_errors.log')
-        with open(log_path, 'a', encoding='utf-8') as logf:
-            logf.write('\n[STANDARDIZED RESULT VALIDATION]\n')
-            for key in flatten_map.values():
-                short_key = key[0]
-                val = standardized_results.get(short_key, None)
-                if val is None:
-                    logf.write(f"Missing key: {short_key}\n")
-                else:
-                    if isinstance(val, list):
-                        logf.write(f"{short_key}: list, len={len(val)}\n")
-                    elif isinstance(val, dict):
-                        logf.write(f"{short_key}: dict, keys={list(val.keys())}\n")
+        try:
+            with open(log_path, 'a', encoding='utf-8') as logf:
+                logf.write('\n[STANDARDIZED RESULT VALIDATION]\n')
+                for key in flatten_map.values():
+                    short_key = key[0]
+                    val = standardized_results.get(short_key, None)
+                    if val is None:
+                        logf.write(f"Missing key: {short_key}\n")
                     else:
-                        logf.write(f"{short_key}: type={type(val)}\n")
-            logf.write(f"Full standardized results keys: {list(standardized_results.keys())}\n")
+                        if isinstance(val, list):
+                            logf.write(f"{short_key}: list, len={len(val)}\n")
+                        elif isinstance(val, dict):
+                            logf.write(f"{short_key}: dict, keys={list(val.keys())}\n")
+                        else:
+                            logf.write(f"{short_key}: type={type(val)}\n")
+                logf.write(f"Full standardized results keys: {list(standardized_results.keys())}\n")
+        except (PermissionError, OSError):
+            # Skip logging if we can't write to the file
+            pass
+        
         update_progress(100, "Scan Complete")
         logger.debug(f"Final standardized results: {standardized_results}")
 
