@@ -93,6 +93,9 @@ const AnalyzerPage: React.FC = () => {
   const [reportTypeFilter, setReportTypeFilter] = useState<string>('All');
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const HISTORY_PAGE_SIZE = 50;
   // Lightweight status info from /analyze/status to avoid large payloads
   const [statusInfo, setStatusInfo] = useState<{ finalized?: boolean; artifacts?: any; counts?: any; report_type?: string; detected_report_type?: string; detected_subtype?: string; detection_confidence?: number; done?: boolean } | null>(null);
   // Partial controls progressive state
@@ -141,10 +144,26 @@ const AnalyzerPage: React.FC = () => {
   });
   const pollTimeoutRef = useRef<any>(null);
 
-  // Fetch scan history and settings on mount
+  // Fetch scan history count on mount
+  useEffect(() => {
+    api.get('/history/count')
+      .then((res: { data: { total: number } }) => setHistoryTotal(res.data.total))
+      .catch((err: any) => console.error('Failed to fetch history count:', err));
+    
+    api.get(SETTINGS_URL)
+      .then((res: { data: any }) => setSettings(res.data))
+      .catch((err: unknown) => console.error('Failed to fetch settings:', err));
+  }, []);
+
+  // Fetch scan history with pagination
   useEffect(() => {
     setHistoryLoading(true);
-    api.get(HISTORY_URL)
+    api.get(HISTORY_URL, {
+      params: {
+        limit: HISTORY_PAGE_SIZE,
+        offset: historyPage * HISTORY_PAGE_SIZE
+      }
+    })
       .then((res: { data: ScanResult[] }) => {
         const historyData = res.data.map((scan) => ({
           ...scan,
@@ -159,10 +178,7 @@ const AnalyzerPage: React.FC = () => {
         console.error('Failed to fetch scan history:', err);
         setHistoryLoading(false);
       });
-    api.get(SETTINGS_URL)
-      .then((res: { data: any }) => setSettings(res.data))
-      .catch((err: unknown) => console.error('Failed to fetch settings:', err));
-  }, []);
+  }, [historyPage]);
 
   // F1 keyboard shortcut for help
   useEffect(() => {
@@ -946,6 +962,10 @@ const AnalyzerPage: React.FC = () => {
             onSearchChange={handleSearchChange}
             onFilterChange={handleFilterChange}
             onDeleteScan={handleDeleteScan}
+            currentPage={historyPage}
+            totalPages={Math.ceil(historyTotal / HISTORY_PAGE_SIZE)}
+            totalScans={historyTotal}
+            onPageChange={setHistoryPage}
           />
           
           {/* Snackbar for cancel */}

@@ -2748,48 +2748,73 @@ async def docker_start(container: str):
 
 # History endpoints
 @app.get("/history")
-async def get_history(limit: int = 100, db=Depends(get_db)):
+async def get_history(
+    limit: int = 50,
+    offset: int = 0,
+    db=Depends(get_db)
+):
     """
-    Get scan history with minimal metadata for dropdown/list.
-    Excludes heavy result_json field for performance.
+    Get paginated scan history with optimized single-query fetch.
+    Uses Redis cache with 2-minute TTL for frequently accessed pages.
     
     Args:
-        limit: Maximum number of scans to return (default 100, max 500)
+        limit: Number of scans per page (default 50, max 100)
+        offset: Number of scans to skip (for pagination)
     """
-    # Cap limit to prevent excessive queries
-    limit = min(max(1, limit), 500)
+    from sqlalchemy.orm import selectinload
+    import redis.asyncio as aioredis
     
-    # Get scans with optimized query
-    result = await db.execute(
+    # Cap limit to prevent excessive queries
+    limit = min(max(1, limit), 100)
+    offset = max(0, offset)
+    
+    # Generate cache key
+    cache_key = f"scan_history:v2:{limit}:{offset}"
+    
+    # Try cache first
+    try:
+        redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+        cached = await redis_client.get(cache_key)
+        if cached:
+            logging.info(f"[HISTORY] Cache HIT for key: {cache_key}")
+            await redis_client.close()
+            return _json.loads(cached)
+        await redis_client.close()
+    except Exception as e:
+        logging.warning(f"[HISTORY] Redis error: {e}")
+    
+    # OPTIMIZED QUERY: Single query with eager-loaded relationship
+    query = (
         select(Scan)
-        .order_by(Scan.scan_date.desc())
+        .options(selectinload(Scan.companies))  # Eager load companies in single query
+        .order_by(Scan.scan_date.desc().nulls_last(), Scan.id.desc())
+        .offset(offset)
         .limit(limit)
     )
-    scan_rows = result.scalars().all()
     
+    result = await db.execute(query)
+    scan_rows = result.scalars().unique().all()
+    
+    # Build response - companies already loaded, no additional queries!
     history = []
     for row in scan_rows:
-        # Get company name for this scan
-        # Order by confidence DESC NULLS LAST, id DESC to get the most confident/recent company record
-        company_result = await db.execute(
-            select(Company)
-            .where(Company.scan_id == row.id)
-            .order_by(Company.confidence.desc().nulls_last(), Company.id.desc())
-            .limit(1)
-        )
-        company_row = company_result.scalar_one_or_none()
-        company_name = company_row.name if company_row else None
-        company_domain = company_row.company_domain if company_row else None
-        logo_url = company_row.logo_url if company_row else None
+        # Get highest confidence company from preloaded relationship
+        company = None
+        if row.companies:
+            # Sort by confidence DESC, id DESC
+            company = max(
+                row.companies,
+                key=lambda c: ((c.confidence or 0), c.id)
+            )
         
         history.append({
             "id": row.id,
             "timestamp": row.scan_date.isoformat() if row.scan_date else None,
             "filename": row.pdf_filename,
             "product": row.product,
-            "company": company_name,
-            "company_domain": company_domain,
-            "logo_url": logo_url,
+            "company": company.name if company else None,
+            "company_domain": company.company_domain if company else None,
+            "logo_url": company.logo_url if company else None,
             "coverage_start": row.coverage_start.date().isoformat() if row.coverage_start else None,
             "coverage_end": row.coverage_end.date().isoformat() if row.coverage_end else None,
             "report_date": row.report_date.isoformat() if row.report_date else None,
@@ -2798,7 +2823,27 @@ async def get_history(limit: int = 100, db=Depends(get_db)):
             # Note: result_json excluded for performance - use /report/{scan_id} for full data
         })
     
+    # Cache for 2 minutes (120 seconds)
+    try:
+        redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+        await redis_client.setex(cache_key, 120, _json.dumps(history))
+        logging.info(f"[HISTORY] Cached result for key: {cache_key}")
+        await redis_client.close()
+    except Exception as e:
+        logging.warning(f"[HISTORY] Redis cache write error: {e}")
+    
     return history
+
+
+@app.get("/history/count")
+async def get_history_count(db=Depends(get_db)):
+    """Get total scan count for pagination"""
+    from sqlalchemy import func
+    
+    result = await db.execute(select(func.count(Scan.id)))
+    total = result.scalar()
+    
+    return {"total": total}
 
 @app.get("/report_diag/{scan_id}")
 async def report_diag(scan_id: int):

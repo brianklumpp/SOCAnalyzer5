@@ -357,79 +357,104 @@ class ScanQueue:
         
         return job_ids
     
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self, max_scans: int = 50) -> Dict[str, Any]:
         """
         Get current queue state.
+        
+        Args:
+            max_scans: Maximum number of scans to return (default 50 to prevent timeout)
         
         Returns:
             Complete queue status with all scans
         """
         import json
         
-        stats = self.redis.hgetall(self.KEY_STATS)
-        current_job_id = self.redis.get(self.KEY_CURRENT)
-        queued_job_ids = self.redis.zrange(self.KEY_ACTIVE, 0, -1)  # Already strings with decode_responses=True
+        try:
+            stats = self.redis.hgetall(self.KEY_STATS)
+            current_job_id = self.redis.get(self.KEY_CURRENT)
+            queued_job_ids = self.redis.zrange(self.KEY_ACTIVE, 0, max_scans - 1)  # Limit to prevent timeout
+        except Exception as e:
+            logger.error(f"[QUEUE] Redis error getting queue status: {e}")
+            return {
+                "paused": False,
+                "current_job_id": None,
+                "queue_length": 0,
+                "scans": [],
+                "stats": {
+                    "total_queued": 0,
+                    "total_completed": 0,
+                    "total_failed": 0,
+                    "total_cancelled": 0
+                }
+            }
         
         # Load scan details
         scans = []
         
         # Currently running
         if current_job_id:
-            scan = self._load_scan(current_job_id)  # Already a string
-            if scan:
-                scan_dict = {
-                    **scan.to_dict(),
-                    "position": 0
-                }
-                # Enrich with job state (identified_entities, counters, etc.)
-                job_state = self.redis.get(f"job:{current_job_id}")
-                if job_state:
+            try:
+                scan = self._load_scan(current_job_id)  # Already a string
+                if scan:
+                    scan_dict = {
+                        **scan.to_dict(),
+                        "position": 0
+                    }
+                    # Enrich with job state (identified_entities, counters, etc.)
                     try:
-                        job_data = json.loads(job_state)
-                        # Add identified_entities for queue card display
-                        if "identified_entities" in job_data:
-                            scan_dict["identifiedEntities"] = job_data["identified_entities"]
-                        # Add counters for progress display
-                        if "counters" in job_data:
-                            scan_dict["counters"] = job_data["counters"]
-                        # Add detected subtype
-                        if "detected_subtype" in job_data:
-                            scan_dict["detectedSubtype"] = job_data["detected_subtype"]
-                        # Add top-level fields for backward compatibility
-                        if "logo_url" in job_data:
-                            scan_dict["logo_url"] = job_data["logo_url"]
-                        if "auditor" in job_data:
-                            scan_dict["auditor"] = job_data["auditor"]
+                        job_state = self.redis.get(f"job:{current_job_id}")
+                        if job_state:
+                            job_data = json.loads(job_state)
+                            # Add identified_entities for queue card display
+                            if "identified_entities" in job_data:
+                                scan_dict["identifiedEntities"] = job_data["identified_entities"]
+                            # Add counters for progress display
+                            if "counters" in job_data:
+                                scan_dict["counters"] = job_data["counters"]
+                            # Add detected subtype
+                            if "detected_subtype" in job_data:
+                                scan_dict["detectedSubtype"] = job_data["detected_subtype"]
+                            # Add top-level fields for backward compatibility
+                            if "logo_url" in job_data:
+                                scan_dict["logo_url"] = job_data["logo_url"]
+                            if "auditor" in job_data:
+                                scan_dict["auditor"] = job_data["auditor"]
                     except Exception as e:
                         logger.warning(f"[QUEUE] Failed to enrich scan {current_job_id} with job state: {e}")
-                scans.append(scan_dict)
+                    scans.append(scan_dict)
+            except Exception as e:
+                logger.error(f"[QUEUE] Error loading current scan {current_job_id}: {e}")
         
-        # Queued scans
+        # Queued scans (limited to max_scans)
         for i, job_id in enumerate(queued_job_ids):
-            scan = self._load_scan(job_id)
-            if scan:
-                scan_dict = {
-                    **scan.to_dict(),
-                    "position": i + 1
-                }
-                # Enrich with job state
-                job_state = self.redis.get(f"job:{job_id}")
-                if job_state:
+            try:
+                scan = self._load_scan(job_id)
+                if scan:
+                    scan_dict = {
+                        **scan.to_dict(),
+                        "position": i + 1
+                    }
+                    # Enrich with job state
                     try:
-                        job_data = json.loads(job_state)
-                        if "identified_entities" in job_data:
-                            scan_dict["identifiedEntities"] = job_data["identified_entities"]
-                        if "counters" in job_data:
-                            scan_dict["counters"] = job_data["counters"]
-                        if "detected_subtype" in job_data:
-                            scan_dict["detectedSubtype"] = job_data["detected_subtype"]
-                        if "logo_url" in job_data:
-                            scan_dict["logo_url"] = job_data["logo_url"]
-                        if "auditor" in job_data:
-                            scan_dict["auditor"] = job_data["auditor"]
+                        job_state = self.redis.get(f"job:{job_id}")
+                        if job_state:
+                            job_data = json.loads(job_state)
+                            if "identified_entities" in job_data:
+                                scan_dict["identifiedEntities"] = job_data["identified_entities"]
+                            if "counters" in job_data:
+                                scan_dict["counters"] = job_data["counters"]
+                            if "detected_subtype" in job_data:
+                                scan_dict["detectedSubtype"] = job_data["detected_subtype"]
+                            if "logo_url" in job_data:
+                                scan_dict["logo_url"] = job_data["logo_url"]
+                            if "auditor" in job_data:
+                                scan_dict["auditor"] = job_data["auditor"]
                     except Exception as e:
                         logger.warning(f"[QUEUE] Failed to enrich scan {job_id} with job state: {e}")
-                scans.append(scan_dict)
+                    scans.append(scan_dict)
+            except Exception as e:
+                logger.error(f"[QUEUE] Error loading queued scan {job_id}: {e}")
+                continue
         
         return {
             "paused": self.is_paused(),

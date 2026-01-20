@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, LargeBinary, Boolean, Enum, ForeignKey
+from sqlalchemy.orm import relationship
 import datetime
 from datetime import timezone
 import enum
@@ -52,6 +53,9 @@ class Scan(Base):
     # Multi-framework support (Phase 1)
     detected_standards = Column(JSON)  # Standards detected in report: ["ISAE 3402", "SSAE 18", "CSAE 3416"]
     active_frameworks = Column(JSON)  # Frameworks used for mapping: ["TSC", "COSO", "ISAE3402", "FINANCIAL_ASSERTIONS"]
+    
+    # Relationships
+    companies = relationship("Company", back_populates="scan", lazy="select")
 
 # --- Entity tables for extracted data ---
 class Company(Base):
@@ -60,9 +64,12 @@ class Company(Base):
     name = Column(String(256), nullable=False)
     parent_company = Column(String(256))
     confidence = Column(Float)
-    scan_id = Column(Integer)
+    scan_id = Column(Integer, ForeignKey('scan.id', ondelete='CASCADE'))
     company_domain = Column(String(256), index=True)  # Company website domain for logo fetching
     logo_url = Column(String(512))  # Cached logo URL from Clearbit API
+    
+    # Relationships
+    scan = relationship("Scan", back_populates="companies")
 
 class Control(Base):
     __tablename__ = "control"

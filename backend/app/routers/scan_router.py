@@ -969,24 +969,66 @@ async def get_queue_status(current_user: User = Depends(get_current_active_user)
         }
     """
     from ..threading.scan_queue import get_scan_queue
+    import asyncio
     
     scan_queue = get_scan_queue()
     if not scan_queue:
         raise HTTPException(status_code=500, detail="Scan queue not available")
     
     try:
-        queue_status = scan_queue.get_status()
+        # Add timeout protection (30 seconds max)
+        async def get_status_async():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, scan_queue.get_status)
+        
+        try:
+            queue_status = await asyncio.wait_for(get_status_async(), timeout=30.0)
+        except asyncio.TimeoutError:
+            logging.error("[GET_QUEUE] Timeout getting queue status - Redis may be unresponsive")
+            # Return minimal safe response
+            return {
+                "queue_length": 0,
+                "is_paused": False,
+                "is_running": False,
+                "current_job_id": None,
+                "queued_scans": [],
+                "stats": {
+                    "total_queued": 0,
+                    "total_completed": 0,
+                    "total_failed": 0,
+                    "total_cancelled": 0
+                },
+                "error": "Queue status temporarily unavailable"
+            }
         
         # Enrich with position information
         for scan in queue_status.get("queued_scans", []):
-            position = scan_queue.get_position(scan["job_id"])
-            scan["position"] = position
+            try:
+                position = scan_queue.get_position(scan["job_id"])
+                scan["position"] = position
+            except Exception as pos_err:
+                logging.warning(f"[GET_QUEUE] Failed to get position for {scan.get('job_id')}: {pos_err}")
+                scan["position"] = -1
         
         return queue_status
         
     except Exception as e:
         logging.error(f"[GET_QUEUE] Error getting queue status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get queue status: {str(e)}")
+        # Return safe fallback instead of 500 error
+        return {
+            "queue_length": 0,
+            "is_paused": False,
+            "is_running": False,
+            "current_job_id": None,
+            "queued_scans": [],
+            "stats": {
+                "total_queued": 0,
+                "total_completed": 0,
+                "total_failed": 0,
+                "total_cancelled": 0
+            },
+            "error": str(e)
+        }
 
 
 @router.post("/analyze/queue/pause")

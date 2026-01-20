@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Paper, Typography, Box, TextField, Select, MenuItem, FormControl, InputLabel, CircularProgress } from '@mui/material';
+import { Paper, Typography, Box, TextField, Select, MenuItem, FormControl, InputLabel, CircularProgress, Button } from '@mui/material';
 import { VirtualHistoryGrid } from '../index';
 
 interface ScanResult {
@@ -18,6 +18,10 @@ interface HistorySectionProps {
   onSearchChange: (query: string) => void;
   onFilterChange: (filter: string) => void;
   onDeleteScan: (scanId: number | string) => void;
+  currentPage?: number;
+  totalPages?: number;
+  totalScans?: number;
+  onPageChange?: (page: number) => void;
 }
 
 const HistorySection: React.FC<HistorySectionProps> = ({
@@ -27,7 +31,11 @@ const HistorySection: React.FC<HistorySectionProps> = ({
   reportTypeFilter,
   onSearchChange,
   onFilterChange,
-  onDeleteScan
+  onDeleteScan,
+  currentPage = 0,
+  totalPages = 1,
+  totalScans = 0,
+  onPageChange
 }) => {
   const navigate = useNavigate();
 
@@ -88,11 +96,38 @@ const HistorySection: React.FC<HistorySectionProps> = ({
           <CircularProgress />
         </Box>
       ) : (
-        <VirtualHistoryGrid
-          scans={filteredHistory}
-          onScanClick={handleScanClick}
-          onDeleteScan={onDeleteScan}
-        />
+        <>
+          <VirtualHistoryGrid
+            scans={filteredHistory}
+            onScanClick={handleScanClick}
+            onDeleteScan={onDeleteScan}
+          />
+          
+          {/* Pagination Controls */}
+          {onPageChange && totalPages > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2, pt: 2, borderTop: '1px solid rgba(0,0,0,0.12)' }}>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={currentPage === 0}
+                onClick={() => onPageChange(currentPage - 1)}
+              >
+                Previous
+              </Button>
+              <Typography variant="body2" color="text.secondary">
+                Page {currentPage + 1} of {totalPages} ({totalScans} total scans)
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={currentPage >= totalPages - 1}
+                onClick={() => onPageChange(currentPage + 1)}
+              >
+                Next
+              </Button>
+            </Box>
+          )}
+        </>
       )}
     </Paper>
   );
