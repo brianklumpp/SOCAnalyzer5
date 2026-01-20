@@ -192,81 +192,68 @@ async def generate_executive_summary(scan_id: int, db: AsyncSession) -> Dict[str
     
     control_results_str = "\n---\n".join(budgeted_results) if budgeted_results else "No control test results available."
     
-    # Build GPT prompt - different format for SOX vendors
-    if is_sox_vendor:
-        prompt = f"""You are an expert SOC 2 auditor conducting a SOX compliance review. Based on the following SOC 2 report data, provide a comprehensive executive summary for SOX compliance assessment.
-
-Report Statistics:
-- Controls Identified: {len(controls_for_stats)} (high-confidence, non-duplicate controls)
-- Subservice Organizations: {suborg_count}
-- Complementary User Entity Controls (CUECs): {cuec_count}
-
-TSC Framework Coverage:
-{tsc_table_str}
-
-COSO 2013 Framework Coverage:
-{coso_table_str}
-
-Sample Control Test Results (prioritizing deviations):
-{control_results_str}
-
-Please provide a SOX-focused executive summary with the following sections:
-
-1. **SOX Objective**: Brief statement of the purpose of this SOX review (1-2 sentences)
-2. **Key Findings**: 3-5 bullet points summarizing the most important findings related to financial reporting controls
-3. **Areas of Concern**: 3-5 bullet points describing risks or deficiencies that could impact financial reporting
-4. **Recommendations - Risk Mitigations**: 3-5 customer-actionable items to mitigate SOX compliance risks
-5. **Recommendations - Contract Enhancements**: 2-4 contract-related improvements for SOX compliance
-6. **SOX Assessor's Conclusion**: Assessment of control adequacy, operating effectiveness, and material weaknesses
-
-Format your response as JSON with this exact structure:
-{{
-    "sox_objective": "Brief statement of SOX review purpose",
-    "key_findings": ["finding 1", "finding 2", ...],
-    "areas_of_concern": ["concern 1", "concern 2", ...],
-    "recommendations_risk_mitigations": ["risk mitigation 1", "risk mitigation 2", ...],
-    "recommendations_contract_enhancements": ["contract enhancement 1", "contract enhancement 2", ...],
-    "sox_assessors_conclusion": {{
-        "adequacy": "Assessment of control coverage adequacy for financial reporting",
-        "operating_effectiveness": "Assessment of how effectively controls operate",
-        "material_weaknesses": "Statement of any material weaknesses identified or 'None identified'"
-    }}
-}}
-
-Note: Keep each item concise (1-2 sentences). Focus on SOX compliance and financial reporting impact."""
+    # Detected deviations list
+    detected_deviations_list = [
+        f"Control {getattr(ctrl, 'control_id', 'Unknown')}: {getattr(ctrl, 'deviation_desc', '').strip()}"
+        for ctrl in high_conf_controls
+        if bool(getattr(ctrl, 'has_deviation', False)) and getattr(ctrl, 'deviation_desc', '').strip()
+    ]
+    detected_deviations_str = "\n".join(detected_deviations_list) if detected_deviations_list else "None."
+    
+    # CUEC control strength assessments
+    high_conf_cuecs_with_strength = [
+        cuec for cuec in cuecs 
+        if getattr(cuec, 'cuec_confidence', 0) >= 0.9 and getattr(cuec, 'control_strength', None)
+    ]
+    cuec_control_strengths_str = "\n".join([
+        f"CUEC {getattr(cuec, 'cuec_tsc_id', 'Unknown')} - {getattr(cuec, 'control_strength', 'Not Set')}: {getattr(cuec, 'cuec_description', '')[:150]}..."
+        for cuec in high_conf_cuecs_with_strength
+    ]) if high_conf_cuecs_with_strength else "No high-confidence CUECs with control strength assessments found."
+    
+    # Get company and product names
+    company_name = "Unknown Company"
+    product_name = "Unknown Product"
+    company_row = (await db.execute(select(Company).where(Company.scan_id == scan_id))).scalars().first()
+    if company_row:
+        company_name = getattr(company_row, 'name', '') or company_name
+    product_row = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
+    if product_row:
+        product_name = getattr(product_row, 'name', '') or product_name
+    
+    # Get coverage period
+    coverage_start = getattr(scan_row, 'coverage_start', None)
+    coverage_end = getattr(scan_row, 'coverage_end', None)
+    if coverage_start and coverage_end:
+        coverage_period_str = f"{coverage_start.strftime('%B %d, %Y')} to {coverage_end.strftime('%B %d, %Y')}"
+    elif coverage_start:
+        coverage_period_str = f"starting {coverage_start.strftime('%B %d, %Y')}"
+    elif coverage_end:
+        coverage_period_str = f"ending {coverage_end.strftime('%B %d, %Y')}"
     else:
-        prompt = f"""You are an expert SOC 2 auditor. Based on the following SOC 2 report data, provide a comprehensive executive summary.
-
-Report Statistics:
-- Controls Identified: {len(controls_for_stats)} (high-confidence, non-duplicate controls)
-- Subservice Organizations: {suborg_count}
-- Complementary User Entity Controls (CUECs): {cuec_count}
-
-TSC Framework Coverage:
-{tsc_table_str}
-
-COSO 2013 Framework Coverage:
-{coso_table_str}
-
-Sample Control Test Results (prioritizing deviations):
-{control_results_str}
-
-Please provide a comprehensive executive summary with the following sections:
-
-1. **Key Findings**: 3-5 bullet points summarizing the most important findings
-2. **Areas of Concern**: 3-5 bullet points describing risks or deficiencies identified
-3. **Recommendations - Risk Mitigations**: 3-5 customer-actionable items to mitigate risks (e.g., implement MFA, enable logging, review access controls)
-4. **Recommendations - Contract Enhancements**: 2-4 contract-related improvements (e.g., negotiate audit rights, add SLA terms, review DPA clauses)
-
-Format your response as JSON with this exact structure:
-{{
-    "key_findings": ["finding 1", "finding 2", ...],
-    "areas_of_concern": ["concern 1", "concern 2", ...],
-    "recommendations_risk_mitigations": ["risk mitigation 1", "risk mitigation 2", ...],
-    "recommendations_contract_enhancements": ["contract enhancement 1", "contract enhancement 2", ...]
-}}
-
-Note: Keep each item concise (1-2 sentences). Focus on actionable insights."""
+        coverage_period_str = "the audit period"
+    
+    sox_vendor_str = "Yes - Subject to SOX Compliance" if is_sox_vendor else "No"
+    
+    # Use comprehensive prompt from config
+    from ..config import EXECUTIVE_SUMMARY_PROMPT
+    
+    prompt = EXECUTIVE_SUMMARY_PROMPT.format(
+        suborg_count=suborg_count,
+        cuec_count=cuec_count,
+        tsc_covered=sum(1 for row in tsc_table if row['present']),
+        tsc_total=len(tsc_table),
+        coso_covered=sum(1 for row in coso_table if row['present']),
+        coso_total=len(coso_table),
+        tsc_table=tsc_table_str,
+        coso_table=coso_table_str,
+        coverage_period=coverage_period_str,
+        control_test_results=control_results_str,
+        detected_deviations=detected_deviations_str,
+        cuec_control_strengths=cuec_control_strengths_str,
+        company=company_name,
+        product=product_name,
+        is_sox_vendor=sox_vendor_str
+    )
     
     # Call GPT in executor to prevent blocking (gpt_extract is synchronous)
     import asyncio
@@ -279,24 +266,54 @@ Note: Keep each item concise (1-2 sentences). Focus on actionable insights."""
         # Return a fallback summary instead of failing completely
         return {
             "error": "Failed to generate summary via GPT",
+            "about_company": f"{company_name} - {product_name}",
             "key_findings": ["GPT service unavailable - summary generation failed"],
             "areas_of_concern": [],
             "recommendations_risk_mitigations": [],
-            "recommendations_contract_enhancements": []
+            "recommendations_contract_enhancements": [],
+            "recommendations": []
         }
     
-    # Parse JSON response
+    # Parse JSON response - clean markdown code fences
+    cleaned_response = response_text.strip()
+    if cleaned_response.startswith('```json'):
+        cleaned_response = cleaned_response[7:]
+    elif cleaned_response.startswith('```'):
+        cleaned_response = cleaned_response[3:]
+    if cleaned_response.endswith('```'):
+        cleaned_response = cleaned_response[:-3]
+    cleaned_response = cleaned_response.strip()
+    
     try:
-        summary_data = json.loads(response_text)
-    except json.JSONDecodeError:
-        logger.error(f"Failed to parse GPT response as JSON: {response_text}")
+        summary_data = json.loads(cleaned_response)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse GPT response as JSON for scan {scan_id}: {e}")
+        logger.error(f"Response preview: {response_text[:500]}")
         # Fallback structure
         summary_data = {
-            "summary": response_text,
-            "strengths": [],
-            "risks": [],
-            "rating": "Unknown"
+            "about_company": f"{company_name} - {product_name}",
+            "key_findings": ["Unable to parse GPT response"],
+            "areas_of_concern": [],
+            "recommendations_risk_mitigations": [],
+            "recommendations_contract_enhancements": [],
+            "recommendations": []
         }
+    
+    # Ensure legacy recommendations field includes all recommendations
+    risk_list = summary_data.get("recommendations_risk_mitigations") or []
+    contract_list = summary_data.get("recommendations_contract_enhancements") or []
+    base_list = summary_data.get("recommendations") or []
+    
+    # Union while preserving order and avoiding duplicates
+    combined = []
+    seen = set()
+    for item in list(base_list) + list(risk_list) + list(contract_list):
+        key = (item or "").strip()
+        if key and key not in seen:
+            combined.append(item)
+            seen.add(key)
+    
+    summary_data["recommendations"] = combined
     
     return summary_data
 
