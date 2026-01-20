@@ -257,17 +257,21 @@ async def generate_executive_summary(scan_id: int, db: AsyncSession) -> Dict[str
     
     # Call GPT in executor to prevent blocking (gpt_extract is synchronous)
     import asyncio
+    import traceback
     loop = asyncio.get_event_loop()
     
     try:
         response_text = await loop.run_in_executor(None, lambda: gpt_extract(prompt, "executive_summary"))
     except Exception as gpt_error:
+        error_tb = traceback.format_exc()
         logger.error(f"GPT call failed for scan {scan_id}: {gpt_error}")
+        logger.error(f"Full traceback:\n{error_tb}")
+        logger.error(f"Prompt length: {len(prompt)} chars")
         # Return a fallback summary instead of failing completely
         return {
-            "error": "Failed to generate summary via GPT",
+            "error": f"Failed to generate summary via GPT: {str(gpt_error)}",
             "about_company": f"{company_name} - {product_name}",
-            "key_findings": ["GPT service unavailable - summary generation failed"],
+            "key_findings": [f"GPT service error: {str(gpt_error)[:200]}"],
             "areas_of_concern": [],
             "recommendations_risk_mitigations": [],
             "recommendations_contract_enhancements": [],
