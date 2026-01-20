@@ -54,8 +54,11 @@ async def get_executive_summary(scan_id: int, force_regenerate: bool = False, db
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
         logging.error(f"Error getting executive summary for scan {scan_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Full traceback: {error_detail}")
+        raise HTTPException(status_code=500, detail=f"Failed to get executive summary: {str(e)}")
 
 
 @router.post("/report/{scan_id}/executive_summary/regenerate")
@@ -85,8 +88,11 @@ async def regenerate_executive_summary(scan_id: int, db=Depends(get_db), current
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
         logging.error(f"Error regenerating executive summary for scan {scan_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Full traceback: {error_detail}")
+        raise HTTPException(status_code=500, detail=f"Failed to regenerate executive summary: {str(e)}")
 
 
 @router.patch("/report/{scan_id}/executive_summary")
@@ -113,5 +119,8 @@ async def update_executive_summary(scan_id: int, data: dict, db=Depends(get_db),
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
         logging.error(f"Error updating executive summary for scan {scan_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Full traceback: {error_detail}")
+        raise HTTPException(status_code=500, detail=f"Failed to update executive summary: {str(e)}")

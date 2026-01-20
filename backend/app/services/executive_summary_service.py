@@ -268,8 +268,22 @@ Format your response as JSON with this exact structure:
 
 Note: Keep each item concise (1-2 sentences). Focus on actionable insights."""
     
-    # Call GPT
-    response_text = gpt_extract(prompt, "executive_summary")
+    # Call GPT in executor to prevent blocking (gpt_extract is synchronous)
+    import asyncio
+    loop = asyncio.get_event_loop()
+    
+    try:
+        response_text = await loop.run_in_executor(None, lambda: gpt_extract(prompt, "executive_summary"))
+    except Exception as gpt_error:
+        logger.error(f"GPT call failed for scan {scan_id}: {gpt_error}")
+        # Return a fallback summary instead of failing completely
+        return {
+            "error": "Failed to generate summary via GPT",
+            "key_findings": ["GPT service unavailable - summary generation failed"],
+            "areas_of_concern": [],
+            "recommendations_risk_mitigations": [],
+            "recommendations_contract_enhancements": []
+        }
     
     # Parse JSON response
     try:
