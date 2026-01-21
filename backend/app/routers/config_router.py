@@ -347,6 +347,87 @@ def _run_docker_cmd(args):
         return {"ok": False, "output": str(e)}
 
 
+@router.get("/dataiku-health")
+async def check_dataiku_health(current_user: User = Depends(get_current_active_user)):
+    """
+    Check Dataiku DSS environment health without requiring admin access.
+    
+    Performs a test LLM completion to verify:
+    - Connection to Dataiku endpoint
+    - Authentication validity
+    - LLM model availability
+    - PII detection environment status
+    
+    Returns detailed status and error messages for troubleshooting.
+    """
+    import time
+    from ..config import LLM_PROVIDER, DATAIKU_DSS_HOST
+    
+    # Check if using Dataiku provider
+    if LLM_PROVIDER != "dataiku_dss":
+        return {
+            "status": "not_applicable",
+            "provider": LLM_PROVIDER,
+            "message": f"Health check only applicable for dataiku_dss provider (current: {LLM_PROVIDER})"
+        }
+    
+    # Test with minimal prompt
+    test_prompt = "Respond with only the word 'OK'"
+    start_time = time.time()
+    
+    try:
+        from ..gpt_client import gpt_extract
+        
+        # Attempt test completion
+        response = gpt_extract(test_prompt, "health_check")
+        response_time_ms = int((time.time() - start_time) * 1000)
+        
+        return {
+            "status": "healthy",
+            "provider": "dataiku_dss",
+            "endpoint": DATAIKU_DSS_HOST,
+            "response_time_ms": response_time_ms,
+            "test_response": response[:100] if response else None,
+            "message": "Dataiku DSS is responding normally"
+        }
+        
+    except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        error_msg = str(e)
+        
+        # Detect specific error types
+        if "pii_detection" in error_msg.lower() or "INTERNAL_pii_detection" in error_msg:
+            status = "pii_environment_missing"
+            message = "PII detection environment not configured in Dataiku DSS"
+            remediation = "Contact Dataiku admin to build 'pii_detection_v1' Python environment or disable PII detection for LLM completions"
+        elif "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+            status = "timeout"
+            message = "Dataiku DSS endpoint timed out"
+            remediation = "Check network connectivity and Dataiku server status"
+        elif "auth" in error_msg.lower() or "unauthorized" in error_msg.lower():
+            status = "auth_error"
+            message = "Authentication failed"
+            remediation = "Verify DATAIKU_API_KEY is valid"
+        elif "connection" in error_msg.lower() or "refused" in error_msg.lower():
+            status = "connection_error"
+            message = "Cannot connect to Dataiku endpoint"
+            remediation = f"Verify DATAIKU_DSS_HOST ({DATAIKU_DSS_HOST}) is accessible"
+        else:
+            status = "error"
+            message = "Dataiku health check failed"
+            remediation = "See error details for diagnosis"
+        
+        return {
+            "status": status,
+            "provider": "dataiku_dss",
+            "endpoint": DATAIKU_DSS_HOST,
+            "response_time_ms": response_time_ms,
+            "error": error_msg,
+            "message": message,
+            "remediation": remediation
+        }
+
+
 @router.get("/docker/status")
 async def docker_status(current_user: User = Depends(get_current_active_user)):
     """Get Docker container status (requires DOCKER_CONTROL_ENABLED)."""

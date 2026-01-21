@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Typography, TextField, Button, Checkbox, FormControlLabel, CircularProgress, IconButton } from '@mui/material';
+import { Box, Typography, TextField, Button, Checkbox, FormControlLabel, CircularProgress, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import { Edit as EditIcon, Refresh as RefreshIcon, Warning as WarningIcon, HelpOutline as HelpOutlineIcon, Save as SaveIcon } from '@mui/icons-material';
 import CompactTimeline from '../../../components/CompactTimeline';
 import { formatExecutiveSummaryRich } from '../../../services/report/executiveSummaryFormatter';
@@ -13,6 +13,7 @@ import { formatExecutiveSummaryRich } from '../../../services/report/executiveSu
 interface OverviewFields {
   company: string;
   product: string;
+  reportType: string;
   coverageStart: string;
   coverageEnd: string;
   reportDate: string;
@@ -38,6 +39,7 @@ interface ReportSummaryTabProps {
   onSetOverviewEdit: (edit: boolean) => void;
   onRegenerateExecutiveSummary: () => Promise<void>;
   onSaveExecutiveSummary: (summary: any) => Promise<void>;
+  onRescanReport: () => Promise<void>;
   onOpenHelp: () => void;
   formatLocalDateWithTZ: (date: string) => string;
   theme: any;
@@ -61,6 +63,7 @@ export const ReportSummaryTab = React.memo(function ReportSummaryTab({
   onSetOverviewEdit,
   onRegenerateExecutiveSummary,
   onSaveExecutiveSummary,
+  onRescanReport,
   onOpenHelp,
   formatLocalDateWithTZ,
   theme,
@@ -69,6 +72,9 @@ export const ReportSummaryTab = React.memo(function ReportSummaryTab({
   // Executive summary edit state
   const [summaryEdit, setSummaryEdit] = useState(false);
   const [editedSummary, setEditedSummary] = useState<any>(null);
+  
+  // Rescan confirmation dialog state
+  const [rescanConfirmOpen, setRescanConfirmOpen] = useState(false);
 
   const handleStartSummaryEdit = useCallback(() => {
     setEditedSummary(executiveSummary);
@@ -88,6 +94,15 @@ export const ReportSummaryTab = React.memo(function ReportSummaryTab({
     setEditedSummary(null);
     setSummaryEdit(false);
   }, []);
+  
+  const handleConfirmRescan = useCallback(async () => {
+    setRescanConfirmOpen(false);
+    try {
+      await onRescanReport();
+    } catch (err) {
+      // Error already shown by parent
+    }
+  }, [onRescanReport]);
 
   // Timeline data
   const timelineEvents = [
@@ -120,6 +135,19 @@ export const ReportSummaryTab = React.memo(function ReportSummaryTab({
               fullWidth 
               sx={{ mb: 1 }} 
             />
+            <TextField 
+              select
+              label="Report Type" 
+              value={overviewFields.reportType || 'SOC2'} 
+              onChange={e => onOverviewFieldChange('reportType', e.target.value)} 
+              fullWidth 
+              sx={{ mb: 1 }}
+              SelectProps={{ native: true }}
+            >
+              <option value="SOC1">SOC 1</option>
+              <option value="SOC2">SOC 2</option>
+              <option value="COMBINED">SOC 1 + SOC 2 Combined</option>
+            </TextField>
             <TextField 
               label="Coverage Start" 
               value={overviewFields.coverageStart} 
@@ -178,14 +206,25 @@ export const ReportSummaryTab = React.memo(function ReportSummaryTab({
                 variant="outlined" 
                 color="secondary" 
                 onClick={() => onSetOverviewEdit(false)} 
-                sx={{ mt: 1 }}
+                sx={{ mt: 1, mr: 1 }}
               >
                 Cancel
+              </Button>
+              <Button 
+                variant="outlined" 
+                color="warning"
+                onClick={() => setRescanConfirmOpen(true)} 
+                sx={{ mt: 1 }}
+              >
+                Rescan Report
               </Button>
             </Box>
           </>
         ) : (
           <>
+            <Typography sx={textSx}>
+              <b>Report Type:</b> {overviewFields.reportType || 'SOC2'}
+            </Typography>
             <Typography sx={textSx}>
               <b>Audited Organization:</b> {overviewFields.company || '-'}
             </Typography>
@@ -370,6 +409,39 @@ export const ReportSummaryTab = React.memo(function ReportSummaryTab({
           </Box>
         </Box>
       </Box>
+
+      {/* Rescan Confirmation Dialog */}
+      <Dialog
+        open={rescanConfirmOpen}
+        onClose={() => setRescanConfirmOpen(false)}
+      >
+        <DialogTitle>Confirm Report Rescan</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to rescan this report?
+            <br /><br />
+            <strong>Warning:</strong> This will re-extract all data from the PDF and <strong>overwrite</strong> the following:
+            <ul style={{ marginTop: 8, marginBottom: 8 }}>
+              <li>All controls and their mappings</li>
+              <li>All CUECs (Complementary User Entity Controls)</li>
+              <li>Subservice organizations</li>
+              <li>Executive summary</li>
+              <li>Framework coverage analysis</li>
+            </ul>
+            Any manual edits, annotations, or verifications you've made will be lost.
+            <br /><br />
+            The report will be added to the scan queue and processed with the current report type setting.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRescanConfirmOpen(false)} color="secondary">
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmRescan} color="warning" variant="contained">
+            Yes, Rescan Report
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 });

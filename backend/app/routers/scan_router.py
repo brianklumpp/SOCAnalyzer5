@@ -1087,6 +1087,117 @@ async def resume_queue(current_user: User = Depends(require_admin)):
         raise HTTPException(status_code=500, detail=f"Failed to resume queue: {str(e)}")
 
 
+@router.post("/report/{scan_id}/rescan")
+async def rescan_report(
+    scan_id: int,
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Re-analyze an existing scan with potentially updated report type.
+    
+    Retrieves the stored PDF from the database, writes it to a temp file,
+    and enqueues a new scan job. This will overwrite the existing scan data.
+    
+    Args:
+        scan_id: ID of scan to re-analyze
+        
+    Returns:
+        {"job_id": str, "message": str}
+    """
+    import uuid
+    import tempfile
+    from ..threading.scan_queue import get_scan_queue
+    
+    try:
+        # Get existing scan
+        result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan = result.scalar_one_or_none()
+        
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        # Retrieve PDF from database
+        pdf_data = scan.pdf_file
+        if not pdf_data:
+            raise HTTPException(status_code=400, detail="No PDF file stored for this scan")
+        
+        # Create temp file with PDF content
+        temp_dir = Path("data/tmp")
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        original_filename = scan.pdf_filename or f"scan_{scan_id}.pdf"
+        temp_pdf_path = temp_dir / f"{uuid.uuid4()}_{original_filename}"
+        
+        # Write PDF to temp file
+        with open(temp_pdf_path, "wb") as f:
+            f.write(pdf_data)
+        
+        logging.info(f"[RESCAN] Extracted PDF for scan {scan_id}: {len(pdf_data)} bytes -> {temp_pdf_path}")
+        
+        # Get current report type from scan
+        report_type = scan.report_type
+        
+        # Create new job
+        job_id = str(uuid.uuid4())
+        logging.info(f"[RESCAN] Creating rescan job {job_id} for scan {scan_id} with report_type='{report_type}'")
+        
+        set_job(job_id, {
+            "status": "Queued",
+            "progress": 0,
+            "done": False,
+            "result": None,
+            "error": None,
+            "checklist": [],
+            "filename": original_filename,
+            "report_type": report_type,
+            "rescan_id": scan_id,  # Track that this is a rescan
+            "start_time": time.time(),
+            "identified_entities": {},
+            "counters": {
+                "subservice_orgs_count": 0,
+                "controls_count": 0,
+                "controls_total_estimate": 0,
+                "controls_percent": 0,
+                "controls_mapped_count": 0,
+                "controls_mapped_percent": 0,
+                "cuecs_count": 0
+            },
+            "phase_completion": {
+                "logo_fetched": False,
+                "cleanup_done": False,
+                "db_uploaded": False
+            },
+            "extraction_partial": False
+        })
+        
+        # Enqueue the scan
+        queue = get_scan_queue()
+        position = queue.enqueue(
+            job_id=job_id,
+            filename=original_filename,
+            pdf_path=str(temp_pdf_path),
+            report_type=report_type,
+            priority=5  # Higher priority for rescans
+        )
+        
+        logging.info(f"[RESCAN] Enqueued rescan job {job_id} at position {position}")
+        
+        return {
+            "job_id": job_id,
+            "message": f"Rescan initiated for scan {scan_id}. The existing data will be overwritten when the scan completes.",
+            "position": position
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_tb = traceback.format_exc()
+        logging.error(f"[RESCAN] Error rescanning scan {scan_id}: {e}\n{error_tb}")
+        raise HTTPException(status_code=500, detail=f"Failed to initiate rescan: {str(e)}")
+
+
 @router.post("/analyze/queue/prioritize/{job_id}")
 async def reprioritize_scan(job_id: str, request: PrioritizeRequest, current_user: User = Depends(get_current_active_user)):
     """

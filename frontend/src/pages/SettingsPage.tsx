@@ -45,6 +45,11 @@ const SettingsPage: React.FC = () => {
   const [loadingAssignments, setLoadingAssignments] = useState<boolean>(false);
   const [savingAssignments, setSavingAssignments] = useState<boolean>(false);
   const [assignmentChanges, setAssignmentChanges] = useState<Record<string, string>>({});
+  
+  // Dataiku health check state
+  const [dataikuHealth, setDataikuHealth] = useState<any>(null);
+  const [checkingDataiku, setCheckingDataiku] = useState<boolean>(false);
+  const [dataikuError, setDataikuError] = useState<string | null>(null);
 
   const fetchRuntime = async () => {
     setLoadingRuntime(true);
@@ -242,6 +247,23 @@ const SettingsPage: React.FC = () => {
       setError(msg);
     } finally {
       setTestingModels(false);
+    }
+  };
+
+  const handleCheckDataikuHealth = async () => {
+    setCheckingDataiku(true);
+    setDataikuError(null);
+    setDataikuHealth(null);
+    try {
+      const r = await api.get('/dataiku-health');
+      setDataikuHealth(r.data);
+      setDataikuError(null);
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.response?.data?.error || e?.message || 'Failed to check Dataiku health';
+      setDataikuError(msg);
+      setDataikuHealth(null);
+    } finally {
+      setCheckingDataiku(false);
     }
   };
 
@@ -565,6 +587,98 @@ const SettingsPage: React.FC = () => {
               <Button variant="contained" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save Settings'}</Button>
             </Box>
           </>
+        )}
+      </Section>
+
+      <Section title="Dataiku Environment Status">
+        <Box sx={{ mb: 2 }}>
+          <Button 
+            variant="outlined" 
+            onClick={handleCheckDataikuHealth} 
+            disabled={checkingDataiku}
+            startIcon={checkingDataiku ? <CircularProgress size={16} /> : null}
+          >
+            {checkingDataiku ? 'Checking...' : 'Check Dataiku Health'}
+          </Button>
+        </Box>
+        {dataikuError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {dataikuError}
+          </Alert>
+        )}
+        {dataikuHealth && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {dataikuHealth.status === 'not_applicable' ? (
+              <Alert severity="info">
+                Dataiku health check is only applicable when using dataiku_dss provider.
+                Current provider: {dataikuHealth.provider}
+              </Alert>
+            ) : (
+              <>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Chip 
+                    label={dataikuHealth.status === 'healthy' ? 'Healthy' : 
+                           dataikuHealth.status === 'pii_environment_missing' ? 'PII Environment Missing' :
+                           dataikuHealth.status === 'timeout' ? 'Timeout' :
+                           dataikuHealth.status === 'auth_error' ? 'Authentication Error' :
+                           dataikuHealth.status === 'connection_error' ? 'Connection Error' : 'Error'}
+                    color={dataikuHealth.status === 'healthy' ? 'success' : 'error'}
+                    sx={{ 
+                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      px: 2,
+                      py: 2.5
+                    }}
+                  />
+                  {dataikuHealth.response_time_ms && (
+                    <Typography variant="body2" color="text.secondary">
+                      Response time: {dataikuHealth.response_time_ms}ms
+                    </Typography>
+                  )}
+                </Box>
+
+                <TextField 
+                  label="Endpoint" 
+                  value={dataikuHealth.endpoint || 'N/A'} 
+                  fullWidth 
+                  disabled 
+                  size="small"
+                />
+
+                {dataikuHealth.message && (
+                  <Alert severity={dataikuHealth.status === 'healthy' ? 'success' : 'warning'}>
+                    {dataikuHealth.message}
+                  </Alert>
+                )}
+
+                {dataikuHealth.remediation && (
+                  <Alert severity="info">
+                    <strong>Remediation:</strong> {dataikuHealth.remediation}
+                  </Alert>
+                )}
+
+                {dataikuHealth.error && (
+                  <Paper sx={{ p: 2, bgcolor: '#f5f5f5' }}>
+                    <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                      {dataikuHealth.error}
+                    </Typography>
+                  </Paper>
+                )}
+
+                {dataikuHealth.test_response && (
+                  <TextField 
+                    label="Test Response Preview" 
+                    value={dataikuHealth.test_response} 
+                    fullWidth 
+                    disabled 
+                    size="small"
+                    multiline
+                    rows={2}
+                  />
+                )}
+              </>
+            )}
+          </Box>
         )}
       </Section>
 

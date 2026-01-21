@@ -629,6 +629,22 @@ const ReportPage: React.FC = () => {
     }
   }, [selectedScanId, saveSummary, showToast]);
 
+  // Rescan report wrapper
+  const handleRescanReport = useCallback(async () => {
+    if (!selectedScanId) return;
+    try {
+      const response = await api.post(`/report/${selectedScanId}/rescan`);
+      const jobId = response.data?.job_id;
+      showToast(`Rescan initiated. Job ID: ${jobId}`, 'success');
+      // Redirect to analyzer page to show queue status
+      window.location.href = '/#/analyzer';
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.detail || 'Failed to initiate rescan';
+      showToast(errorMsg, 'error');
+      throw err;
+    }
+  }, [selectedScanId, showToast]);
+
   // Format date helper
   const formatLocalDateWithTZ = useCallback((date: string) => {
     if (!date) return '';
@@ -870,6 +886,7 @@ const ReportPage: React.FC = () => {
               onSetOverviewEdit={setOverviewEdit}
               onRegenerateExecutiveSummary={handleRegenerateExecutiveSummary}
               onSaveExecutiveSummary={handleSaveExecutiveSummary}
+              onRescanReport={handleRescanReport}
               onOpenHelp={handleOpenHelp}
               formatLocalDateWithTZ={formatLocalDateWithTZ}
               theme={theme}
