@@ -65,6 +65,7 @@ from .routers import (
     auth_router,
     users_router,
     grace_router,
+    objective_router,
 )
 
 # Import authentication dependencies
@@ -407,6 +408,9 @@ app.include_router(auth_router.router)
 
 # User management (admin-only)
 app.include_router(users_router.router)
+
+# Control objectives management
+app.include_router(objective_router.router, tags=["objective"])
 
 # GRaCe AI Assistant
 app.include_router(grace_router.router, tags=["grace"])

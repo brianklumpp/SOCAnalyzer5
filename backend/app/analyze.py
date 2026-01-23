@@ -1169,6 +1169,54 @@ Format: X - reason"""
         management_response_step = [
             (11, "management_response_extraction", _run_management_response_extraction, "Extracting management responses for deviations...", 60),
         ]
+        
+        # Objective extraction step - runs after management response extraction
+        # Extracts control objectives and maps them to controls
+        async def _run_objective_extraction():
+            """Extract control objectives and create control-objective mappings."""
+            try:
+                from .extractors.objective_extractor import extract_objectives, map_controls_to_objectives
+                from .database import get_db_session
+                
+                logger.info("Extracting control objectives from report")
+                
+                # Get extracted text from job path
+                txt_path = job_paths['extracted_text']
+                with open(txt_path, 'r', encoding='utf-8') as f:
+                    extracted_text = f.read()
+                
+                # Get database session
+                db_session = next(get_db_session())
+                
+                try:
+                    # Extract objectives
+                    objectives = extract_objectives(
+                        extracted_text=extracted_text,
+                        scan_id=None,  # Will be set when saving to database
+                        db_session=db_session,
+                        job_id=job_id,
+                        redis_client=redis_client
+                    )
+                    
+                    logger.info(f"Extracted {len(objectives)} control objectives")
+                    
+                    # Map objectives to controls (if scan_id available)
+                    # Note: This requires controls to be saved to database first
+                    # In practice, this will happen during data insertion phase
+                    
+                    return {"success": True, "objectives_count": len(objectives)}
+                    
+                finally:
+                    db_session.close()
+                    
+            except Exception as e:
+                logger.error(f"Objective extraction failed: {e}", exc_info=True)
+                return {"success": False, "error": str(e)}
+        
+        objective_extraction_step = [
+            (11.5, "objective_extraction", _run_objective_extraction, "Extracting control objectives...", 65),
+        ]
+        
         # Post-control extraction steps that run in parallel
         post_control_parallel_steps = [
             (12, "cuec_extraction", _run_cuec_extraction, "Running CUECs extractor...", 70),

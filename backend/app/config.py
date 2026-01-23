@@ -3503,3 +3503,208 @@ FRAMEWORK_MULTI_MATCH_PROMPT_GS007 = FRAMEWORK_MULTI_MATCH_PROMPT_COSO_ICFR
 FRAMEWORK_MULTI_MATCH_PROMPT_ISO27001 = FRAMEWORK_MULTI_MATCH_PROMPT_TSC
 FRAMEWORK_MULTI_MATCH_PROMPT_NIST = FRAMEWORK_MULTI_MATCH_PROMPT_TSC
 
+
+# =============================================================================
+# CONTROL OBJECTIVE EXTRACTION - Configuration
+# =============================================================================
+
+# Enable control objective extraction (extracts objectives from varied report formats)
+ENABLE_OBJECTIVE_EXTRACTION = os.getenv('ENABLE_OBJECTIVE_EXTRACTION', 'true').lower() == 'true'
+
+# Objective Extraction Settings
+OBJECTIVE_TOKENS_PER_CHUNK = 600  # Balanced for various objective section formats
+OBJECTIVE_CHUNK_OVERLAP_TOKENS = 120  # Overlap to catch objectives split across chunks
+OBJECTIVE_MIN_CONFIDENCE = 0.0  # Keep all objectives, let frontend filter by confidence
+OBJECTIVE_MAX_DISTANCE_FROM_KEYWORDS = 30  # Max lines from objective keywords to count
+
+# Multi-factor confidence weights (must sum to 1.0)
+OBJECTIVE_CONFIDENCE_WEIGHTS = {
+    'keyword': 0.25,     # Keyword match score (e.g., "control objective", "objective:")
+    'distance': 0.20,    # Proximity to objective keywords
+    'gpt_opinion': 0.30, # GPT's confidence in identification
+    'alignment': 0.15,   # Alignment with extracted controls
+    'format': 0.10       # Format clarity (heading, numbering, table structure)
+}
+
+# Objective Section Keywords (for detecting objective sections)
+OBJECTIVE_SECTION_KEYWORDS = [
+    "control objective",
+    "control objectives",
+    "test of design objective",
+    "test objective",
+    "system objective",
+    "system objectives",
+    "internal control objective",
+    "service organization's objective",
+    "management's objective",
+    "description of service organization's system",
+]
+
+# Objective Pattern Keywords (for identifying individual objectives)
+OBJECTIVE_PATTERN_KEYWORDS = [
+    "objective:",
+    "control objective:",
+    "the objective is",
+    "the control objective",
+    "designed to ensure",
+    "ensure that",
+    "controls provide reasonable assurance",
+]
+
+# Objective Extraction Prompt - Multi-objective extraction with confidence scoring
+OBJECTIVE_EXTRACTION_PROMPT = """
+You are an expert SOC auditor identifying Control Objectives from audit report text.
+
+## Background:
+Control objectives describe the intended outcome or goal that controls are designed to achieve.
+They are often found in sections like:
+- "Control Objectives"
+- "Test of Design Objectives"
+- "Description of Service Organization's System"
+- Numbered sections with explicit objectives
+
+## Text Chunk:
+{text_chunk}
+
+## Task:
+Extract ALL control objectives from this text. For each objective, provide:
+
+1. **objective_id**: The identifier if explicitly stated (e.g., "HR-01", "Access-1", "Objective 2.1"). Use null if unnumbered.
+2. **objective_text**: The complete objective statement (full sentence/paragraph)
+3. **confidence_factors**:
+   - **keyword_match**: 0.0-1.0 score for presence of objective keywords
+   - **format_clarity**: 0.0-1.0 score for structure (explicit heading/numbering = high, inferred = low)
+   - **gpt_opinion**: 0.0-1.0 your overall confidence this is a true control objective
+4. **extraction_method**: "heading", "numbered_list", "table", or "gpt_inferred"
+5. **section_heading**: The section name where this objective appears (if identifiable)
+6. **reasoning**: Brief explanation for your confidence scores (max 150 chars)
+
+## Guidelines:
+- Control objectives typically describe GOALS, not specific control activities
+- Common patterns: "ensure that", "provide reasonable assurance", "designed to"
+- Do NOT extract individual controls as objectives
+- Do NOT extract test procedures or results as objectives
+- Objectives are usually more general than controls (e.g., "ensure access is restricted" is an objective; "multi-factor authentication required" is a control)
+
+## Output Format:
+Return a JSON array:
+{{
+  "objectives": [
+    {{
+      "objective_id": "HR-01" or null,
+      "objective_text": "Complete objective statement",
+      "confidence_factors": {{
+        "keyword_match": 0.85,
+        "format_clarity": 0.90,
+        "gpt_opinion": 0.88
+      }},
+      "extraction_method": "heading",
+      "section_heading": "Control Objectives",
+      "reasoning": "Explicit heading with numbered ID and clear objective language"
+    }}
+  ]
+}}
+
+If no objectives found, return {{"objectives": []}}.
+"""
+
+# Objective Deduplication Prompt - Consolidate duplicate objectives across chunks
+OBJECTIVE_DEDUPLICATION_PROMPT = """
+You are consolidating duplicate control objectives extracted from overlapping text chunks.
+
+## Objective Candidates:
+{objective_list}
+
+## Task:
+Group objectives that represent the SAME underlying objective, even if wording varies slightly.
+
+## Guidelines:
+- Objectives with same objective_id are definitely duplicates
+- Objectives with similar text (>80% semantic similarity) are likely duplicates
+- Choose the BEST version (clearest wording, highest confidence) as the primary
+- Preserve unique objectives (different goals/purposes)
+
+## Output Format:
+Return JSON with deduplicated objectives:
+{{
+  "deduplicated": [
+    {{
+      "objective_id": "HR-01",
+      "objective_text": "Best version of objective text",
+      "confidence_factors": {{"keyword_match": 0.85, "format_clarity": 0.90, "gpt_opinion": 0.88}},
+      "extraction_method": "heading",
+      "section_heading": "Control Objectives",
+      "duplicate_count": 2,
+      "merged_from_indices": [0, 3]
+    }}
+  ]
+}}
+
+Return ALL unique objectives, choosing the best representative for duplicates.
+"""
+
+# Objective-Control Alignment Prompt - Calculate alignment between objectives and controls
+OBJECTIVE_CONTROL_ALIGNMENT_PROMPT = """
+You are analyzing how well a control aligns with a control objective.
+
+## Control Objective:
+{objective_text}
+
+## Control:
+{control_desc}
+
+## Task:
+Assess how well this control fulfills or supports the stated objective.
+
+## Scoring Guidelines:
+- **1.0**: Control directly implements the objective (perfect match)
+- **0.8-0.9**: Control strongly supports the objective (clear alignment)
+- **0.6-0.7**: Control partially addresses the objective (related but not complete)
+- **0.4-0.5**: Control tangentially related to objective (weak connection)
+- **0.0-0.3**: Control unrelated or contradictory to objective
+
+## Output Format:
+{{
+  "alignment_score": 0.0-1.0,
+  "reasoning": "Brief explanation of alignment assessment (max 150 chars)",
+  "key_connections": ["aspect1", "aspect2"]
+}}
+
+Respond ONLY with JSON.
+"""
+
+# Objective-Enhanced Framework Mapping - Use objectives as context for better TSC/COSO matching
+OBJECTIVE_ENHANCED_FRAMEWORK_PROMPT = """
+You are mapping a control to {framework} framework criteria.
+
+## Control Objective:
+{objective_text}
+
+## Control Description:
+{control_desc}
+
+## Task:
+Use the control objective as additional context to identify the most relevant {framework} criteria.
+The objective provides insight into the INTENT and PURPOSE of the control, which helps determine framework alignment.
+
+## Available {framework} Criteria:
+{criteria_list}
+
+{framework_specific_instructions}
+
+## Output Format:
+{{
+  "matches": [
+    {{
+      "id": "Criterion ID",
+      "confidence": 0.0-1.0,
+      "keywords_matched": ["keyword1", "keyword2"],
+      "reasoning": "Brief explanation referencing both objective and control (max 150 chars)"
+    }}
+  ]
+}}
+
+Return 3-5 most relevant matches with confidence ≥ 0.6.
+Respond ONLY with JSON.
+"""
+

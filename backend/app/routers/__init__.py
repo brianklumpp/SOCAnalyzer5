@@ -21,6 +21,7 @@ from . import (
     auth_router,
     users_router,
     grace_router,
+    objective_router,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "auth_router",
     "users_router",
     "grace_router",
+    "objective_router",
 ]

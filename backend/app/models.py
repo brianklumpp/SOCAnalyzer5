@@ -366,3 +366,77 @@ class RefreshToken(Base):
     
     def __repr__(self):
         return f"<RefreshToken(id={self.id}, user_id={self.user_id}, revoked={self.revoked})>"
+
+
+# ========== Control Objective Models ==========
+
+class ControlObjective(Base):
+    """
+    Control objectives extracted from SOC reports.
+    Supports many-to-many relationships with controls via ControlObjectiveMapping.
+    """
+    __tablename__ = "control_objectives"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scan_id = Column(Integer, ForeignKey('scan.id', ondelete='CASCADE'), nullable=False, index=True)
+    
+    # Objective identification
+    objective_id = Column(String(128), nullable=True, index=True)  # e.g., "HR-01", "Access-1" - nullable for unnumbered objectives
+    objective_text = Column(Text, nullable=False)  # Full objective description
+    
+    # Multi-factor confidence scoring (0.0-1.0 for each factor)
+    keyword_confidence = Column(Float, default=0.0)  # Keyword match score (weight: 0.25)
+    distance_confidence = Column(Float, default=0.0)  # Proximity to keywords score (weight: 0.20)
+    gpt_confidence = Column(Float, default=0.0)  # GPT opinion score (weight: 0.30)
+    alignment_confidence = Column(Float, default=0.0)  # Control alignment score (weight: 0.15)
+    format_confidence = Column(Float, default=0.0)  # Format clarity score (weight: 0.10)
+    final_confidence = Column(Float, nullable=False, index=True)  # Weighted average of all factors
+    
+    # Confidence calculation metadata
+    confidence_calc = Column(Text)  # Human-readable breakdown of scoring
+    gpt_reasoning = Column(Text)  # GPT's explanation for its confidence score
+    
+    # Source metadata
+    page_refs = Column(JSON)  # [12, 13] - pages where objective appears
+    line_ref = Column(Integer)  # Starting line number in extracted text
+    source_context = Column(Text)  # Surrounding text for context
+    
+    # Extraction metadata
+    extraction_method = Column(String(32))  # 'heading', 'numbered_list', 'table', 'gpt_inferred'
+    section_heading = Column(String(256))  # e.g., "Control Objectives", "Test of Design Objectives"
+    
+    # Status tracking
+    status = Column(String(32), default='pending')  # 'pending', 'approved', 'rejected', 'converted_to_control'
+    
+    # Audit trail
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    updated_by_user_id = Column(Integer, ForeignKey('users.id'))
+    
+    # Relationships
+    mappings = relationship("ControlObjectiveMapping", back_populates="objective", cascade="all, delete-orphan")
+
+
+class ControlObjectiveMapping(Base):
+    """
+    Junction table for many-to-many relationships between controls and objectives.
+    Preserves all objective data during control merges via edit_log.
+    """
+    __tablename__ = "control_objective_mappings"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    control_id = Column(Integer, ForeignKey('control.id', ondelete='CASCADE'), nullable=False, index=True)
+    objective_id = Column(Integer, ForeignKey('control_objectives.id', ondelete='CASCADE'), nullable=False, index=True)
+    
+    # Mapping metadata
+    mapping_confidence = Column(Float, default=1.0)  # Confidence that control fulfills objective (0-1)
+    mapping_method = Column(String(32))  # 'auto_proximity', 'auto_gpt', 'manual'
+    is_primary = Column(Boolean, default=False)  # True for the primary objective (shown in inline column)
+    
+    # Audit trail
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    created_by_user_id = Column(Integer, ForeignKey('users.id'))
+    
+    # Relationships
+    control = relationship("Control")
+    objective = relationship("ControlObjective", back_populates="mappings")
