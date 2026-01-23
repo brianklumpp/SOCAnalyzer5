@@ -61,6 +61,15 @@ export const ReportCuecsTab = React.memo(function ReportCuecsTab({
   const handleRowClick = React.useCallback((row: any) => {
     if (!pdfNavigateHandler) return;
     
+    // Check if page refs exist - if not, skip navigation to avoid expensive search
+    const pageRefs = row.cuec_page_refs;
+    const hasPageRef = Array.isArray(pageRefs) && pageRefs.length > 0;
+    
+    if (!hasPageRef) {
+      console.log('[CUECs Tab] Row clicked but no page refs available, skipping navigation');
+      return;
+    }
+    
     // Extract page number from cuec_page_refs array and apply offset
     let targetPage: number | null = null;
     if (row.cuec_page_refs && Array.isArray(row.cuec_page_refs) && row.cuec_page_refs.length > 0) {

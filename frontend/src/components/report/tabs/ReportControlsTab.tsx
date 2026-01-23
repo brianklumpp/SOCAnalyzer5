@@ -64,9 +64,17 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
   const handleRowClick = React.useCallback((row: any) => {
     if (!pdfNavigateHandler) return;
     
+    // Check if page refs exist - if not, skip navigation to avoid expensive search
+    const pageRefs = row.control_page_refs;
+    const hasPageRef = (Array.isArray(pageRefs) && pageRefs.length > 0) || row.control_page_ref;
+    
+    if (!hasPageRef) {
+      console.log('[Controls Tab] Row clicked but no page refs available, skipping navigation');
+      return;
+    }
+    
     // Try to get snippet from pdf_snippet field first, then fallback to control text
     const snippet = row.pdf_snippet || row.control_desc || row.control_text || null;
-    const pageRefs = row.control_page_refs;
     let targetPage: number | null = null;
     
     if (Array.isArray(pageRefs) && pageRefs.length > 0) {
@@ -88,7 +96,7 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
       pdfPage: targetPage 
     });
     
-    // Navigate with snippet - PDF viewer will search for text if page is null
+    // Navigate with snippet and page number
     pdfNavigateHandler(snippet, targetPage);
   }, [pdfNavigateHandler, tocPageOffset]);
 
