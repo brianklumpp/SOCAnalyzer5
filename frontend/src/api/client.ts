@@ -63,8 +63,10 @@ class FetchClient {
       headers['Authorization'] = `Bearer ${currentAccessToken}`;
     }
 
+    // Use timeout from config if provided, otherwise use default
+    const timeoutMs = options.timeout || this.timeout;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(fullURL, {

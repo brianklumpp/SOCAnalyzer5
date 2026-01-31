@@ -1,48 +1,45 @@
 
-2026-01-23 22:50:16,152 | INFO | main | This is a test log for Management Assertion section.
+2026-01-31 00:11:26,998 | INFO | main | This is a test log for Management Assertion section.
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:16,346 | INFO | main | [DEBUG] _init_db_on_startup() called
+2026-01-31 00:11:27,170 | INFO | main | [DEBUG] _init_db_on_startup() called
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,391 | INFO | main | [STARTUP] GPT logging status: enabled=True ready=True path=/app/data/logs/gpt_calls.log
+2026-01-31 00:11:29,947 | INFO | main | [STARTUP] GPT logging status: enabled=True ready=True path=/app/data/logs/gpt_calls.log
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,392 | INFO | gpt_client | {"ts": 1769208619.3927279, "phase": "startup_check", "message": "backend startup", "service": "backend"}
+2026-01-31 00:11:29,947 | INFO | gpt_client | {"ts": 1769818289.9476633, "phase": "startup_check", "message": "backend startup", "service": "backend"}
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,648 | INFO | main | [STARTUP] Initializing scan queue...
+2026-01-31 00:11:30,139 | INFO | main | [STARTUP] Initializing scan queue...
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,650 | INFO | main | [STARTUP] Connecting to Redis at redis://172.20.0.4:6379/0
+2026-01-31 00:11:30,140 | INFO | main | [STARTUP] Connecting to Redis at redis://172.20.0.4:6379/0
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,653 | INFO | main | [STARTUP] Creating scan queue instance...
+2026-01-31 00:11:30,142 | INFO | main | [STARTUP] Creating scan queue instance...
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,654 | INFO | scan_queue | [QUEUE] Initialized with max_concurrent=4
+2026-01-31 00:11:30,143 | INFO | scan_queue | [QUEUE] Initialized with max_concurrent=4
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,655 | INFO | scan_queue | [QUEUE] Global scan queue initialized
+2026-01-31 00:11:30,143 | INFO | scan_queue | [QUEUE] Global scan queue initialized
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,658 | INFO | main | [STARTUP] Scan queue initialized successfully (max_concurrent=4)
+2026-01-31 00:11:30,144 | INFO | main | [STARTUP] Scan queue initialized successfully (max_concurrent=4)
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,660 | INFO | main | [STARTUP] Starting queue worker thread...
+2026-01-31 00:11:30,144 | INFO | main | [STARTUP] Starting queue worker thread...
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,661 | INFO | scan_queue | [QUEUE_WORKER] Starting queue worker thread
+2026-01-31 00:11:30,145 | INFO | scan_queue | [QUEUE_WORKER] Starting queue worker thread
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,661 | INFO | scan_queue | [QUEUE_WORKER] Queue worker thread started
+2026-01-31 00:11:30,145 | INFO | scan_queue | [QUEUE_WORKER] Queue worker thread started
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,663 | INFO | main | [STARTUP] Queue worker started
+2026-01-31 00:11:30,146 | INFO | main | [STARTUP] Queue worker started
 --------------------------------------------------------------------------------
 
-2026-01-23 22:50:19,664 | INFO | main | [STARTUP] Running cleanup task...
---------------------------------------------------------------------------------
-
-2026-01-23 22:50:20,207 | INFO | main | [CLEANUP] No expired items to clean
+2026-01-31 00:11:30,146 | INFO | main | [STARTUP] Running cleanup task...
 --------------------------------------------------------------------------------

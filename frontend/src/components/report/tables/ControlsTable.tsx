@@ -5,12 +5,15 @@
  * Includes confidence tooltip/modal integration and duplicate detection.
  */
 
-import React, { useState, useMemo } from 'react';
-import { IconButton, Tooltip, CircularProgress, Box, Chip } from '@mui/material';
+import React, { useState, useMemo, useEffect } from 'react';
+import { IconButton, Tooltip, CircularProgress, Box, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography } from '@mui/material';
 import { Refresh as RefreshIcon, Link as LinkIcon, Warning as WarningIcon, WarningAmber as WarningAmberIcon } from '@mui/icons-material';
+import { Transform as ConvertIcon } from '@mui/icons-material';
 import EditableTable from '../../EditableTable';
 import { controlColumns, defaultVisibleControlColumns } from '../../../config/report/columnDefinitions';
 import { MergeSuggestionsPanel } from './MergeSuggestionsPanel';
+import { getObjectives, getObjectiveControls, getPrimaryObjectiveCriteria, convertControlToObjective } from '../../../services/objectiveService';
+import { ObjectiveSelector } from '../../../components/ObjectiveSelector';
 
 interface Control {
   id: number;
@@ -47,6 +50,11 @@ interface ControlsTableProps {
   onRowClick?: (row: any) => void;
   frameworkCriteria?: any;
   onOpenMappingDetails?: (control: any, frameworkType: string) => void;
+  objectives?: any[];
+  objectivesLoading?: boolean;
+  objectiveMappings?: Map<string | number, any>;
+  onObjectivesRefresh?: () => void;
+  showToast?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 export const ControlsTable = React.memo(function ControlsTable({ 
@@ -65,10 +73,87 @@ export const ControlsTable = React.memo(function ControlsTable({
   onOpenControlModal,
   onRowClick,
   frameworkCriteria,
-  onOpenMappingDetails
+  onOpenMappingDetails,
+  objectives,
+  objectivesLoading,
+  objectiveMappings: objectiveMappingsProp,
+  onObjectivesRefresh,
+  showToast
 }: ControlsTableProps) {
   const [recomputingIds, setRecomputingIds] = useState<Set<number>>(new Set());
   const [togglingDeviationIds, setTogglingDeviationIds] = useState<Set<number>>(new Set());
+  const [criteriaOpen, setCriteriaOpen] = useState(false);
+  const [criteriaLoading, setCriteriaLoading] = useState(false);
+  const [criteriaError, setCriteriaError] = useState<string | null>(null);
+  const [criteriaData, setCriteriaData] = useState<any | null>(null);
+  const [objectiveEditorOpen, setObjectiveEditorOpen] = useState(false);
+  const [objectiveEditorControl, setObjectiveEditorControl] = useState<any>(null);
+  const [tableResetCounter, setTableResetCounter] = useState(0);
+  
+  // Use cached objective mappings from props, or fallback to fetching if not provided
+  const [localObjectiveMappings, setLocalObjectiveMappings] = useState<Map<string | number, any>>(new Map());
+  
+  // Fetch objective mappings for all controls (only if not provided via props)
+  useEffect(() => {
+    const fetchMappings = async () => {
+      
+      if (!scanId || controls.length === 0) return;
+      
+      try {
+        // Fetch all objectives for this scan
+        const objectives = await getObjectives(scanId);
+        
+        // Build a map of control_db_id -> primary objective
+        const mappingsMap = new Map<string | number, any>();
+        
+        // For each objective, fetch its controls and mappings
+        await Promise.all(
+          objectives.map(async (objective: any) => {
+            try {
+              const result = await getObjectiveControls(scanId, objective.id);
+              
+              // For each control mapping, if it's primary, store it
+              result.controls.forEach((controlMapping: any) => {
+                if (controlMapping.is_primary) {
+                  const controlDbId = controlMapping.control_db_id;
+                  const controlId = controlMapping.control_id;
+                  const mappingPayload = { ...controlMapping, objective };
+
+                  if (controlDbId !== undefined && controlDbId !== null) {
+                    mappingsMap.set(controlDbId, mappingPayload);
+                  }
+                  if (controlId !== undefined && controlId !== null) {
+                    mappingsMap.set(controlId, mappingPayload);
+                  }
+                }
+              });
+            } catch (error) {
+              // Silently ignore errors - objectives might not have been extracted yet
+              console.debug(`No controls found for objective ${objective.id}`);
+            }
+          })
+        );
+        
+        setLocalObjectiveMappings(mappingsMap);
+      } catch (error) {
+        // Silently ignore errors - objectives feature might not be used yet
+        console.debug('Objectives not available for this scan');
+      }
+    };
+    
+    fetchMappings();
+  }, [scanId, controls, objectiveMappingsProp]);
+  
+  // Merge local mappings with props mappings (props take precedence)
+  const objectiveMappings = useMemo(() => {
+    const merged = new Map<string | number, any>(localObjectiveMappings);
+    if (objectiveMappingsProp) {
+      objectiveMappingsProp.forEach((value, key) => {
+        merged.set(key, value);
+      });
+    }
+    return merged;
+  }, [localObjectiveMappings, objectiveMappingsProp]);
   
   // Detect duplicate control IDs
   const duplicateControlIds = useMemo(() => {
@@ -89,10 +174,71 @@ export const ControlsTable = React.memo(function ControlsTable({
     return duplicates;
   }, [controls]);
 
+  const handleOpenObjectiveCriteria = async (control: Control) => {
+    if (!scanId || !control?.id) return;
+    setCriteriaOpen(true);
+    setCriteriaLoading(true);
+    setCriteriaError(null);
+    setCriteriaData(null);
+    try {
+      const data = await getPrimaryObjectiveCriteria(scanId, control.id);
+      setCriteriaData(data);
+    } catch (error: any) {
+      setCriteriaError(error?.message || 'Failed to load mapping criteria');
+    } finally {
+      setCriteriaLoading(false);
+    }
+  };
+
+  const handleOpenObjectiveEditor = (control: Control) => {
+    setObjectiveEditorControl(control);
+    setObjectiveEditorOpen(true);
+  };
+
+  const handleCloseObjectiveEditor = () => {
+    setObjectiveEditorOpen(false);
+    setObjectiveEditorControl(null);
+  };
+
+  const handleConvertControlToObjective = async (control: Control) => {
+    if (!scanId || !control?.id) return;
+    try {
+      await convertControlToObjective(scanId, control.id);
+      onObjectivesRefresh?.();
+    } catch (error) {
+      console.error('Failed to convert control to objective:', error);
+    }
+  };
+
+  const handleResetTablePrefs = () => {
+    try {
+      localStorage.removeItem('table_prefs:report_controls_all_v3');
+    } catch {
+      // ignore
+    }
+    setTableResetCounter(prev => prev + 1);
+  };
+
   // Get columns with confidence modal handler
   const columns = useMemo(
-    () => controlColumns(onOpenConfidenceModal, onOpenControlModal, frameworkCriteria, onOpenMappingDetails), 
-    [onOpenConfidenceModal, onOpenControlModal, frameworkCriteria, onOpenMappingDetails]
+    () => controlColumns(
+      onOpenConfidenceModal,
+      onOpenControlModal,
+      frameworkCriteria,
+      onOpenMappingDetails,
+      handleOpenObjectiveCriteria,
+      handleOpenObjectiveEditor,
+      handleConvertControlToObjective
+    ), 
+    [
+      onOpenConfidenceModal,
+      onOpenControlModal,
+      frameworkCriteria,
+      onOpenMappingDetails,
+      handleOpenObjectiveCriteria,
+      handleOpenObjectiveEditor,
+      handleConvertControlToObjective
+    ]
   );
 
   // Preprocess rows to format similarity percentages and add instance info
@@ -108,6 +254,16 @@ export const ControlsTable = React.memo(function ControlsTable({
       }
       if (typeof newRow.control_coso_similarity === 'number') {
         newRow.control_coso_similarity = `${Math.round(newRow.control_coso_similarity * 100)}%`;
+      }
+      
+      // Add primary objective if available
+      const controlDbId = typeof row.id === 'string' ? parseInt(row.id, 10) : row.id;
+      const mapping = objectiveMappings.get(controlDbId) ?? objectiveMappings.get(row.control_id);
+      if (mapping?.objective) {
+        newRow.primary_objective = mapping.objective;
+        if (mapping.mapping_confidence !== undefined && mapping.mapping_confidence !== null) {
+          newRow.primary_objective_confidence = mapping.mapping_confidence;
+        }
       }
       
       // Add instance badge if this is a duplicate instance
@@ -131,7 +287,7 @@ export const ControlsTable = React.memo(function ControlsTable({
       
       return newRow;
     });
-  }, [controls]);
+  }, [controls, objectiveMappings]);
 
   const handleRecompute = async (row: any) => {
     try {
@@ -174,6 +330,13 @@ export const ControlsTable = React.memo(function ControlsTable({
 
   const actionsRenderer = (row: any) => (
     <Box sx={{ display: 'flex', gap: 0.5 }}>
+      <Tooltip title="Convert to Objective">
+        <span>
+          <IconButton size="small" onClick={() => handleConvertControlToObjective(row)}>
+            <ConvertIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
       <Tooltip title="Recompute Framework Mapping">
         <span>
           <IconButton 
@@ -213,67 +376,139 @@ export const ControlsTable = React.memo(function ControlsTable({
   );
 
   return (
-    <EditableTable
-      rows={processedControls}
-      columns={columns}
-      ignored={ignored}
-      recentlyChangedIds={new Set()}
-      onIgnore={(rowOrIdx: number | any) => {
-        const row = typeof rowOrIdx === 'number' ? processedControls[rowOrIdx] : rowOrIdx;
-        if (row) handleIgnore(row, row.id || rowOrIdx, 'controls');
-      }}
-      onConfirm={onConfirm ? (row: any) => onConfirm(row) : undefined}
-      onEdit={(rowIdxOrRow: any, newRow: any) => {
-        // Get the original full row
-        const originalRow = typeof rowIdxOrRow === 'number' ? processedControls[rowIdxOrRow] : processedControls.find((r: any) => r.id === newRow.id);
-        // Merge changes with original row to preserve all fields
-        const mergedRow = { ...originalRow, ...newRow };
-        console.log('[ControlsTable] onEdit called:', {
-          hasAnalystNotes: 'analyst_notes' in mergedRow,
-          analystNotesValue: mergedRow.analyst_notes,
-          allKeys: Object.keys(mergedRow)
-        });
-        const parentIdx = controls.findIndex((r: any) => r.id === mergedRow.id);
-        onEdit(mergedRow, parentIdx >= 0 ? parentIdx : rowIdxOrRow);
-      }}
-      onBatchEdit={onBatchEdit ? (changes: any, displayRows: any[]) => {
-        // Map sorted display indices back to parent array indices using row.id
-        const mappedChanges: { [parentIdx: number]: any } = {};
-        Object.keys(changes).forEach((sortedIdxStr) => {
-          const sortedIdx = parseInt(sortedIdxStr, 10);
-          const row = displayRows[sortedIdx];
-          if (row) {
-            const parentIdx = controls.findIndex((r: any) => r.id === row.id);
-            if (parentIdx >= 0) {
-              mappedChanges[parentIdx] = changes[sortedIdxStr];
+    <>
+      <EditableTable
+        key={tableResetCounter}
+        rows={processedControls}
+        columns={columns}
+        ignored={ignored}
+        recentlyChangedIds={new Set()}
+        onIgnore={(rowOrIdx: number | any) => {
+          const row = typeof rowOrIdx === 'number' ? processedControls[rowOrIdx] : rowOrIdx;
+          if (row) handleIgnore(row, row.id || rowOrIdx, 'controls');
+        }}
+        onConfirm={onConfirm ? (row: any) => onConfirm(row) : undefined}
+        onEdit={(rowIdxOrRow: any, newRow: any) => {
+          // Get the original full row
+          const originalRow = typeof rowIdxOrRow === 'number' ? processedControls[rowIdxOrRow] : processedControls.find((r: any) => r.id === newRow.id);
+          // Merge changes with original row to preserve all fields
+          const mergedRow = { ...originalRow, ...newRow };
+          console.log('[ControlsTable] onEdit called:', {
+            hasAnalystNotes: 'analyst_notes' in mergedRow,
+            analystNotesValue: mergedRow.analyst_notes,
+            allKeys: Object.keys(mergedRow)
+          });
+          const parentIdx = controls.findIndex((r: any) => r.id === mergedRow.id);
+          onEdit(mergedRow, parentIdx >= 0 ? parentIdx : rowIdxOrRow);
+        }}
+        onBatchEdit={onBatchEdit ? (changes: any, displayRows: any[]) => {
+          // Map sorted display indices back to parent array indices using row.id
+          const mappedChanges: { [parentIdx: number]: any } = {};
+          Object.keys(changes).forEach((sortedIdxStr) => {
+            const sortedIdx = parseInt(sortedIdxStr, 10);
+            const row = displayRows[sortedIdx];
+            if (row) {
+              const parentIdx = controls.findIndex((r: any) => r.id === row.id);
+              if (parentIdx >= 0) {
+                mappedChanges[parentIdx] = changes[sortedIdxStr];
+              }
             }
-          }
-        });
-        onBatchEdit(mappedChanges, controls);
-      } : undefined}
-      duplicateIds={duplicateControlIds}
-      tableSx={{ width: '100%' }}
-      cellSx={{ 
-        whiteSpace: 'pre-line', 
-        overflow: 'visible', 
-        textOverflow: 'clip', 
-        wordBreak: 'break-word', 
-        padding: '4px 6px', 
-        fontSize: 12 
-      }}
-      defaultVisibleColumns={defaultVisibleControlColumns}
-      storageKey="report_controls_all"
-      additionalButtons={
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          {additionalButtons}
-          <MergeSuggestionsPanel 
-            scanId={scanId} 
-            onMergeComplete={() => onRefresh?.()} 
-          />
-        </Box>
-      }
-      actionsRenderer={actionsRenderer}
-      onRowClick={onRowClick}
-    />
+          });
+          onBatchEdit(mappedChanges, controls);
+        } : undefined}
+        duplicateIds={duplicateControlIds}
+        tableSx={{ width: '100%' }}
+        cellSx={{ 
+          whiteSpace: 'pre-line', 
+          overflow: 'visible', 
+          textOverflow: 'clip', 
+          wordBreak: 'break-word', 
+          padding: '4px 6px', 
+          fontSize: 12 
+        }}
+        defaultVisibleColumns={defaultVisibleControlColumns}
+        storageKey="report_controls_all_v3"
+        additionalButtons={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {additionalButtons}
+            <Button variant="outlined" size="small" onClick={handleResetTablePrefs}>
+              Reset Table View
+            </Button>
+            <MergeSuggestionsPanel 
+              scanId={scanId} 
+              onMergeComplete={() => onRefresh?.()} 
+            />
+          </Box>
+        }
+        actionsRenderer={actionsRenderer}
+        onRowClick={onRowClick}
+      />
+
+      <Dialog open={criteriaOpen} onClose={() => setCriteriaOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Objective Mapping Criteria</DialogTitle>
+        <DialogContent>
+          {criteriaLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : criteriaError ? (
+            <Typography color="error">{criteriaError}</Typography>
+          ) : criteriaData ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box>
+                <Typography variant="subtitle2">Control</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {criteriaData.control?.control_id || 'Unknown'}
+                </Typography>
+                <Typography variant="body2">{criteriaData.control?.control_desc}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle2">Objective</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {criteriaData.objective?.objective_id || 'Unlabeled'}
+                </Typography>
+                <Typography variant="body2">{criteriaData.objective?.objective_text}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle2">Scores</Typography>
+                <Typography variant="body2">Page proximity: {criteriaData.mapping?.page_proximity_score?.toFixed?.(2) ?? 'N/A'}</Typography>
+                <Typography variant="body2">Line proximity: {criteriaData.mapping?.line_proximity_score?.toFixed?.(2) ?? 'N/A'}</Typography>
+                <Typography variant="body2">GPT alignment: {criteriaData.mapping?.gpt_alignment_score?.toFixed?.(2) ?? 'N/A'}</Typography>
+                <Typography variant="body2">ID alignment: {criteriaData.mapping?.id_alignment_score?.toFixed?.(2) ?? 'N/A'}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Final mapping confidence: {criteriaData.mapping?.mapping_confidence?.toFixed?.(2) ?? 'N/A'}
+                </Typography>
+                <Typography variant="body2">Method: {criteriaData.mapping?.mapping_method || 'N/A'}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle2">Alignment reasoning</Typography>
+                <Typography variant="body2">{criteriaData.mapping?.alignment_reasoning || 'N/A'}</Typography>
+              </Box>
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCriteriaOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={objectiveEditorOpen} onClose={handleCloseObjectiveEditor} maxWidth="md" fullWidth>
+        <DialogTitle>Edit Control Objectives</DialogTitle>
+        <DialogContent dividers>
+          {objectiveEditorControl ? (
+            <ObjectiveSelector
+              scanId={scanId}
+              controlId={objectiveEditorControl.id}
+              onChange={() => onObjectivesRefresh?.()}
+            />
+          ) : (
+            <Typography variant="body2">Select a control to edit objectives.</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseObjectiveEditor}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 });

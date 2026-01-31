@@ -22,7 +22,8 @@ export const normalizeConfidence = (val: any): number | undefined => {
 export const filterLowConfidence = (arr: any[], key = "confidence", threshold = 0.75) => 
   arr.filter(item => {
     // Include items with low confidence OR items that have been merged away (secondary controls)
-    const confidence = item[key] ?? 1;
+    const normalized = normalizeConfidence(item[key]);
+    const confidence = normalized ?? (item[key] ?? 1);
     const isMergedSecondary = item.merged_to_control_id != null;
     return confidence < threshold || isMergedSecondary;
   });
@@ -30,7 +31,8 @@ export const filterLowConfidence = (arr: any[], key = "confidence", threshold = 
 export const filterHighConfidence = (arr: any[], key = "confidence", threshold = 0.75) => 
   arr.filter(item => {
     // Include items with high confidence that haven't been merged away (primary controls only)
-    const confidence = item[key] ?? 1;
+    const normalized = normalizeConfidence(item[key]);
+    const confidence = normalized ?? (item[key] ?? 1);
     const isPrimary = item.merged_to_control_id == null;
     return confidence >= threshold && isPrimary;
   });

@@ -1137,10 +1137,11 @@ async def rescan_report(
         
         # Get current report type from scan
         report_type = scan.report_type
+        report_type_value = report_type.value if hasattr(report_type, "value") else report_type
         
         # Create new job
         job_id = str(uuid.uuid4())
-        logging.info(f"[RESCAN] Creating rescan job {job_id} for scan {scan_id} with report_type='{report_type}'")
+        logging.info(f"[RESCAN] Creating rescan job {job_id} for scan {scan_id} with report_type='{report_type_value}'")
         
         set_job(job_id, {
             "status": "Queued",
@@ -1150,7 +1151,7 @@ async def rescan_report(
             "error": None,
             "checklist": [],
             "filename": original_filename,
-            "report_type": report_type,
+            "report_type": report_type_value,
             "rescan_id": scan_id,  # Track that this is a rescan
             "start_time": time.time(),
             "identified_entities": {},
@@ -1177,7 +1178,7 @@ async def rescan_report(
             job_id=job_id,
             filename=original_filename,
             pdf_path=str(temp_pdf_path),
-            report_type=report_type,
+            report_type=report_type_value,
             priority=5  # Higher priority for rescans
         )
         

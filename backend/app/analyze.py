@@ -1184,6 +1184,15 @@ Format: X - reason"""
                 txt_path = job_paths['extracted_text']
                 with open(txt_path, 'r', encoding='utf-8') as f:
                     extracted_text = f.read()
+
+                sections = []
+                try:
+                    section_json_path = job_paths['json_dir'] / 'section_results.json'
+                    if section_json_path.exists():
+                        with open(section_json_path, 'r', encoding='utf-8') as sf:
+                            sections = json.load(sf)
+                except Exception as e:
+                    logger.warning(f"Objective extraction: failed to load sections: {e}")
                 
                 # Get database session
                 db_session = next(get_db_session())
@@ -1194,6 +1203,7 @@ Format: X - reason"""
                         extracted_text=extracted_text,
                         scan_id=None,  # Will be set when saving to database
                         db_session=db_session,
+                        sections=sections,
                         job_id=job_id,
                         redis_client=redis_client
                     )
@@ -1808,6 +1818,77 @@ Format: X - reason"""
                     logger.error(f"Management response extraction failed: {e}\n{traceback.format_exc()}")
                     checklist[11]["status"] = "error"
                     update_checklist(checklist)
+                    # Continue with warnings - don't fail entire scan
+            
+            # Run objective extraction step (sequential, after control extraction)
+            if 'objective_extraction' not in completed_extractors:
+                logger.info("[OBJECTIVE] Running control objective extraction")
+                try:
+                    from .extractors.objective_extractor import extract_objectives
+                    from sqlalchemy import create_engine
+                    from sqlalchemy.orm import sessionmaker
+                    
+                    # Create sync database session for objective extraction
+                    sync_db_url = config.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+                    sync_engine = create_engine(sync_db_url, echo=False)
+                    SessionLocal = sessionmaker(bind=sync_engine)
+                    objective_db_session = SessionLocal()
+                    
+                    try:
+                        # Load extracted text
+                        txt_path = None
+                        candidate_paths = []
+                        if job_paths and isinstance(job_paths, dict) and job_paths.get('temp_dir'):
+                            candidate_paths.append(job_paths['temp_dir'] / 'output.txt')
+                        candidate_paths.append(data_path('data/output/output.txt'))
+
+                        for candidate in candidate_paths:
+                            if os.path.isfile(candidate):
+                                txt_path = candidate
+                                break
+
+                        if txt_path:
+                            with open(txt_path, 'r', encoding='utf-8') as f:
+                                extracted_text = f.read()
+
+                            sections = []
+                            try:
+                                section_json_path = job_paths['json_dir'] / 'section_results.json'
+                                if section_json_path.exists():
+                                    with open(section_json_path, 'r', encoding='utf-8') as sf:
+                                        sections = json.load(sf)
+                            except Exception as e:
+                                logger.warning(f"[OBJECTIVE] Failed to load sections: {e}")
+                            
+                            # Extract objectives (returns ControlObjective models)
+                            objectives = extract_objectives(
+                                extracted_text=extracted_text,
+                                scan_id=None,  # Will be set during database insertion
+                                db_session=objective_db_session,
+                                sections=sections,
+                                job_id=job_id,
+                                redis_client=redis_client
+                            )
+                            
+                            logger.info(f"[OBJECTIVE] Extracted {len(objectives)} control objectives")
+                            
+                            # Store objectives in results for later database insertion
+                            results['objectives_extracted'] = len(objectives)
+                            
+                        else:
+                            logger.warning("[OBJECTIVE] Extracted text not found, skipping objective extraction")
+                            results['objectives_extracted'] = 0
+                            
+                    finally:
+                        objective_db_session.close()
+                    
+                    completed_extractors.append('objective_extraction')
+                    save_checkpoint(completed_extractors)
+                    logger.info(f"[OBJECTIVE] Extraction complete: extracted {results.get('objectives_extracted', 0)} objectives")
+                    
+                except Exception as e:
+                    logger.error(f"Objective extraction failed: {e}\n{traceback.format_exc()}")
+                    results['objectives_extracted'] = 0
                     # Continue with warnings - don't fail entire scan
             
             # Run post-control parallel steps (CUEC + subservice_orgs)

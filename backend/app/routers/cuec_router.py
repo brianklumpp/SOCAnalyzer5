@@ -18,6 +18,8 @@ from ..auth.dependencies import get_current_active_user
 
 router = APIRouter()
 
+from ..extractors.cuec_extractor import map_cuecs_to_objectives
+
 
 def _norm_pct_like(val):
     """Normalize percentage-like values to 0-1 float."""
@@ -209,6 +211,33 @@ async def patch_cuec(scan_id: int, cuec_id: int, data: Dict[str, Any] = Body(...
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/cuecs/{cuec_id} DB error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.post("/report/{scan_id}/cuecs/objectives/map")
+async def map_cuec_objectives_endpoint(
+    scan_id: int,
+    force: bool = False,
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Map objectives to CUECs for this scan."""
+    try:
+        from ..database import sync_engine
+        from sqlalchemy.orm import sessionmaker
+
+        SessionLocal = sessionmaker(bind=sync_engine)
+        sync_db = SessionLocal()
+        try:
+            mappings_created = map_cuecs_to_objectives(scan_id, sync_db, force=force)
+            return {
+                "status": "success",
+                "mappings_created": mappings_created
+            }
+        finally:
+            sync_db.close()
+    except Exception as e:
+        logging.error(f"Failed to map CUECs to objectives for scan {scan_id}: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

@@ -165,6 +165,8 @@ class CUEC(Base):
     updated_at = Column(DateTime)  # Timestamp of last update
     updated_by_user_id = Column(Integer, ForeignKey('users.id'))  # User who last updated this CUEC
 
+    objective_mappings = relationship("CUECObjectiveMapping", back_populates="cuec", cascade="all, delete-orphan")
+
 class SubserviceOrg(Base):
     __tablename__ = "subservice_org"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -415,6 +417,7 @@ class ControlObjective(Base):
     
     # Relationships
     mappings = relationship("ControlObjectiveMapping", back_populates="objective", cascade="all, delete-orphan")
+    cuec_mappings = relationship("CUECObjectiveMapping", back_populates="objective", cascade="all, delete-orphan")
 
 
 class ControlObjectiveMapping(Base):
@@ -430,6 +433,10 @@ class ControlObjectiveMapping(Base):
     
     # Mapping metadata
     mapping_confidence = Column(Float, default=1.0)  # Confidence that control fulfills objective (0-1)
+    page_proximity_score = Column(Float)
+    line_proximity_score = Column(Float)
+    gpt_alignment_score = Column(Float)
+    id_alignment_score = Column(Float)
     mapping_method = Column(String(32))  # 'auto_proximity', 'auto_gpt', 'manual'
     is_primary = Column(Boolean, default=False)  # True for the primary objective (shown in inline column)
     
@@ -440,3 +447,30 @@ class ControlObjectiveMapping(Base):
     # Relationships
     control = relationship("Control")
     objective = relationship("ControlObjective", back_populates="mappings")
+
+
+class CUECObjectiveMapping(Base):
+    """
+    Junction table for many-to-many relationships between CUECs and objectives.
+    """
+    __tablename__ = "cuec_objective_mappings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cuec_id = Column(Integer, ForeignKey('cuec.id', ondelete='CASCADE'), nullable=False, index=True)
+    objective_id = Column(Integer, ForeignKey('control_objectives.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Mapping metadata
+    mapping_confidence = Column(Float, default=1.0)
+    page_proximity_score = Column(Float)
+    line_proximity_score = Column(Float)
+    gpt_alignment_score = Column(Float)
+    mapping_method = Column(String(32))
+    is_primary = Column(Boolean, default=False)
+
+    # Audit trail
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    created_by_user_id = Column(Integer, ForeignKey('users.id'))
+
+    # Relationships
+    cuec = relationship("CUEC", back_populates="objective_mappings")
+    objective = relationship("ControlObjective", back_populates="cuec_mappings")

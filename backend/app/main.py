@@ -27,6 +27,7 @@ logging.warning(f"[BOOT] Loaded backend.app.main from {__file__}")
 from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
 from .models import Company, Control, CUEC, SubserviceOrg, Product, Setting
+from .models import ControlObjective, ControlObjectiveMapping
 from .models import Scan, ConfidenceWeights, ConfidenceWeightAudit
 from .base import Base
 from .database import engine, get_db
@@ -1373,14 +1374,92 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
             scan_id = summary.get("scan_id")
             if scan_id:
                 try:
-                    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+                    scan_db = db
+                    close_scan_db = False
+                    if scan_db is None:
+                        from sqlalchemy import create_engine
+                        from sqlalchemy.orm import sessionmaker
+                        sync_db_url = cfg.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+                        sync_engine = create_engine(sync_db_url, echo=False)
+                        SessionLocal = sessionmaker(bind=sync_engine)
+                        scan_db = SessionLocal()
+                        close_scan_db = True
+
+                    scan = scan_db.query(Scan).filter(Scan.id == scan_id).first()
                     if scan:
                         scan.elapsed_seconds = elapsed_seconds
                         scan.progress_status = "Scan Complete"
-                        db.commit()
+                        scan_db.commit()
                         logging.info(f"[ELAPSED_TIME] Stored elapsed_seconds={elapsed_seconds:.1f}s and progress_status='Scan Complete' for scan_id={scan_id}")
+
+                    # Kick off objective extraction + mapping after scan insert
+                    if cfg.ENABLE_OBJECTIVE_EXTRACTION:
+                        try:
+                            import threading
+                            from sqlalchemy import create_engine
+                            from sqlalchemy.orm import sessionmaker
+                            from .extractors.objective_extractor import extract_objectives, map_controls_to_objectives
+
+                            def _run_objectives_post_insert(scan_id_val: int):
+                                sync_db_url = cfg.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+                                sync_engine = create_engine(sync_db_url, echo=False)
+                                SessionLocal = sessionmaker(bind=sync_engine)
+                                sync_db_session = SessionLocal()
+                                try:
+                                    scan_row = sync_db_session.query(Scan).filter(Scan.id == scan_id_val).first()
+                                    if not scan_row or not scan_row.extracted_text:
+                                        logging.warning(f"[OBJECTIVES] No extracted_text for scan {scan_id_val}")
+                                        return
+
+                                    sections = []
+                                    result_json = getattr(scan_row, "result_json", None)
+                                    if isinstance(result_json, str):
+                                        try:
+                                            result_json = _json.loads(result_json)
+                                        except Exception:
+                                            result_json = {}
+                                    if isinstance(result_json, dict):
+                                        sections = result_json.get("sections") or []
+
+                                    objectives = extract_objectives(
+                                        extracted_text=scan_row.extracted_text,
+                                        scan_id=scan_id_val,
+                                        db_session=sync_db_session,
+                                        sections=sections,
+                                        job_id=None,
+                                        redis_client=None
+                                    )
+                                    logging.info(f"[OBJECTIVES] Extracted {len(objectives)} objectives for scan {scan_id_val}")
+
+                                    mappings_created = map_controls_to_objectives(
+                                        scan_id=scan_id_val,
+                                        db_session=sync_db_session,
+                                        job_id=None,
+                                        redis_client=None
+                                    )
+                                    logging.info(f"[OBJECTIVES] Created {mappings_created} mappings for scan {scan_id_val}")
+                                except Exception as obj_err:
+                                    logging.error(f"[OBJECTIVES] Post-insert extraction failed for scan {scan_id_val}: {obj_err}")
+                                finally:
+                                    sync_db_session.close()
+
+                            threading.Thread(
+                                target=_run_objectives_post_insert,
+                                args=(scan_id,),
+                                name=f"objective-extract-{scan_id}",
+                                daemon=True
+                            ).start()
+                        except Exception as obj_init_err:
+                            logging.error(f"[OBJECTIVES] Failed to start post-insert extraction: {obj_init_err}")
                 except Exception as elapsed_err:
                     logging.error(f"[ERROR] Failed to store elapsed_seconds: {elapsed_err}")
+                finally:
+                    if scan_id and db is None:
+                        try:
+                            if close_scan_db:
+                                scan_db.close()
+                        except Exception:
+                            pass
             
             # Clean up temp file
             import os
@@ -2865,9 +2944,14 @@ async def delete_scan(scan_id: int, db=Depends(get_db)):
     Useful for testing/cleanup.
     """
     from sqlalchemy import delete
+    import redis.asyncio as aioredis
     try:
         # Delete in order to respect foreign key constraints
-        # Controls, CUECs, SubserviceOrgs reference scan_id
+        # Objectives mappings/objectives, Controls, CUECs, SubserviceOrgs reference scan_id
+        await db.execute(delete(ControlObjectiveMapping).where(ControlObjectiveMapping.objective_id.in_(
+            select(ControlObjective.id).where(ControlObjective.scan_id == scan_id)
+        )))
+        await db.execute(delete(ControlObjective).where(ControlObjective.scan_id == scan_id))
         await db.execute(delete(Control).where(Control.scan_id == scan_id))
         await db.execute(delete(CUEC).where(CUEC.scan_id == scan_id))
         await db.execute(delete(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))
@@ -2884,6 +2968,16 @@ async def delete_scan(scan_id: int, db=Depends(get_db)):
         
         await db.delete(scan_row)
         await db.commit()
+
+        # Clear cached history pages so UI reflects deletion
+        try:
+            redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+            keys = await redis_client.keys("scan_history:v2:*")
+            if keys:
+                await redis_client.delete(*keys)
+            await redis_client.close()
+        except Exception as e:
+            logging.warning(f"[HISTORY] Cache invalidation failed: {e}")
         
         logging.info(f"[DELETE_SCAN] Successfully deleted scan {scan_id} and all associated data")
         return {"status": "deleted", "scan_id": scan_id}
@@ -4047,13 +4141,14 @@ async def extract_entity(
         entity_type = data.get("entity_type", "").lower()
         search_text = (data.get("search_text") or "").strip()
         force_multi_extract = data.get("force_multi_extract", False)
+        occurrence_index = data.get("occurrence_index")
         
         # Validate inputs
         if not search_text:
             raise HTTPException(status_code=400, detail="search_text is required")
         
-        if entity_type not in ["control", "cuec", "subservice_org"]:
-            raise HTTPException(status_code=400, detail="entity_type must be 'control', 'cuec', or 'subservice_org'")
+        if entity_type not in ["control", "cuec", "subservice_org", "objective"]:
+            raise HTTPException(status_code=400, detail="entity_type must be 'control', 'cuec', 'subservice_org', or 'objective'")
         
         # Load the scan's extracted_text
         result = await db.execute(select(Scan).filter(Scan.id == scan_id))
@@ -4086,12 +4181,41 @@ async def extract_entity(
                 "occurrence_count": 0
             }
         
+        def build_occurrence_previews(preview_limit: int = 50, window: int = 200):
+            previews = []
+            for idx, occ_idx in enumerate(occurrences[:preview_limit]):
+                start = max(0, occ_idx - window)
+                end = min(len(full_text), occ_idx + len(search_text) + window)
+                snippet = full_text[start:end]
+                previews.append({
+                    "index": idx,
+                    "char_index": occ_idx,
+                    "snippet": snippet,
+                    "match_start": occ_idx - start,
+                    "match_end": occ_idx - start + len(search_text)
+                })
+            return previews
+
+        # If a specific occurrence was requested, use it
+        if occurrence_index is not None:
+            try:
+                occurrence_index = int(occurrence_index)
+            except Exception:
+                raise HTTPException(status_code=400, detail="occurrence_index must be an integer")
+            if occurrence_index < 0 or occurrence_index >= len(occurrences):
+                raise HTTPException(status_code=400, detail="occurrence_index out of range")
+            occurrences = [occurrences[occurrence_index]]
+            force_multi_extract = True
+
         # Check occurrence count and warn if needed
         if len(occurrences) > MAX_SEARCH_OCCURRENCES and not force_multi_extract:
+            previews = build_occurrence_previews()
             return {
                 "warning": f"Found {len(occurrences)} occurrences. Consider refining your search term or enable 'force_multi_extract'.",
                 "occurrence_count": len(occurrences),
-                "requires_force": True
+                "requires_force": True,
+                "occurrences": previews,
+                "preview_truncated": len(previews) < len(occurrences)
             }
         
         # Extract context windows (±2000 chars) for each occurrence
@@ -4140,6 +4264,9 @@ async def extract_entity(
         
         # Parse JSON response
         result_data = json_lib.loads(json_text)
+        
+        logging.info(f"[extract_entity] Successfully parsed GPT response. Keys: {list(result_data.keys())}")
+        logging.info(f"[extract_entity] Result data: {result_data}")
         
         return {
             "entity_type": entity_type,

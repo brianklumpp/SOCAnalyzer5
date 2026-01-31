@@ -792,14 +792,29 @@ const AnalyzerPage: React.FC = () => {
     try {
       await api.delete(`/report/${scanId}`);
       // Refresh history after deletion
-      const res = await api.get(HISTORY_URL);
-      setHistory(res.data);
+      const [historyRes, countRes] = await Promise.all([
+        api.get(HISTORY_URL, {
+          params: {
+            limit: HISTORY_PAGE_SIZE,
+            offset: historyPage * HISTORY_PAGE_SIZE
+          }
+        }),
+        api.get('/history/count')
+      ]);
+      const historyData = historyRes.data.map((scan: ScanResult) => ({
+        ...scan,
+        product: scan.product || 'Unknown Product',
+        timestamp: scan.timestamp || '',
+        results: scan.results || [],
+      }));
+      setHistory(historyData);
+      setHistoryTotal(countRes.data.total || 0);
       console.log(`[DELETE_SCAN] Successfully deleted scan ${scanId}`);
     } catch (error) {
       console.error('[DELETE_SCAN] Error deleting scan:', error);
       // You could add a snackbar/toast notification here if desired
     }
-  }, []);
+  }, [historyPage]);
 
   // Handle scan click - memoized to prevent VirtualHistoryGrid re-renders
   const handleScanClick = useCallback((scanId: number | string) => {

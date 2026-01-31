@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Box } from '@mui/material';
+import { Box, Button } from '@mui/material';
 import UniversalFrameworkMapper from '../../components/UniversalFrameworkMapper';
 import ConfidenceTooltip from '../../components/ConfidenceTooltip';
 import ControlTooltip from '../../components/ControlTooltip';
@@ -20,6 +20,38 @@ export const cuecColumns = (
   onOpenMappingDetails?: (control: any, frameworkType: string) => void
 ) => [
   { key: "cuec_description", label: "Description", width: 400, editable: true },
+  {
+    key: "cuec_primary_objective",
+    label: "Control Objective",
+    width: 260,
+    editable: false,
+    render: (row: any) => {
+      const objectiveText = row.cuec_primary_objective?.objective_text || row.cuec_primary_objective_text;
+      const objectiveId = row.cuec_primary_objective?.objective_id;
+      if (!objectiveText) return null;
+      const scores = row.cuec_primary_objective_scores || {};
+      const total = typeof scores.total === 'number' ? scores.total : row.cuec_primary_objective_confidence;
+      const color = typeof total === 'number' ? (total >= 0.8 ? '#4caf50' : total >= 0.6 ? '#ff9800' : '#f44336') : '#666';
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <span style={{ fontSize: '0.75em', color: '#666' }}>
+            ID: {objectiveId || 'Unlabeled'}
+          </span>
+          <span>{objectiveText}</span>
+          {typeof total === 'number' ? (
+            <span style={{ fontSize: '0.75em', color, fontWeight: 600 }}>
+              {Math.round(total * 100)}% mapping confidence
+            </span>
+          ) : null}
+          {(scores.page_proximity_score || scores.line_proximity_score || scores.gpt_alignment_score) ? (
+            <span style={{ fontSize: '0.72em', color: '#666' }}>
+              scores: page {scores.page_proximity_score ?? '—'} · line {scores.line_proximity_score ?? '—'} · gpt {scores.gpt_alignment_score ?? '—'}
+            </span>
+          ) : null}
+        </Box>
+      );
+    }
+  },
   { key: "cuec_gpt_reasoning", label: "GPT Reasoning", width: 350, editable: true },
   { key: "cuec_confidence", label: "Confidence", width: 80 },
   { 
@@ -70,6 +102,7 @@ export const cuecColumns = (
 
 export const defaultVisibleCuecColumns = [
   "cuec_description",
+  "cuec_primary_objective",
   "cuec_confidence",
   "cuec_confidence_justification",
   "control_strength",
@@ -88,7 +121,10 @@ export const controlColumns = (
   onOpenConfidenceModal?: (control: any) => void,
   onOpenControlModal?: (control: any) => void,
   frameworkCriteria?: any,
-  onOpenMappingDetails?: (control: any, frameworkType: string) => void
+  onOpenMappingDetails?: (control: any, frameworkType: string) => void,
+  onOpenObjectiveCriteria?: (control: any) => void,
+  onOpenObjectiveEditor?: (control: any) => void,
+  onConvertControlToObjective?: (control: any) => void
 ) => [
   { 
     key: "control_id", 
@@ -104,6 +140,68 @@ export const controlColumns = (
     ) : (row.control_id || 'N/A')
   },
   { key: "control_desc", label: "Description", width: 400, editable: true },
+  { 
+    key: "primary_objective", 
+    label: "Control Objective", 
+    width: 300, 
+    editable: false,
+    format: (v: any) => v?.objective_text || '',
+    render: (row: any) => {
+      const objectiveText = row.primary_objective?.objective_text || row.primary_objective_text;
+      const objectiveId = row.primary_objective?.objective_id;
+      const hasObjective = Boolean(objectiveText);
+      const mappingConfidence = row.primary_objective_confidence;
+      const objectiveConfidence = row.primary_objective?.final_confidence ?? row.primary_objective_confidence ?? 0;
+      const confidence = typeof mappingConfidence === 'number' ? mappingConfidence : objectiveConfidence;
+      const confidenceLabel = typeof mappingConfidence === 'number' ? 'mapping' : 'objective';
+      const confidenceColor = confidence >= 0.8 ? '#4caf50' : confidence >= 0.6 ? '#ff9800' : '#f44336';
+      const scores = row.primary_objective_scores || {};
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <span style={{ fontSize: '0.75em', color: '#666' }}>ID: {objectiveId || 'Unlabeled'}</span>
+          <span>{objectiveText || 'Unmapped objective'}</span>
+          {(scores.page_proximity_score || scores.gpt_alignment_score || scores.id_alignment_score) ? (
+            <span style={{ fontSize: '0.72em', color: '#666' }}>
+              scores: page {scores.page_proximity_score ?? '—'} · gpt {scores.gpt_alignment_score ?? '—'} · id {scores.id_alignment_score ?? '—'}
+            </span>
+          ) : null}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            {hasObjective ? (
+              <span style={{ fontSize: '0.75em', color: confidenceColor, fontWeight: 'bold' }}>
+                {Math.round(confidence * 100)}% {confidenceLabel} confidence
+              </span>
+            ) : null}
+            {onOpenObjectiveCriteria ? (
+              <Button
+                size="small"
+                variant="text"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenObjectiveCriteria(row);
+                }}
+                sx={{ minWidth: 'auto', padding: '0 6px', fontSize: '0.7rem' }}
+              >
+                Why?
+              </Button>
+            ) : null}
+            {onOpenObjectiveEditor ? (
+              <Button
+                size="small"
+                variant="text"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenObjectiveEditor(row);
+                }}
+                sx={{ minWidth: 'auto', padding: '0 6px', fontSize: '0.7rem' }}
+              >
+                Edit
+              </Button>
+            ) : null}
+          </Box>
+        </Box>
+      );
+    }
+  },
   { key: "control_test", label: "Test", width: 320, editable: true },
   { key: "control_test_results", label: "Test Results", width: 160, editable: true },
   { key: "has_deviation", label: "Deviation?", width: 90, format: (v: any) => v ? 'Yes' : '', editable: true },
@@ -178,6 +276,7 @@ export const controlColumns = (
 export const defaultVisibleControlColumns = [
   "control_id",
   "control_desc",
+  "primary_objective",
   "control_test",
   "control_test_results",
   "has_deviation",

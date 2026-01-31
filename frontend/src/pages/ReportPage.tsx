@@ -44,6 +44,9 @@ import { lightTheme, darkTheme, solidigmColors } from '../theme/solidigmTheme';
 // API client
 import api from '../api/client';
 
+// Auth
+import { useAuth } from '../contexts/AuthContext';
+
 // Utilities
 import { formatLocalDateTimeWithTZ } from '../utils/date';
 import { getCoverageStart, getCoverageEnd, getReportDate } from '../utils/report';
@@ -61,6 +64,7 @@ import {
   normalizeConfidence,
   computeHighConfNameCounts,
 } from '../services/report/dataTransformations';
+import { getObjectives, getPrimaryObjectiveMappings, convertControlToObjective, type ControlObjective } from '../services/objectiveService';
 
 // Configuration
 import { API_URL, HISTORY_URL } from '../config/report/constants';
@@ -72,6 +76,7 @@ import { ReportCuecsTab } from '../components/report/tabs/ReportCuecsTab';
 import { ReportSuborgsTab } from '../components/report/tabs/ReportSuborgsTab';
 import { ReportCoverageTab } from '../components/report/tabs/ReportCoverageTab';
 import { ReportDeviationsTab } from '../components/report/tabs/ReportDeviationsTab';
+import ObjectivesCoverageTab from '../components/report/tabs/ObjectivesCoverageTab';
 
 // Components - Dialogs
 import { AddItemDialog } from '../components/report/dialogs/AddItemDialog';
@@ -81,6 +86,7 @@ import ControlDetailsModal from '../components/ControlDetailsModal';
 import FrameworkMappingDetailsModal from '../components/FrameworkMappingDetailsModal';
 import HelpDialog from '../components/HelpDialog';
 import FloatingGraceChat from '../components/FloatingGraceChat';
+import ObjectivesModal from '../components/ObjectivesModal';
 
 // Tab panel component with scroll restoration
 interface TabPanelProps {
@@ -315,6 +321,14 @@ const ReportPage: React.FC = () => {
     localStorage.setItem('socanalyzer_use_default_confidence', useDefaultConfidence ? 'true' : 'false');
   }, [useDefaultConfidence]);
 
+  // Auth & Objectives
+  const { user } = useAuth();
+  const [objectives, setObjectives] = useState<ControlObjective[]>([]);
+  const [objectivesLoading, setObjectivesLoading] = useState(false);
+  const [objectivesModalOpen, setObjectivesModalOpen] = useState(false);
+  const [objectiveMappings, setObjectiveMappings] = useState<Map<string | number, any>>(new Map());
+  const { accessToken, loading: authLoading } = useAuth();
+
   // Confidence modal state
   const [confidenceModalOpen, setConfidenceModalOpen] = useState(false);
   const [selectedControl, setSelectedControl] = useState<any>(null);
@@ -373,6 +387,48 @@ const ReportPage: React.FC = () => {
       refreshReport(selectedScanId);
     }
   }, [selectedScanId, refreshReport]);
+
+  // Fetch and cache objectives for current scan
+  useEffect(() => {
+    const fetchObjectivesData = async () => {
+      if (!selectedScanId) return;
+      if (authLoading || !accessToken) return;
+
+      setObjectivesLoading(true);
+      try {
+        const scanIdNum = parseInt(selectedScanId);
+        const objectivesData = await getObjectives(scanIdNum);
+        setObjectives(objectivesData);
+
+        const mappingsMap = new Map<string | number, any>();
+        try {
+          const mappingResponse = await getPrimaryObjectiveMappings(scanIdNum);
+          (mappingResponse.mappings || []).forEach((mapping: any) => {
+            if (!mapping?.is_primary) return;
+            const controlDbId = mapping.control_db_id;
+            const controlId = mapping.control_id;
+
+            if (controlDbId !== undefined && controlDbId !== null) {
+              mappingsMap.set(controlDbId, mapping);
+            }
+            if (controlId !== undefined && controlId !== null) {
+              mappingsMap.set(controlId, mapping);
+            }
+          });
+        } catch (error) {
+          console.debug('Primary objective mappings not available');
+        }
+
+        setObjectiveMappings(mappingsMap);
+      } catch (error) {
+        console.error('Error fetching objectives:', error);
+      } finally {
+        setObjectivesLoading(false);
+      }
+    };
+
+    fetchObjectivesData();
+  }, [selectedScanId, accessToken, authLoading]);
 
   // Sync overview fields when report loads
   useEffect(() => {
@@ -605,6 +661,52 @@ const ReportPage: React.FC = () => {
     setSelectedFrameworkType(frameworkType);
     setMappingDetailsModalOpen(true);
   }, []);
+
+  // Handle Objectives modal
+  const handleOpenObjectivesModal = useCallback(() => {
+    setObjectivesModalOpen(true);
+  }, []);
+
+  const handleCloseObjectivesModal = useCallback(() => {
+    setObjectivesModalOpen(false);
+  }, []);
+
+  const handleObjectivesRefresh = useCallback(async () => {
+    if (!selectedScanId) return;
+
+    try {
+      const scanIdNum = parseInt(selectedScanId);
+      const objectivesData = await getObjectives(scanIdNum);
+      setObjectives(objectivesData);
+
+      const mappingsMap = new Map<string | number, any>();
+      try {
+        const mappingResponse = await getPrimaryObjectiveMappings(scanIdNum);
+        (mappingResponse.mappings || []).forEach((mapping: any) => {
+          if (!mapping?.is_primary) return;
+          const controlDbId = mapping.control_db_id;
+          const controlId = mapping.control_id;
+
+          if (controlDbId !== undefined && controlDbId !== null) {
+            mappingsMap.set(controlDbId, mapping);
+          }
+          if (controlId !== undefined && controlId !== null) {
+            mappingsMap.set(controlId, mapping);
+          }
+        });
+      } catch (error) {
+        console.debug('Primary objective mappings not available');
+      }
+
+      setObjectiveMappings(mappingsMap);
+
+      // Refresh report data without triggering full-page loading spinner
+      const res = await api.get(`${API_URL}${selectedScanId}`, { timeout: 60000 });
+      setReport(res.data);
+    } catch (error) {
+      console.error('Error refreshing objectives:', error);
+    }
+  }, [selectedScanId, setReport]);
 
   // Regenerate executive summary wrapper
   const handleRegenerateExecutiveSummary = useCallback(async () => {
@@ -858,11 +960,17 @@ const ReportPage: React.FC = () => {
             }}
           >
             <Tab label="Summary" icon={<SummarizeIcon />} iconPosition="start" {...a11yProps(0)} />
-            <Tab label="Controls" icon={<ListAltIcon />} iconPosition="start" {...a11yProps(1)} />
+            <Tab 
+              label="Controls"
+              icon={<ListAltIcon />} 
+              iconPosition="start" 
+              {...a11yProps(1)} 
+            />
             <Tab label="CUECs" icon={<AssignmentIcon />} iconPosition="start" {...a11yProps(2)} />
             <Tab label="Subservice Orgs" icon={<BusinessIcon />} iconPosition="start" {...a11yProps(3)} />
             <Tab label="Deviations" icon={<WarningIcon />} iconPosition="start" {...a11yProps(4)} />
             <Tab label="Coverage" icon={<PieChartIcon />} iconPosition="start" {...a11yProps(5)} />
+            <Tab label="Objective Coverage" icon={<AssignmentIcon />} iconPosition="start" {...a11yProps(6)} />
           </Tabs>
         </Box>
 
@@ -916,6 +1024,13 @@ const ReportPage: React.FC = () => {
               onOpenMappingDetails={handleOpenMappingDetails}
               darkMode={darkMode}
               tocPageOffset={report?.toc_page_offset}
+              objectives={objectives}
+              objectivesLoading={objectivesLoading}
+              objectiveMappings={objectiveMappings}
+              onOpenObjectivesModal={handleOpenObjectivesModal}
+              isAdmin={user?.is_admin}
+              onObjectivesRefresh={handleObjectivesRefresh}
+              showToast={showToast}
             />
           </TabPanel>
 
@@ -977,6 +1092,14 @@ const ReportPage: React.FC = () => {
               onOpenControlModal={handleOpenControlModal}
             />
           </TabPanel>
+
+          <TabPanel value={activeTab} index={6} tabScrollPositions={tabScrollPositions}>
+            <ObjectivesCoverageTab
+              scanId={parseInt(selectedScanId || '0')}
+              onOpenControlModal={handleOpenControlModal}
+              onRefresh={handleObjectivesRefresh}
+            />
+          </TabPanel>
         </Box>
 
         {/* Floating GRaCe Assistant - Available on all tabs */}
@@ -1014,6 +1137,23 @@ const ReportPage: React.FC = () => {
           open={controlDetailsModalOpen}
           control={selectedControlDetails}
           onClose={() => setControlDetailsModalOpen(false)}
+          onConvertToObjective={(control) => {
+            if (!selectedScanId || !control?.id) return;
+            convertControlToObjective(parseInt(selectedScanId, 10), control.id)
+              .then((result) => {
+                if (result?.status === 'exists') {
+                  showToast('Objective exists. Control ignored and linked.', 'info');
+                } else {
+                  showToast('Control converted to objective', 'success');
+                }
+                handleObjectivesRefresh();
+                handleRefreshReport();
+              })
+              .catch((err) => {
+                console.error('Failed to convert control to objective:', err);
+                showToast('Failed to convert control to objective', 'error');
+              });
+          }}
         />
 
         <FrameworkMappingDetailsModal
@@ -1024,6 +1164,15 @@ const ReportPage: React.FC = () => {
           onClose={() => setMappingDetailsModalOpen(false)}
           onUpdate={handleRefreshReport}
           scanId={parseInt(selectedScanId || '0')}
+        />
+
+        <ObjectivesModal
+          open={objectivesModalOpen}
+          onClose={handleCloseObjectivesModal}
+          scanId={parseInt(selectedScanId || '0')}
+          currentUser={user?.username || ''}
+          onRefresh={handleObjectivesRefresh}
+          showToast={showToast}
         />
 
         {/* Help Dialog */}

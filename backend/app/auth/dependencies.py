@@ -1,4 +1,8 @@
 """Authentication dependencies for FastAPI route protection."""
+import os
+import time
+import asyncio
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -10,6 +14,51 @@ from backend.app.auth.security import verify_access_token
 
 # HTTP Bearer token scheme
 security = HTTPBearer()
+
+# Short-lived cache to reduce DB lookups for auth
+AUTH_USER_CACHE_TTL_SECONDS = int(os.getenv("AUTH_USER_CACHE_TTL_SECONDS", "30"))
+_user_cache: dict[str, tuple[float, User]] = {}
+_user_cache_lock = asyncio.Lock()
+
+
+def _exp_to_epoch(exp_val: Optional[object]) -> Optional[float]:
+    if exp_val is None:
+        return None
+    if isinstance(exp_val, (int, float)):
+        return float(exp_val)
+    if isinstance(exp_val, datetime):
+        if exp_val.tzinfo is None:
+            exp_val = exp_val.replace(tzinfo=timezone.utc)
+        return exp_val.timestamp()
+    return None
+
+
+async def _get_cached_user(token: str) -> Optional[User]:
+    if AUTH_USER_CACHE_TTL_SECONDS <= 0:
+        return None
+    now = time.time()
+    async with _user_cache_lock:
+        entry = _user_cache.get(token)
+        if not entry:
+            return None
+        expires_at, user = entry
+        if expires_at <= now:
+            _user_cache.pop(token, None)
+            return None
+        return user
+
+
+async def _set_cached_user(token: str, user: User, token_exp_epoch: Optional[float]) -> None:
+    if AUTH_USER_CACHE_TTL_SECONDS <= 0:
+        return
+    now = time.time()
+    cache_exp = now + AUTH_USER_CACHE_TTL_SECONDS
+    if token_exp_epoch is not None:
+        cache_exp = min(cache_exp, token_exp_epoch - 1)
+        if cache_exp <= now:
+            return
+    async with _user_cache_lock:
+        _user_cache[token] = (cache_exp, user)
 
 
 async def get_current_user(
@@ -36,6 +85,11 @@ async def get_current_user(
     )
     
     token = credentials.credentials
+
+    cached_user = await _get_cached_user(token)
+    if cached_user is not None:
+        return cached_user
+
     payload = verify_access_token(token)
     
     if payload is None:
@@ -57,6 +111,9 @@ async def get_current_user(
     
     if user is None:
         raise credentials_exception
+
+    token_exp_epoch = _exp_to_epoch(payload.get("exp"))
+    await _set_cached_user(token, user, token_exp_epoch)
     
     return user
 

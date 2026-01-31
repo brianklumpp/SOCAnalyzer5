@@ -1,18 +1,33 @@
 version: '3.8'
 
 services:
+  backend:
+    volumes:
+      # Bind mount source code for live editing
+      - ./backend/app:/app/backend/app
+      - ./backend/alembic:/app/backend/alembic
+      - ./backend/alembic.ini:/app/backend/alembic.ini:ro
+      # Mount .env for runtime config updates
+      - ./.env:/app/.env
+      # Data, docs, and certs
+      - ./data:/app/data
+      - ./docs:/app/docs:ro
+      - ./certs:/certs:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHFILES_FORCE_POLLING: "true"
+    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --workers 4 --reload --reload-dir /app/backend/app
+
   frontend:
-    build:
-      target: build  # Use build stage (node development server)
-    command: npm start
+    image: node:18-alpine
+    working_dir: /app
+    command: sh -c "npm install --legacy-peer-deps; npm start"
     ports:
       - "3001:3000"  # React dev server port (map to 3001 to avoid conflicts)
     volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-      - ./frontend/package.json:/app/package.json
-      - ./frontend/tsconfig.json:/app/tsconfig.json
-      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
     environment:
       - CHOKIDAR_USEPOLLING=true  # Enable polling for file changes on Windows
       - WATCHPACK_POLLING=true
+      - HOST=0.0.0.0

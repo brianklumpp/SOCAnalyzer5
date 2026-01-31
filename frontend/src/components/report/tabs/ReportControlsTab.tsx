@@ -33,6 +33,13 @@ interface ReportControlsTabProps {
   tocPageOffset?: number;
   frameworkCriteria?: any;
   onOpenMappingDetails?: (control: any, frameworkType: string) => void;
+  objectives?: any[];
+  objectivesLoading?: boolean;
+  objectiveMappings?: Map<string | number, any>;
+  onOpenObjectivesModal?: () => void;
+  isAdmin?: boolean;
+  onObjectivesRefresh?: () => void;
+  showToast?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 export const ReportControlsTab = React.memo(function ReportControlsTab({
@@ -56,7 +63,14 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
   darkMode,
   tocPageOffset,
   frameworkCriteria,
-  onOpenMappingDetails
+  onOpenMappingDetails,
+  objectives,
+  objectivesLoading,
+  objectiveMappings,
+  onOpenObjectivesModal,
+  isAdmin,
+  onObjectivesRefresh,
+  showToast
 }: ReportControlsTabProps) {
   const lowConfSectionRef = useRef<HTMLDivElement>(null);
   const [pdfNavigateHandler, setPdfNavigateHandler] = React.useState<((snippet: string | null, page?: number | null) => void) | null>(null);
@@ -136,6 +150,11 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
           onOpenControlModal={onOpenControlModal}
           frameworkCriteria={frameworkCriteria}
           onOpenMappingDetails={onOpenMappingDetails}
+          objectives={objectives}
+          objectivesLoading={objectivesLoading}
+          objectiveMappings={objectiveMappings}
+          onObjectivesRefresh={onObjectivesRefresh}
+          showToast={showToast}
           additionalButtons={
             <>
               <Button variant="outlined" size="small" onClick={onAddControl}>
@@ -153,6 +172,17 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
                     Recompute All
                   </Button>
                 </Tooltip>
+              )}
+              {isAdmin && onOpenObjectivesModal && (
+                <Button
+                  type="button"
+                  variant="outlined"
+                  size="small"
+                  onClick={onOpenObjectivesModal}
+                  sx={{ ml: 1 }}
+                >
+                  Manage Objectives
+                </Button>
               )}
               {filteredLowConfControls.length > 0 && !showLowConfidence && (
                 <Chip 
@@ -197,6 +227,10 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
               onOpenConfidenceModal={onOpenConfidenceModal}
               onOpenControlModal={onOpenControlModal}
               onRowClick={handleRowClick}
+              objectives={objectives}
+              objectivesLoading={objectivesLoading}
+              objectiveMappings={objectiveMappings}
+              showToast={showToast}
             />
           </Box>
         </Collapse>

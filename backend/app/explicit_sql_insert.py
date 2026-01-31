@@ -504,6 +504,54 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
                     logging.info(f"[PHASE] Updated phase_completion.db_uploaded=True for job {job_id}")
             except Exception as phase_err:
                 logging.warning(f"Could not update phase_completion.db_uploaded: {phase_err}")
+
+        # Kick off objective extraction + mapping after DB commit
+        try:
+            if config.ENABLE_OBJECTIVE_EXTRACTION:
+                extracted_text_for_objectives = data.get("extracted_text")
+                if extracted_text_for_objectives:
+                    from .extractors.objective_extractor import extract_objectives, map_controls_to_objectives
+                    import threading
+
+                    def _run_objectives_post_insert(scan_id_val: int, text: str):
+                        try:
+                            sync_db_url = config.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+                            sync_engine = create_engine(sync_db_url, echo=False)
+                            SessionLocal = sessionmaker(bind=sync_engine)
+                            with SessionLocal() as db_session:
+                                sections = data.get("sections") or []
+                                objectives = extract_objectives(
+                                    extracted_text=text,
+                                    scan_id=scan_id_val,
+                                    db_session=db_session,
+                                    sections=sections,
+                                    job_id=None,
+                                    redis_client=None
+                                )
+                                logging.info(f"[OBJECTIVES] Extracted {len(objectives)} objectives for scan {scan_id_val}")
+
+                                if objectives:
+                                    mappings_created = map_controls_to_objectives(
+                                        scan_id=scan_id_val,
+                                        db_session=db_session,
+                                        job_id=None,
+                                        redis_client=None
+                                    )
+                                    logging.info(f"[OBJECTIVES] Created {mappings_created} mappings for scan {scan_id_val}")
+                            sync_engine.dispose()
+                        except Exception as obj_err:
+                            logging.error(f"[OBJECTIVES] Post-insert extraction failed for scan {scan_id_val}: {obj_err}")
+
+                    threading.Thread(
+                        target=_run_objectives_post_insert,
+                        args=(scan_id, extracted_text_for_objectives),
+                        name=f"objective-extract-{scan_id}",
+                        daemon=True
+                    ).start()
+                else:
+                    logging.warning(f"[OBJECTIVES] extracted_text missing; skipping for scan {scan_id}")
+        except Exception as obj_init_err:
+            logging.error(f"[OBJECTIVES] Failed to start post-insert extraction: {obj_init_err}")
                 
     except Exception as outer_error:
         print(f"DEBUG: Outer exception caught: {outer_error}")

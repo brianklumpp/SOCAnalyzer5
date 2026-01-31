@@ -10,6 +10,13 @@ DATABASE_URL = os.getenv("DATABASE_URL_ASYNC")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable is not set. Please set it in your .env file.")
 
+# Database pool configuration (async engine)
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
+DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))
+DB_POOL_PRE_PING = os.getenv("DB_POOL_PRE_PING", "true").lower() == "true"
+
 # Schema/migration startup behavior
 AUTO_CREATE_SCHEMA = os.getenv("AUTO_CREATE_SCHEMA", "true").lower() == "true"
 RUN_MIGRATIONS_ON_START = os.getenv("RUN_MIGRATIONS_ON_START", "false").lower() == "true"
@@ -277,6 +284,39 @@ FRAMEWORK_MAPPING_MODEL = os.getenv("FRAMEWORK_MAPPING_MODEL", "gpt-4o-mini")
 # Recommended: 45 seconds (conservative), 30 for faster timeout, 60 for very large controls
 FRAMEWORK_MAPPING_TIMEOUT_SECONDS = int(os.getenv("FRAMEWORK_MAPPING_TIMEOUT_SECONDS", "45"))
 # --- END: Batched Framework Mapping Settings ---
+
+# --- Control Objectives Extraction Model Configuration ---
+# GPT model for control objectives extraction (independent of DEFAULT_GPT_MODEL)
+# Recommended: "gpt-5" for highest accuracy (complex audit language understanding)
+# Alternative: "gpt-4o" for good accuracy with faster processing
+# Control objectives require sophisticated reasoning to:
+#   - Distinguish objectives from controls/CUECs/procedures
+#   - Understand nuanced audit terminology
+#   - Accurately assess confidence based on context
+#   - Map objectives to controls with proper reasoning
+CONTROL_OBJECTIVES_MODEL = os.getenv("CONTROL_OBJECTIVES_MODEL", "gpt-4o")
+
+# --- Objective mapping configuration ---
+# Maximum line distance to consider for proximity scoring
+OBJECTIVE_MAPPING_MAX_LINE_DISTANCE = int(os.getenv("OBJECTIVE_MAPPING_MAX_LINE_DISTANCE", "50"))
+# Number of candidate objectives to score per control
+OBJECTIVE_MAPPING_CANDIDATE_LIMIT = int(os.getenv("OBJECTIVE_MAPPING_CANDIDATE_LIMIT", "5"))
+# Weights for mapping confidence (should sum to 1.0)
+OBJECTIVE_MAPPING_WEIGHT_ALIGNMENT = float(os.getenv("OBJECTIVE_MAPPING_WEIGHT_ALIGNMENT", "0.6"))
+OBJECTIVE_MAPPING_WEIGHT_PROXIMITY = float(os.getenv("OBJECTIVE_MAPPING_WEIGHT_PROXIMITY", "0.3"))
+OBJECTIVE_MAPPING_WEIGHT_OBJECTIVE_CONFIDENCE = float(os.getenv("OBJECTIVE_MAPPING_WEIGHT_OBJECTIVE_CONFIDENCE", "0.1"))
+OBJECTIVE_MAPPING_MIN_ALIGNMENT = float(os.getenv("OBJECTIVE_MAPPING_MIN_ALIGNMENT", "0.5"))
+OBJECTIVE_MAPPING_PRIMARY_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_PRIMARY_THRESHOLD", "0.8"))
+OBJECTIVE_MAPPING_POSSIBLE_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_POSSIBLE_THRESHOLD", "0.6"))
+OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD", "0.6"))
+OBJECTIVE_MAPPING_ID_SIMILARITY_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_ID_SIMILARITY_THRESHOLD", "0.8"))
+
+# --- CUEC objective mapping configuration ---
+CUEC_OBJECTIVE_MAPPING_CANDIDATE_LIMIT = int(os.getenv("CUEC_OBJECTIVE_MAPPING_CANDIDATE_LIMIT", "5"))
+CUEC_OBJECTIVE_MAPPING_PRIMARY_THRESHOLD = float(os.getenv("CUEC_OBJECTIVE_MAPPING_PRIMARY_THRESHOLD", "0.8"))
+CUEC_OBJECTIVE_MAPPING_POSSIBLE_THRESHOLD = float(os.getenv("CUEC_OBJECTIVE_MAPPING_POSSIBLE_THRESHOLD", "0.6"))
+CUEC_OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD = float(os.getenv("CUEC_OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD", "0.6"))
+CUEC_OBJECTIVE_MAPPING_MAX_LINE_DISTANCE = int(os.getenv("CUEC_OBJECTIVE_MAPPING_MAX_LINE_DISTANCE", "10"))
 
 # Maximum worker threads for parallel execution
 # Controls outer parallelism (number of controls/chunks processed at once)
@@ -1374,12 +1414,11 @@ def get_runtime_model_config(extractor_name: str) -> str:
     
     # Try database for persistence across restarts
     try:
-        import asyncio
         from sqlalchemy import text
-        from .database import engine
+        from .database import sync_engine
         
-        # Use sync connection for config access
-        with engine.sync_engine.connect() as conn:
+        # Use dedicated sync connection for config access
+        with sync_engine.connect() as conn:
             result = conn.execute(
                 text("SELECT model_name FROM model_config WHERE extractor_name = :name"),
                 {"name": extractor_name}
@@ -3187,6 +3226,9 @@ Return ONLY the statement text, no JSON or additional formatting.""",
 ENTITY_EXTRACTION_FROM_CONTEXT_PROMPT = """
 You are an expert SOC report analyst. Extract structured information for a {entity_type} from the provided text context.
 
+CRITICAL: You MUST extract ONLY the entity type specified: {entity_type}
+DO NOT extract data for any other entity type, even if you find related information in the text.
+
 ## Search Term
 {search_text}
 
@@ -3196,45 +3238,56 @@ The following context contains {occurrence_count} occurrence(s) of the search te
 {text_context}
 
 ## Task
-Extract the following fields based on the entity type:
+Extract ONLY the following fields for entity_type="{entity_type}":
 
-### For entity_type="control":
+### If entity_type="control":
+Return these fields ONLY:
 - control_id: The control identifier (e.g., CC6.1, CC7.2)
 - description: Full description of the control
 - test_procedures: Testing procedures performed
 - test_results: Results of testing
 - deviation_description: Any deviations or exceptions noted
 - page_ref: Page number where the control appears (from === PAGE X === markers)
+- confidence: 0.0-1.0
 
-### For entity_type="cuec":
+### If entity_type="cuec":
+Return these fields ONLY:
 - description: Description of the complementary user entity control
 - tsc_id: TSC framework identifier
 - coso_id: COSO framework identifier
 - justification: Justification for the CUEC
 - page_ref: Page number (from === PAGE X === markers)
+- confidence: 0.0-1.0
 
-### For entity_type="subservice_org":
+### If entity_type="subservice_org":
+Return these fields ONLY:
 - name: Name of the subservice organization
 - description: Description of services provided
 - page_ref: Page number (from === PAGE X === markers)
+- confidence: 0.0-1.0
+
+### If entity_type="objective":
+Return these fields ONLY:
+- objective_id: The control objective identifier (e.g., CC1.1, AC-01, "Objective 1")
+- objective_text: Full objective description (the goal or intended outcome)
+- page_ref: Page number (from === PAGE X === markers)
+- confidence: 0.0-1.0
+
+WARNING: If searching for an objective, look for objective statements describing GOALS or INTENDED OUTCOMES, NOT control implementations or test results. Objectives are typically found in sections titled "Control Objectives" or "Objectives" and describe what the controls are designed to achieve.
 
 ## Output Format
-Return a JSON object with:
-- The extracted fields for the entity type (use null for fields not found)
-- confidence: 0.0-1.0 indicating extraction confidence
+Return ONLY a JSON object with the fields specified for the requested entity_type="{entity_type}".
+DO NOT include fields from other entity types.
 
-Example for control:
+If the search term does not correspond to a valid {entity_type}, return confidence 0.0 and null for all entity-specific fields.
+
+Example for entity_type="objective":
 {{
-  "control_id": "CC6.1",
-  "description": "The entity implements logical access security...",
-  "test_procedures": "We inspected system configurations...",
-  "test_results": "No exceptions noted",
-  "deviation_description": null,
-  "page_ref": 42,
+  "objective_id": "CC1.1",
+  "objective_text": "The entity demonstrates a commitment to integrity and ethical values.",
+  "page_ref": 15,
   "confidence": 0.95
 }}
-
-If the search term does not correspond to a valid {entity_type}, return confidence 0.0 and null for all fields except confidence.
 """
 
 # ============================================================================
@@ -3516,6 +3569,10 @@ OBJECTIVE_TOKENS_PER_CHUNK = 600  # Balanced for various objective section forma
 OBJECTIVE_CHUNK_OVERLAP_TOKENS = 120  # Overlap to catch objectives split across chunks
 OBJECTIVE_MIN_CONFIDENCE = 0.0  # Keep all objectives, let frontend filter by confidence
 OBJECTIVE_MAX_DISTANCE_FROM_KEYWORDS = 30  # Max lines from objective keywords to count
+OBJECTIVE_PATTERN_LEARNER_MODEL = os.getenv("OBJECTIVE_PATTERN_LEARNER_MODEL", "gpt-4o-mini")
+OBJECTIVE_PATTERN_ALIGNMENT_BOOST = float(os.getenv("OBJECTIVE_PATTERN_ALIGNMENT_BOOST", "0.2"))
+OBJECTIVE_PATTERN_MIN_OBJECTIVES = int(os.getenv("OBJECTIVE_PATTERN_MIN_OBJECTIVES", "4"))
+OBJECTIVE_PATTERN_MIN_CONTROLS = int(os.getenv("OBJECTIVE_PATTERN_MIN_CONTROLS", "4"))
 
 # Multi-factor confidence weights (must sum to 1.0)
 OBJECTIVE_CONFIDENCE_WEIGHTS = {
@@ -3554,6 +3611,8 @@ OBJECTIVE_PATTERN_KEYWORDS = [
 # Objective Extraction Prompt - Multi-objective extraction with confidence scoring
 OBJECTIVE_EXTRACTION_PROMPT = """
 You are an expert SOC auditor identifying Control Objectives from audit report text.
+
+If the provided text does not contain explicit control objectives, return an empty list: {{"objectives": []}}.
 
 ## Background:
 Control objectives describe the intended outcome or goal that controls are designed to achieve.
@@ -3605,7 +3664,130 @@ Return a JSON array:
   ]
 }}
 
+Return ONLY valid JSON. Do NOT include any prose, explanations, or Markdown code fences.
+Return ONLY valid JSON. Do NOT include any prose, explanations, or Markdown code fences.
 If no objectives found, return {{"objectives": []}}.
+"""
+
+# Objective Pattern Learning Prompt - infer ID/text cues from early objectives + controls
+OBJECTIVE_PATTERN_LEARNER_PROMPT = """
+You are learning patterns for Control Objective identifiers and phrasing from a SOC report.
+
+You are given:
+1) The first few HIGH-confidence Control Objectives
+2) The first few HIGH-confidence Controls
+
+Your job is to infer:
+- Whether objectives have a recognizable identifier pattern (ID pattern)
+- If no ID pattern, the strongest text cues that indicate objectives
+- How objective IDs relate to control IDs (if any)
+
+IMPORTANT:
+- Do NOT use regex. Describe patterns in natural language.
+- Be conservative. If unsure, say pattern not present.
+
+High-Confidence Objectives:
+{objective_samples}
+
+High-Confidence Controls:
+{control_samples}
+
+Return JSON only:
+{
+    "id_pattern": {
+        "present": true/false,
+        "description": "natural-language description of the ID pattern",
+        "examples": ["example1", "example2"]
+    },
+    "text_cues": ["Objective:", "Control Objective", "Trust Services Criteria", "COSO Principle", "TSC"],
+    "alignment_notes": "brief guidance on how objective IDs relate to control IDs, if any",
+    "confidence": 0.0-1.0
+}
+"""
+
+# Objective Gap Extraction Settings
+OBJECTIVE_GAP_PROBE_LIMIT = int(os.getenv("OBJECTIVE_GAP_PROBE_LIMIT", "10"))
+OBJECTIVE_GAP_LOG_LIMIT = int(os.getenv("OBJECTIVE_GAP_LOG_LIMIT", "200"))
+OBJECTIVE_GAP_LOG_TTL_DAYS = int(os.getenv("OBJECTIVE_GAP_LOG_TTL_DAYS", "14"))
+
+# Objective Gap Pattern Prompt - infer ID series and last-segment increment
+OBJECTIVE_GAP_PATTERN_PROMPT = """
+You are analyzing Control Objective IDs from a SOC report to infer the ID series used in the report.
+
+CRITICAL: Identify the FULL prefix (everything before the FINAL incrementing segment).
+
+Examples:
+- "CC4.1", "CC4.2", "CC4.3" → prefix is "CC4." (not "CC")
+- "P3.1", "P3.2" → prefix is "P3." (not "P")
+- "A1.1", "A1.2", "A1.3" → prefix is "A1." (not "A")
+
+Rules:
+- The prefix is EVERYTHING before the last incrementing number or letter
+- Group IDs by their FULL prefix (e.g., "CC4.", "CC5.", "CC6." are separate groups)
+- The LAST segment after the prefix is what increments (numeric: 1,2,3... or alphabetic: A,B,C...AA,AB...)
+- Output JSON only, no markdown
+
+Existing Objective IDs (total: {total_ids}):
+{objective_ids}
+
+Return JSON in this exact structure:
+{{
+    "groups": [
+        {{
+            "prefix": "C2.",
+            "segment_type": "number",
+            "separator": ".",
+            "examples": ["C2.1", "C2.2", "C2.3"],
+            "notes": "C2.x series"
+        }},
+        {{
+            "prefix": "P1.",
+            "segment_type": "letter",
+            "separator": ".",
+            "examples": ["P1.A", "P1.B"],
+            "notes": "P1.A/B series"
+        }}
+    ],
+    "notes": "Brief overall notes"
+}}
+"""
+
+# Objective Pattern Rescan Prompt - find additional objectives using learned patterns
+OBJECTIVE_PATTERN_RESCAN_PROMPT = """
+You are extracting additional Control Objectives using learned patterns.
+
+Patterns Learned:
+{patterns}
+
+Existing Objectives (avoid duplicates):
+{existing_objectives}
+
+Task:
+1) Scan the provided text for objectives that match the learned ID pattern or text cues.
+2) Return FULL objective text and objective_id if present (optional).
+3) Only return objectives not already in the existing list.
+4) If you are unsure, do NOT include it.
+
+Text:
+{text_chunk}
+
+Return JSON only:
+{
+    "objectives": [
+        {
+            "objective_id": "CC1.5" or null,
+            "objective_text": "Full objective sentence or paragraph",
+            "confidence_factors": {
+                "keyword_match": 0.0-1.0,
+                "format_clarity": 0.0-1.0,
+                "gpt_opinion": 0.0-1.0
+            },
+            "section_heading": "Control Objectives" or null,
+            "reasoning": "brief reasoning",
+            "pattern_alignment": true/false
+        }
+    ]
+}
 """
 
 # Objective Deduplication Prompt - Consolidate duplicate objectives across chunks

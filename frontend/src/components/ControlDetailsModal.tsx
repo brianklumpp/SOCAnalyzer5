@@ -5,9 +5,15 @@ interface ControlDetailsModalProps {
   open: boolean;
   control: any;
   onClose: () => void;
+  onConvertToObjective?: (control: any) => void;
 }
 
-const ControlDetailsModal: React.FC<ControlDetailsModalProps> = ({ open, control, onClose }) => {
+const ControlDetailsModal: React.FC<ControlDetailsModalProps> = ({
+  open,
+  control,
+  onClose,
+  onConvertToObjective
+}) => {
   if (!control) return null;
 
   const formatField = (value: any): string => {
@@ -66,8 +72,17 @@ const ControlDetailsModal: React.FC<ControlDetailsModalProps> = ({ open, control
             {control.control_page_ref ? `Page ${control.control_page_ref}` : 'N/A'}
           </Typography>
         </Box>
+
       </DialogContent>
       <DialogActions>
+        {onConvertToObjective && (
+          <Button
+            variant="outlined"
+            onClick={() => onConvertToObjective(control)}
+          >
+            Convert to Objective
+          </Button>
+        )}
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>

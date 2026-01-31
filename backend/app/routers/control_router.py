@@ -36,6 +36,24 @@ def _parse_page_refs(value):
     return []
 
 
+def _append_edit_log(ctrl: Control, message: str) -> None:
+    prev = getattr(ctrl, "edit_log", "") or ""
+    sep = "\n" if prev else ""
+    ctrl.edit_log = f"{prev}{sep}{message}"
+
+
+def _log_field_change(ctrl: Control, field: str, old_value: Any, new_value: Any, current_user: User, timestamp: str, *, large: bool = False) -> None:
+    if old_value == new_value:
+        return
+    if field == "analyst_notes":
+        message = f"Analyst notes updated by {current_user.username} ({timestamp})"
+    elif large:
+        message = f"UI edit: {field} updated by {current_user.username} ({timestamp})"
+    else:
+        message = f"UI edit: {field} {old_value} -> {new_value} by {current_user.username} ({timestamp})"
+    _append_edit_log(ctrl, message)
+
+
 @router.patch("/report/{scan_id}/controls/annotation/{control_id}")
 async def patch_control_annotation(scan_id: int, control_id: str, data: Dict[str, Any] = Body(...), db=Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Update control annotation by control_id (legacy endpoint, may match multiple)."""
@@ -69,7 +87,9 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             return JSONResponse({"error": "Control not found"}, status_code=404)
         
         # Update allowed fields
-        justification_note = None
+        now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
+        large_fields = {"control_desc", "control_test", "control_test_results", "deviation_desc", "annotation", "confidence_calc"}
+        changed = False
         if "control_confidence" in data:
             old = getattr(ctrl, "control_confidence", None)
             new_val = None
@@ -90,34 +110,61 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
                 new_val = None
             if new_val is not None:
                 ctrl.control_confidence = new_val
-            justification_note = f"UI edit: control_confidence {old} -> {ctrl.control_confidence}"
+            _log_field_change(ctrl, "control_confidence", old, ctrl.control_confidence, current_user, now)
+            changed = changed or (old != ctrl.control_confidence)
         
         if "analyst_notes" in data:
+            old = getattr(ctrl, "analyst_notes", None)
             ctrl.analyst_notes = data["analyst_notes"]
-            now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
-            existing = ctrl.edit_log or ""
-            separator = "\n" if existing and not existing.endswith("\n") else ""
-            ctrl.edit_log = f"{existing}{separator}Analyst notes updated by {current_user.username} ({now})"
-        elif "confidence_calc" in data:
+            _log_field_change(ctrl, "analyst_notes", old, ctrl.analyst_notes, current_user, now)
+            changed = changed or (old != ctrl.analyst_notes)
+        if "confidence_calc" in data:
+            old = getattr(ctrl, "confidence_calc", None)
             ctrl.confidence_calc = data["confidence_calc"]
+            _log_field_change(ctrl, "confidence_calc", old, ctrl.confidence_calc, current_user, now, large=True)
+            changed = changed or (old != ctrl.confidence_calc)
         # Note: edit_log is auto-generated only, skip if sent from frontend
         
         if "annotation" in data:
+            old = getattr(ctrl, "annotation", None)
             ctrl.annotation = data["annotation"]
+            _log_field_change(ctrl, "annotation", old, ctrl.annotation, current_user, now, large=True)
+            changed = changed or (old != ctrl.annotation)
         if "control_id" in data:
+            old = getattr(ctrl, "control_id", None)
             ctrl.control_id = data["control_id"]
+            _log_field_change(ctrl, "control_id", old, ctrl.control_id, current_user, now)
+            changed = changed or (old != ctrl.control_id)
         if "control_desc" in data:
+            old = getattr(ctrl, "control_desc", None)
             ctrl.control_desc = data["control_desc"]
+            _log_field_change(ctrl, "control_desc", old, ctrl.control_desc, current_user, now, large=True)
+            changed = changed or (old != ctrl.control_desc)
         if "control_test" in data:
+            old = getattr(ctrl, "control_test", None)
             ctrl.control_test = data["control_test"]
+            _log_field_change(ctrl, "control_test", old, ctrl.control_test, current_user, now, large=True)
+            changed = changed or (old != ctrl.control_test)
         if "control_test_results" in data:
+            old = getattr(ctrl, "control_test_results", None)
             ctrl.control_test_results = data["control_test_results"]
+            _log_field_change(ctrl, "control_test_results", old, ctrl.control_test_results, current_user, now, large=True)
+            changed = changed or (old != ctrl.control_test_results)
         if "control_page_refs" in data or "control_page_ref" in data:
+            old = getattr(ctrl, "control_page_refs", None)
             ctrl.control_page_refs = _parse_page_refs(data.get("control_page_refs") or data.get("control_page_ref"))
+            _log_field_change(ctrl, "control_page_refs", old, ctrl.control_page_refs, current_user, now)
+            changed = changed or (old != ctrl.control_page_refs)
         if "has_deviation" in data:
+            old = getattr(ctrl, "has_deviation", None)
             ctrl.has_deviation = data["has_deviation"]
+            _log_field_change(ctrl, "has_deviation", old, ctrl.has_deviation, current_user, now)
+            changed = changed or (old != ctrl.has_deviation)
         if "deviation_desc" in data:
+            old = getattr(ctrl, "deviation_desc", None)
             ctrl.deviation_desc = data["deviation_desc"]
+            _log_field_change(ctrl, "deviation_desc", old, ctrl.deviation_desc, current_user, now, large=True)
+            changed = changed or (old != ctrl.deviation_desc)
         
         # Auto-populate deviation_desc from control_test_results if has_deviation=true but deviation_desc is blank
         if ctrl.has_deviation and not (ctrl.deviation_desc or "").strip():
@@ -132,12 +179,9 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
                 elif 'deviation' in test_results.lower() or 'exception' in test_results.lower():
                     ctrl.deviation_desc = test_results[:300].strip()
         
-        # Append audit note to edit_log
-        if justification_note:
-            prev = getattr(ctrl, "edit_log", "") or ""
-            sep = ",\n" if prev else ""
-            now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
-            ctrl.edit_log = f"{prev}{sep}{justification_note} by {current_user.username} ({now})"
+        # Update audit fields
+        ctrl.updated_at = datetime.datetime.utcnow()
+        ctrl.updated_by_user_id = current_user.id
         
         # Mark executive summary stale
         await mark_executive_summary_stale(scan_id, db)
@@ -180,7 +224,8 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
         if not ctrl:
             return JSONResponse({"error": "Control not found"}, status_code=404)
         
-        justification_note = None
+        now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
+        large_fields = {"control_desc", "control_test", "control_test_results", "deviation_desc", "annotation", "confidence_calc"}
         if "control_confidence" in data:
             old = getattr(ctrl, "control_confidence", None)
             new_val = None
@@ -201,34 +246,50 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
                 new_val = None
             if new_val is not None:
                 ctrl.control_confidence = new_val
-            justification_note = f"UI edit: control_confidence {old} -> {ctrl.control_confidence}"
+            _log_field_change(ctrl, "control_confidence", old, ctrl.control_confidence, current_user, now)
         
         if "analyst_notes" in data:
+            old = getattr(ctrl, "analyst_notes", None)
             ctrl.analyst_notes = data["analyst_notes"]
-            now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
-            existing = ctrl.edit_log or ""
-            separator = "\n" if existing and not existing.endswith("\n") else ""
-            ctrl.edit_log = f"{existing}{separator}Analyst notes updated by {current_user.username} ({now})"
-        elif "confidence_calc" in data:
+            _log_field_change(ctrl, "analyst_notes", old, ctrl.analyst_notes, current_user, now)
+        if "confidence_calc" in data:
+            old = getattr(ctrl, "confidence_calc", None)
             ctrl.confidence_calc = data["confidence_calc"]
+            _log_field_change(ctrl, "confidence_calc", old, ctrl.confidence_calc, current_user, now, large=True)
         # Note: edit_log is auto-generated only, skip if sent from frontend
         
         if "annotation" in data:
+            old = getattr(ctrl, "annotation", None)
             ctrl.annotation = data["annotation"]
+            _log_field_change(ctrl, "annotation", old, ctrl.annotation, current_user, now, large=True)
         if "control_id" in data:
+            old = getattr(ctrl, "control_id", None)
             ctrl.control_id = data["control_id"]
+            _log_field_change(ctrl, "control_id", old, ctrl.control_id, current_user, now)
         if "control_desc" in data:
+            old = getattr(ctrl, "control_desc", None)
             ctrl.control_desc = data["control_desc"]
+            _log_field_change(ctrl, "control_desc", old, ctrl.control_desc, current_user, now, large=True)
         if "control_test" in data:
+            old = getattr(ctrl, "control_test", None)
             ctrl.control_test = data["control_test"]
+            _log_field_change(ctrl, "control_test", old, ctrl.control_test, current_user, now, large=True)
         if "control_test_results" in data:
+            old = getattr(ctrl, "control_test_results", None)
             ctrl.control_test_results = data["control_test_results"]
+            _log_field_change(ctrl, "control_test_results", old, ctrl.control_test_results, current_user, now, large=True)
         if "control_page_refs" in data or "control_page_ref" in data:
+            old = getattr(ctrl, "control_page_refs", None)
             ctrl.control_page_refs = _parse_page_refs(data.get("control_page_refs") or data.get("control_page_ref"))
+            _log_field_change(ctrl, "control_page_refs", old, ctrl.control_page_refs, current_user, now)
         if "has_deviation" in data:
+            old = getattr(ctrl, "has_deviation", None)
             ctrl.has_deviation = data["has_deviation"]
+            _log_field_change(ctrl, "has_deviation", old, ctrl.has_deviation, current_user, now)
         if "deviation_desc" in data:
+            old = getattr(ctrl, "deviation_desc", None)
             ctrl.deviation_desc = data["deviation_desc"]
+            _log_field_change(ctrl, "deviation_desc", old, ctrl.deviation_desc, current_user, now, large=True)
         
         # Auto-populate deviation_desc from control_test_results if has_deviation=true but deviation_desc is blank
         if ctrl.has_deviation and not (ctrl.deviation_desc or "").strip():
@@ -242,12 +303,6 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
                 # Fallback: use first 300 chars of test_results if it contains "deviation"
                 elif 'deviation' in test_results.lower() or 'exception' in test_results.lower():
                     ctrl.deviation_desc = test_results[:300].strip()
-        
-        if justification_note:
-            prev = getattr(ctrl, "edit_log", "") or ""
-            sep = ",\n" if prev else ""
-            now = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
-            ctrl.edit_log = f"{prev}{sep}{justification_note} by {current_user.username} ({now})"
         
         # Update audit fields
         ctrl.updated_at = datetime.datetime.utcnow()

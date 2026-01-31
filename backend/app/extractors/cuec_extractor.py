@@ -19,12 +19,17 @@ import os
 import json
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
 from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, List
 from .. import config
 from ..gpt_client import gpt_extract
+from ..models import CUEC, ControlObjective, CUECObjectiveMapping, Scan
+from ..database import sync_engine
+from sqlalchemy.orm import sessionmaker
+from .objective_extractor import calculate_alignment_score
 
 # Cache for GPT responsibility checks to avoid redundant calls
 _responsibility_check_cache = {}
@@ -246,6 +251,214 @@ def chunk_text_with_overlap(text, chunk_size, overlap):
             i += chunk_size
     
     return chunks
+
+
+def _min_page_ref(page_refs: Optional[Any]) -> Optional[int]:
+    if page_refs is None:
+        return None
+    if isinstance(page_refs, int):
+        return page_refs
+    if isinstance(page_refs, list) and page_refs:
+        try:
+            return min([p for p in page_refs if isinstance(p, int)])
+        except Exception:
+            return None
+    return None
+
+
+def _cuec_page_proximity_score(cuec_page: Optional[int], objective_page: Optional[int]) -> float:
+    if cuec_page is None or objective_page is None:
+        return 0.0
+    if objective_page > cuec_page:
+        return 0.0
+    distance = cuec_page - objective_page
+    if distance <= 1:
+        return 0.3
+    return 0.0
+
+
+def _cuec_line_proximity_score(cuec_line: Optional[int], objective_line: Optional[int]) -> float:
+    if cuec_line is None or objective_line is None:
+        return 0.0
+    distance = abs(cuec_line - objective_line)
+    return 0.3 if distance <= config.CUEC_OBJECTIVE_MAPPING_MAX_LINE_DISTANCE else 0.0
+
+
+def map_cuecs_to_objectives(
+    scan_id: int,
+    db_session: Optional[Any] = None,
+    force: bool = False
+) -> int:
+    """
+    Map CUECs to control objectives using weighted proximity and GPT alignment.
+    """
+    close_session = False
+    if db_session is None:
+        SessionLocal = sessionmaker(bind=sync_engine)
+        db_session = SessionLocal()
+        close_session = True
+
+    try:
+        cuecs = db_session.query(CUEC).filter_by(scan_id=scan_id).all()
+        objectives = db_session.query(ControlObjective).filter_by(scan_id=scan_id).all()
+
+        if not cuecs or not objectives:
+            return 0
+
+        scan = db_session.query(Scan).filter_by(id=scan_id).first()
+        section_start = None
+        section_end = None
+        if scan and getattr(scan, "sections", None):
+            sections_data = scan.sections
+            if isinstance(sections_data, str):
+                try:
+                    sections_data = json.loads(sections_data)
+                except Exception:
+                    sections_data = None
+            if isinstance(sections_data, list):
+                desc_section = next(
+                    (s for s in sections_data if isinstance(s, dict) and s.get("topic") == "Description_of_System"),
+                    None
+                )
+                if desc_section:
+                    section_start = desc_section.get("DOC_page_ref")
+                    section_end = desc_section.get("end_DOC_page_ref")
+
+        cuec_ids = [c.id for c in cuecs]
+        existing_mappings = db_session.query(CUECObjectiveMapping).filter(
+            CUECObjectiveMapping.cuec_id.in_(cuec_ids)
+        ).all()
+        mappings_by_cuec: Dict[int, List[CUECObjectiveMapping]] = {}
+        for mapping in existing_mappings:
+            mappings_by_cuec.setdefault(mapping.cuec_id, []).append(mapping)
+
+        mappings_created = 0
+        mappings_updated = 0
+
+        for cuec in cuecs:
+            existing_for_cuec = mappings_by_cuec.get(cuec.id, [])
+            if existing_for_cuec and not force:
+                primary_existing = [m for m in existing_for_cuec if m.is_primary]
+                if not primary_existing:
+                    best_existing = max(
+                        existing_for_cuec,
+                        key=lambda m: m.mapping_confidence if m.mapping_confidence is not None else 0.0
+                    )
+                    best_existing.is_primary = True
+                    mappings_updated += 1
+                continue
+
+            if force and existing_for_cuec:
+                for mapping in existing_for_cuec:
+                    db_session.delete(mapping)
+
+            cuec_page = _min_page_ref(cuec.cuec_page_refs)
+            cuec_line = cuec.cuec_line_ref
+
+            candidate_objectives: List[ControlObjective] = []
+            for obj in objectives:
+                obj_page = _min_page_ref(obj.page_refs)
+                if section_start is not None and section_end is not None and obj_page is not None:
+                    if obj_page < section_start or obj_page > section_end:
+                        continue
+                if cuec_page is not None and obj_page is not None:
+                    if obj_page > cuec_page:
+                        continue
+                    if cuec_page - obj_page > 1:
+                        continue
+                candidate_objectives.append(obj)
+
+            if cuec_line is not None:
+                candidate_objectives.sort(
+                    key=lambda obj: abs((obj.line_ref or cuec_line) - cuec_line)
+                )
+
+            candidate_objectives = candidate_objectives[:max(1, config.CUEC_OBJECTIVE_MAPPING_CANDIDATE_LIMIT)]
+
+            best_objective = None
+            best_score = -1.0
+            best_scores = {}
+            best_possible_objective = None
+            best_possible_score = -1.0
+            best_possible_scores = {}
+
+            for objective in candidate_objectives:
+                try:
+                    alignment_score, _reasoning = calculate_alignment_score(
+                        objective.objective_text,
+                        cuec.cuec_description or ""
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed alignment for cuec {cuec.id} and objective {objective.id}: {e}"
+                    )
+                    alignment_score = 0.0
+
+                gpt_score = 0.2 if alignment_score >= config.CUEC_OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD else 0.0
+                obj_page = _min_page_ref(objective.page_refs)
+                page_score = _cuec_page_proximity_score(cuec_page, obj_page)
+                line_score = _cuec_line_proximity_score(cuec_line, objective.line_ref)
+                total_score = max(0.0, min(1.0, page_score + line_score + gpt_score))
+
+                if total_score >= config.CUEC_OBJECTIVE_MAPPING_PRIMARY_THRESHOLD and total_score > best_score:
+                    best_score = total_score
+                    best_objective = objective
+                    best_scores = {
+                        "page_proximity_score": page_score,
+                        "line_proximity_score": line_score,
+                        "gpt_alignment_score": gpt_score
+                    }
+                elif (
+                    total_score >= config.CUEC_OBJECTIVE_MAPPING_POSSIBLE_THRESHOLD
+                    and total_score > best_possible_score
+                ):
+                    best_possible_score = total_score
+                    best_possible_objective = objective
+                    best_possible_scores = {
+                        "page_proximity_score": page_score,
+                        "line_proximity_score": line_score,
+                        "gpt_alignment_score": gpt_score
+                    }
+
+            if best_objective is None and best_possible_objective is None:
+                continue
+
+            if best_objective is not None:
+                mapping = CUECObjectiveMapping(
+                    cuec_id=cuec.id,
+                    objective_id=best_objective.id,
+                    mapping_confidence=max(0.0, best_score),
+                    mapping_method='auto_weighted',
+                    is_primary=True,
+                    page_proximity_score=best_scores.get("page_proximity_score"),
+                    line_proximity_score=best_scores.get("line_proximity_score"),
+                    gpt_alignment_score=best_scores.get("gpt_alignment_score"),
+                    created_at=datetime.utcnow()
+                )
+                db_session.add(mapping)
+                mappings_created += 1
+            elif best_possible_objective is not None:
+                mapping = CUECObjectiveMapping(
+                    cuec_id=cuec.id,
+                    objective_id=best_possible_objective.id,
+                    mapping_confidence=max(0.0, best_possible_score),
+                    mapping_method='auto_weighted',
+                    is_primary=False,
+                    page_proximity_score=best_possible_scores.get("page_proximity_score"),
+                    line_proximity_score=best_possible_scores.get("line_proximity_score"),
+                    gpt_alignment_score=best_possible_scores.get("gpt_alignment_score"),
+                    created_at=datetime.utcnow()
+                )
+                db_session.add(mapping)
+                mappings_created += 1
+
+        if mappings_created > 0 or mappings_updated > 0:
+            db_session.commit()
+
+        return mappings_created
+    finally:
+        if close_session:
+            db_session.close()
 
 def levenshtein_distance(a, b):
     if a == b:

@@ -9,8 +9,9 @@ from fastapi import APIRouter, Depends, Body, HTTPException, BackgroundTasks
 from fastapi.responses import Response
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.future import select
+from sqlalchemy import and_
 
-from ..models import Scan, Control, CUEC, SubserviceOrg, Company, Product
+from ..models import Scan, Control, CUEC, SubserviceOrg, Company, Product, ControlObjective, ControlObjectiveMapping, CUECObjectiveMapping
 from ..models import User
 from ..database import get_db
 from ..services.excel_export import ExcelExportService
@@ -55,6 +56,69 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
         cuecs = (await db.execute(select(CUEC).where(CUEC.scan_id == scan_id))).scalars().all()
         suborgs = (await db.execute(select(SubserviceOrg).where(SubserviceOrg.scan_id == scan_id))).scalars().all()
         product = (await db.execute(select(Product).where(Product.scan_id == scan_id))).scalars().first()
+
+        # Build primary objective mapping for controls
+        primary_objective_by_control_id = {}
+        try:
+            mappings_result = await db.execute(
+                select(ControlObjectiveMapping, ControlObjective)
+                .join(ControlObjective, ControlObjectiveMapping.objective_id == ControlObjective.id)
+                .join(Control, ControlObjectiveMapping.control_id == Control.id)
+                .where(
+                    and_(
+                        Control.scan_id == scan_id,
+                        ControlObjectiveMapping.is_primary.is_(True)
+                    )
+                )
+            )
+            for mapping, objective in mappings_result.all():
+                primary_objective_by_control_id[mapping.control_id] = {
+                    "id": objective.id,
+                    "objective_id": objective.objective_id,
+                    "objective_text": objective.objective_text,
+                    "final_confidence": objective.final_confidence,
+                    "mapping_confidence": mapping.mapping_confidence,
+                    "page_proximity_score": getattr(mapping, "page_proximity_score", None),
+                    "line_proximity_score": getattr(mapping, "line_proximity_score", None),
+                    "gpt_alignment_score": getattr(mapping, "gpt_alignment_score", None),
+                    "id_alignment_score": getattr(mapping, "id_alignment_score", None),
+                    "page_refs": objective.page_refs,
+                    "line_ref": objective.line_ref,
+                    "status": objective.status
+                }
+        except Exception as e:
+            logging.error(f"[REPORT] Failed to build primary objective map for scan_id={scan_id}: {e}")
+
+        # Build primary objective mapping for CUECs
+        primary_objective_by_cuec_id = {}
+        try:
+            cuec_mappings_result = await db.execute(
+                select(CUECObjectiveMapping, ControlObjective)
+                .join(ControlObjective, CUECObjectiveMapping.objective_id == ControlObjective.id)
+                .join(CUEC, CUECObjectiveMapping.cuec_id == CUEC.id)
+                .where(
+                    and_(
+                        CUEC.scan_id == scan_id,
+                        CUECObjectiveMapping.is_primary.is_(True)
+                    )
+                )
+            )
+            for mapping, objective in cuec_mappings_result.all():
+                primary_objective_by_cuec_id[mapping.cuec_id] = {
+                    "id": objective.id,
+                    "objective_id": objective.objective_id,
+                    "objective_text": objective.objective_text,
+                    "final_confidence": objective.final_confidence,
+                    "mapping_confidence": mapping.mapping_confidence,
+                    "page_proximity_score": getattr(mapping, "page_proximity_score", None),
+                    "line_proximity_score": getattr(mapping, "line_proximity_score", None),
+                    "gpt_alignment_score": getattr(mapping, "gpt_alignment_score", None),
+                    "page_refs": objective.page_refs,
+                    "line_ref": objective.line_ref,
+                    "status": objective.status
+                }
+        except Exception as e:
+            logging.error(f"[REPORT] Failed to build primary CUEC objective map for scan_id={scan_id}: {e}")
 
         # Extract additional fields from the results JSON if present
         results = scan_row.result_json or {}
@@ -113,6 +177,16 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
             except Exception:
                 pass
         
+        if controls:
+            sample_control_id = getattr(controls[0], "id", None)
+            sample_objective = primary_objective_by_control_id.get(sample_control_id)
+            logging.error(
+                f"[REPORT] primary objective map size={len(primary_objective_by_control_id)} "
+                f"sample_control_id={sample_control_id} has_sample={bool(sample_objective)}"
+            )
+        else:
+            logging.error("[REPORT] primary objective map size=0 (no controls)")
+
         payload = {
             "scan_id": scan_row.id,
             "scan_date": (scan_row.scan_date.isoformat() if getattr(scan_row, "scan_date", None) else None),
@@ -192,6 +266,15 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
                     "control_strength": getattr(c, "control_strength", None),
                     "edit_log": getattr(c, "edit_log", None),
                     "pdf_snippet": getattr(c, "pdf_snippet", None),
+                    "cuec_primary_objective": primary_objective_by_cuec_id.get(getattr(c, "id", None)),
+                    "cuec_primary_objective_text": (primary_objective_by_cuec_id.get(getattr(c, "id", None)) or {}).get("objective_text"),
+                    "cuec_primary_objective_confidence": (primary_objective_by_cuec_id.get(getattr(c, "id", None)) or {}).get("mapping_confidence"),
+                    "cuec_primary_objective_scores": {
+                        "page_proximity_score": (primary_objective_by_cuec_id.get(getattr(c, "id", None)) or {}).get("page_proximity_score"),
+                        "line_proximity_score": (primary_objective_by_cuec_id.get(getattr(c, "id", None)) or {}).get("line_proximity_score"),
+                        "gpt_alignment_score": (primary_objective_by_cuec_id.get(getattr(c, "id", None)) or {}).get("gpt_alignment_score"),
+                        "total": (primary_objective_by_cuec_id.get(getattr(c, "id", None)) or {}).get("mapping_confidence"),
+                    },
                 } for c in cuecs
             ],
             "controls": [
@@ -208,7 +291,18 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
                     "framework_mappings", "primary_framework",
                     "primary_criterion_id", "primary_confidence",
                     "is_duplicate_instance", "duplicate_group_id", "instance_differentiator"
-                ]}) for ctrl in controls
+                ]} | {
+                    "primary_objective": primary_objective_by_control_id.get(getattr(ctrl, "id", None)),
+                    "primary_objective_text": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("objective_text"),
+                    "primary_objective_confidence": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("mapping_confidence"),
+                    "primary_objective_scores": {
+                        "page_proximity_score": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("page_proximity_score"),
+                        "line_proximity_score": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("line_proximity_score"),
+                        "gpt_alignment_score": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("gpt_alignment_score"),
+                        "id_alignment_score": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("id_alignment_score"),
+                        "total": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("mapping_confidence"),
+                    }
+                }) for ctrl in controls
             ],
             "bad_chunks": bad_chunks if any(bad_chunks.values()) else persisted_bad_chunks,
             "executive_summary": getattr(scan_row, "executive_summary", None)
