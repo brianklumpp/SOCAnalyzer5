@@ -4,12 +4,13 @@ Handles recomputation of framework mappings for controls and CUECs.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from ..models import Control, CUEC, Scan
 from ..frameworks import map_control_to_frameworks_dynamic, get_available_frameworks
+from ..utils.objective_id_normalizer import normalize_objective_id
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,12 @@ async def recompute_control_framework_mappings(
         # Update control with new mappings
         control.framework_mappings = mapping_result.get("framework_mappings", {})
         control.primary_framework = mapping_result.get("primary_framework")
-        control.primary_criterion_id = mapping_result.get("primary_criterion_id")
+        
+        # Normalize the criterion ID
+        original_criterion_id = mapping_result.get("primary_criterion_id")
+        control.primary_criterion_id = original_criterion_id
+        control.primary_criterion_id_normalized = normalize_objective_id(original_criterion_id) if original_criterion_id else None
+        control.primary_criterion_id_original = original_criterion_id
         control.primary_confidence = mapping_result.get("primary_confidence")
         
         await db.commit()
@@ -184,7 +190,12 @@ async def recompute_cuec_framework_mappings(
         # Update CUEC with new Phase 1 multi-framework mappings
         cuec.framework_mappings = mapping_result.get("framework_mappings", {})
         cuec.primary_framework = mapping_result.get("primary_framework")
-        cuec.primary_criterion_id = mapping_result.get("primary_criterion_id")
+        
+        # Normalize the criterion ID
+        original_criterion_id = mapping_result.get("primary_criterion_id")
+        cuec.primary_criterion_id = original_criterion_id
+        cuec.primary_criterion_id_normalized = normalize_objective_id(original_criterion_id) if original_criterion_id else None
+        cuec.primary_criterion_id_original = original_criterion_id
         cuec.primary_confidence = mapping_result.get("primary_confidence")
         
         await db.commit()
@@ -279,3 +290,157 @@ async def compute_framework_mappings(
             "error": str(e),
             "framework_mappings": {}
         }
+
+
+async def map_all_frameworks_for_scan(
+    scan_id: int,
+    db: Session,
+    entity_type: str = "controls",
+    framework_keys: Optional[List[str]] = None,
+    min_confidence: float = 0.0
+) -> Dict[str, Any]:
+    """
+    Map all controls or CUECs in a scan to ALL available frameworks.
+    
+    This is the on-demand "full framework mapping" triggered from the frontend
+    after the scan pipeline completes with only default frameworks (TSC+COSO).
+    
+    Uses the batched mapping function for efficiency (single GPT call per item).
+    
+    Args:
+        scan_id: Scan ID
+        db: Database session
+        entity_type: "controls" or "cuecs"
+        framework_keys: Optional explicit list of framework keys to map to.
+                       If None, maps to ALL frameworks for the report type.
+        min_confidence: Only map items with confidence >= this value (default: 0.0 = all)
+        
+    Returns:
+        Dict with success count, failed count, and results per item
+    """
+    from ..frameworks import map_control_to_all_frameworks_batched, extract_mapping_fields_for_db
+    
+    try:
+        # Get scan for report type
+        scan_result = await db.execute(select(Scan).where(Scan.id == scan_id))
+        scan = scan_result.scalar_one_or_none()
+        if not scan:
+            return {"success": False, "error": f"Scan {scan_id} not found"}
+        
+        report_type = scan.report_type.value if scan.report_type else "SOC2"
+        
+        # Load ALL frameworks (not scan_default_only)
+        available_frameworks = get_available_frameworks(
+            report_type=report_type,
+            scan_default_only=False,
+            framework_keys=framework_keys
+        )
+        
+        if not available_frameworks:
+            return {"success": False, "error": f"No frameworks available for report type: {report_type}"}
+        
+        fw_names = list(available_frameworks.keys())
+        logger.info(f"[MAP_ALL_FRAMEWORKS] Mapping {entity_type} in scan {scan_id} to {len(fw_names)} frameworks: {fw_names}")
+        
+        # Get items to map
+        if entity_type == "controls":
+            query = select(Control).where(Control.scan_id == scan_id)
+            if min_confidence > 0:
+                query = query.where(Control.control_confidence >= min_confidence)
+            result = await db.execute(query)
+            items = result.scalars().all()
+        elif entity_type == "cuecs":
+            query = select(CUEC).where(CUEC.scan_id == scan_id)
+            if min_confidence > 0:
+                query = query.where(CUEC.cuec_confidence >= min_confidence)
+            result = await db.execute(query)
+            items = result.scalars().all()
+        else:
+            return {"success": False, "error": f"Invalid entity_type: {entity_type}"}
+        
+        if not items:
+            return {
+                "success": True,
+                "total": 0,
+                "success_count": 0,
+                "failed_count": 0,
+                "frameworks": fw_names,
+                "message": f"No {entity_type} found in scan {scan_id}"
+            }
+        
+        logger.info(f"[MAP_ALL_FRAMEWORKS] Processing {len(items)} {entity_type}")
+        
+        success_count = 0
+        failed_count = 0
+        
+        for item in items:
+            try:
+                if entity_type == "controls":
+                    desc = item.control_desc or ""
+                    item_id = item.control_id or str(item.id)
+                    has_deviation = item.has_deviation or False
+                    deviation_desc = item.deviation_desc
+                else:
+                    desc = item.cuec_description or ""
+                    item_id = f"CUEC-{item.cuec_seq or item.id}"
+                    has_deviation = False
+                    deviation_desc = None
+                
+                if not desc:
+                    logger.warning(f"[MAP_ALL_FRAMEWORKS] Skipping {item_id}: no description")
+                    continue
+                
+                # Use batched mapping (single GPT call for all frameworks)
+                mapping_result = map_control_to_all_frameworks_batched(
+                    control_desc=desc,
+                    control_id=item_id,
+                    available_frameworks=available_frameworks,
+                    has_deviation=has_deviation,
+                    deviation_desc=deviation_desc,
+                    top_k=5
+                )
+                
+                # Merge new framework mappings with existing ones
+                existing_mappings = item.framework_mappings or {}
+                new_mappings = mapping_result.get("framework_mappings", {})
+                
+                # Merge: new frameworks override, existing frameworks preserved if not in new
+                merged_mappings = {**existing_mappings, **new_mappings}
+                
+                # Update item
+                item.framework_mappings = merged_mappings
+                item.primary_framework = mapping_result.get("primary_framework") or item.primary_framework
+                
+                original_criterion_id = mapping_result.get("primary_criterion_id")
+                if original_criterion_id:
+                    item.primary_criterion_id = original_criterion_id
+                    item.primary_criterion_id_normalized = normalize_objective_id(original_criterion_id)
+                    item.primary_criterion_id_original = original_criterion_id
+                    item.primary_confidence = mapping_result.get("primary_confidence")
+                
+                success_count += 1
+                
+                if success_count % 10 == 0:
+                    logger.info(f"[MAP_ALL_FRAMEWORKS] Progress: {success_count}/{len(items)} {entity_type} mapped")
+                    
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"[MAP_ALL_FRAMEWORKS] Failed to map {item_id}: {e}")
+        
+        await db.commit()
+        
+        logger.info(f"[MAP_ALL_FRAMEWORKS] Complete: {success_count} mapped, {failed_count} failed out of {len(items)} {entity_type}")
+        
+        return {
+            "success": True,
+            "total": len(items),
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "frameworks": fw_names,
+            "message": f"Mapped {success_count} of {len(items)} {entity_type} to {len(fw_names)} frameworks ({', '.join(fw_names)})"
+        }
+        
+    except Exception as e:
+        logger.error(f"[MAP_ALL_FRAMEWORKS] Error: {e}", exc_info=True)
+        await db.rollback()
+        return {"success": False, "error": str(e)}

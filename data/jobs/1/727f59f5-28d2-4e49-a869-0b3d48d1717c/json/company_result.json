@@ -1,9 +1,0 @@
-{
-  "company": "ServiceNow, Inc.",
-  "parent_company": null,
-  "company_domain": "servicenow.com",
-  "confidence": 1.0,
-  "raw_gpt_responses": [
-    "{\n    \"company\": \"ServiceNow, Inc.\",\n    \"parent_company\": null,\n    \"company_domain\": \"servicenow.com\",\n    \"confidence\": 1.0,\n    \"explanation\": \"The report explicitly names 'ServiceNow, Inc.' as the company being audited multiple times in the Management’s Assertion and the Independent Service Auditor’s Report. The domain 'servicenow.com' is inferred from the company's name as no explicit URLs are provided in the text but is widely recognized as their official domain.\"\n}"
-  ]
-}

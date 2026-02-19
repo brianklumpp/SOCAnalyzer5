@@ -124,7 +124,21 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
         results = scan_row.result_json or {}
         auditor = scan_row.auditor if getattr(scan_row, 'auditor', None) else results.get("auditor", {})
         coverage_period = results.get("coverage_period", {})
-        report_date = results.get("report_date", {})
+        report_date_result = results.get("report_date", {})
+        
+        # Extract actual report_date value from extraction result
+        # The extraction stores {"report_date": "YYYY-MM-DD", "explanation": "..."} in result_json
+        # But scan.report_date column may be NULL if never populated from extraction
+        report_date_value = None
+        if getattr(scan_row, 'report_date', None):
+            # If report_date column is populated, use it
+            report_date_value = getattr(scan_row, 'report_date', None).date().isoformat() if getattr(scan_row, 'report_date', None) else None
+        elif isinstance(report_date_result, dict) and report_date_result.get('report_date'):
+            # Otherwise try to extract from result_json
+            report_date_value = report_date_result.get('report_date')
+        elif isinstance(report_date_result, str):
+            # Sometimes result_json might store just the date string directly
+            report_date_value = report_date_result
         
         def extract_bad_chunks(section):
             if isinstance(section, dict):
@@ -197,7 +211,7 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
             "coverage_period": coverage_period,
             "coverage_start": (getattr(scan_row, "coverage_start", None).date().isoformat() if getattr(scan_row, "coverage_start", None) else None),
             "coverage_end": (getattr(scan_row, "coverage_end", None).date().isoformat() if getattr(scan_row, "coverage_end", None) else None),
-            "report_date": report_date,
+            "report_date": report_date_value,
             "product": getattr(scan_row, "product", None) or (product.name if product else None),
             "report_type": getattr(scan_row, "report_type", "SOC2"),
             "as_of_date": (getattr(scan_row, "as_of_date", None).date().isoformat() if getattr(scan_row, "as_of_date", None) else None),

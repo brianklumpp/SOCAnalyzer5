@@ -21,7 +21,10 @@ import {
   ZoomOutMap,
   Search as SearchIcon,
   NavigateBefore,
-  NavigateNext
+  NavigateNext,
+  Close,
+  SwapHoriz,
+  SwapVert
 } from '@mui/icons-material';
 import { APP_CONFIG } from '../../config';
 import { api } from '../../api/client';
@@ -85,6 +88,8 @@ interface PdfViewerPanelProps {
   initialPage?: number | null;
   navigationKey?: number; // Changes when navigation is requested to force re-navigation
   onClose?: () => void;
+  orientation?: 'horizontal' | 'vertical'; // Split view orientation
+  onToggleOrientation?: () => void; // Toggle split orientation
 }
 
 export const PdfViewerPanel: React.FC<PdfViewerPanelProps> = ({
@@ -92,7 +97,9 @@ export const PdfViewerPanel: React.FC<PdfViewerPanelProps> = ({
   pdfSnippet,
   initialPage,
   navigationKey,
-  onClose
+  onClose,
+  orientation,
+  onToggleOrientation
 }) => {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -598,6 +605,23 @@ export const PdfViewerPanel: React.FC<PdfViewerPanelProps> = ({
               </IconButton>
             </Tooltip>
           </Stack>
+        )}
+
+        {/* Split View Controls */}
+        {onToggleOrientation && (
+          <Tooltip title={orientation === 'horizontal' ? 'Switch to Vertical Split' : 'Switch to Horizontal Split'}>
+            <IconButton size="small" onClick={onToggleOrientation} sx={{ ml: 1 }}>
+              {orientation === 'horizontal' ? <SwapVert /> : <SwapHoriz />}
+            </IconButton>
+          </Tooltip>
+        )}
+        
+        {onClose && (
+          <Tooltip title="Close Split View">
+            <IconButton size="small" onClick={onClose} color="error">
+              <Close />
+            </IconButton>
+          </Tooltip>
         )}
       </Box>
 

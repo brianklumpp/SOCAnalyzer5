@@ -28,7 +28,10 @@ RUN echo "=== Build Environment ===" && \
     echo "VITE_API_BASE=$VITE_API_BASE" && \
     echo "VITE_WS_BASE=$VITE_WS_BASE"
 # Vite build is fast and efficient - no memory issues!
-RUN npm run build && ls -la /app/build && echo "Build directory contents:" && ls -la /app/build/ || echo "Build failed!"
+RUN npm run build || (echo "Build failed with exit code $?" && exit 1) && \
+    echo "=== Checking build output ===" && \
+    ls -la /app/ && \
+    (ls -la /app/build || ls -la /app/dist || echo "No build/dist directory found!")
 
 # Production stage with nginx
 FROM nginx:alpine AS prod

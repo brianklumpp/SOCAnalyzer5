@@ -6,7 +6,7 @@ from dateutil import parser as date_parser
 from collections import Counter
 from pathlib import Path
 from .. import config
-from ..gpt_client import gpt_extract
+from ..gpt_client import gpt_extract, extract_json_from_response
 
 logger = logging.getLogger(__name__)
 
@@ -331,12 +331,8 @@ def extract_coverage_period(job_paths=None, job_id=None):
         result['explanation'] = 'No response from GPT.'
     else:
         try:
-            # Handle markdown code blocks from GPT
-            response_clean = response.strip()
-            # Try to extract JSON from markdown code block (regardless of position in response)
-            json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
-            if json_match:
-                response_clean = json_match.group(1).strip()
+            # Use the robust JSON extraction utility
+            response_clean = extract_json_from_response(response, f'coverage_period_JOB{job_id}')
             
             data = json.loads(response_clean)
             result['type'] = data.get('type')

@@ -263,21 +263,21 @@ const JobQueuePage: React.FC = () => {
                           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                             <LinearProgress
                               variant="determinate"
-                              value={job.counters.controls_percent || 0}
+                              value={job.counters?.controls_percent || 0}
                               sx={{ flexGrow: 1 }}
                             />
                             <Typography variant="caption">
-                              {job.counters.controls_percent || 0}%
+                              {job.counters?.controls_percent || 0}%
                             </Typography>
                           </Box>
                         )}
                       </TableCell>
                       <TableCell>
-                        {job.counters.controls_count > 0 && (
+                        {(job.counters?.controls_count || 0) > 0 && (
                           <Typography variant="body2">
-                            {job.counters.controls_count}
-                            {job.counters.controls_total_estimate > 0 &&
-                              ` / ${job.counters.controls_total_estimate}`}
+                            {job.counters?.controls_count}
+                            {(job.counters?.controls_total_estimate || 0) > 0 &&
+                              ` / ${job.counters?.controls_total_estimate}`}
                           </Typography>
                         )}
                       </TableCell>

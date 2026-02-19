@@ -367,7 +367,7 @@ def map_controls_parallel(
         List of controls with framework_mappings added
         
     Example:
-        from backend.app.threading import IntelligentTaskExecutor, ProgressTracker
+        from backend.app.scan_threading import IntelligentTaskExecutor, ProgressTracker
         from backend.app.frameworks import get_available_frameworks, map_controls_parallel
         
         executor = IntelligentTaskExecutor(max_workers=4)
@@ -559,17 +559,13 @@ def map_controls_parallel(
                     # Update Redis counters
                     if job_id and redis_client:
                         try:
-                            import json
                             controls_mapped_percent = int((mappings_completed / len(controls)) * 100)
-                            job_json = redis_client.get(f"job:{job_id}")
-                            if job_json:
-                                job = json.loads(job_json)
-                                if "counters" not in job:
-                                    job["counters"] = {}
-                                job["counters"]["controls_mapped_count"] = mappings_completed
-                                job["counters"]["controls_mapped_percent"] = controls_mapped_percent
-                                redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
-                                logging.info(f"[PROGRESS] Framework mapping: {mappings_completed}/{len(controls)} ({controls_mapped_percent}%)")
+                            from ..job_state import job_hmset
+                            job_hmset(job_id, {
+                                'controls_mapped_count': mappings_completed,
+                                'controls_mapped_percent': controls_mapped_percent
+                            }, redis_client)
+                            logging.info(f"[PROGRESS] Framework mapping: {mappings_completed}/{len(controls)} ({controls_mapped_percent}%)")
                         except Exception as e:
                             logging.warning(f"Could not update mapping progress: {e}")
         
@@ -577,7 +573,7 @@ def map_controls_parallel(
     
     # Execute parallel mapping using outer executor
     try:
-        from ..threading.intelligent_executor import TaskPriority
+        from ..scan_threading.intelligent_executor import TaskPriority
         
         results = executor.map(
             process_control_batch,
@@ -777,16 +773,12 @@ def _map_controls_sequential(
             # Update Redis counters
             if job_id and redis_client:
                 try:
-                    import json
                     controls_mapped_percent = int((controls_mapped / len(controls)) * 100)
-                    job_json = redis_client.get(f"job:{job_id}")
-                    if job_json:
-                        job = json.loads(job_json)
-                        if "counters" not in job:
-                            job["counters"] = {}
-                        job["counters"]["controls_mapped_count"] = controls_mapped
-                        job["counters"]["controls_mapped_percent"] = controls_mapped_percent
-                        redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
+                    from ..job_state import job_hmset
+                    job_hmset(job_id, {
+                        'controls_mapped_count': controls_mapped,
+                        'controls_mapped_percent': controls_mapped_percent
+                    }, redis_client)
                 except Exception as e:
                     logging.warning(f"Could not update mapping progress: {e}")
     

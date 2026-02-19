@@ -1,7 +1,0 @@
-{
-  "product": "Okta Identity as a Service (IDaaS)",
-  "confidence": 1.0,
-  "raw_gpt_responses": [
-    "{\n    \"product\": \"Okta Identity as a Service (IDaaS)\",\n    \"confidence\": 1.0,\n    \"explanation\": \"The report explicitly states multiple times that the scope of the SOC 2 examination covers 'Okta’s Identity as a Service (IDaaS) System' relevant to security, availability, and confidentiality. This is clearly defined in the central system description and throughout the report.\"\n}"
-  ]
-}

@@ -14,7 +14,9 @@ import api from '../api/client';
 export interface ControlObjective {
   id: number;
   scan_id: number;
-  objective_id: string | null;
+  objective_id: string | null;  // DEPRECATED: Use objective_id_normalized for display/sorting
+  objective_id_normalized: string | null;  // Normalized format for consistent display/sorting
+  objective_id_original: string | null;  // Original format from PDF for searching
   objective_text: string;
   status: 'pending' | 'approved' | 'rejected';
   extraction_source: string;
@@ -26,6 +28,46 @@ export interface ControlObjective {
   control_alignment_score?: number;
   final_confidence?: number;
   confidence_factors?: any;
+  confidence_calc?: string;  // Human-readable calculation string
+  confidence_metadata?: {    // Detailed audit trail
+    method: string;
+    calculated_at: string;
+    factor_scores: {
+      keyword_confidence: number;
+      distance_confidence: number;
+      gpt_confidence: number;
+      alignment_confidence: number;
+      format_confidence: number;
+    };
+    weighted_contributions: {
+      keyword_contribution: number;
+      distance_contribution: number;
+      gpt_contribution: number;
+      alignment_contribution: number;
+      format_contribution: number;
+    };
+    weights_used: {
+      keyword: number;
+      distance: number;
+      gpt_opinion: number;
+      alignment: number;
+      format: number;
+    };
+    adjustments: Array<{
+      type: string;
+      penalty_multiplier: number;
+      reason: string;
+      applied_at: string;
+    }>;
+  };
+  
+  // Individual confidence factors (persisted)
+  keyword_confidence?: number;
+  distance_confidence?: number;
+  gpt_confidence?: number;
+  alignment_confidence?: number;
+  format_confidence?: number;
+  gpt_reasoning?: string;
   
   // Framework mappings
   tsc_mappings?: any;
@@ -51,12 +93,13 @@ export interface ControlObjectiveMapping {
   id: number;
   control_id: number;
   objective_id: number;
-  is_primary: boolean;
   mapping_confidence: number;
   page_proximity_score?: number;
   line_proximity_score?: number;
   gpt_alignment_score?: number;
   id_alignment_score?: number;
+  objective_gpt_confidence_boost?: number;
+  mapping_justification?: string;
   mapping_rationale?: string;
   created_at?: string;
 }
@@ -90,12 +133,10 @@ export interface MapObjectivesRequest {
 
 export interface BulkApproveRequest {
   objective_ids: number[];
-  approved_by: string;
 }
 
 export interface BulkRejectRequest {
   objective_ids: number[];
-  rejected_by: string;
 }
 
 export interface ConvertToControlRequest {
@@ -381,7 +422,7 @@ export async function getControlObjectives(
 }
 
 /**
- * Get primary objective mappings for all controls in a scan
+ * Get highest-confidence objective mappings for all controls in a scan
  */
 export async function getPrimaryObjectiveMappings(
   scanId: number
@@ -417,7 +458,6 @@ export async function createMapping(
     `/report/${scanId}/objectives/${objectiveId}/controls/${controlId}`,
     {
       mapping_confidence: mapping.mapping_confidence,
-      is_primary: mapping.is_primary,
     }
   );
   return {

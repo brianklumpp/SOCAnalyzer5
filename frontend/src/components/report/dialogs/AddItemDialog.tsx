@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Box, Checkbox, FormControlLabel, Tabs, Tab, Alert, CircularProgress } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Box, Checkbox, FormControlLabel, Tabs, Tab, Alert, CircularProgress, LinearProgress, Typography } from '@mui/material';
 import axios from 'axios';
 import { APP_CONFIG } from '../../../config';
 
@@ -30,6 +30,7 @@ interface AddItemDialogProps {
   useDefaultConfidence: boolean;
   onDefaultConfidenceChange: (value: string) => void;
   onUseDefaultConfidenceChange: (checked: boolean) => void;
+  progressMessage?: string | null;  // Step-by-step status from parent during creation
 }
 
 // Field configurations for each resource type
@@ -81,6 +82,7 @@ export const AddItemDialog = React.memo(function AddItemDialog({
   useDefaultConfidence,
   onDefaultConfidenceChange,
   onUseDefaultConfidenceChange,
+  progressMessage,
 }: AddItemDialogProps) {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [activeTab, setActiveTab] = useState(0);
@@ -88,6 +90,7 @@ export const AddItemDialog = React.memo(function AddItemDialog({
   const [forceMultiExtract, setForceMultiExtract] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractionAlert, setExtractionAlert] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
+  const [creating, setCreating] = useState(false);
   
   // Framework preview state (tab 2)
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -104,6 +107,7 @@ export const AddItemDialog = React.memo(function AddItemDialog({
       setForceMultiExtract(false);
       setExtracting(false);
       setExtractionAlert(null);
+      setCreating(false);
     }
   }, [open, type]);
 
@@ -120,7 +124,12 @@ export const AddItemDialog = React.memo(function AddItemDialog({
   };
 
   const handleCreate = async () => {
-    await onCreate(formData);
+    setCreating(true);
+    try {
+      await onCreate(formData);
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handlePreviewFrameworks = async () => {
@@ -453,11 +462,27 @@ export const AddItemDialog = React.memo(function AddItemDialog({
           </Box>
         )}
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleCreate} disabled={activeTab === 1}>
-          Create
-        </Button>
+      <DialogActions sx={{ flexDirection: 'column', alignItems: 'stretch', gap: 0, px: 3, pb: 2 }}>
+        {creating && (
+          <Box sx={{ width: '100%', mb: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+              <CircularProgress size={16} />
+              <Typography sx={{ fontSize: 12, color: 'text.secondary', fontWeight: 500 }}>
+                {progressMessage || 'Creating...'}
+              </Typography>
+            </Box>
+            <LinearProgress
+              variant="indeterminate"
+              sx={{ height: 3, borderRadius: 2 }}
+            />
+          </Box>
+        )}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+          <Button onClick={onClose} disabled={creating}>Cancel</Button>
+          <Button variant="contained" onClick={handleCreate} disabled={activeTab === 1 || creating}>
+            {creating ? 'Creating…' : 'Create'}
+          </Button>
+        </Box>
       </DialogActions>
     </Dialog>
   );

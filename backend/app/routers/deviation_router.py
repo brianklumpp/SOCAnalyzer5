@@ -202,6 +202,30 @@ async def create_deviation(scan_id: int, data: dict, db=Depends(get_db), current
             if field not in data:
                 raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
         
+        # ── Dedup guard: check if control_id already exists in this scan ──
+        raw_cid = str(data.get("control_id") or "").strip()
+        if raw_cid:
+            existing = (await db.execute(
+                select(Control).where(
+                    Control.scan_id == scan_id,
+                    Control.control_id == raw_cid,
+                )
+            )).scalar_one_or_none()
+            if existing:
+                # Update existing control to mark as deviation
+                existing.has_deviation = True
+                existing.deviation_desc = data.get("deviation_summary") or existing.deviation_desc
+                if data.get("test_result"):
+                    existing.control_test_results = data.get("test_result")
+                await db.commit()
+                await db.refresh(existing)
+                return {
+                    "status": "success",
+                    "control_id": existing.id,
+                    "deviation_summary": existing.deviation_desc,
+                    "_updated_existing": True,
+                }
+
         # Create new control with deviation=True
         new_control = Control(
             scan_id=scan_id,

@@ -64,7 +64,7 @@ import {
   normalizeConfidence,
   computeHighConfNameCounts,
 } from '../services/report/dataTransformations';
-import { getObjectives, getPrimaryObjectiveMappings, convertControlToObjective, type ControlObjective } from '../services/objectiveService';
+import { getObjectives, getPrimaryObjectiveMappings, convertControlToObjective, createMapping, type ControlObjective } from '../services/objectiveService';
 
 // Configuration
 import { API_URL, HISTORY_URL } from '../config/report/constants';
@@ -76,7 +76,7 @@ import { ReportCuecsTab } from '../components/report/tabs/ReportCuecsTab';
 import { ReportSuborgsTab } from '../components/report/tabs/ReportSuborgsTab';
 import { ReportCoverageTab } from '../components/report/tabs/ReportCoverageTab';
 import { ReportDeviationsTab } from '../components/report/tabs/ReportDeviationsTab';
-import ObjectivesCoverageTab from '../components/report/tabs/ObjectivesCoverageTab';
+import { ReportObjectivesTab } from '../components/report/tabs/ReportObjectivesTab';
 
 // Components - Dialogs
 import { AddItemDialog } from '../components/report/dialogs/AddItemDialog';
@@ -86,7 +86,6 @@ import ControlDetailsModal from '../components/ControlDetailsModal';
 import FrameworkMappingDetailsModal from '../components/FrameworkMappingDetailsModal';
 import HelpDialog from '../components/HelpDialog';
 import FloatingGraceChat from '../components/FloatingGraceChat';
-import ObjectivesModal from '../components/ObjectivesModal';
 
 // Tab panel component with scroll restoration
 interface TabPanelProps {
@@ -174,7 +173,7 @@ const ReportPage: React.FC = () => {
   const [selectedScanId, setSelectedScanId] = useState<string | undefined>(scanId);
 
   // Report data hook
-  const { report, setReport, loading, refreshReport } = useReportData(selectedScanId);
+  const { report, setReport, loading, refreshReport, silentRefresh } = useReportData(selectedScanId);
 
   // Executive summary hook
   const {
@@ -241,7 +240,7 @@ const ReportPage: React.FC = () => {
   const [excelExporting, setExcelExporting] = useState(false);
 
   // Resource CRUD hooks
-  const { handleEdit, handleBatchEdit, handleIgnore, handleConfirm, handleRecompute, handleRecomputeAllHighConfidence, handleToggleDeviation } = useResourceCRUD({
+  const { handleEdit, handleBatchEdit, handleIgnore, handleConfirm, handleRecompute, handleRecomputeAllHighConfidence, handleMapAllFrameworks, handleToggleDeviation } = useResourceCRUD({
     scanId: selectedScanId,
     setReport,
     showToast,
@@ -264,8 +263,9 @@ const ReportPage: React.FC = () => {
     handleIgnore: (row: any) => handleIgnore('cuecs', row),
     handleConfirm: (row: any) => handleConfirm('cuecs', row),
     handleRecompute: async (row: any) => handleRecompute('cuecs', row),
-    handleRecomputeAllHighConfidence: async () => handleRecomputeAllHighConfidence('cuecs')
-  }), [handleEdit, handleBatchEdit, handleIgnore, handleConfirm, handleRecompute, handleRecomputeAllHighConfidence]);
+    handleRecomputeAllHighConfidence: async () => handleRecomputeAllHighConfidence('cuecs'),
+    handleMapAllFrameworks: async () => handleMapAllFrameworks('cuecs')
+  }), [handleEdit, handleBatchEdit, handleIgnore, handleConfirm, handleRecompute, handleRecomputeAllHighConfidence, handleMapAllFrameworks]);
 
   const controlHandlers = useMemo(() => ({
     handleEdit: (row: any, idx: number) => handleEdit('controls', row, idx),
@@ -274,8 +274,9 @@ const ReportPage: React.FC = () => {
     handleConfirm: (row: any) => handleConfirm('controls', row),
     handleRecompute: async (row: any) => handleRecompute('controls', row),
     handleRecomputeAllHighConfidence: async () => handleRecomputeAllHighConfidence('controls'),
+    handleMapAllFrameworks: async () => handleMapAllFrameworks('controls'),
     handleToggleDeviation: async (row: any, hasDeviation: boolean) => handleToggleDeviation(row, hasDeviation)
-  }), [handleEdit, handleBatchEdit, handleIgnore, handleConfirm, handleRecompute, handleRecomputeAllHighConfidence, handleToggleDeviation]);
+  }), [handleEdit, handleBatchEdit, handleIgnore, handleConfirm, handleRecompute, handleRecomputeAllHighConfidence, handleMapAllFrameworks, handleToggleDeviation]);
 
   // Overview edit state
   const [overviewEdit, setOverviewEdit] = useState(false);
@@ -304,6 +305,8 @@ const ReportPage: React.FC = () => {
   // Add item dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addDialogType, setAddDialogType] = useState<'suborg' | 'cuec' | 'control'>('suborg');
+  const [createProgressMessage, setCreateProgressMessage] = useState<string | null>(null);
+  const pendingObjectiveMapRef = useRef<number | null>(null);  // objective ID to auto-map new control to
 
   // Default confidence state (persisted)
   const [defaultConfidence, setDefaultConfidence] = useState<string>(
@@ -325,7 +328,6 @@ const ReportPage: React.FC = () => {
   const { user } = useAuth();
   const [objectives, setObjectives] = useState<ControlObjective[]>([]);
   const [objectivesLoading, setObjectivesLoading] = useState(false);
-  const [objectivesModalOpen, setObjectivesModalOpen] = useState(false);
   const [objectiveMappings, setObjectiveMappings] = useState<Map<string | number, any>>(new Map());
   const { accessToken, loading: authLoading } = useAuth();
 
@@ -404,7 +406,6 @@ const ReportPage: React.FC = () => {
         try {
           const mappingResponse = await getPrimaryObjectiveMappings(scanIdNum);
           (mappingResponse.mappings || []).forEach((mapping: any) => {
-            if (!mapping?.is_primary) return;
             const controlDbId = mapping.control_db_id;
             const controlId = mapping.control_id;
 
@@ -416,7 +417,7 @@ const ReportPage: React.FC = () => {
             }
           });
         } catch (error) {
-          console.debug('Primary objective mappings not available');
+          console.debug('Objective mappings not available');
         }
 
         setObjectiveMappings(mappingsMap);
@@ -486,6 +487,12 @@ const ReportPage: React.FC = () => {
     [allControls, ignored.controls]
   );
 
+  // Filtered high-confidence approved objectives for coverage tab
+  const filteredHighConfObjectives = useMemo(
+    () => objectives.filter((obj: any) => obj.status === 'approved' && (obj.final_confidence || 0) >= 0.70),
+    [objectives]
+  );
+
   // Compute duplicate suborg names
   const hasAnyDuplicateSoNames = useMemo(() => {
     const nameCounts = computeHighConfNameCounts(filteredHighConfSubOrgs);
@@ -522,7 +529,15 @@ const ReportPage: React.FC = () => {
 
   // Add item handlers
   const handleOpenAddDialog = useCallback((type: 'suborg' | 'cuec' | 'control') => {
+    pendingObjectiveMapRef.current = null;
     setAddDialogType(type);
+    setAddDialogOpen(true);
+  }, []);
+
+  // Open add-control dialog with an objective to auto-map to after creation
+  const handleCreateControlForObjective = useCallback((objectiveId: number) => {
+    pendingObjectiveMapRef.current = objectiveId;
+    setAddDialogType('control');
     setAddDialogOpen(true);
   }, []);
 
@@ -601,11 +616,12 @@ const ReportPage: React.FC = () => {
           if (norm !== undefined) payload.control_confidence = norm;
         }
 
+        setCreateProgressMessage('Creating control…');
         const { data: created } = await api.post(`${API_URL}${selectedScanId}/controls`, payload);
         
         // Automatically trigger TSC/COSO framework mapping after creation
         try {
-          showToast('Control created, computing frameworks...', 'info');
+          setCreateProgressMessage('Computing framework mappings…');
           const mappingResp = await api.post(`${API_URL}${selectedScanId}/controls/id/${created.id}/recompute_frameworks`);
           const mappedControl = { ...created, ...mappingResp.data.control };
           setReport((prev: any) => ({ ...prev, controls: [...(prev?.controls || []), mappedControl] }));
@@ -624,6 +640,28 @@ const ReportPage: React.FC = () => {
           setReport((prev: any) => ({ ...prev, controls: [...(prev?.controls || []), created] }));
           showToast('Control created (framework mapping failed)', 'warning');
         }
+
+        // Auto-map to pending objective if triggered from Objective Coverage tab
+        const pendingObjId = pendingObjectiveMapRef.current;
+        if (pendingObjId && created.id) {
+          try {
+            setCreateProgressMessage('Mapping control to objective…');
+            await createMapping(parseInt(selectedScanId), {
+              objective_id: pendingObjId,
+              control_id: created.id,
+              mapping_confidence: 1.0,
+            } as any);
+            showToast('Control auto-mapped to objective', 'success');
+          } catch (mapErr: any) {
+            console.warn('Auto-map to objective failed:', mapErr);
+            showToast('Control created but objective mapping failed', 'warning');
+          }
+          pendingObjectiveMapRef.current = null;
+          // Silent refresh so ObjectivesCoverageTab picks up the new mapping
+          // without unmounting/remounting tabs (which would lose sub-tab position)
+          setCreateProgressMessage('Refreshing report…');
+          if (selectedScanId) await silentRefresh(selectedScanId);
+        }
       }
 
       setAddDialogOpen(false);
@@ -632,8 +670,10 @@ const ReportPage: React.FC = () => {
       console.error('Failed to create item:', e);
       const msg = e?.response?.data || e?.message || 'Failed to create item';
       showToast(typeof msg === 'string' ? msg : 'Failed to create item', 'error');
+    } finally {
+      setCreateProgressMessage(null);
     }
-  }, [selectedScanId, addDialogType, showToast, setReport, setExecutiveSummaryStale]);
+  }, [selectedScanId, addDialogType, showToast, setReport, setExecutiveSummaryStale, refreshReport, silentRefresh]);
 
   // Handle confidence modal
   const handleOpenConfidenceModal = useCallback((control: any) => {
@@ -662,14 +702,7 @@ const ReportPage: React.FC = () => {
     setMappingDetailsModalOpen(true);
   }, []);
 
-  // Handle Objectives modal
-  const handleOpenObjectivesModal = useCallback(() => {
-    setObjectivesModalOpen(true);
-  }, []);
 
-  const handleCloseObjectivesModal = useCallback(() => {
-    setObjectivesModalOpen(false);
-  }, []);
 
   const handleObjectivesRefresh = useCallback(async () => {
     if (!selectedScanId) return;
@@ -683,7 +716,6 @@ const ReportPage: React.FC = () => {
       try {
         const mappingResponse = await getPrimaryObjectiveMappings(scanIdNum);
         (mappingResponse.mappings || []).forEach((mapping: any) => {
-          if (!mapping?.is_primary) return;
           const controlDbId = mapping.control_db_id;
           const controlId = mapping.control_id;
 
@@ -695,7 +727,7 @@ const ReportPage: React.FC = () => {
           }
         });
       } catch (error) {
-        console.debug('Primary objective mappings not available');
+        console.debug('Objective mappings not available');
       }
 
       setObjectiveMappings(mappingsMap);
@@ -960,17 +992,17 @@ const ReportPage: React.FC = () => {
             }}
           >
             <Tab label="Summary" icon={<SummarizeIcon />} iconPosition="start" {...a11yProps(0)} />
+            <Tab label="Objectives" icon={<AssignmentIcon />} iconPosition="start" {...a11yProps(1)} />
             <Tab 
               label="Controls"
               icon={<ListAltIcon />} 
               iconPosition="start" 
-              {...a11yProps(1)} 
+              {...a11yProps(2)} 
             />
-            <Tab label="CUECs" icon={<AssignmentIcon />} iconPosition="start" {...a11yProps(2)} />
-            <Tab label="Subservice Orgs" icon={<BusinessIcon />} iconPosition="start" {...a11yProps(3)} />
-            <Tab label="Deviations" icon={<WarningIcon />} iconPosition="start" {...a11yProps(4)} />
-            <Tab label="Coverage" icon={<PieChartIcon />} iconPosition="start" {...a11yProps(5)} />
-            <Tab label="Objective Coverage" icon={<AssignmentIcon />} iconPosition="start" {...a11yProps(6)} />
+            <Tab label="CUECs" icon={<AssignmentIcon />} iconPosition="start" {...a11yProps(3)} />
+            <Tab label="Subservice Orgs" icon={<BusinessIcon />} iconPosition="start" {...a11yProps(4)} />
+            <Tab label="Deviations" icon={<WarningIcon />} iconPosition="start" {...a11yProps(5)} />
+            <Tab label="Coverage" icon={<PieChartIcon />} iconPosition="start" {...a11yProps(6)} />
           </Tabs>
         </Box>
 
@@ -1002,6 +1034,15 @@ const ReportPage: React.FC = () => {
             />
           </TabPanel>
           <TabPanel value={activeTab} index={1} tabScrollPositions={tabScrollPositions} noPadding>
+            <ReportObjectivesTab
+              scanId={selectedScanId}
+              onRefresh={handleRefreshReport}
+              showToast={showToast}
+              darkMode={darkMode}
+              tocPageOffset={report?.toc_page_offset}
+            />
+          </TabPanel>
+          <TabPanel value={activeTab} index={2} tabScrollPositions={tabScrollPositions} noPadding>
             <ReportControlsTab
               scanId={selectedScanId}
               filteredHighConfControls={filteredHighConfControls}
@@ -1015,6 +1056,7 @@ const ReportPage: React.FC = () => {
               onConfirm={controlHandlers.handleConfirm}
               onRecompute={controlHandlers.handleRecompute}
               onRecomputeAllHighConfidence={controlHandlers.handleRecomputeAllHighConfidence}
+              onMapAllFrameworks={controlHandlers.handleMapAllFrameworks}
               onToggleDeviation={controlHandlers.handleToggleDeviation}
               onRefresh={handleRefreshReport}
               onAddControl={() => handleOpenAddDialog('control')}
@@ -1027,14 +1069,12 @@ const ReportPage: React.FC = () => {
               objectives={objectives}
               objectivesLoading={objectivesLoading}
               objectiveMappings={objectiveMappings}
-              onOpenObjectivesModal={handleOpenObjectivesModal}
-              isAdmin={user?.is_admin}
               onObjectivesRefresh={handleObjectivesRefresh}
               showToast={showToast}
             />
           </TabPanel>
 
-          <TabPanel value={activeTab} index={2} tabScrollPositions={tabScrollPositions} noPadding>
+          <TabPanel value={activeTab} index={3} tabScrollPositions={tabScrollPositions} noPadding>
             <ReportCuecsTab
               scanId={scanId}
               filteredHighConfCuecs={filteredHighConfCuecs}
@@ -1049,6 +1089,7 @@ const ReportPage: React.FC = () => {
               onConfirm={cuecHandlers.handleConfirm}
               onRecompute={cuecHandlers.handleRecompute}
               onRecomputeAllHighConfidence={cuecHandlers.handleRecomputeAllHighConfidence}
+              onMapAllFrameworks={cuecHandlers.handleMapAllFrameworks}
               onAddCuec={() => handleOpenAddDialog('cuec')}
               frameworkCriteria={frameworkCriteria}
               onOpenMappingDetails={handleOpenMappingDetails}
@@ -1058,7 +1099,7 @@ const ReportPage: React.FC = () => {
             />
           </TabPanel>
 
-          <TabPanel value={activeTab} index={3} tabScrollPositions={tabScrollPositions} noPadding>
+          <TabPanel value={activeTab} index={4} tabScrollPositions={tabScrollPositions} noPadding>
             <ReportSuborgsTab
               scanId={scanId}
               filteredHighConfSubOrgs={filteredHighConfSubOrgs}
@@ -1080,24 +1121,21 @@ const ReportPage: React.FC = () => {
             />
           </TabPanel>
 
-          <TabPanel value={activeTab} index={4} tabScrollPositions={tabScrollPositions}>
+          <TabPanel value={activeTab} index={5} tabScrollPositions={tabScrollPositions}>
             <ReportDeviationsTab scanId={selectedScanId!} />
           </TabPanel>
 
-          <TabPanel value={activeTab} index={5} tabScrollPositions={tabScrollPositions}>
+          <TabPanel value={activeTab} index={6} tabScrollPositions={tabScrollPositions}>
             <ReportCoverageTab
               highConfControlsForCoverage={filteredHighConfControls}
               highConfCuecsFiltered={filteredHighConfCuecs}
               onOpenCuecModal={handleOpenCuecModal}
               onOpenControlModal={handleOpenControlModal}
-            />
-          </TabPanel>
-
-          <TabPanel value={activeTab} index={6} tabScrollPositions={tabScrollPositions}>
-            <ObjectivesCoverageTab
-              scanId={parseInt(selectedScanId || '0')}
-              onOpenControlModal={handleOpenControlModal}
-              onRefresh={handleObjectivesRefresh}
+              scanId={selectedScanId ? parseInt(selectedScanId) : undefined}
+              highConfObjectives={filteredHighConfObjectives}
+              onRefresh={handleRefreshReport}
+              tocPageOffset={report?.toc_page_offset}
+              onCreateControlForObjective={handleCreateControlForObjective}
             />
           </TabPanel>
         </Box>
@@ -1118,6 +1156,7 @@ const ReportPage: React.FC = () => {
           useDefaultConfidence={useDefaultConfidence}
           onDefaultConfidenceChange={setDefaultConfidence}
           onUseDefaultConfidenceChange={setUseDefaultConfidence}
+          progressMessage={createProgressMessage}
         />
 
         <ConfidenceModal
@@ -1164,15 +1203,6 @@ const ReportPage: React.FC = () => {
           onClose={() => setMappingDetailsModalOpen(false)}
           onUpdate={handleRefreshReport}
           scanId={parseInt(selectedScanId || '0')}
-        />
-
-        <ObjectivesModal
-          open={objectivesModalOpen}
-          onClose={handleCloseObjectivesModal}
-          scanId={parseInt(selectedScanId || '0')}
-          currentUser={user?.username || ''}
-          onRefresh={handleObjectivesRefresh}
-          showToast={showToast}
         />
 
         {/* Help Dialog */}

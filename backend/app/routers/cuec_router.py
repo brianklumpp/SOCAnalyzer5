@@ -406,3 +406,45 @@ async def recompute_cuec_frameworks(scan_id: int, cuec_id: int, db=Depends(get_d
     except Exception as e:
         logging.error(f"Error recomputing CUEC frameworks for {cuec_id}: {e}")
         return JSONResponse({"error": str(e), "success": False}, status_code=500)
+
+
+@router.post("/report/{scan_id}/cuecs/map_all_frameworks")
+async def map_cuecs_to_all_frameworks(
+    scan_id: int,
+    data: Dict[str, Any] = Body(default={}),
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Map all CUECs in a scan to ALL available frameworks.
+    
+    During the scan pipeline, only default frameworks (TSC+COSO) are mapped.
+    This endpoint triggers full framework mapping to all applicable frameworks.
+    
+    Optional body:
+        framework_keys: List of specific framework keys to map (e.g., ["NIST", "ISO27001"])
+                       If omitted, maps to ALL frameworks for the scan's report type.
+        min_confidence: Only map CUECs with confidence >= this value (default: 0.0)
+    """
+    try:
+        from ..services.framework_mapping_service import map_all_frameworks_for_scan
+        
+        framework_keys = data.get("framework_keys", None)
+        min_confidence = data.get("min_confidence", 0.0)
+        
+        result = await map_all_frameworks_for_scan(
+            scan_id=scan_id,
+            db=db,
+            entity_type="cuecs",
+            framework_keys=framework_keys,
+            min_confidence=min_confidence
+        )
+        
+        if result.get("success"):
+            return result
+        else:
+            return JSONResponse(result, status_code=500)
+            
+    except Exception as e:
+        logging.error(f"Error mapping all frameworks for CUECs in scan {scan_id}: {e}")
+        return JSONResponse({"error": str(e), "success": False}, status_code=500)

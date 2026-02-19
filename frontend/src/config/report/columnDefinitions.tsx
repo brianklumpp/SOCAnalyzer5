@@ -224,6 +224,20 @@ export const controlColumns = (
   },
   { key: "confidence_calc", label: "Confidence Calculation", width: 300, editable: false, cellSx: { whiteSpace: 'pre-wrap', fontSize: '0.85rem' } },
   { 
+    key: "primary_objective_mapping_justification", 
+    label: "Mapping Justification", 
+    width: 350, 
+    hidden: true,
+    editable: false, 
+    format: (v: any, row: any) => {
+      const justification = row.primary_objective_scores?.mapping_justification 
+        || row.primary_objective?.mapping_justification
+        || '';
+      return justification;
+    },
+    cellSx: { whiteSpace: 'pre-line', fontSize: '0.85em', color: '#666' } 
+  },
+  { 
     key: "framework_mappings", 
     label: "Framework Mappings", 
     width: 250, 

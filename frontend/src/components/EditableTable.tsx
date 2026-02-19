@@ -31,13 +31,15 @@ interface EditableTableProps {
   onConfirm?: (row: any) => void; // optional confirm button to set confidence to 100%
   additionalButtons?: React.ReactNode; // optional additional buttons to prepend to button row
   onRowClick?: (row: any) => void; // optional row click handler for PDF navigation
+  selectedIds?: Set<number>; // optional set of selected row IDs for bulk actions
+  onSelectionChange?: (selectedIds: Set<number>) => void; // callback when selection changes
 }
 
 
 const minColWidth = 60;
 const defaultColWidth = 120;
 
-const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, onIgnore, onEdit, onBatchEdit, recentlyChangedIds, duplicateIds, tableSx, cellSx, defaultVisibleColumns, storageKey, actionsRenderer, onConfirm, additionalButtons, onRowClick }) => {
+const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, onIgnore, onEdit, onBatchEdit, recentlyChangedIds, duplicateIds, tableSx, cellSx, defaultVisibleColumns, storageKey, actionsRenderer, onConfirm, additionalButtons, onRowClick, selectedIds, onSelectionChange }) => {
   const theme = useTheme();
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [editRow, setEditRow] = useState<any>({});
@@ -340,6 +342,7 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
       <TableContainer sx={{ fontSize: 10, p: 0, m: 0, mb: 1, overflowX: 'auto', maxHeight: '100%' }} className="content-text">
         <Table size="small" className="table-compact" stickyHeader sx={{ fontSize: 10, borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%', ...tableSx }}>
           <colgroup>
+            {onSelectionChange && <col key="__checkbox__" width={36} />}
             <col key="__actions__" width={colWidths.__actions__ || 80} />
             {visibleColumns.map(col => (
               <col key={col.key} width={colWidths[col.key] || defaultColWidth} />
@@ -347,6 +350,28 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
           </colgroup>
           <TableHead>
             <TableRow>
+                {onSelectionChange && (
+                  <TableCell sx={{ fontSize: 10, p: 0.25, border: `1px solid ${theme.palette.divider}`, background: theme.palette.mode === 'dark' ? theme.palette.grey[800] : '#f7f7f7', width: 36, maxWidth: 36, textAlign: 'center' }}>
+                    <Checkbox
+                      size="small"
+                      sx={{ p: 0 }}
+                      checked={filteredRows.length > 0 && selectedIds != null && filteredRows.every(r => selectedIds.has(r.id))}
+                      indeterminate={selectedIds != null && selectedIds.size > 0 && !filteredRows.every(r => selectedIds.has(r.id))}
+                      onChange={(e) => {
+                        if (!onSelectionChange) return;
+                        if (e.target.checked) {
+                          const all = new Set(selectedIds);
+                          filteredRows.forEach(r => { if (r.id != null) all.add(r.id); });
+                          onSelectionChange(all);
+                        } else {
+                          const cleared = new Set(selectedIds);
+                          filteredRows.forEach(r => cleared.delete(r.id));
+                          onSelectionChange(cleared);
+                        }
+                      }}
+                    />
+                  </TableCell>
+                )}
                 <TableCell sx={{ fontSize: 10, p: 0.5, border: `1px solid ${theme.palette.divider}`, background: theme.palette.mode === 'dark' ? theme.palette.grey[800] : '#f7f7f7', minWidth: minColWidth, width: colWidths.__actions__, maxWidth: colWidths.__actions__, position: 'relative' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <span>Actions</span>
@@ -416,6 +441,9 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
             </TableRow>
             {/* Filter row */}
             <TableRow>
+              {onSelectionChange && (
+                <TableCell sx={{ fontSize: 10, p: 0.25, border: `1px solid ${theme.palette.divider}`, width: 36, maxWidth: 36 }} />
+              )}
               <TableCell sx={{ fontSize: 10, p: 0.5, border: `1px solid ${theme.palette.divider}`, width: colWidths.__actions__, maxWidth: colWidths.__actions__ }} />
               {visibleColumns.map(col => (
                 <TableCell 
@@ -461,7 +489,24 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
                     { backgroundColor: theme.palette.mode === 'dark' ? '#1a4d2e' : '#d4edda', borderLeft: '3px solid #28a745', transition: 'background-color 0.3s ease' } : {})
                 }}
               >
+              {onSelectionChange && (
+                <TableCell sx={{ fontSize: 10, p: 0.25, border: `1px solid ${theme.palette.divider}`, width: 36, maxWidth: 36, textAlign: 'center' }}>
+                  <Checkbox
+                    size="small"
+                    sx={{ p: 0 }}
+                    checked={selectedIds?.has(row.id) ?? false}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => {
+                      if (!onSelectionChange || row.id == null) return;
+                      const next = new Set(selectedIds);
+                      if (next.has(row.id)) next.delete(row.id); else next.add(row.id);
+                      onSelectionChange(next);
+                    }}
+                  />
+                </TableCell>
+              )}
               <TableCell sx={{ fontSize: 10, p: 0.5, border: `1px solid ${theme.palette.divider}`, width: colWidths.__actions__, maxWidth: colWidths.__actions__ }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px' }}>
                   {batchEditMode ? (
                     <Button size="small" color={ignored.has(row.id ?? i) ? "secondary" : "error"} onClick={(e) => { e.stopPropagation(); onIgnore(i); }} sx={{ fontSize: 9, minWidth: 0, px: 0.5, py: 0.25 }}>
                       {ignored.has(row.id ?? i) ? "Unign" : "Ign"}
@@ -473,23 +518,23 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
                     </>
                   ) : (
                     <>
-                      {/* Force rebuild 2025-12-10-03:35 */}
                       <IconButton onClick={(e) => { e.stopPropagation(); setEditIdx(i); setEditRow(row); }} size="small" sx={{ p: 0.25 }}><EditIcon sx={{ fontSize: 16 }} /></IconButton>
-                      {actionsRenderer ? <span style={{ marginLeft: 2, marginRight: 2 }}>{actionsRenderer(row, i)}</span> : null}
+                      {actionsRenderer ? actionsRenderer(row, i) : null}
                       <Button size="small" color={ignored.has(row.id ?? i) ? "secondary" : "error"} onClick={(e) => { e.stopPropagation(); onIgnore(row); }} sx={{ fontSize: 9, minWidth: 0, px: 0.5, py: 0.25 }}>
                         {ignored.has(row.id ?? i) ? "Unign" : "Ign"}
                       </Button>
                       {onConfirm && (
-                        <Button size="small" color="success" onClick={(e) => { e.stopPropagation(); onConfirm(row); }} sx={{ fontSize: 9, minWidth: 0, px: 0.5, py: 0.25, ml: 0.5 }}>
+                        <Button size="small" color="success" onClick={(e) => { e.stopPropagation(); onConfirm(row); }} sx={{ fontSize: 9, minWidth: 0, px: 0.5, py: 0.25 }}>
                           ✓
                         </Button>
                       )}
                     </>
                   )}
+                </Box>
                 </TableCell>
                 {visibleColumns.map(col => {
                   const isEditing = (batchEditMode || editIdx === i) && isEditableCol(col.key);
-                  const isDescriptionColumn = col.key === 'control_desc' || col.key === 'cuec_description' || col.key === 'third_party_description';
+                  const isDescriptionColumn = col.key === 'control_desc' || col.key === 'cuec_description' || col.key === 'third_party_description' || col.key === 'objective_text';
                   return (
                     <TableCell 
                       key={col.key} 

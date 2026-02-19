@@ -1,6 +1,7 @@
 # --- All imports at the top (PEP8 best practice) ---
 import os
 import json
+import re
 from typing import Tuple, Optional, Dict, Any, Callable
 import requests
 import time
@@ -20,6 +21,62 @@ from .config import (
     LOG_GPT_PROMPTS, LOG_GPT_MAX_PROMPT_CHARS, LOG_GPT_MAX_RESPONSE_CHARS, LOG_GPT_SAMPLE_RATE, GPT_CALLS_LOG_PATH, LOG_GPT_INCLUDE_HEADERS,
     LOG_GPT_HEADER_WHITELIST, HTTP_REQUEST_TIMEOUT
 )
+
+
+def extract_json_from_response(response: str, extractor_name: str = "unknown") -> str:
+    """
+    Robustly extract JSON from GPT response that may contain markdown code blocks or extra text.
+    
+    Args:
+        response: Raw GPT response string
+        extractor_name: Name of extractor for logging
+        
+    Returns:
+        Cleaned JSON string ready for json.loads()
+        
+    Raises:
+        ValueError: If no valid JSON content found
+    """
+    logger = logging.getLogger(__name__)
+    
+    if not response or not response.strip():
+        raise ValueError("Empty response from GPT")
+    
+    response_clean = response.strip()
+    
+    # Pattern 1: ```json\n{...}\n``` or ```\n{...}\n```
+    json_match = re.search(r'```(?:json)?\s*\n(.*?)\s*```', response_clean, re.DOTALL)
+    if json_match:
+        response_clean = json_match.group(1).strip()
+        logger.debug(f'[{extractor_name}] Extracted JSON from markdown code block (pattern 1: newline after fence)')
+        return response_clean
+    
+    # Pattern 2: ```json{...}``` or ```{...}``` (no newline after fence)
+    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_clean, re.DOTALL)
+    if json_match:
+        response_clean = json_match.group(1).strip()
+        logger.debug(f'[{extractor_name}] Extracted JSON from markdown code block (pattern 2: no newline)')
+        return response_clean
+    
+    # Pattern 3: Find first { to last } in response (handles extra text before/after)
+    first_brace = response_clean.find('{')
+    last_brace = response_clean.rfind('}')
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        response_clean = response_clean[first_brace:last_brace+1]
+        logger.debug(f'[{extractor_name}] Extracted JSON by finding braces (pattern 3: brace extraction)')
+        return response_clean
+    
+    # Pattern 4: Try with array [ to ]
+    first_bracket = response_clean.find('[')
+    last_bracket = response_clean.rfind(']')
+    if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
+        response_clean = response_clean[first_bracket:last_bracket+1]
+        logger.debug(f'[{extractor_name}] Extracted JSON array by finding brackets (pattern 4: bracket extraction)')
+        return response_clean
+    
+    # No patterns matched - raise error
+    raise ValueError(f"No valid JSON content found in response. First 200 chars: {response[:200]}")
+
 
 # --- Certificate handling: Only use if file actually exists ---
 # Check early before any API calls - this must happen at module import time
@@ -230,22 +287,20 @@ def _with_retries(func, *, retries: int = 3, base_delay_seconds: float = 1.0, on
                 if job_id:
                     import redis
                     redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
-                    job_json = redis_client.get(f"job:{job_id}")
-                    if job_json:
-                        import json
-                        job_data = json.loads(job_json)
-                        original_status = job_data.get("status", "")
-                        # Extract readable error message
-                        error_msg = str(exc)
-                        if "502 Bad Gateway" in error_msg:
-                            error_msg = "502 Bad Gateway (service unavailable)"
-                        elif "timeout" in error_msg.lower():
-                            error_msg = "Request timeout"
-                        else:
-                            error_msg = exc_type
-                        job_data["status"] = f"⚠️ GPT service error: {error_msg} (retry {attempt + 1}/{retries}). {original_status}"
-                        job_data["gpt_service_warning"] = True
-                        redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=86400)
+                    from .job_state import job_hget, job_hmset
+                    original_status = job_hget(job_id, "status", redis_client) or ""
+                    # Extract readable error message
+                    error_msg = str(exc)
+                    if "502 Bad Gateway" in error_msg:
+                        error_msg = "502 Bad Gateway (service unavailable)"
+                    elif "timeout" in error_msg.lower():
+                        error_msg = "Request timeout"
+                    else:
+                        error_msg = exc_type
+                    job_hmset(job_id, {
+                        "status": f"⚠️ GPT service error: {error_msg} (retry {attempt + 1}/{retries}). {original_status}",
+                        "gpt_service_warning": True
+                    }, redis_client)
             except Exception as status_err:
                 logging.warning(f"Could not update job status for GPT error: {status_err}")
                     

@@ -766,6 +766,57 @@ export function useResourceCRUD({
     }
   }, [scanId, setReport, showToast]);
 
+  // MAP ALL FRAMEWORKS handler - maps controls/CUECs to all available frameworks
+  // (scan pipeline only maps to TSC+COSO by default for speed)
+  const handleMapAllFrameworks = useCallback(async (type: 'cuecs' | 'controls') => {
+    if (!scanId) return;
+
+    try {
+      let endpoint = '';
+      if (type === 'cuecs') {
+        endpoint = `${API_URL}${scanId}/cuecs/map_all_frameworks`;
+      } else {
+        endpoint = `${API_URL}${scanId}/controls/map_all_frameworks`;
+      }
+
+      const label = type === 'cuecs' ? 'CUECs' : 'controls';
+      showToast(`Mapping ${label} to all available frameworks... This may take a few minutes.`, 'info');
+      
+      const resp = await api.post(endpoint, {});
+      const data = resp.data;
+
+      if (data.success) {
+        // Refresh the full report data to get updated framework_mappings
+        // Since map_all_frameworks updates DB directly, we need to reload
+        try {
+          const reportResp = await api.get(`${API_URL}${scanId}`);
+          if (reportResp.data) {
+            setReport(reportResp.data);
+          }
+        } catch (refreshErr) {
+          console.warn('Could not refresh report after framework mapping:', refreshErr);
+        }
+
+        const frameworks = data.frameworks ? data.frameworks.join(', ') : 'all';
+        const message = data.message || `Mapped ${data.success_count} of ${data.total} ${label} to frameworks: ${frameworks}`;
+        
+        if (data.total === 0) {
+          showToast(`No ${label} found to map`, 'info');
+        } else if (data.failed_count > 0) {
+          showToast(`${message} (${data.failed_count} failed)`, 'warning');
+        } else {
+          showToast(message, 'success');
+        }
+      } else {
+        throw new Error(data.error || 'Framework mapping failed');
+      }
+    } catch (e: any) {
+      console.error(e);
+      const errorMsg = e?.response?.data?.error || e?.response?.data?.message || 'Failed to map frameworks';
+      showToast(errorMsg, 'error');
+    }
+  }, [scanId, setReport, showToast]);
+
   return {
     handleCreate,
     handleEdit,
@@ -774,6 +825,7 @@ export function useResourceCRUD({
     handleConfirm,
     handleRecompute,
     handleRecomputeAllHighConfidence,
+    handleMapAllFrameworks,
     handleToggleDeviation
   };
 }

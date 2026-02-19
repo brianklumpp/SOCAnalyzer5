@@ -8,11 +8,11 @@ from typing import Dict, Any, Tuple
 
 from fastapi import APIRouter, Depends, Body, HTTPException
 from fastapi.responses import JSONResponse
-from sqlalchemy import and_
+from sqlalchemy import and_, delete
 from sqlalchemy.future import select
 from sqlalchemy.exc import MultipleResultsFound
 
-from ..models import Control, Scan
+from ..models import Control, Scan, ControlObjectiveMapping, ControlFeedback
 from ..models import User
 from ..database import get_db
 from ..services import merge_service
@@ -34,6 +34,118 @@ def _parse_page_refs(value):
     if isinstance(value, int):
         return [str(value)]
     return []
+
+
+async def _cleanup_mappings_if_low_confidence(ctrl: Control, db, current_user: User, now: str) -> int:
+    """Delete control-objective mappings when control confidence drops below threshold.
+    
+    When a control is ignored (confidence=0) or manually edited to low confidence,
+    its objective mappings should be removed since low confidence is a
+    'marked for deletion' behavior.
+    
+    Returns the number of deleted mappings.
+    """
+    threshold = getattr(cfg, 'HIGH_CONFIDENCE_THRESHOLD', 0.75)
+    confidence = getattr(ctrl, 'control_confidence', None)
+    if confidence is not None and confidence < threshold:
+        result = await db.execute(
+            delete(ControlObjectiveMapping).where(
+                ControlObjectiveMapping.control_id == ctrl.id
+            )
+        )
+        deleted = result.rowcount
+        if deleted > 0:
+            logging.info(
+                f"[MAPPING CLEANUP] Removed {deleted} objective mapping(s) for control "
+                f"id={ctrl.id} (control_id={ctrl.control_id}) — confidence {confidence} "
+                f"< threshold {threshold}"
+            )
+            _append_edit_log(
+                ctrl,
+                f"Auto-removed {deleted} objective mapping(s) — confidence {confidence} "
+                f"below threshold {threshold} by {current_user.username} ({now})"
+            )
+        return deleted
+    return 0
+
+
+import re as _re
+
+# TSC criteria pattern: CC1.1, CC2.3, A1.1, A1.2, C1.1, P1.1, PI1.1
+_TSC_PATTERN = _re.compile(r'^(CC|A|C|P|PI)\d+\.\d+$', _re.IGNORECASE)
+
+
+def _classify_rejection_reason(ctrl: Control) -> str:
+    """Heuristically classify why a control was rejected based on its content."""
+    cid = (ctrl.control_id or "").strip()
+    desc = (ctrl.control_desc or "").strip().lower()
+
+    # TSC criteria text (CC3.1, A1.1, etc.)
+    if _TSC_PATTERN.match(cid):
+        return "tsc_criteria"
+
+    # Auditor test procedures ("Inspected...", "Observed...", "Tested...")
+    auditor_verbs = ("inspected", "observed", "tested", "inquired", "examined", "reviewed the")
+    if any(desc.startswith(v) for v in auditor_verbs):
+        return "auditor_test_procedure"
+    if "to determine whether" in desc:
+        return "auditor_test_procedure"
+
+    # Narrative statements
+    narrative_starts = ("the company's", "the organization's", "according to", "as part of", "during the")
+    if any(desc.startswith(n) for n in narrative_starts) and len(desc) < 200:
+        return "narrative_statement"
+
+    # Enumeration/list fragments (very short, no verb)
+    if len(desc) < 80 and not any(c in desc for c in ".?!"):
+        return "enumeration_fragment"
+
+    # Generic statements (present tense but too vague)
+    if len(desc) < 120:
+        return "generic_statement"
+
+    return "other"
+
+
+async def _record_control_feedback(
+    db,
+    ctrl: Control,
+    scan_id: int,
+    action: str,
+    user_id: int,
+    *,
+    corrected_control_id: str = None,
+    rejection_reason: str = None,
+    rejection_notes: str = None,
+) -> None:
+    """
+    Record a ControlFeedback row for learning system.
+    Non-fatal: logs and continues on error.
+    """
+    try:
+        # Auto-classify rejection reason if not provided
+        if action in ("rejected", "converted_to_objective") and not rejection_reason:
+            rejection_reason = _classify_rejection_reason(ctrl)
+
+        fb = ControlFeedback(
+            scan_id=scan_id,
+            control_db_id=ctrl.id,
+            action=action,
+            original_confidence=ctrl.control_confidence,
+            control_id_text=(ctrl.control_id or "")[:128],
+            control_desc_snippet=(ctrl.control_desc or "")[:300],
+            corrected_control_id=corrected_control_id,
+            rejection_reason=rejection_reason,
+            rejection_notes=rejection_notes,
+            user_id=user_id,
+        )
+        db.add(fb)
+        logging.info(
+            f"[CONTROL_FEEDBACK] Recorded {action} for control "
+            f"{ctrl.control_id or ctrl.id} (scan={scan_id}, reason={rejection_reason})"
+        )
+    except Exception as e:
+        logging.warning(f"[CONTROL_FEEDBACK] Failed to record feedback: {e}")
 
 
 def _append_edit_log(ctrl: Control, message: str) -> None:
@@ -132,11 +244,15 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             changed = changed or (old != ctrl.annotation)
         if "control_id" in data:
             old = getattr(ctrl, "control_id", None)
-            ctrl.control_id = data["control_id"]
+            ctrl._feedback_old_control_id = old  # for learning system
+            # Clean control_id: remove newlines, tabs, and excess whitespace
+            cleaned_control_id = str(data["control_id"] or "").strip().replace('\n', '').replace('\r', '').replace('\t', ' ') if data["control_id"] else None
+            ctrl.control_id = cleaned_control_id
             _log_field_change(ctrl, "control_id", old, ctrl.control_id, current_user, now)
             changed = changed or (old != ctrl.control_id)
         if "control_desc" in data:
             old = getattr(ctrl, "control_desc", None)
+            ctrl._feedback_old_desc = old  # for learning system
             ctrl.control_desc = data["control_desc"]
             _log_field_change(ctrl, "control_desc", old, ctrl.control_desc, current_user, now, large=True)
             changed = changed or (old != ctrl.control_desc)
@@ -183,13 +299,44 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
         ctrl.updated_at = datetime.datetime.utcnow()
         ctrl.updated_by_user_id = current_user.id
         
+        # Remove objective mappings if confidence dropped below threshold
+        mappings_removed = 0
+        if "control_confidence" in data:
+            mappings_removed = await _cleanup_mappings_if_low_confidence(ctrl, db, current_user, now)
+        
+        # ── Control Feedback Learning System ──
+        # Record feedback when analyst zeroes confidence (rejection)
+        if "control_confidence" in data:
+            old_conf = old if 'old' in dir() else None  # old from confidence block above
+            # Recalculate old — it was set above but may be out of scope
+            if ctrl.control_confidence is not None and ctrl.control_confidence < 0.01:
+                await _record_control_feedback(
+                    db, ctrl, scan_id, "rejected", current_user.id,
+                )
+        # Record feedback when control_id is corrected
+        if "control_id" in data:
+            old_cid = data.get("_old_control_id")  # set below in control_id handling
+            new_cid = ctrl.control_id
+            # We stored the old value earlier; check if it actually changed
+            if hasattr(ctrl, '_feedback_old_control_id') and ctrl._feedback_old_control_id != new_cid:
+                await _record_control_feedback(
+                    db, ctrl, scan_id, "id_corrected", current_user.id,
+                    corrected_control_id=new_cid,
+                )
+        # Record feedback when description is materially edited
+        if "control_desc" in data and hasattr(ctrl, '_feedback_old_desc'):
+            if ctrl._feedback_old_desc != ctrl.control_desc:
+                await _record_control_feedback(
+                    db, ctrl, scan_id, "desc_corrected", current_user.id,
+                )
+        
         # Mark executive summary stale
         await mark_executive_summary_stale(scan_id, db)
         db.add(ctrl)
         await db.commit()
         await db.refresh(ctrl)
         
-        return {
+        result = {
             "id": ctrl.id,
             "control_id": ctrl.control_id,
             "control_desc": ctrl.control_desc,
@@ -208,6 +355,9 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
             "has_deviation": ctrl.has_deviation,
             "deviation_desc": ctrl.deviation_desc
         }
+        if mappings_removed > 0:
+            result["mappings_removed"] = mappings_removed
+        return result
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/controls/{control_id} DB error: {e}")
@@ -264,10 +414,14 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
             _log_field_change(ctrl, "annotation", old, ctrl.annotation, current_user, now, large=True)
         if "control_id" in data:
             old = getattr(ctrl, "control_id", None)
-            ctrl.control_id = data["control_id"]
+            ctrl._feedback_old_control_id = old  # for learning system
+            # Clean control_id: remove newlines, tabs, and excess whitespace
+            cleaned_control_id = str(data["control_id"] or "").strip().replace('\n', '').replace('\r', '').replace('\t', ' ') if data["control_id"] else None
+            ctrl.control_id = cleaned_control_id
             _log_field_change(ctrl, "control_id", old, ctrl.control_id, current_user, now)
         if "control_desc" in data:
             old = getattr(ctrl, "control_desc", None)
+            ctrl._feedback_old_desc = old  # for learning system
             ctrl.control_desc = data["control_desc"]
             _log_field_change(ctrl, "control_desc", old, ctrl.control_desc, current_user, now, large=True)
         if "control_test" in data:
@@ -308,6 +462,29 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
         ctrl.updated_at = datetime.datetime.utcnow()
         ctrl.updated_by_user_id = current_user.id
         
+        # Remove objective mappings if confidence dropped below threshold
+        mappings_removed = 0
+        if "control_confidence" in data:
+            mappings_removed = await _cleanup_mappings_if_low_confidence(ctrl, db, current_user, now)
+        
+        # ── Control Feedback Learning System ──
+        if "control_confidence" in data:
+            if ctrl.control_confidence is not None and ctrl.control_confidence < 0.01:
+                await _record_control_feedback(
+                    db, ctrl, scan_id, "rejected", current_user.id,
+                )
+        if "control_id" in data:
+            if hasattr(ctrl, '_feedback_old_control_id') and ctrl._feedback_old_control_id != ctrl.control_id:
+                await _record_control_feedback(
+                    db, ctrl, scan_id, "id_corrected", current_user.id,
+                    corrected_control_id=ctrl.control_id,
+                )
+        if "control_desc" in data and hasattr(ctrl, '_feedback_old_desc'):
+            if ctrl._feedback_old_desc != ctrl.control_desc:
+                await _record_control_feedback(
+                    db, ctrl, scan_id, "desc_corrected", current_user.id,
+                )
+        
         await mark_executive_summary_stale(scan_id, db)
         db.add(ctrl)
         await db.commit()
@@ -321,7 +498,7 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
             if user:
                 updated_by_username = user.username
         
-        return {
+        result = {
             "id": ctrl.id,
             "control_id": ctrl.control_id,
             "control_desc": ctrl.control_desc,
@@ -342,6 +519,9 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
             "updated_at": ctrl.updated_at.isoformat() if ctrl.updated_at else None,
             "updated_by": updated_by_username or "System" if ctrl.updated_at and not ctrl.updated_by_user_id else updated_by_username
         }
+        if mappings_removed > 0:
+            result["mappings_removed"] = mappings_removed
+        return result
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/controls/{control_db_id} DB error: {e}")
@@ -725,4 +905,46 @@ async def preview_framework_mappings(scan_id: int, data: Dict[str, Any] = Body(.
         raise
     except Exception as e:
         logging.error(f"Error previewing mappings: {e}")
+        return JSONResponse({"error": str(e), "success": False}, status_code=500)
+
+
+@router.post("/report/{scan_id}/controls/map_all_frameworks")
+async def map_controls_to_all_frameworks(
+    scan_id: int,
+    data: Dict[str, Any] = Body(default={}),
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Map all controls in a scan to ALL available frameworks.
+    
+    During the scan pipeline, only default frameworks (TSC+COSO) are mapped.
+    This endpoint triggers full framework mapping to all applicable frameworks.
+    
+    Optional body:
+        framework_keys: List of specific framework keys to map (e.g., ["NIST", "ISO27001"])
+                       If omitted, maps to ALL frameworks for the scan's report type.
+        min_confidence: Only map controls with confidence >= this value (default: 0.0)
+    """
+    try:
+        from ..services.framework_mapping_service import map_all_frameworks_for_scan
+        
+        framework_keys = data.get("framework_keys", None)
+        min_confidence = data.get("min_confidence", 0.0)
+        
+        result = await map_all_frameworks_for_scan(
+            scan_id=scan_id,
+            db=db,
+            entity_type="controls",
+            framework_keys=framework_keys,
+            min_confidence=min_confidence
+        )
+        
+        if result.get("success"):
+            return result
+        else:
+            return JSONResponse(result, status_code=500)
+            
+    except Exception as e:
+        logging.error(f"Error mapping all frameworks for controls in scan {scan_id}: {e}")
         return JSONResponse({"error": str(e), "success": False}, status_code=500)

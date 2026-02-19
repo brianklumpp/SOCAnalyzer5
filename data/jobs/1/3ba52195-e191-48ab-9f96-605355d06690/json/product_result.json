@@ -1,7 +1,0 @@
-{
-  "product": "Okta Identity as a Service (IDaaS)",
-  "confidence": 0.95,
-  "raw_gpt_responses": [
-    "{\n    \"product\": \"Okta Identity as a Service (IDaaS)\",\n    \"confidence\": 0.95,\n    \"explanation\": \"The SOC 2 report explicitly states that the system in scope is 'Okta’s Identity as a Service (IDaaS)' system, referenced throughout multiple sections of the document in relation to the trust service criteria of security, availability, and confidentiality.\"\n}"
-  ]
-}

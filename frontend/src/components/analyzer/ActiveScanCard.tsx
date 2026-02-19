@@ -50,6 +50,8 @@ interface ActiveScanCardProps {
     controls_percent?: number;
     controls_mapped_count?: number;
     controls_mapped_percent?: number;
+    objectives_count?: number;
+    objectives_percent?: number;
     cuecs_count?: number;
     subservice_orgs_count?: number;
   };
@@ -271,6 +273,8 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
           />
         </Box>
 
+
+
         <Divider sx={{ my: 1 }} />
 
         {/* Report Information Section */}
@@ -279,31 +283,7 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
             📄 Report Information
           </Typography>
           <Stack spacing={0.5} sx={{ mt: 0.5 }}>
-            {identifiedEntities?.report_type && (
-              <Box display="flex" alignItems="center" gap={0.5}>
-                <AssessmentIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                <Typography variant="body2" color="text.primary" fontWeight={500}>
-                  {identifiedEntities.report_type}
-                  {detectedSubtype && ` ${detectedSubtype}`}
-                </Typography>
-              </Box>
-            )}
-            {reportDate && (
-              <Box display="flex" alignItems="center" gap={0.5}>
-                <CalendarTodayIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                <Typography variant="body2" color="text.primary">
-                  Report Date: {reportDate}
-                </Typography>
-              </Box>
-            )}
-            {coveragePeriod && (
-              <Box display="flex" alignItems="center" gap={0.5}>
-                <DateRangeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                <Typography variant="body2" color="text.primary">
-                  Coverage: {coveragePeriod}
-                </Typography>
-              </Box>
-            )}
+            {/* Company Name - First */}
             {identifiedEntities?.company && (
               <Box display="flex" alignItems="center" gap={0.5}>
                 {identifiedEntities.company_logo_url ? (
@@ -335,19 +315,46 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
                 </Typography>
               </Box>
             )}
-            {identifiedEntities?.auditor && (
-              <Box display="flex" alignItems="center" gap={0.5}>
-                <AccountBalanceIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                <Typography variant="body2" color="text.primary" noWrap>
-                  {identifiedEntities.auditor}
-                </Typography>
-              </Box>
-            )}
+            {/* Product - Second */}
             {identifiedEntities?.product && (
               <Box display="flex" alignItems="center" gap={0.5}>
                 <DescriptionIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                 <Typography variant="body2" color="text.primary" noWrap>
                   Product: {identifiedEntities.product}
+                </Typography>
+              </Box>
+            )}
+            {/* Report Type - Third */}
+            {identifiedEntities?.report_type && (
+              <Box display="flex" alignItems="center" gap={0.5}>
+                <AssessmentIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                <Typography variant="body2" color="text.primary" fontWeight={500}>
+                  {identifiedEntities.report_type}
+                  {detectedSubtype && ` ${detectedSubtype}`}
+                </Typography>
+              </Box>
+            )}
+            {reportDate && (
+              <Box display="flex" alignItems="center" gap={0.5}>
+                <CalendarTodayIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                <Typography variant="body2" color="text.primary">
+                  Report Date: {reportDate}
+                </Typography>
+              </Box>
+            )}
+            {coveragePeriod && (
+              <Box display="flex" alignItems="center" gap={0.5}>
+                <DateRangeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                <Typography variant="body2" color="text.primary">
+                  Coverage: {coveragePeriod}
+                </Typography>
+              </Box>
+            )}
+            {identifiedEntities?.auditor && (
+              <Box display="flex" alignItems="center" gap={0.5}>
+                <AccountBalanceIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                <Typography variant="body2" color="text.primary" noWrap>
+                  {identifiedEntities.auditor}
                 </Typography>
               </Box>
             )}
@@ -364,7 +371,7 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
               </Typography>
               <Stack spacing={1.5} sx={{ mt: 1 }}>
                 {/* Controls */}
-                {counters.controls_count !== undefined && (
+                {(counters.controls_count !== undefined && (counters.controls_count > 0 || counters.controls_percent !== undefined && counters.controls_percent > 0)) && (
                   <Box>
                     <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
                       <Typography variant="body2" color="text.secondary">
@@ -421,27 +428,90 @@ const ActiveScanCard: React.FC<ActiveScanCardProps> = ({
                   </Box>
                 )}
                 
+                {/* Control Objectives */}
+                {((counters.objectives_count !== undefined && counters.objectives_count > 0) || progress >= 90) && (
+                  <Box>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                      <Typography variant="body2" color="text.secondary">
+                        {(() => {
+                          if (progress >= 100) return '✓ Control Objectives';
+                          if (progress >= 98) return 'Identifying Objective Gaps';
+                          if (progress >= 95) return 'Mapping Objectives to Controls';
+                          if (progress >= 92) return 'Extracting Control Objectives';
+                          return 'Control Objectives';
+                        })()}
+                      </Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {counters.objectives_count ? `${counters.objectives_count} found` : progress >= 92 ? 'in progress...' : ''}
+                      </Typography>
+                    </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={progress >= 100 ? 100 : (counters.objectives_percent ?? (counters.objectives_count ? 50 : 0))}
+                      sx={{
+                        height: 4,
+                        borderRadius: 1,
+                        backgroundColor: 'action.hover',
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 1,
+                          backgroundColor: progress >= 100 ? 'success.main' : 'warning.main'
+                        }
+                      }}
+                    />
+                  </Box>
+                )}
+                
                 {/* CUECs */}
                 {counters.cuecs_count !== undefined && counters.cuecs_count > 0 && (
-                  <Box display="flex" justifyContent="space-between" alignItems="center">
-                    <Typography variant="body2" color="text.secondary">
-                      CUECs (Complementary User Entity Controls)
-                    </Typography>
-                    <Typography variant="body2" fontWeight={600}>
-                      {counters.cuecs_count}
-                    </Typography>
+                  <Box>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                      <Typography variant="body2" color="text.secondary">
+                        CUECs (User Entity Controls)
+                      </Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {counters.cuecs_count} found
+                      </Typography>
+                    </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={100}
+                      sx={{
+                        height: 4,
+                        borderRadius: 1,
+                        backgroundColor: 'action.hover',
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 1,
+                          backgroundColor: 'secondary.main'
+                        }
+                      }}
+                    />
                   </Box>
                 )}
                 
                 {/* Subservice Organizations */}
                 {counters.subservice_orgs_count !== undefined && counters.subservice_orgs_count > 0 && (
-                  <Box display="flex" justifyContent="space-between" alignItems="center">
-                    <Typography variant="body2" color="text.secondary">
-                      Subservice Organizations
-                    </Typography>
-                    <Typography variant="body2" fontWeight={600}>
-                      {counters.subservice_orgs_count}
-                    </Typography>
+                  <Box>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                      <Typography variant="body2" color="text.secondary">
+                        Subservice Organizations
+                      </Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {counters.subservice_orgs_count} found
+                      </Typography>
+                    </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={100}
+                      sx={{
+                        height: 4,
+                        borderRadius: 1,
+                        backgroundColor: 'action.hover',
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 1,
+                          backgroundColor: '#8d6e63'
+                        }
+                      }}
+                    />
                   </Box>
                 )}
               </Stack>

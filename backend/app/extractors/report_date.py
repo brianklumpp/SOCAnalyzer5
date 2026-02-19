@@ -82,21 +82,43 @@ def extract_report_date(job_paths=None, job_id=None):
     if auditor_section and auditor_section.get('DOC_page_ref') is not None and auditor_section.get('end_DOC_page_ref') is not None:
         start = auditor_section['DOC_page_ref']
         end = auditor_section['end_DOC_page_ref']
+        
         pages = list(range(start, end + 1))
         text = extract_text_for_pages(txt_lines, pages)
         logger.info(f"[JOB {job_id}] Extracted text from pages {start}-{end} ({len(text)} chars)")
     elif auditor_section and auditor_section.get('start_line') and auditor_section.get('end_line'):
         start_line = auditor_section['start_line']
         end_line = auditor_section['end_line']
+        
+        # Fix: end_line often defaults to document end. Find actual section end by looking for next section
+        auditor_start = auditor_section['start_line']
+        actual_end_line = end_line
+        for section in section_results:
+            if section.get('start_line') and section['start_line'] > auditor_start:
+                # Found a section that starts after auditor section
+                actual_end_line = min(actual_end_line, section['start_line'] - 1)
+        
+        if actual_end_line != end_line:
+            logger.info(f"[JOB {job_id}] Corrected section end from {end_line} to {actual_end_line} (next section boundary)")
+            end_line = actual_end_line
+        
         text = extract_text_for_lines(txt_lines, start_line, end_line)
         logger.info(f"[JOB {job_id}] Extracted text from lines {start_line}-{end_line} ({len(text)} chars)")
     else:
-        logger.info(f"[JOB {job_id}] No valid section boundaries. Using entire document for GPT-only extraction context.")
+        logger.info(f"[JOB {job_id}] No valid section boundaries. Using entire document for extraction.")
         with open(pdf_txt_path, 'r', encoding='utf-8') as f2:
             text = f2.read()
-    # Primary path: GPT extraction on last lines of the auditor section
+    
+    # Primary path: GPT extraction - signature appears at END of auditor report section
+    # Extract the last ~100 lines of the section where the signature date will be
     lines = [l.strip() for l in text.splitlines() if l.strip()]
-    last_lines = '\n'.join(lines[-5:])
+    
+    # Extract last 100 lines (or all if less than 100)
+    num_lines_to_extract = min(100, len(lines))
+    start_idx = max(0, len(lines) - num_lines_to_extract)
+    extraction_window = '\n'.join(lines[start_idx:])
+    
+    logger.info(f"[JOB {job_id}] Extracting last {num_lines_to_extract} lines from auditor section (lines {start_idx}-{len(lines)}, {len(extraction_window)} chars)")
     
     # Debug: Save the extracted text
     debug_path = str(job_paths['temp_dir'] / 'report_date_debug.txt')
@@ -109,11 +131,10 @@ def extract_report_date(job_paths=None, job_id=None):
             debug_file.write(f"  end_line: {auditor_section.get('end_line')}\n")
         debug_file.write(f"\nTotal text length: {len(text)}\n")
         debug_file.write(f"Total lines: {len(lines)}\n")
-        debug_file.write(f"\nLast 5 lines sent to GPT:\n{last_lines}\n")
-        debug_file.write(f"\n\nFull text (first 5000 chars):\n{text[:5000]}\n")
-        debug_file.write(f"\n\nFull text (last 5000 chars):\n{text[-5000:]}\n")
+        debug_file.write(f"Extracted last {num_lines_to_extract} lines (start_idx={start_idx})\n")
+        debug_file.write(f"\nExtraction window sent to GPT:\n{extraction_window}\n")
     
-    prompt = config.REPORT_DATE_EXTRACTION_PROMPT.format(text=last_lines)
+    prompt = config.REPORT_DATE_EXTRACTION_PROMPT.format(text=extraction_window)
     response = gpt_extract(prompt, 'report_date_extractor')
     result = {'report_date': None, 'explanation': '', 'raw_gpt_response': response}
     if not response:
@@ -165,6 +186,39 @@ def extract_report_date(job_paths=None, job_id=None):
                 result['report_date'] = iso
                 if not result.get('explanation'):
                     result['explanation'] = 'Heuristic parse: last date in auditor section'
+    
+    # VALIDATION: Check report_date against coverage_period if available
+    # Report date should be AFTER coverage_end (typically a few days to a month later)
+    if result.get('report_date'):
+        coverage_period_path = job_paths['json_dir'] / 'coverage_period_result.json'
+        if coverage_period_path.exists():
+            try:
+                from datetime import datetime
+                with open(str(coverage_period_path), 'r', encoding='utf-8') as cp_file:
+                    coverage_data = json.load(cp_file)
+                
+                coverage_end_str = coverage_data.get('end_date')
+                if coverage_end_str:
+                    report_date_obj = datetime.fromisoformat(result['report_date'])
+                    coverage_end_obj = datetime.fromisoformat(coverage_end_str)
+                    
+                    days_after_coverage = (report_date_obj - coverage_end_obj).days
+                    
+                    # Report date should be 0-90 days AFTER coverage end
+                    if days_after_coverage < 0:
+                        logger.warning(f"[JOB {job_id}] VALIDATION FAILED: report_date ({result['report_date']}) is BEFORE coverage_end ({coverage_end_str}) by {abs(days_after_coverage)} days. This is likely incorrect.")
+                        result['explanation'] += f" | WARNING: Report date appears to be before coverage end date (off by {abs(days_after_coverage)} days)"
+                        result['validation_warning'] = f"Report date is {abs(days_after_coverage)} days BEFORE coverage end"
+                    elif days_after_coverage > 90:
+                        logger.warning(f"[JOB {job_id}] VALIDATION WARNING: report_date ({result['report_date']}) is {days_after_coverage} days after coverage_end ({coverage_end_str}). This is unusually long.")
+                        result['explanation'] += f" | WARNING: Report date is {days_after_coverage} days after coverage end (typically 0-60 days)"
+                        result['validation_warning'] = f"Report date is {days_after_coverage} days after coverage end (unusually long)"
+                    else:
+                        logger.info(f"[JOB {job_id}] VALIDATION PASSED: report_date is {days_after_coverage} days after coverage_end (within normal range)")
+                        result['explanation'] += f" | Validated: {days_after_coverage} days after coverage end"
+            except Exception as val_err:
+                logger.warning(f"[JOB {job_id}] Could not validate report_date against coverage_period: {val_err}")
+    
     with open(output_json_path, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     logger.info(f'[JOB {job_id}] Report date extraction result: {result}')

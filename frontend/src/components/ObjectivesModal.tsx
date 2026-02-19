@@ -81,6 +81,7 @@ import {
 } from '../services/objectiveService';
 import api from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { SplitViewLayout } from './report/SplitViewLayout';
 
 interface ObjectivesModalProps {
   open: boolean;
@@ -118,6 +119,9 @@ export const ObjectivesModal: React.FC<ObjectivesModalProps> = ({
   const [extracting, setExtracting] = useState(false);
   const [mapping, setMapping] = useState(false);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
+  
+  // PDF navigation
+  const pdfNavigateRef = useRef<((snippet: string | null, page?: number | null) => void) | null>(null);
   const [extractStatus, setExtractStatus] = useState<{
     status: string;
     progress_status?: string;
@@ -566,34 +570,45 @@ export const ObjectivesModal: React.FC<ObjectivesModalProps> = ({
     }
 
     try {
-      const response = await api.post(`/report/${scanId}/extract-entity`, {
-        entity_type: 'control',
-        search_text: searchValue,
-        force_multi_extract: false,
-      });
-
-      const data = response.data;
-      if (data.warning || data.requires_force) {
-        return { status: 'warning' as const, message: data.warning || 'Multiple matches found. Refine your search.' };
-      }
-      if (data.error) {
-        return { status: 'error' as const, message: data.error };
-      }
-
-      const extracted = data.extracted_data || {};
-      const payload: any = {
-        control_id: extracted.control_id || objective.objective_id || undefined,
-        control_desc: extracted.description || objective.objective_text,
-        control_test: Array.isArray(extracted.test_procedures)
-          ? extracted.test_procedures.join('\n')
-          : extracted.test_procedures,
-        control_test_results: Array.isArray(extracted.test_results)
-          ? extracted.test_results.join('\n')
-          : extracted.test_results,
-        deviation_desc: extracted.deviation_description || undefined,
-        control_page_ref: extracted.page_ref || undefined,
+      // Try to extract control details from the document
+      let payload: any = {
+        control_id: objective.objective_id || undefined,
+        control_desc: objective.objective_text,
+        control_test: '[Converted from control objective]',
+        control_test_results: '',
+        control_page_ref: objective.page_refs || undefined,
       };
 
+      try {
+        const response = await api.post(`/report/${scanId}/extract-entity`, {
+          entity_type: 'control',
+          search_text: searchValue,
+          force_multi_extract: false,
+        });
+
+        const data = response.data;
+        // If extraction succeeds, use the extracted data
+        if (!data.warning && !data.requires_force && !data.error) {
+          const extracted = data.extracted_data || {};
+          payload = {
+            control_id: extracted.control_id || objective.objective_id || undefined,
+            control_desc: extracted.description || objective.objective_text,
+            control_test: Array.isArray(extracted.test_procedures)
+              ? extracted.test_procedures.join('\n')
+              : extracted.test_procedures || '[Converted from control objective]',
+            control_test_results: Array.isArray(extracted.test_results)
+              ? extracted.test_results.join('\n')
+              : extracted.test_results || '',
+            deviation_desc: extracted.deviation_description || undefined,
+            control_page_ref: extracted.page_ref || objective.page_refs || undefined,
+          };
+        }
+      } catch (extractErr) {
+        // Extraction failed, but continue with objective data
+        console.warn('Extract-entity failed, using objective data:', extractErr);
+      }
+
+      // Always attempt to convert, even if extraction failed
       const result = await convertToControl(scanId, objective.id, payload);
       const action = (result as any).status || 'converted';
       const messageMap: Record<string, string> = {
@@ -872,10 +887,11 @@ export const ObjectivesModal: React.FC<ObjectivesModalProps> = ({
     <Dialog 
       open={open} 
       onClose={onClose} 
-      maxWidth="xl" 
+      maxWidth={false}
       fullWidth
       disablePortal={false}
       disableScrollLock={false}
+      sx={{ '& .MuiDialog-paper': { width: '95vw', maxWidth: '95vw' } }}
     >
       <DialogTitle sx={{ py: 1, px: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -886,7 +902,15 @@ export const ObjectivesModal: React.FC<ObjectivesModalProps> = ({
         </Box>
       </DialogTitle>
       
-      <DialogContent sx={{ pt: 1, pb: 2 }}>
+      <DialogContent sx={{ p: 1, height: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <SplitViewLayout
+          scanId={scanId}
+          tabName={"objectives" as any}
+          onPdfNavigate={(handler) => {
+            pdfNavigateRef.current = handler;
+          }}
+        >
+          <>
         {/* Action Buttons */}
         <Box sx={{ mb: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
           <Button
@@ -1160,7 +1184,8 @@ export const ObjectivesModal: React.FC<ObjectivesModalProps> = ({
             </Collapse>
           </Box>
         )}
-
+          </>
+        </SplitViewLayout>
         {/* Messages */}
         {error && (
           <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 1 }}>
@@ -1300,9 +1325,37 @@ export const ObjectivesModal: React.FC<ObjectivesModalProps> = ({
                         onChange={(e) => handleSelectOne(obj.id, e.target.checked)}
                       />
                     </TableCell>
-                    <TableCell>{obj.objective_id || '—'}</TableCell>
-                    <TableCell>
-                      <Typography variant="body2" sx={{ maxWidth: 400 }}>
+                    <TableCell
+                      sx={{ 
+                        cursor: obj.objective_text ? 'pointer' : 'default',
+                        '&:hover': obj.objective_text ? { bgcolor: '#f5f5f5' } : {} 
+                      }}
+                      onClick={() => {
+                        if (obj.objective_text && pdfNavigateRef.current) {
+                          pdfNavigateRef.current(obj.objective_text, obj.page_refs?.[0] || null);
+                        }
+                      }}
+                    >
+                      {obj.objective_id_normalized || obj.objective_id || '—'}
+                    </TableCell>
+                    <TableCell
+                      sx={{ 
+                        cursor: obj.objective_text ? 'pointer' : 'default',
+                        '&:hover': obj.objective_text ? { bgcolor: '#f5f5f5' } : {} 
+                      }}
+                      onClick={() => {
+                        if (obj.objective_text && pdfNavigateRef.current) {
+                          pdfNavigateRef.current(obj.objective_text, obj.page_refs?.[0] || null);
+                        }
+                      }}
+                    >
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          maxWidth: 400,
+                          cursor: obj.objective_text ? 'pointer' : 'default' 
+                        }}
+                      >
                         {obj.objective_text}
                       </Typography>
                     </TableCell>

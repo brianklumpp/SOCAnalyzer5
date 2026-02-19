@@ -47,6 +47,8 @@ interface Counters {
   controls_percent: number;
   controls_mapped_count: number;
   controls_mapped_percent: number;
+  objectives_count: number;
+  objectives_percent: number;
   subservice_orgs_count: number;
   cuecs_count: number;
 }
@@ -113,15 +115,7 @@ const AnalyzerPage: React.FC = () => {
   // Real-time progress state
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [identifiedEntities, setIdentifiedEntities] = useState<IdentifiedEntities>({});
-  const [counters, setCounters] = useState<Counters>({
-    controls_count: 0,
-    controls_total_estimate: 0,
-    controls_percent: 0,
-    controls_mapped_count: 0,
-    controls_mapped_percent: 0,
-    subservice_orgs_count: 0,
-    cuecs_count: 0
-  });
+  const [counters, setCounters] = useState<Counters>({});
   const [phaseCompletion, setPhaseCompletion] = useState<PhaseCompletion>({
     logo_fetched: false,
     cleanup_complete: false,
@@ -454,6 +448,22 @@ const AnalyzerPage: React.FC = () => {
       setScanStartTime(null);
     }
   }, [loading, scanStartTime]);
+
+  // Update browser tab title with overall progress
+  useEffect(() => {
+    const baseTitle = 'SOC Report Analyzer';
+    if (queuedScans.length > 0 && queuedScans.some((scan: any) => scan.status === 'running')) {
+      // Find running scan with highest progress
+      const runningScans = queuedScans.filter((scan: any) => scan.status === 'running');
+      const maxProgress = Math.max(...runningScans.map((scan: any) => {
+        const progressInfo = scanProgress[scan.job_id] || {};
+        return progressInfo.progress || 0;
+      }));
+      document.title = `(${maxProgress}%) ${baseTitle}`;
+    } else {
+      document.title = baseTitle;
+    }
+  }, [queuedScans, scanProgress]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
@@ -890,7 +900,13 @@ const AnalyzerPage: React.FC = () => {
             </Alert>
           )}
           
-          <Paper sx={{ p: 1.5, mb: 1.5 }}>
+          <Paper sx={{ 
+            p: 1.5, 
+            mb: 1.5,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper'
+          }}>
           {/* Finalized banner + quick summary counts if available */}
           {statusInfo?.finalized && (
             <Alert severity="info" sx={{ mb: 1, py: 0.5 }}>
@@ -911,7 +927,14 @@ const AnalyzerPage: React.FC = () => {
           </Paper>
           
           {/* Scan Queue Section - Always visible */}
-          <Paper sx={{ p: 1.5, mt: 1.5, mb: 1.5 }}>
+          <Paper sx={{ 
+            p: 1.5, 
+            mt: 1.5, 
+            mb: 1.5,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper'
+          }}>
             <Typography variant="h6" sx={{ mb: 1, fontSize: '1.1rem' }}>
               Scan Queue {queuePaused && <Chip label="PAUSED" color="warning" size="small" sx={{ ml: 1 }} />}
             </Typography>

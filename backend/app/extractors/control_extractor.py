@@ -37,6 +37,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Callable
 from ..gpt_client import gpt_extract
+from ..utils.objective_id_normalizer import normalize_objective_id
 import concurrent.futures
 
 try:
@@ -85,6 +86,169 @@ def validate_markers_stripped(text: str) -> bool:
     if not text:
         return True
     return '║' not in text
+
+
+def _parse_chunk_line_map(chunk_text: str) -> List[Tuple[int, str]]:
+    """
+    Parse a chunk's ║N║-marked text into (line_number, line_text) pairs.
+
+    Each original document line was prefixed with ║<line_num>║ during chunking.
+    This function extracts those markers and returns a list of tuples, each
+    containing the document-relative line number and the text on that line.
+
+    Args:
+        chunk_text: The raw chunk text containing ║N║ markers.
+
+    Returns:
+        List of (doc_line_number, line_text) tuples in document order.
+    """
+    results: List[Tuple[int, str]] = []
+    # Find all ║N║ markers and capture the text between them
+    marker_pattern = re.compile(r'║(\d+)║')
+    markers = list(marker_pattern.finditer(chunk_text))
+    if not markers:
+        return results
+
+    for i, m in enumerate(markers):
+        line_num = int(m.group(1))
+        text_start = m.end()
+        # Text runs until the next marker (or end of string)
+        text_end = markers[i + 1].start() if i + 1 < len(markers) else len(chunk_text)
+        line_text = chunk_text[text_start:text_end]
+        results.append((line_num, line_text))
+
+    return results
+
+
+def find_control_line_in_chunk(
+    chunk_text: str,
+    control_id: Optional[str],
+    control_desc: Optional[str],
+    chunk_start_line: int,
+    gpt_start_line: Optional[int] = None,
+) -> int:
+    """
+    Search the chunk text for the actual document line where a control appears.
+
+    Hybrid strategy (tried in order):
+      1. Text search for control_id (e.g. "EM-01-01") in ║N║-marked lines.
+      2. GPT-reported start_line — validated against chunk boundaries.
+      3. Text search for first ~8 words of control_desc (fallback for messy PDFs).
+      4. Fallback: return chunk_start_line (current behaviour).
+
+    GPT start_line (Strategy 2) is placed *after* control_id search because the
+    ID search is deterministic and cheap, but *before* description search because
+    GPT understands the semantic role of interleaved lines (control desc vs test
+    procedure vs result) that a text pattern match cannot distinguish.
+
+    Args:
+        chunk_text:       The raw chunk text with ║N║ markers.
+        control_id:       The GPT-extracted control identifier (may be None).
+        control_desc:     The GPT-extracted control description (may be None).
+        chunk_start_line: Fallback line number (chunk's start_line).
+        gpt_start_line:   GPT-reported start_line from the extraction (may be None).
+
+    Returns:
+        The document-relative line number where the control starts.
+    """
+    line_map = _parse_chunk_line_map(chunk_text)
+    if not line_map:
+        return chunk_start_line
+
+    # Determine the valid line range for this chunk (for sanity checks)
+    chunk_line_min = line_map[0][0]
+    chunk_line_max = line_map[-1][0]
+
+    # --- Strategy 1: search by control_id ---
+    if control_id:
+        cid_clean = control_id.strip()
+        # Try exact substring match first (case-insensitive)
+        for line_num, line_text in line_map:
+            if cid_clean.lower() in line_text.lower():
+                logging.info(
+                    f"[LINEREF] Strategy 1: Matched control_id '{cid_clean}' at doc line {line_num}"
+                )
+                return line_num
+
+        # Try with whitespace collapsed (handles line-break splits like "EM-\n01-01")
+        cid_collapsed = re.sub(r'\s+', '', cid_clean).lower()
+        # Build a running window of consecutive lines to catch IDs split across lines
+        for i in range(len(line_map)):
+            # Combine this line with the next line (handles 2-line splits)
+            combined = line_map[i][1]
+            if i + 1 < len(line_map):
+                combined += line_map[i + 1][1]
+            combined_collapsed = re.sub(r'\s+', '', combined).lower()
+            if cid_collapsed in combined_collapsed:
+                logging.info(
+                    f"[LINEREF] Strategy 1: Matched control_id '{cid_clean}' (collapsed) at doc line {line_map[i][0]}"
+                )
+                return line_map[i][0]
+
+    # --- Strategy 2: GPT-reported start_line (validated) ---
+    if gpt_start_line is not None and isinstance(gpt_start_line, int):
+        if chunk_line_min <= gpt_start_line <= chunk_line_max:
+            logging.info(
+                f"[LINEREF] Strategy 2: Using GPT start_line {gpt_start_line} "
+                f"(within chunk range {chunk_line_min}-{chunk_line_max})"
+            )
+            return gpt_start_line
+        else:
+            logging.warning(
+                f"[LINEREF] Strategy 2: GPT start_line {gpt_start_line} outside chunk range "
+                f"{chunk_line_min}-{chunk_line_max} — skipping"
+            )
+
+    # --- Strategy 3: search by first ~8 words of description ---
+    if control_desc and control_desc.strip():
+        # Strip any leftover ║N║ markers from the description GPT returned
+        desc_clean = strip_line_markers(control_desc)
+        words = desc_clean.split()
+        if words:
+            # Use first 8 words (or fewer if desc is short)
+            snippet_words = words[:8]
+            snippet = ' '.join(snippet_words).lower()
+
+            for line_num, line_text in line_map:
+                line_norm = ' '.join(strip_line_markers(line_text).split()).lower()
+                if snippet in line_norm:
+                    logging.info(
+                        f"[LINEREF] Strategy 3: Matched desc snippet at doc line {line_num}"
+                    )
+                    return line_num
+
+            # Try progressively shorter snippets (7, 6, 5 words) for partial matches
+            for word_count in (7, 6, 5):
+                if len(words) >= word_count:
+                    shorter_snippet = ' '.join(words[:word_count]).lower()
+                    for line_num, line_text in line_map:
+                        line_norm = ' '.join(strip_line_markers(line_text).split()).lower()
+                        if shorter_snippet in line_norm:
+                            logging.info(
+                                f"[LINEREF] Strategy 3: Matched desc snippet ({word_count} words) at doc line {line_num}"
+                            )
+                            return line_num
+
+            # Last resort within strategy 3: try combining adjacent lines
+            # (handles descriptions that start mid-line or span a line break)
+            snippet = ' '.join(snippet_words).lower()
+            for i in range(len(line_map)):
+                combined_text = line_map[i][1]
+                if i + 1 < len(line_map):
+                    combined_text += ' ' + line_map[i + 1][1]
+                combined_norm = ' '.join(strip_line_markers(combined_text).split()).lower()
+                if snippet in combined_norm:
+                    logging.info(
+                        f"[LINEREF] Strategy 3: Matched desc snippet (cross-line) at doc line {line_map[i][0]}"
+                    )
+                    return line_map[i][0]
+
+    # --- Strategy 4: fallback ---
+    logging.info(
+        f"[LINEREF] Strategy 4: No match found for control_id='{control_id}', "
+        f"gpt_start_line={gpt_start_line}, falling back to chunk start line {chunk_start_line}"
+    )
+    return chunk_start_line
 
 # ============================================================================
 # CHECKPOINT MANAGEMENT - Incremental Write Support
@@ -244,10 +408,99 @@ def create_aware_chunks(
     return chunks
 
 # ============================================================================
+# CONTROL FEEDBACK LEARNING SYSTEM
+# ============================================================================
+
+def _get_control_feedback_text(
+    scan_id: Optional[int] = None,
+    max_examples: int = 12,
+) -> str:
+    """
+    Query ControlFeedback for this scan (and optionally global) and format
+    as a few-shot block that can be injected into the extraction prompt.
+    
+    Returns an empty string if no feedback exists or DB is unavailable.
+    """
+    try:
+        from sqlalchemy import create_engine, text as sa_text
+        from ..database import SYNC_DATABASE_URL
+        
+        engine = create_engine(SYNC_DATABASE_URL, pool_pre_ping=True)
+        
+        with engine.connect() as conn:
+            # First try scan-specific feedback, then supplement with global
+            if scan_id:
+                rows = conn.execute(sa_text("""
+                    SELECT action, control_id_text, control_desc_snippet,
+                           original_confidence, rejection_reason, corrected_control_id
+                    FROM control_feedback
+                    WHERE scan_id = :scan_id
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                """), {"scan_id": scan_id, "limit": max_examples}).fetchall()
+            else:
+                rows = []
+            
+            # Supplement with global if < 4 scan-specific examples
+            if len(rows) < 4:
+                remaining = max_examples - len(rows)
+                global_filter = f"AND scan_id != {scan_id}" if scan_id else ""
+                global_rows = conn.execute(sa_text(f"""
+                    SELECT action, control_id_text, control_desc_snippet,
+                           original_confidence, rejection_reason, corrected_control_id
+                    FROM control_feedback
+                    WHERE 1=1 {global_filter}
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                """), {"limit": remaining}).fetchall()
+                rows.extend(global_rows)
+        
+        if not rows:
+            return ""
+        
+        lines = [
+            "\n### 11. Analyst Feedback (use these corrections to calibrate extraction):"
+        ]
+        
+        for row in rows:
+            action = row[0]
+            cid = row[1] or "?"
+            desc_snip = (row[2] or "")[:120]
+            orig_conf = row[3]
+            reason = row[4] or ""
+            corrected_id = row[5] or ""
+            
+            if action == "rejected":
+                reason_text = f" ({reason.replace('_', ' ')})" if reason else ""
+                lines.append(
+                    f"- NOT a control{reason_text}: \"{cid}\" — \"{desc_snip}\" "
+                    f"[was extracted at confidence {orig_conf or '?'}]"
+                )
+            elif action == "converted_to_objective":
+                lines.append(
+                    f"- IS AN OBJECTIVE, not a control: \"{cid}\" — \"{desc_snip}\" "
+                    f"[was extracted at confidence {orig_conf or '?'}]"
+                )
+            elif action == "id_corrected":
+                lines.append(
+                    f"- WRONG ID: \"{cid}\" should be \"{corrected_id}\" — \"{desc_snip}\""
+                )
+            elif action == "confirmed":
+                lines.append(
+                    f"- CORRECT control: \"{cid}\" — \"{desc_snip}\""
+                )
+        
+        return "\n".join(lines)
+    except Exception as e:
+        logging.warning(f"[CONTROL_FEEDBACK] Failed to load feedback: {e}")
+        return ""
+
+
+# ============================================================================
 # CHAIN-OF-THOUGHT EXTRACTION (from control_extractor_v4.py)
 # ============================================================================
 
-def extract_control_with_cot(chunk: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+def extract_control_with_cot(chunk: Dict[str, Any], control_feedback_block: str = "") -> Optional[List[Dict[str, Any]]]:
     """
     Extract controls using Chain-of-Thought reasoning.
     
@@ -259,6 +512,7 @@ def extract_control_with_cot(chunk: Dict[str, Any]) -> Optional[List[Dict[str, A
     
     Args:
         chunk: Chunk dictionary with text and metadata
+        control_feedback_block: Optional few-shot feedback text from ControlFeedback table
         
     Returns:
         List of extracted control dicts or None
@@ -273,7 +527,8 @@ def extract_control_with_cot(chunk: Dict[str, Any]) -> Optional[List[Dict[str, A
         # Format prompt with chunk text (ALWAYS use SOC2 prompt for all report types)
         prompt = config.CONTROL_EXTRACTION_PROMPT_V4.format(
             start_line=start_line,
-            text=text
+            text=text,
+            control_feedback_block=control_feedback_block,
         )
         
         # Call GPT
@@ -293,11 +548,30 @@ def extract_control_with_cot(chunk: Dict[str, Any]) -> Optional[List[Dict[str, A
         # Add chunk metadata and adjust line numbers
         for control in controls:
             control["chunk_id"] = chunk_id
-            control["source_start_line"] = start_line
-            # Adjust end_line if GPT provided relative line number
+            # Hybrid line-ref: control_id text search → GPT start_line → desc text search → fallback
+            gpt_start = control.get("start_line")
+            if isinstance(gpt_start, int) and gpt_start > 0:
+                # GPT may return chunk-relative or doc-absolute — normalise
+                # If GPT returned a small number (< start_line), treat as chunk-relative
+                if gpt_start < start_line:
+                    gpt_start = start_line + gpt_start
+            else:
+                gpt_start = None
+            control["source_start_line"] = find_control_line_in_chunk(
+                text,
+                control.get("control_id"),
+                control.get("control_desc"),
+                start_line,
+                gpt_start_line=gpt_start,
+            )
+            # Adjust end_line: GPT should now return doc-absolute ║N║ marker numbers,
+            # but older models may return chunk-relative offsets. Normalise both.
             if "end_line" in control and isinstance(control["end_line"], int):
-                control["end_line"] = start_line + control["end_line"]
-            logging.info(f"[CHUNK {chunk_id}] Extracted control: {control.get('control_id', 'N/A')}, confidence: {control.get('control_confidence', 0):.2f}, continuation: {control.get('continuation', False)}")
+                if control["end_line"] < start_line:
+                    # Looks chunk-relative → convert to doc-absolute
+                    control["end_line"] = start_line + control["end_line"]
+                # else: already doc-absolute, keep as-is
+            logging.info(f"[CHUNK {chunk_id}] Extracted control: {control.get('control_id', 'N/A')}, confidence: {control.get('control_confidence', 0):.2f}, line_ref: {control['source_start_line']}, continuation: {control.get('continuation', False)}")
         
         logging.info(f"[CHUNK {chunk_id}] Extracted {len(controls)} control(s)")
         return controls
@@ -342,6 +616,10 @@ def parse_control_json(response: str, chunk_id: int) -> Optional[List[Dict[str, 
             if not isinstance(control, dict):
                 logging.warning(f"[CHUNK {chunk_id}] Control is not a dict: {type(control)}")
                 continue
+            
+            # CRITICAL FIX: Strip newlines and whitespace from control_id immediately after GPT extraction
+            if "control_id" in control and control["control_id"]:
+                control["control_id"] = str(control["control_id"]).strip().replace('\n', '').replace('\r', '').replace('\t', ' ')
             
             # Ensure lists for test arrays
             if "control_tests" in control and not isinstance(control["control_tests"], list):
@@ -532,6 +810,19 @@ def merge_two_controls(base: Dict[str, Any], addition: Dict[str, Any]) -> Dict[s
     if combined_pages:
         merged["control_page_refs"] = combined_pages
     
+    # Collect ALL line positions into all_line_refs (Phase A: location preservation)
+    base_line = merged.get("control_line_ref")
+    add_line = addition.get("control_line_ref")
+    existing_all = list(merged.get("all_line_refs") or [])
+    addition_all = list(addition.get("all_line_refs") or [])
+    combined_lines = set(existing_all + addition_all)
+    if base_line is not None:
+        combined_lines.add(base_line)
+    if add_line is not None:
+        combined_lines.add(add_line)
+    if combined_lines:
+        merged["all_line_refs"] = sorted(combined_lines)
+    
     # Update end_line to furthest (handle None values)
     if "end_line" in addition:
         merged_end = merged.get("end_line") or 0
@@ -587,6 +878,57 @@ def filter_by_confidence(controls: List[Dict[str, Any]], min_confidence: float =
     logging.info(f"Confidence filtering: {len(accepted)} accepted, {len(rejected)} rejected (threshold: {min_confidence})")
     
     return accepted, rejected
+
+
+# TSC criteria IDs that should not be extracted as controls
+_TSC_ID_PATTERN = re.compile(r'^(CC|A|C|P|PI)\d+\.\d+$', re.IGNORECASE)
+
+
+def filter_tsc_criteria(controls: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Post-extraction filter: auto-flag controls whose IDs match TSC criteria patterns.
+    
+    TSC criteria (CC1.1, CC3.2, A1.1, etc.) are objectives, not controls.
+    When the extractor picks these up, they should be separated out and marked
+    with a low confidence + annotation so they can be auto-converted to objectives.
+    
+    Args:
+        controls: List of control dicts from extraction
+        
+    Returns:
+        Tuple of (real_controls, tsc_flagged) where tsc_flagged have lowered confidence
+    """
+    real_controls = []
+    tsc_flagged = []
+    
+    for control in controls:
+        cid = (control.get("control_id") or "").strip()
+        if _TSC_ID_PATTERN.match(cid):
+            # This looks like a TSC criteria ID, not a real control
+            control["_tsc_flagged"] = True
+            control["_original_confidence"] = control.get("control_confidence", 0)
+            control["control_confidence"] = 0.0  # Zero it — user can convert to objective
+            control["control_gpt_conf_justification"] = (
+                f"Auto-flagged as TSC criteria (ID pattern: {cid}). "
+                f"Original confidence: {control['_original_confidence']:.2f}. "
+                f"TSC criteria are objectives, not controls."
+            )
+            tsc_flagged.append(control)
+            logging.info(
+                f"[TSC_FILTER] Flagged '{cid}' as TSC criteria objective "
+                f"(original confidence: {control['_original_confidence']:.2f})"
+            )
+        else:
+            real_controls.append(control)
+    
+    if tsc_flagged:
+        logging.info(
+            f"[TSC_FILTER] {len(tsc_flagged)} controls flagged as TSC criteria, "
+            f"{len(real_controls)} real controls retained"
+        )
+    
+    return real_controls, tsc_flagged
+
 
 # ============================================================================
 # POST-MERGE VALIDATION (simplified from control_extractor_v4.py)
@@ -675,13 +1017,35 @@ def validate_controls(
             
             if "source_start_line" in control and "text_lines" in control:
                 page_num = get_page_for_line(control["text_lines"], control["source_start_line"])
-                control["control_page_refs"] = [page_num] if page_num else []
                 control["control_line_ref"] = control["source_start_line"]
+                # Initialize all_line_refs with this position (merge will accumulate more)
+                if "all_line_refs" not in control or not control["all_line_refs"]:
+                    control["all_line_refs"] = [control["source_start_line"]]
+                
+                # Compute pages from ALL known line positions (start, end, all_line_refs)
+                all_pages = set()
+                if page_num:
+                    all_pages.add(page_num)
+                # Also add end_line page if available
+                end_line = control.get("end_line")
+                if end_line and isinstance(end_line, int):
+                    end_page = get_page_for_line(control["text_lines"], end_line)
+                    if end_page:
+                        all_pages.add(end_page)
+                # Also add pages for all_line_refs entries
+                for lr in (control.get("all_line_refs") or []):
+                    if isinstance(lr, int) and lr > 0:
+                        p = get_page_for_line(control["text_lines"], lr)
+                        if p:
+                            all_pages.add(p)
+                control["control_page_refs"] = sorted(all_pages) if all_pages else []
                 
                 if i == 0:
-                    logging.info(f"[PAGE EXTRACTION DEBUG] Control 0: Extracted page={page_num} for line={control['source_start_line']}")
+                    logging.info(f"[PAGE EXTRACTION DEBUG] Control 0: Extracted pages={control['control_page_refs']} for line={control['source_start_line']}")
             elif "source_start_line" in control:
                 control["control_line_ref"] = control["source_start_line"]
+                if "all_line_refs" not in control or not control["all_line_refs"]:
+                    control["all_line_refs"] = [control["source_start_line"]]
                 if i == 0:
                     logging.warning(f"[PAGE EXTRACTION DEBUG] Control 0: Has source_start_line but missing text_lines")
         except Exception as e:
@@ -983,6 +1347,19 @@ def extract_controls(
     last_progress_update = 0  # Track when we last updated progress
     section_total_lines = section_end - section_start
     
+    # ── Control Feedback Learning System ──
+    # Build feedback block once and reuse for all chunks
+    control_feedback_block = ""
+    try:
+        int_scan_id = int(scan_id) if scan_id else None
+        control_feedback_block = _get_control_feedback_text(scan_id=int_scan_id)
+        if control_feedback_block:
+            logging.info(f"{log_prefix}[CONTROL_FEEDBACK] Loaded feedback block ({len(control_feedback_block)} chars)")
+        else:
+            logging.info(f"{log_prefix}[CONTROL_FEEDBACK] No feedback data available")
+    except Exception as fb_err:
+        logging.warning(f"{log_prefix}[CONTROL_FEEDBACK] Failed to load feedback: {fb_err}")
+    
     for chunk in chunks:
         # Early exit if we've reached max_controls limit (for quick testing)
         if max_controls and len(raw_controls) >= max_controls:
@@ -1009,7 +1386,7 @@ def extract_controls(
             
             # Track GPT response time
             gpt_start = time.time()
-            controls_from_chunk = extract_control_with_cot(chunk)
+            controls_from_chunk = extract_control_with_cot(chunk, control_feedback_block=control_feedback_block)
             gpt_elapsed = time.time() - gpt_start
             total_gpt_time += gpt_elapsed
             logging.info(f"[CHUNK {chunk['chunk_id']}] GPT response time: {gpt_elapsed:.2f}s, found {len(controls_from_chunk) if controls_from_chunk else 0} controls")
@@ -1027,25 +1404,18 @@ def extract_controls(
                         
                         # Only update if progress increased by 5% or more
                         if controls_percent >= last_progress_update + 5:
-                            # Import needed for updates
-                            import json
-                            
                             # Estimate total controls from section size
                             avg_controls_per_line = len(raw_controls) / max(1, lines_processed)
                             controls_total_estimate = int(avg_controls_per_line * section_total_lines)
                             
-                            # Update job state
-                            job_json = redis_client.get(f"job:{job_id}")
-                            if job_json:
-                                job = json.loads(job_json)
-                                if "counters" not in job:
-                                    job["counters"] = {}
-                                job["counters"]["controls_count"] = len(raw_controls)
-                                job["counters"]["controls_total_estimate"] = controls_total_estimate
-                                job["counters"]["controls_percent"] = controls_percent
-                                redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
-                                logging.info(f"[PROGRESS] Updated controls: {len(raw_controls)}/{controls_total_estimate} ({controls_percent}%)")
-                                last_progress_update = controls_percent
+                            from ..job_state import job_hmset
+                            job_hmset(job_id, {
+                                'controls_count': len(raw_controls),
+                                'controls_total_estimate': controls_total_estimate,
+                                'controls_percent': controls_percent
+                            }, redis_client)
+                            logging.info(f"[PROGRESS] Updated controls: {len(raw_controls)}/{controls_total_estimate} ({controls_percent}%)")
+                            last_progress_update = controls_percent
                     except Exception as prog_err:
                         logging.warning(f"Could not update control progress: {prog_err}")
                 
@@ -1077,6 +1447,10 @@ def extract_controls(
     min_confidence = getattr(config, 'CONTROL_V4_MIN_CONFIDENCE', 0.5)
     accepted_controls, rejected_controls = filter_by_confidence(merged_controls, min_confidence)
     
+    # Step 4b: TSC criteria auto-filter
+    accepted_controls, tsc_flagged = filter_tsc_criteria(accepted_controls)
+    rejected_controls.extend(tsc_flagged)  # TSC criteria go to rejected with confidence=0
+    
     # Add text_lines context to controls for page number extraction
     for control in accepted_controls:
         control["text_lines"] = text_lines
@@ -1100,105 +1474,22 @@ def extract_controls(
         write_checkpoint(validated_controls, rejected_controls, partial_diagnostics, checkpoint_path, scan_id, job_id)
         logging.info(f"{log_prefix}Checkpoint written: {len(validated_controls)} controls (before framework mapping)")
     
-    # Step 5b: Framework mapping - Map controls to appropriate frameworks based on report type
-    try:
-        from ..frameworks import get_available_frameworks, map_control_to_frameworks_dynamic, extract_mapping_fields_for_db
-        
-        logging.info(f"Framework mapping: Loading frameworks for report_type={report_type}")
-        available_frameworks = get_available_frameworks(report_type=report_type)
-        logging.info(f"Framework mapping: Found {len(available_frameworks)} frameworks: {list(available_frameworks.keys())}")
-        
-        controls_mapped = 0  # Track mapping progress
-        
-        for idx, control in enumerate(validated_controls, 1):
-            control_desc = control.get("control_desc", "") or control.get("description", "")
-            control_id = control.get("control_id", "UNKNOWN")
-            has_deviation = control.get("has_deviation", False)
-            deviation_desc = control.get("deviation_desc")
-            
-            if not control_desc:
-                logging.warning(f"[{control_id}] No description available for framework mapping, skipping")
-                continue
-            
-            # Map control to all available frameworks
-            mapping_result = map_control_to_frameworks_dynamic(
-                control_desc=control_desc,
-                control_id=control_id,
-                available_frameworks=available_frameworks,
-                has_deviation=has_deviation,
-                deviation_desc=deviation_desc,
-                top_k=5
-            )
-            
-            # Extract DB-compatible fields
-            db_fields = extract_mapping_fields_for_db(mapping_result)
-            
-            # Add to control dict
-            control["framework_mappings"] = db_fields["framework_mappings"]
-            control["primary_framework"] = db_fields["primary_framework"]
-            control["primary_criterion_id"] = db_fields["primary_criterion_id"]
-            control["primary_confidence"] = db_fields["primary_confidence"]
-            
-            logging.info(f"[{control_id}] Mapped to {len(db_fields['framework_mappings'])} frameworks, primary: {db_fields['primary_framework']}")
-            
-            controls_mapped += 1
-            
-            # Update job state every 10 controls with mapping progress
-            if job_id and redis_client and controls_mapped % 10 == 0:
-                try:
-                    import json
-                    controls_mapped_percent = int((controls_mapped / len(validated_controls)) * 100)
-                    job_json = redis_client.get(f"job:{job_id}")
-                    if job_json:
-                        job = json.loads(job_json)
-                        if "counters" not in job:
-                            job["counters"] = {}
-                        job["counters"]["controls_mapped_count"] = controls_mapped
-                        job["counters"]["controls_mapped_percent"] = controls_mapped_percent
-                        redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
-                        logging.info(f"[PROGRESS] Framework mapping: {controls_mapped}/{len(validated_controls)} ({controls_mapped_percent}%)")
-                except Exception as map_prog_err:
-                    logging.warning(f"Could not update mapping progress: {map_prog_err}")
-            
-            # Write checkpoint every 10 controls during framework mapping
-            if idx % checkpoint_interval == 0:
-                partial_diagnostics = {
-                    "status": "framework_mapping",
-                    "controls_mapped": idx,
-                    "total_controls": len(validated_controls),
-                    "elapsed_seconds": round(time.time() - start_time, 2)
-                }
-                write_checkpoint(validated_controls, rejected_controls, partial_diagnostics, checkpoint_path, scan_id, job_id)
-                logging.info(f"{log_prefix}Checkpoint written: {idx}/{len(validated_controls)} controls mapped")
-        
-        frameworks_mapped = sum(1 for c in validated_controls if c.get("framework_mappings"))
-        logging.info(f"Framework mapping complete: {frameworks_mapped}/{len(validated_controls)} controls mapped")
-        
-    except Exception as e:
-        logging.error(f"Framework mapping failed: {e}", exc_info=True)
-        logging.warning("Continuing without framework mapping - controls will have empty framework_mappings")
-        
-        # Set extraction_partial flag due to framework mapping failure
-        if job_id and redis_client:
-            try:
-                import json
-                job_json = redis_client.get(f"job:{job_id}")
-                if job_json:
-                    job = json.loads(job_json)
-                    job["extraction_partial"] = True
-                    job["status"] = f"Partial: Framework mapping failed - {str(e)[:100]}"
-                    redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
-                    logging.warning("[PROGRESS] Warning: Framework mapping partially completed")
-            except Exception as flag_err:
-                logging.warning(f"Could not set extraction_partial flag: {flag_err}")
-        
-        # Add empty framework fields so controls don't fail validation
-        for control in validated_controls:
-            if "framework_mappings" not in control:
-                control["framework_mappings"] = {}
-                control["primary_framework"] = None
-                control["primary_criterion_id"] = None
-                control["primary_confidence"] = 0.0
+    # Step 5b: Framework mapping - SKIPPED during pipeline extraction
+    # Framework mapping is now handled as a separate parallel phase in analyze.py
+    # (_run_framework_mapping_task) which runs concurrently with objective extraction.
+    # This avoids sequential blocking here and enables parallel execution.
+    # The batch phase uses map_controls_to_frameworks_batch() with parallel workers.
+    logging.info(f"{log_prefix}Skipping inline framework mapping (handled in parallel post-control phase)")
+    
+    # Initialize empty framework fields so controls pass validation
+    for control in validated_controls:
+        if "framework_mappings" not in control:
+            control["framework_mappings"] = {}
+            control["primary_framework"] = None
+            control["primary_criterion_id"] = None
+            control["primary_criterion_id_normalized"] = None
+            control["primary_criterion_id_original"] = None
+            control["primary_confidence"] = 0.0
     
     # Step 6: Optionally map financial assertions (SOC1 only, if enabled)
     if enable_assertion_mapping and report_type == "SOC1":
@@ -1429,6 +1720,16 @@ def extract_controls_parallel(
     gpt_time_lock = threading.Lock()
     control_count = 0  # Track for "every 2 controls" updates
     
+    # ── Control Feedback Learning System ──
+    control_feedback_block = ""
+    try:
+        int_scan_id = int(scan_id) if scan_id else None
+        control_feedback_block = _get_control_feedback_text(scan_id=int_scan_id)
+        if control_feedback_block:
+            logging.info(f"[PARALLEL] [CONTROL_FEEDBACK] Loaded feedback block ({len(control_feedback_block)} chars)")
+    except Exception as fb_err:
+        logging.warning(f"[PARALLEL] [CONTROL_FEEDBACK] Failed to load feedback: {fb_err}")
+    
     def process_chunk(chunk_data: Tuple[int, Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
         """
         Process a single chunk (called in parallel).
@@ -1451,7 +1752,7 @@ def extract_controls_parallel(
             
             # Track GPT timing
             gpt_start = time.time()
-            controls_from_chunk = extract_control_with_cot(chunk)
+            controls_from_chunk = extract_control_with_cot(chunk, control_feedback_block=control_feedback_block)
             gpt_elapsed = time.time() - gpt_start
             
             # Update global GPT time (thread-safe)
@@ -1477,28 +1778,25 @@ def extract_controls_parallel(
                         # Also update Redis for legacy frontend
                         if job_id and redis_client:
                             try:
-                                job_json = redis_client.get(f"job:{job_id}")
-                                if job_json:
-                                    job = json.loads(job_json)
-                                    if "counters" not in job:
-                                        job["counters"] = {}
+                                # Calculate progress
+                                current_line = chunk.get('end_line', section_start)
+                                lines_processed = current_line - section_start
+                                section_total_lines = section_end - section_start
+                                controls_percent = int((lines_processed / max(1, section_total_lines)) * 100)
+                                
+                                # Estimate total
+                                avg_controls_per_line = control_count / max(1, lines_processed)
+                                controls_total_estimate = int(avg_controls_per_line * section_total_lines)
+                                
+                                # Use thread-safe flat hash update
+                                from ..job_state import job_hmset
+                                job_hmset(job_id, {
+                                    'controls_count': control_count,
+                                    'controls_total_estimate': controls_total_estimate,
+                                    'controls_percent': min(95, controls_percent)
+                                }, redis_client)
                                     
-                                    # Calculate progress
-                                    current_line = chunk.get('end_line', section_start)
-                                    lines_processed = current_line - section_start
-                                    section_total_lines = section_end - section_start
-                                    controls_percent = int((lines_processed / max(1, section_total_lines)) * 100)
-                                    
-                                    # Estimate total
-                                    avg_controls_per_line = control_count / max(1, lines_processed)
-                                    controls_total_estimate = int(avg_controls_per_line * section_total_lines)
-                                    
-                                    job["counters"]["controls_count"] = control_count
-                                    job["counters"]["controls_total_estimate"] = controls_total_estimate
-                                    job["counters"]["controls_percent"] = min(95, controls_percent)  # Cap at 95% until mapping
-                                    redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
-                                    
-                                    logging.info(f"[PARALLEL] Progress: {control_count}/{controls_total_estimate} ({controls_percent}%)")
+                                logging.info(f"[PARALLEL] Progress: {control_count}/{controls_total_estimate} ({controls_percent}%)")
                             except Exception as prog_err:
                                 logging.warning(f"[PARALLEL] Progress update failed: {prog_err}")
                     
@@ -1524,7 +1822,7 @@ def extract_controls_parallel(
     
     try:
         # Use executor.map for parallel processing with automatic result ordering
-        from ..threading import TaskPriority
+        from ..scan_threading import TaskPriority
         results = executor.map(
             process_chunk,
             chunk_data,
@@ -1546,6 +1844,7 @@ def extract_controls_parallel(
             start_at_line=start_at_line,
             max_controls=max_controls,
             scan_id=scan_id,
+            job_paths=job_paths,  # FIXED: Add missing job_paths parameter
             job_id=job_id,
             redis_client=redis_client
         )
@@ -1574,6 +1873,12 @@ def extract_controls_parallel(
         min_confidence=getattr(config, 'HIGH_CONFIDENCE_THRESHOLD', 0.75)
     )
     logging.info(f"[PARALLEL] Kept {len(high_confidence_controls)}, rejected {len(rejected_controls)}")
+    
+    # TSC criteria auto-filter
+    high_confidence_controls, tsc_flagged = filter_tsc_criteria(high_confidence_controls)
+    rejected_controls.extend(tsc_flagged)
+    if tsc_flagged:
+        logging.info(f"[PARALLEL] TSC filter: {len(tsc_flagged)} flagged, {len(high_confidence_controls)} retained")
     
     # Add text_lines context to controls for page number extraction
     for control in high_confidence_controls:
@@ -1647,10 +1952,11 @@ def extract_controls_parallel(
             json.dump(output, f, ensure_ascii=False, indent=2)
         logging.info(f"{log_prefix}Saved {len(validated_controls)} controls to {control_json_path}")
         
-        # Clean up checkpoint file
-        if CHECKPOINT_FILE and os.path.exists(CHECKPOINT_FILE):
+        # Clean up checkpoint file (if checkpoint functionality is enabled)
+        checkpoint_file = job_paths.get('checkpoint') if job_paths else None
+        if checkpoint_file and os.path.exists(checkpoint_file):
             try:
-                os.remove(CHECKPOINT_FILE)
+                os.remove(checkpoint_file)
                 logging.info("[PARALLEL] Checkpoint file removed")
             except Exception as e:
                 logging.warning(f"[PARALLEL] Failed to remove checkpoint: {e}")
@@ -1760,6 +2066,8 @@ def map_controls_to_frameworks_batch(
                 control["framework_mappings"] = {}
                 control["primary_framework"] = None
                 control["primary_criterion_id"] = None
+                control["primary_criterion_id_normalized"] = None
+                control["primary_criterion_id_original"] = None
                 control["primary_confidence"] = 0.0
                 return control
             
@@ -1788,10 +2096,16 @@ def map_controls_to_frameworks_batch(
             # Extract DB-compatible fields
             db_fields = extract_mapping_fields_for_db(mapping_result)
             
+            # Normalize the criterion ID
+            original_criterion_id = db_fields["primary_criterion_id"]
+            normalized_criterion_id = normalize_objective_id(original_criterion_id) if original_criterion_id else None
+            
             # Add to control dict
             control["framework_mappings"] = db_fields["framework_mappings"]
             control["primary_framework"] = db_fields["primary_framework"]
-            control["primary_criterion_id"] = db_fields["primary_criterion_id"]
+            control["primary_criterion_id"] = original_criterion_id
+            control["primary_criterion_id_normalized"] = normalized_criterion_id
+            control["primary_criterion_id_original"] = original_criterion_id
             control["primary_confidence"] = db_fields["primary_confidence"]
             
             logger.info(f"[{control_id}] Mapped to {len(db_fields['framework_mappings'])} frameworks, primary: {db_fields['primary_framework']}")
@@ -1803,24 +2117,16 @@ def map_controls_to_frameworks_batch(
                 # Update job state every 10 controls
                 if job_id and redis_client and controls_mapped % 10 == 0:
                     try:
-                        import json as json_mod
                         controls_mapped_percent = int((controls_mapped / len(controls)) * 100)
-                        job_json = redis_client.get(f"job:{job_id}")
-                        if job_json:
-                            job_data = json_mod.loads(job_json)
-                            if "counters" not in job_data:
-                                job_data["counters"] = {}
-                            job_data["counters"]["controls_mapped_count"] = controls_mapped
-                            job_data["counters"]["controls_mapped_percent"] = controls_mapped_percent
-                            
-                            # Update overall progress (50-70% range for framework mapping)
-                            job_data["progress"] = 50 + int(controls_mapped_percent * 0.20)
-                            
-                            # Update status message so frontend shows real-time progress
-                            job_data["status"] = f"Mapping {controls_mapped}/{len(controls)} controls to frameworks ({controls_mapped_percent}%)..."
-                            
-                            redis_client.set(f"job:{job_id}", json_mod.dumps(job_data), ex=86400)
-                            logger.info(f"[PROGRESS] Framework mapping: {controls_mapped}/{len(controls)} ({controls_mapped_percent}%) - Overall: {job_data['progress']}%")
+                        progress_val = 50 + int(controls_mapped_percent * 0.20)
+                        from ..job_state import job_hmset
+                        job_hmset(job_id, {
+                            'controls_mapped_count': controls_mapped,
+                            'controls_mapped_percent': controls_mapped_percent,
+                            'progress': progress_val,
+                            'status': f"Mapping {controls_mapped}/{len(controls)} controls to frameworks ({controls_mapped_percent}%)..."
+                        }, redis_client)
+                        logger.info(f"[PROGRESS] Framework mapping: {controls_mapped}/{len(controls)} ({controls_mapped_percent}%) - Overall: {progress_val}%")
                     except Exception as progress_err:
                         logger.warning(f"Could not update progress: {progress_err}")
                 
@@ -1848,6 +2154,8 @@ def map_controls_to_frameworks_batch(
             control["framework_mappings"] = {}
             control["primary_framework"] = None
             control["primary_criterion_id"] = None
+            control["primary_criterion_id_normalized"] = None
+            control["primary_criterion_id_original"] = None
             control["primary_confidence"] = 0.0
             return control
     
@@ -1855,7 +2163,7 @@ def map_controls_to_frameworks_batch(
     if executor:
         logger.info(f"[FRAMEWORK_MAPPING] Using parallel execution with batch size {batch_size}")
         try:
-            from ..threading import TaskPriority
+            from ..scan_threading import TaskPriority
             mapped_controls = list(executor.map(
                 map_single_control,
                 controls,
@@ -1902,18 +2210,14 @@ def map_controls_to_frameworks_batch(
     # Final progress update to 100%
     if job_id and redis_client:
         try:
-            import json as json_mod
-            job_json = redis_client.get(f"job:{job_id}")
-            if job_json:
-                job_data = json_mod.loads(job_json)
-                if "counters" not in job_data:
-                    job_data["counters"] = {}
-                job_data["counters"]["controls_mapped_count"] = len(controls)
-                job_data["counters"]["controls_mapped_percent"] = 100
-                job_data["counters"]["total_controls"] = len(controls)
-                job_data["status"] = f"Framework mapping complete: {frameworks_mapped}/{len(controls)} controls mapped"
-                redis_client.set(f"job:{job_id}", json_mod.dumps(job_data), ex=86400)
-                logger.info(f"[PROGRESS] Framework mapping final update: {frameworks_mapped}/{len(controls)} (100%)")
+            from ..job_state import job_hmset
+            job_hmset(job_id, {
+                'controls_mapped_count': len(controls),
+                'controls_mapped_percent': 100,
+                'total_controls': len(controls),
+                'status': f"Framework mapping complete: {frameworks_mapped}/{len(controls)} controls mapped"
+            }, redis_client)
+            logger.info(f"[PROGRESS] Framework mapping final update: {frameworks_mapped}/{len(controls)} (100%)")
         except Exception as final_err:
             logger.warning(f"Could not update final progress: {final_err}")
     

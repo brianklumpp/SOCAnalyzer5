@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, LargeBinary, Boolean, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Float, LargeBinary, Boolean, Enum, ForeignKey, UniqueConstraint, Index, text
 from sqlalchemy.orm import relationship
 import datetime
 from datetime import timezone
@@ -54,6 +54,12 @@ class Scan(Base):
     detected_standards = Column(JSON)  # Standards detected in report: ["ISAE 3402", "SSAE 18", "CSAE 3416"]
     active_frameworks = Column(JSON)  # Frameworks used for mapping: ["TSC", "COSO", "ISAE3402", "FINANCIAL_ASSERTIONS"]
     
+    # Objective ID pattern information (for normalization)
+    pattern_info = Column(JSON)  # GPT-identified patterns: {"groups": [{"prefix": "CC1.", "format_template": "CC1.", "examples": ["CC1.1"]}]}
+    
+    # User tracking
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)  # User who initiated the scan
+    
     # Relationships
     companies = relationship("Company", back_populates="scan", lazy="select")
 
@@ -73,6 +79,14 @@ class Company(Base):
 
 class Control(Base):
     __tablename__ = "control"
+    __table_args__ = (
+        Index(
+            'uq_control_scan_control_id',
+            'scan_id', 'control_id',
+            unique=True,
+            postgresql_where=text("control_id IS NOT NULL AND control_id != ''"),
+        ),
+    )
     id = Column(Integer, primary_key=True, autoincrement=True)
     control_id = Column(String(128))
     control_desc = Column(Text)
@@ -82,6 +96,7 @@ class Control(Base):
     deviation_desc = Column(Text)
     control_page_refs = Column(JSON)  # [51, 52, 89] - pages where control appears
     control_line_ref = Column(Integer)
+    all_line_refs = Column(JSON)  # [3234, 3340] - ALL line positions where this control appears (multi-objective support)
     control_seq = Column(Integer)
     
     # ⚠️ LEGACY COLUMNS REMOVED (v2.1.0): control_tsc_id, control_coso_id, control_tsc_similarity, control_soc_domain, etc.
@@ -98,7 +113,9 @@ class Control(Base):
     # Schema: {"TSC": [{...}], "COSO": [{...}], "FINANCIAL_ASSERTIONS": [{...}], "ISAE3402": [{...}], ...}
     framework_mappings = Column(JSON)  # All framework mappings in one unified structure
     primary_framework = Column(String(64))  # Framework with highest confidence match (e.g., "TSC", "COSO")
-    primary_criterion_id = Column(String(128))  # Best matching criterion ID across all frameworks
+    primary_criterion_id = Column(String(128))  # DEPRECATED: Use primary_criterion_id_normalized for display/sorting
+    primary_criterion_id_normalized = Column(String(128), index=True)  # Normalized criterion ID for consistent display/sorting
+    primary_criterion_id_original = Column(String(128))  # Original criterion ID format from report for accurate searching
     primary_confidence = Column(Float)  # Confidence score of best match
     
     control_status = Column(String(64))
@@ -152,7 +169,9 @@ class CUEC(Base):
     # Universal framework mappings - supports unlimited frameworks beyond TSC/COSO
     framework_mappings = Column(JSON)  # All framework mappings in one unified structure
     primary_framework = Column(String(64))  # Framework with highest confidence match
-    primary_criterion_id = Column(String(128))  # Best matching criterion ID across all frameworks
+    primary_criterion_id = Column(String(128))  # DEPRECATED: Use primary_criterion_id_normalized for display/sorting
+    primary_criterion_id_normalized = Column(String(128), index=True)  # Normalized criterion ID for consistent display/sorting
+    primary_criterion_id_original = Column(String(128))  # Original criterion ID format from report for accurate searching
     primary_confidence = Column(Float)  # Confidence score of best match
     
     scan_id = Column(Integer)
@@ -383,7 +402,9 @@ class ControlObjective(Base):
     scan_id = Column(Integer, ForeignKey('scan.id', ondelete='CASCADE'), nullable=False, index=True)
     
     # Objective identification
-    objective_id = Column(String(128), nullable=True, index=True)  # e.g., "HR-01", "Access-1" - nullable for unnumbered objectives
+    objective_id = Column(String(128), nullable=True, index=True)  # DEPRECATED: Use objective_id_normalized instead
+    objective_id_normalized = Column(String(128), nullable=True, index=True)  # Normalized ID: "CC6.1", "ID-23" (for sorting/display)
+    objective_id_original = Column(String(128), nullable=True)  # Original ID from PDF: "CC 6.1", "ID - 23" (for PDF search)
     objective_text = Column(Text, nullable=False)  # Full objective description
     
     # Multi-factor confidence scoring (0.0-1.0 for each factor)
@@ -397,10 +418,13 @@ class ControlObjective(Base):
     # Confidence calculation metadata
     confidence_calc = Column(Text)  # Human-readable breakdown of scoring
     gpt_reasoning = Column(Text)  # GPT's explanation for its confidence score
+    confidence_metadata = Column(JSON)  # Detailed audit trail (similar to controls' verification_metadata)
     
     # Source metadata
     page_refs = Column(JSON)  # [12, 13] - pages where objective appears
     line_ref = Column(Integer)  # Starting line number in extracted text
+    all_line_refs = Column(JSON)  # [3233, 3500] - ALL line positions where this objective appears (chunk overlap support)
+    all_page_refs = Column(JSON)  # [12, 13, 45] - ALL pages where this objective appears (union from dedup)
     source_context = Column(Text)  # Surrounding text for context
     
     # Extraction metadata
@@ -426,6 +450,9 @@ class ControlObjectiveMapping(Base):
     Preserves all objective data during control merges via edit_log.
     """
     __tablename__ = "control_objective_mappings"
+    __table_args__ = (
+        UniqueConstraint('control_id', 'objective_id', name='uq_control_objective_mapping'),
+    )
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     control_id = Column(Integer, ForeignKey('control.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -437,8 +464,13 @@ class ControlObjectiveMapping(Base):
     line_proximity_score = Column(Float)
     gpt_alignment_score = Column(Float)
     id_alignment_score = Column(Float)
+    objective_gpt_confidence_boost = Column(Float)  # Boost from objective extraction confidence
+    mapping_justification = Column(Text)  # Human-readable explanation of score components
     mapping_method = Column(String(32))  # 'auto_proximity', 'auto_gpt', 'manual'
     is_primary = Column(Boolean, default=False)  # True for the primary objective (shown in inline column)
+    confirmed = Column(Boolean, default=False)  # True when analyst has reviewed & confirmed this mapping
+    confirmed_at = Column(DateTime)  # When mapping was confirmed
+    confirmed_by_user_id = Column(Integer, ForeignKey('users.id'))  # Who confirmed
     
     # Audit trail
     created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
@@ -474,3 +506,78 @@ class CUECObjectiveMapping(Base):
     # Relationships
     cuec = relationship("CUEC", back_populates="objective_mappings")
     objective = relationship("ControlObjective", back_populates="cuec_mappings")
+
+
+class ControlFeedback(Base):
+    """
+    Records analyst corrections to extracted controls.
+    Used for few-shot prompt injection to improve future control extraction accuracy.
+    Each row represents a single user action on a control (reject, convert, correct ID, confirm).
+    
+    Actions:
+    - 'rejected': Control zeroed (confidence → 0) — false positive (auditor test, narrative, etc.)
+    - 'converted_to_objective': Control was actually a TSC criteria / objective
+    - 'id_corrected': Control ID was wrong or truncated (e.g. "3-01" → "AM-03-01")
+    - 'desc_corrected': Control description was materially edited
+    - 'confirmed': Control explicitly approved by analyst
+    """
+    __tablename__ = "control_feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scan_id = Column(Integer, ForeignKey('scan.id', ondelete='CASCADE'), nullable=False, index=True)
+    control_db_id = Column(Integer, ForeignKey('control.id', ondelete='SET NULL'), nullable=True)
+
+    # The action taken by the analyst
+    action = Column(String(32), nullable=False)
+    # 'rejected', 'converted_to_objective', 'id_corrected', 'desc_corrected', 'confirmed'
+
+    # Snapshot of original extraction (survives if control deleted)
+    original_confidence = Column(Float)  # GPT self-confidence at extraction time
+    control_id_text = Column(String(128))  # Original control_id (e.g. "CC3.1", "3-01")
+    control_desc_snippet = Column(Text)  # First 300 chars of control description
+
+    # Correction details
+    corrected_control_id = Column(String(128))  # New control_id after correction (for id_corrected)
+    rejection_reason = Column(String(64))
+    # 'tsc_criteria', 'auditor_test_procedure', 'narrative_statement',
+    # 'generic_statement', 'enumeration_fragment', 'procedural_description', 'other'
+    rejection_notes = Column(Text)  # Optional analyst explanation
+
+    # Audit
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+
+class MappingFeedback(Base):
+    """
+    Records analyst corrections to control-objective mappings.
+    Used for few-shot prompt injection to improve future auto-mapping accuracy.
+    Each row represents a single user action (confirm, remove, add, redirect).
+    """
+    __tablename__ = "mapping_feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scan_id = Column(Integer, ForeignKey('scan.id', ondelete='CASCADE'), nullable=False, index=True)
+    control_id = Column(Integer, ForeignKey('control.id', ondelete='SET NULL'), nullable=True)
+    objective_id = Column(Integer, ForeignKey('control_objectives.id', ondelete='SET NULL'), nullable=True)
+
+    # The action taken by the analyst
+    action = Column(String(32), nullable=False)  # 'confirmed', 'removed', 'added', 'redirected'
+
+    # Snapshot of the original auto-mapping (for learning context)
+    original_confidence = Column(Float)  # Auto-mapped confidence before correction
+    original_method = Column(String(32))  # 'auto_tiered', 'auto_proximity', etc.
+
+    # Text snippets for few-shot prompt (survives if control/objective deleted)
+    control_id_text = Column(String(128))  # e.g. "CC3.2"
+    control_desc_snippet = Column(Text)  # First 300 chars of control description
+    objective_id_text = Column(String(128))  # e.g. "Objective 3"
+    objective_text_snippet = Column(Text)  # First 300 chars of objective text
+
+    # For redirect actions: the objective it was moved TO
+    redirected_to_objective_id = Column(Integer, ForeignKey('control_objectives.id', ondelete='SET NULL'))
+    redirected_to_objective_text = Column(Text)  # Snapshot
+
+    # Audit
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)

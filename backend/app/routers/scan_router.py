@@ -126,7 +126,7 @@ async def analyze_pdf_bg(
     # Add scan to queue (v2.1.0) - queue worker will start threads
     try:
         logging.info(f"[SCAN] Enqueueing scan: job_id={job_id}, filename={filename}")
-        from ..threading.scan_queue import get_scan_queue
+        from ..scan_threading.scan_queue import get_scan_queue
         queue = get_scan_queue()
         position = queue.enqueue(
             job_id=job_id,
@@ -812,7 +812,7 @@ async def batch_upload_scans(
     """
     import uuid
     import shutil
-    from ..threading.scan_queue import get_scan_queue, ScanQueueStatus
+    from ..scan_threading.scan_queue import get_scan_queue, ScanQueueStatus
     
     logging.info(f"[BATCH_UPLOAD] Received {len(files)} files")
     
@@ -968,7 +968,7 @@ async def get_queue_status(current_user: User = Depends(get_current_active_user)
             }
         }
     """
-    from ..threading.scan_queue import get_scan_queue
+    from ..scan_threading.scan_queue import get_scan_queue
     import asyncio
     
     scan_queue = get_scan_queue()
@@ -1041,7 +1041,7 @@ async def pause_queue(current_user: User = Depends(require_admin)):
     Returns:
         {"message": str, "is_paused": bool}
     """
-    from ..threading.scan_queue import get_scan_queue
+    from ..scan_threading.scan_queue import get_scan_queue
     
     scan_queue = get_scan_queue()
     if not scan_queue:
@@ -1069,7 +1069,7 @@ async def resume_queue(current_user: User = Depends(require_admin)):
     Returns:
         {"message": str, "is_paused": bool}
     """
-    from ..threading.scan_queue import get_scan_queue
+    from ..scan_threading.scan_queue import get_scan_queue
     
     scan_queue = get_scan_queue()
     if not scan_queue:
@@ -1107,7 +1107,7 @@ async def rescan_report(
     """
     import uuid
     import tempfile
-    from ..threading.scan_queue import get_scan_queue
+    from ..scan_threading.scan_queue import get_scan_queue
     
     try:
         # Get existing scan
@@ -1217,7 +1217,7 @@ async def reprioritize_scan(job_id: str, request: PrioritizeRequest, current_use
             "new_position": int
         }
     """
-    from ..threading.scan_queue import get_scan_queue
+    from ..scan_threading.scan_queue import get_scan_queue
     
     scan_queue = get_scan_queue()
     if not scan_queue:
@@ -1355,7 +1355,7 @@ async def cancel_queued_scan(job_id: str, current_user: User = Depends(get_curre
             "was_running": bool
         }
     """
-    from ..threading.scan_queue import get_scan_queue
+    from ..scan_threading.scan_queue import get_scan_queue
     
     scan_queue = get_scan_queue()
     if not scan_queue:
@@ -1413,7 +1413,7 @@ async def get_active_scans(current_user: User = Depends(get_current_active_user)
             ]
         }
     """
-    from ..threading.scan_queue import get_scan_queue
+    from ..scan_threading.scan_queue import get_scan_queue
     
     scan_queue = get_scan_queue()
     if not scan_queue:

@@ -1,5 +1,6 @@
 """
 Redis helper functions for job management with connection pooling.
+Now delegates to job_state.py (Redis Hash) instead of JSON blobs.
 """
 import json as _json
 import logging
@@ -7,6 +8,10 @@ import redis
 from typing import Optional, Dict, Any
 
 from ..config import REDIS_URL
+from ..job_state import (
+    get_job_compat, job_hmset, job_delete, job_exists,
+    flatten_job_dict,
+)
 
 
 # Redis connection pool singleton for better performance
@@ -36,7 +41,7 @@ def _get_redis():
 
 def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
     """
-    Get job status from Redis.
+    Get job status from Redis Hash, returning a backward-compatible nested dict.
     
     Args:
         job_id: Job identifier
@@ -47,40 +52,28 @@ def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
     """
     if redis_client is None:
         redis_client = _get_redis()
-        try:
-            job_json = redis_client.get(f"job:{job_id}")
-        except Exception as e:
-            logging.warning(f"[get_job] Redis access failed: {e}")
-            return None
-        if job_json:
-            try:
-                return _json.loads(job_json)
-            except Exception:
-                return None
-        return None
-    else:
-        # Use provided client (no try/except needed, caller handles)
-        job_json = redis_client.get(f"job:{job_id}")
-        if job_json:
-            try:
-                return _json.loads(job_json)
-            except Exception:
-                return None
+    try:
+        return get_job_compat(job_id, redis_client)
+    except Exception as e:
+        logging.warning(f"[get_job] Redis access failed: {e}")
         return None
 
 
 def set_job(job_id: str, job_dict: Dict[str, Any], redis_client=None) -> None:
     """
-    Store job status in Redis with 24-hour expiry.
+    Store job status in Redis Hash with 24-hour expiry.
+    Flattens any nested dicts (identified_entities, counters, phase_completion)
+    before writing.
     
     Args:
         job_id: Job identifier
-        job_dict: Job data to store
+        job_dict: Job data to store (may contain nested dicts)
         redis_client: Optional Redis client (will create if None)
     """
     if redis_client is None:
         redis_client = _get_redis()
-    redis_client.set(f"job:{job_id}", _json.dumps(job_dict), ex=60*60*24)  # 24h expiry
+    flat = flatten_job_dict(job_dict)
+    job_hmset(job_id, flat, redis_client)
 
 
 def del_job(job_id: str, redis_client=None) -> None:
@@ -93,5 +86,5 @@ def del_job(job_id: str, redis_client=None) -> None:
     """
     if redis_client is None:
         redis_client = _get_redis()
-    redis_client.delete(f"job:{job_id}")
+    job_delete(job_id, redis_client)
 

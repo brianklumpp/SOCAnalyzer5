@@ -5,7 +5,7 @@ import logging
 import traceback
 import argparse
 import time  # Added missing import for watchdog timing and progress tracking
-import threading  # For thread-safe job state management
+import threading  # Still needed for ThreadPoolExecutor in parallel metadata
 # ThreadPoolExecutor removed - now using sequential processing for stability
 from .extractors.auditor import extract_auditor_from_report
 from .extractors.company import extract_company_from_report
@@ -19,65 +19,7 @@ from .extractors.coverage_period import extract_coverage_period
 from .pdf_handler import extract_text_from_pdf, find_section_candidates
 from . import config
 from .models import ReportType
-
-# Thread-safe job state management for multi-threading support
-_job_locks = {}  # Dictionary of job_id -> Lock
-_job_locks_lock = threading.Lock()  # Lock for managing the locks dictionary
-
-
-def _deep_merge(base_dict, update_dict):
-    """
-    Recursively merge update_dict into base_dict, preserving existing keys.
-    
-    Args:
-        base_dict: Base dictionary to merge into
-        update_dict: Dictionary with updates to apply
-        
-    Returns:
-        Merged dictionary
-    """
-    if not isinstance(base_dict, dict) or not isinstance(update_dict, dict):
-        return update_dict
-    
-    result = base_dict.copy()
-    for key, value in update_dict.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _deep_merge(result[key], value)
-        else:
-            result[key] = value
-    return result
-
-
-def _update_job_state(job_id, updates_dict, redis_client):
-    """
-    Thread-safe update of Redis job state with deep merge support.
-    
-    Args:
-        job_id: Job identifier
-        updates_dict: Dictionary of updates to merge into existing state
-        redis_client: Sync Redis client instance
-    """
-    
-    # Get or create per-job lock
-    with _job_locks_lock:
-        if job_id not in _job_locks:
-            _job_locks[job_id] = threading.Lock()
-        job_lock = _job_locks[job_id]
-    
-    # Perform atomic get-modify-set with per-job lock
-    with job_lock:
-        try:
-            job_json = redis_client.get(f"job:{job_id}")
-            if not job_json:
-                logging.warning(f"[_update_job_state] Job {job_id} not found in Redis, update skipped")
-                return
-            
-            current_state = json.loads(job_json)
-            merged_state = _deep_merge(current_state, updates_dict)
-            redis_client.set(f"job:{job_id}", json.dumps(merged_state), ex=86400)
-            
-        except Exception as e:
-            logging.error(f"[_update_job_state] Failed to update job {job_id}: {e}")
+from .job_state import job_hmset, job_hset, job_hget, job_hgetall
 
 
 def validate_report_type(report_type_str):
@@ -139,7 +81,7 @@ def run_metadata_extractors_parallel(
         'coverage_period_extraction', 'cuec_extraction', 'subservice_orgs_extraction'
         
     Example:
-        from backend.app.threading import IntelligentTaskExecutor, ProgressTracker
+        from backend.app.scan_threading import IntelligentTaskExecutor, ProgressTracker
         
         executor = IntelligentTaskExecutor(max_workers=5)
         tracker = ProgressTracker(job_id="test-123", redis_client=redis)
@@ -213,11 +155,7 @@ def run_metadata_extractors_parallel(
                     'coverage_period_extraction': 'Extracting coverage period...'
                 }
                 if extractor_name in status_messages:
-                    job_json = redis_client.get(f"job:{job_id}")
-                    if job_json:
-                        job_data = json.loads(job_json)
-                        job_data["status"] = status_messages[extractor_name]
-                        redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=86400)
+                    job_hset(job_id, 'status', status_messages[extractor_name], redis_client)
             except Exception:
                 pass  # Fail silently
         
@@ -259,62 +197,50 @@ def run_metadata_extractors_parallel(
                 results[extractor_name] = result
                 extractors_completed += 1
                 
-                # Update Redis job state with entity detection
+                # Update Redis job state with flat hash fields
                 if job_id and redis_client:
                     try:
-                        job_json = redis_client.get(f"job:{job_id}")
-                        if job_json:
-                            job = json.loads(job_json)
-                            
-                            # Update identified_entities
-                            if 'identified_entities' not in job:
-                                job['identified_entities'] = {}
-                            
-                            if extractor_name == 'auditor_extraction' and result:
-                                auditor = result.get('auditor') if isinstance(result, dict) else result
-                                if auditor:
-                                    job['identified_entities']['auditor'] = str(auditor)
-                            
-                            elif extractor_name == 'product_extraction' and result:
-                                product = result.get('product') if isinstance(result, dict) else result
-                                if product:
-                                    job['identified_entities']['product'] = str(product)
-                            
-                            elif extractor_name == 'report_date_extraction' and result:
-                                report_date = result.get('report_date') if isinstance(result, dict) else result
-                                if report_date:
-                                    job['identified_entities']['report_date'] = str(report_date)
-                            
-                            elif extractor_name == 'coverage_period_extraction' and result:
-                                # Result is dict with {type, start_date, end_date, as_of_date, explanation}
-                                if isinstance(result, dict):
-                                    if result.get('start_date') and result.get('end_date'):
-                                        coverage_str = f"{result['start_date']} to {result['end_date']}"
-                                    elif result.get('as_of_date'):
-                                        coverage_str = f"As of {result['as_of_date']}"
-                                    elif result.get('end_date'):
-                                        coverage_str = f"As of {result['end_date']}"
-                                    else:
-                                        coverage_str = str(result)
-                                    job['identified_entities']['coverage_period'] = coverage_str
+                        entity_updates = {}
+                        if extractor_name == 'auditor_extraction' and result:
+                            auditor = result.get('auditor') if isinstance(result, dict) else result
+                            if auditor:
+                                entity_updates['auditor'] = str(auditor)
+                        
+                        elif extractor_name == 'product_extraction' and result:
+                            product = result.get('product') if isinstance(result, dict) else result
+                            if product:
+                                entity_updates['product'] = str(product)
+                        
+                        elif extractor_name == 'report_date_extraction' and result:
+                            report_date = result.get('report_date') if isinstance(result, dict) else result
+                            if report_date:
+                                entity_updates['report_date'] = str(report_date)
+                        
+                        elif extractor_name == 'coverage_period_extraction' and result:
+                            if isinstance(result, dict):
+                                if result.get('start_date') and result.get('end_date'):
+                                    coverage_str = f"{result['start_date']} to {result['end_date']}"
+                                elif result.get('as_of_date'):
+                                    coverage_str = f"As of {result['as_of_date']}"
+                                elif result.get('end_date'):
+                                    coverage_str = f"As of {result['end_date']}"
                                 else:
-                                    job['identified_entities']['coverage_period'] = str(result)
-                            
-                            # Update counters
-                            if 'counters' not in job:
-                                job['counters'] = {}
-                            
-                            if extractor_name == 'cuec_extraction' and result:
-                                if isinstance(result, dict):
-                                    cuec_count = len(result.get('cuecs', []))
-                                    job['counters']['cuecs_count'] = cuec_count
-                            
-                            elif extractor_name == 'subservice_orgs_extraction' and result:
-                                if isinstance(result, dict):
-                                    orgs_count = len(result.get('subservice_orgs', []))
-                                    job['counters']['subservice_orgs_count'] = orgs_count
-                            
-                            redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
+                                    coverage_str = str(result)
+                                entity_updates['coverage_period'] = coverage_str
+                            else:
+                                entity_updates['coverage_period'] = str(result)
+                        
+                        # Build counter updates (flat fields now)
+                        if extractor_name == 'cuec_extraction' and result:
+                            if isinstance(result, dict):
+                                entity_updates['cuecs_count'] = len(result.get('cuecs', []))
+                        
+                        elif extractor_name == 'subservice_orgs_extraction' and result:
+                            if isinstance(result, dict):
+                                entity_updates['subservice_orgs_count'] = len(result.get('subservice_orgs', []))
+                        
+                        if entity_updates:
+                            job_hmset(job_id, entity_updates, redis_client)
                     
                     except Exception as e:
                         logger.warning(f"[PARALLEL_METADATA] Could not update job state: {e}")
@@ -342,7 +268,7 @@ def run_metadata_extractors_parallel(
     
     # Execute in parallel using executor
     try:
-        from .threading.intelligent_executor import TaskPriority
+        from .scan_threading.intelligent_executor import TaskPriority
         
         # Create list of (name, func) tuples for executor.map
         task_list = [(name, func) for name, func in extractor_tasks]
@@ -437,43 +363,33 @@ def _run_metadata_extractors_sequential(
             results[name] = result
             logger.info(f"[SEQUENTIAL_METADATA] {name} completed")
             
-            # Update Redis job state
+            # Update Redis job state with flat hash fields
             if job_id and redis_client and result:
                 try:
-                    job_json = redis_client.get(f"job:{job_id}")
-                    if job_json:
-                        job = json.loads(job_json)
-                        
-                        if 'identified_entities' not in job:
-                            job['identified_entities'] = {}
-                        
-                        if name == 'product_extraction':
-                            product = result.get('product') if isinstance(result, dict) else result
-                            if product:
-                                job['identified_entities']['product'] = str(product)
-                        
-                        elif name == 'report_date_extraction':
-                            report_date = result.get('report_date') if isinstance(result, dict) else result
-                            if report_date:
-                                job['identified_entities']['report_date'] = str(report_date)
-                        
-                        elif name == 'coverage_period_extraction':
-                            coverage = result.get('coverage_period') if isinstance(result, dict) else result
-                            if coverage:
-                                job['identified_entities']['coverage_period'] = str(coverage)
-                        
-                        if 'counters' not in job:
-                            job['counters'] = {}
-                        
-                        if name == 'cuec_extraction' and isinstance(result, dict):
-                            cuec_count = len(result.get('cuecs', []))
-                            job['counters']['cuecs_count'] = cuec_count
-                        
-                        elif name == 'subservice_orgs_extraction' and isinstance(result, dict):
-                            orgs_count = len(result.get('subservice_orgs', []))
-                            job['counters']['subservice_orgs_count'] = orgs_count
-                        
-                        redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
+                    entity_updates = {}
+                    if name == 'product_extraction':
+                        product = result.get('product') if isinstance(result, dict) else result
+                        if product:
+                            entity_updates['product'] = str(product)
+                    
+                    elif name == 'report_date_extraction':
+                        report_date = result.get('report_date') if isinstance(result, dict) else result
+                        if report_date:
+                            entity_updates['report_date'] = str(report_date)
+                    
+                    elif name == 'coverage_period_extraction':
+                        coverage = result.get('coverage_period') if isinstance(result, dict) else result
+                        if coverage:
+                            entity_updates['coverage_period'] = str(coverage)
+                    
+                    # Counter updates (flat fields)
+                    if name == 'cuec_extraction' and isinstance(result, dict):
+                        entity_updates['cuecs_count'] = len(result.get('cuecs', []))
+                    elif name == 'subservice_orgs_extraction' and isinstance(result, dict):
+                        entity_updates['subservice_orgs_count'] = len(result.get('subservice_orgs', []))
+                    
+                    if entity_updates:
+                        job_hmset(job_id, entity_updates, redis_client)
                 
                 except Exception as e:
                     logger.warning(f"[SEQUENTIAL_METADATA] Could not update job state: {e}")
@@ -584,7 +500,18 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         else:
             return os.path.join(PROJECT_ROOT, rel_path)
 
+    _last_progress_pct = 0  # monotonic guard
+
     def update_progress(percent, status=None):
+        nonlocal _last_progress_pct
+        # Never let progress go backward (parallel tasks may report out of order)
+        if percent < _last_progress_pct and percent < 100:
+            logger.debug(f"[PROGRESS] Suppressed backward progress {percent}% (current {_last_progress_pct}%)")
+            # Still update status text if provided, but keep the higher percent
+            if status and progress_callback:
+                progress_callback(_last_progress_pct, status)
+            return
+        _last_progress_pct = percent
         if progress_callback:
             progress_callback(percent, status)
 
@@ -614,12 +541,13 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
         control_section = None
 
     def _control_progress_hook(latest_ctrl_end_line: int):
+        """Update progress during control extraction (20-55% range)."""
         try:
             if progress_callback and control_section and isinstance(control_section.get('end_line'), int):
                 ctrl_end = max(0, latest_ctrl_end_line)
                 sec_end = max(1, control_section['end_line'])
-                pct = 50 + int(45 * min(1.0, ctrl_end / float(sec_end)))
-                progress_callback(pct, f"Controls {ctrl_end}/{sec_end}")
+                pct = 20 + int(35 * min(1.0, ctrl_end / float(sec_end)))
+                update_progress(pct, f"Controls {ctrl_end}/{sec_end}")
         except Exception:
             pass
 
@@ -634,7 +562,7 @@ def analyze_pdf_file(pdf_path, output_json_path='data/json/section_results.json'
 
     try:
         # Check for embedded PDFs first (common with protected/agreement PDFs)
-        update_progress(3, "Checking for embedded files...")
+        update_progress(1, "Checking for embedded files...")
         from .pdf_handler import extract_embedded_files, flatten_pdf
         
         temp_extract_dir = os.path.join(os.path.dirname(pdf_path), 'extracted')
@@ -699,7 +627,7 @@ Format: X - reason"""
         
         # Check if PDF needs flattening (has interactive elements or protected content)
         # Try flattening first, then fall back to original if it fails
-        update_progress(5, "Preprocessing PDF...")
+        update_progress(2, "Preprocessing PDF...")
         flattened_path = pdf_path.replace('.pdf', '_flattened.pdf')
         flatten_success = flatten_pdf(pdf_path, flattened_path, password=password)
         
@@ -711,7 +639,7 @@ Format: X - reason"""
             extraction_path = pdf_path
         
         # Always (re)generate section_results.json before running extractors
-        update_progress(10, "Extracting text from PDF...")
+        update_progress(3, "Extracting text from PDF...")
         extract_text_from_pdf(extraction_path, OUTPUT_TEXT_FILE, password=password)
         logger.debug(f"Extracted text to {OUTPUT_TEXT_FILE}")
         
@@ -731,10 +659,20 @@ Format: X - reason"""
                 logger.debug(f"Cleaned up extracted files directory: {temp_extract_dir}")
             except Exception as e:
                 logger.warning(f"Failed to clean up extracted files: {e}")
-        update_progress(20, "Analyzing sections...")
+        update_progress(5, "Analyzing sections...")
         with open(OUTPUT_TEXT_FILE, 'r', encoding='utf-8') as f:
             text = f.read()
-        section_results = find_section_candidates(text)
+        section_data = find_section_candidates(text)
+        
+        # Extract sections list and toc_page_offset
+        if isinstance(section_data, dict):
+            section_results = section_data.get('sections', [])
+            toc_page_offset = section_data.get('toc_page_offset', None)
+        else:
+            # Legacy format: section_data is already the list
+            section_results = section_data
+            toc_page_offset = None
+        
         logger.debug(f"Section candidates found: {len(section_results)}")
         # Add text snippets and line numbers, but preserve all other fields
         for section in section_results:
@@ -760,6 +698,20 @@ Format: X - reason"""
                     del section['line']
                 if section.get('snippet') is None:
                     section['snippet'] = ''
+        # Fix end_line indexing: pdf_handler returns 0-indexed end_line, but
+        # start_line was overwritten above to 1-indexed. Convert end_line to
+        # 1-indexed so the pair is consistent for extractors using
+        # text_lines[start_line-1:end_line] slicing.
+        for section in section_results:
+            el = section.get('end_line')
+            sl = section.get('start_line', 0)
+            if el is not None and isinstance(el, int) and el > 0 and sl > 0:
+                # Only convert if end_line appears 0-indexed (i.e. less than start_line or equal)
+                # pdf_handler's second pass sets end_line = next_start_line - 1 (0-indexed)
+                # After analyze.py converts start_line to 1-indexed, a correct section would have
+                # end_line < start_line of the NEXT section (already 1-indexed).  We add 1 to
+                # align end_line with 1-indexed convention expected by create_aware_chunks().
+                section['end_line'] = el + 1
         # Always write section_results.json before running extractors
         try:
             os.makedirs(os.path.dirname(data_path(output_json_path)), exist_ok=True)
@@ -785,8 +737,9 @@ Format: X - reason"""
             {"name": "control_extraction", "status": "pending"},  # Index 9
             {"name": "control_framework_mapping", "status": "pending"}, # Index 10
             {"name": "management_response_extraction", "status": "pending"}, # Index 11
-            {"name": "cuec_extraction", "status": "pending"},     # Index 12
-            {"name": "subservice_orgs_extraction", "status": "pending"}, # Index 13
+            {"name": "objective_extraction", "status": "pending"}, # Index 12
+            {"name": "cuec_extraction", "status": "pending"},     # Index 13
+            {"name": "subservice_orgs_extraction", "status": "pending"}, # Index 14
         ]
         # 0: file_uploaded
         checklist[0]["status"] = "done"
@@ -799,6 +752,12 @@ Format: X - reason"""
         update_checklist(checklist)
         results = {}
         results['sections'] = section_results
+        
+        # Store toc_page_offset if detected during section identification
+        # Always persist a value (0 when no offset detected) so the frontend
+        # never has to guess with a ?? 2 fallback.
+        results['toc_page_offset'] = toc_page_offset if toc_page_offset is not None else 0
+        logger.info(f"Storing TOC page offset in results: {results['toc_page_offset']}")
         
         # Initialize checkpoint tracking variable early
         completed_extractors = []
@@ -934,8 +893,8 @@ Format: X - reason"""
                 from .frameworks import get_available_frameworks
                 
                 # Get available frameworks for report type
-                available_frameworks = get_available_frameworks(report_type=validated_report_type.value)
-                logger.info(f"[FRAMEWORK_MAPPING] Loaded {len(available_frameworks)} frameworks: {list(available_frameworks.keys())}")
+                available_frameworks = get_available_frameworks(report_type=validated_report_type.value, scan_default_only=True)
+                logger.info(f"[FRAMEWORK_MAPPING] Loaded {len(available_frameworks)} frameworks (scan_default_only): {list(available_frameworks.keys())}")
                 
                 # Map controls with parallel execution
                 mapped_controls = map_controls_to_frameworks_batch(
@@ -1157,17 +1116,16 @@ Format: X - reason"""
                 return {"success": False, "reason": str(e)}
         
         prereq_steps = [
-            (3, "company_extraction", extract_company_from_report, "Running company extractor...", 30),
-            (4, "logo_fetching", _run_logo_fetching, "Fetching company logo...", 32),
+            (3, "company_extraction", extract_company_from_report, "Running company extractor...", 8),
+            (4, "logo_fetching", _run_logo_fetching, "Fetching company logo...", 10),
         ]
-        # Control extraction step (has internal parallelism)
+        # Control extraction step (has internal parallelism, progress hook covers 20-55%)
         parallel_steps = [
-            (9, "control_extraction", _run_control_extraction, "Running controls extractor...", 50),
+            (9, "control_extraction", _run_control_extraction, "Running controls extractor...", 20),
         ]
-        # Management response extraction step - runs after control extraction, before CUEC extraction
-        # This must run sequentially after controls are extracted to process deviation controls
+        # Management response extraction step - runs in parallel pool after control extraction
         management_response_step = [
-            (11, "management_response_extraction", _run_management_response_extraction, "Extracting management responses for deviations...", 60),
+            (11, "management_response_extraction", _run_management_response_extraction, "Extracting management responses for deviations...", 58),
         ]
         
         # Objective extraction step - runs after management response extraction
@@ -1224,13 +1182,12 @@ Format: X - reason"""
                 return {"success": False, "error": str(e)}
         
         objective_extraction_step = [
-            (11.5, "objective_extraction", _run_objective_extraction, "Extracting control objectives...", 65),
+            (11.5, "objective_extraction", _run_objective_extraction, "Extracting control objectives...", 60),
         ]
         
-        # Post-control extraction steps that run in parallel
+        # Post-control extraction steps (CUEC only — subservice_orgs moved to parallel pool)
         post_control_parallel_steps = [
-            (12, "cuec_extraction", _run_cuec_extraction, "Running CUECs extractor...", 70),
-            (13, "subservice_orgs_extraction", _run_subservice_orgs_extraction, "Running subservice orgs extractor...", 80),
+            (12, "cuec_extraction", _run_cuec_extraction, "Running CUECs extractor...", 78),
         ]
 
         # Watchdog: if controls extractor runs too long without increasing result size, mark as partial and continue
@@ -1249,14 +1206,11 @@ Format: X - reason"""
                 
                 # Clean up any stale pause states from previous runs
                 try:
-                    job_json = redis_client.get(f"job:{job_id}")
-                    if job_json:
-                        job_data = json.loads(job_json)
-                        if job_data.get("status") == "Paused" and not job_data.get("paused"):
-                            # Status is Paused but paused flag is not set - likely stale
-                            logger.error(f"[PAUSE_CLEANUP] Removing stale 'Paused' status from job {job_id}")
-                            job_data["status"] = "Starting"
-                            redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=60*60*24)
+                    cur_status = job_hget(job_id, 'status', redis_client) if job_id else None
+                    cur_paused = job_hget(job_id, 'paused', redis_client) if job_id else False
+                    if cur_status == 'Paused' and not cur_paused:
+                        logger.error(f"[PAUSE_CLEANUP] Removing stale 'Paused' status from job {job_id}")
+                        job_hset(job_id, 'status', 'Starting', redis_client)
                 except Exception as cleanup_err:
                     logger.debug(f"Pause cleanup error: {cleanup_err}")
                     
@@ -1270,28 +1224,23 @@ Format: X - reason"""
                 try:
                     # Check both queue pause and individual job pause
                     is_queue_paused = redis_client.exists("scan_queue:paused") > 0
-                    job_json = redis_client.get(f"job:{job_id}")
+                    cur_status = job_hget(job_id, 'status', redis_client)
+                    has_paused_flag = job_hget(job_id, 'paused', redis_client)
                     
-                    # VERBOSE LOGGING - Log full state for debugging
-                    logger.error(f"[PAUSE_CHECK] job_id={job_id}, queue_paused={is_queue_paused}, job_exists={bool(job_json)}")
-                    
-                    if job_json:
-                        job_data = json.loads(job_json)
-                        is_job_paused = job_data.get("status") == "Paused"
-                        has_paused_flag = job_data.get("paused", False)
-                        
-                        # VERBOSE LOGGING - Log job state details
-                        logger.error(f"[PAUSE_CHECK] status='{job_data.get('status')}', paused_flag={has_paused_flag}, is_job_paused={is_job_paused}")
-                        
-                        # Only trigger if BOTH status is "Paused" AND paused flag is True
-                        # This prevents false positives from stale status
-                        if is_queue_paused or (is_job_paused and has_paused_flag):
-                            logger.warning(f"[PAUSE] Scan paused (queue:{is_queue_paused}, job:{is_job_paused}, flag:{has_paused_flag})")
-                            raise RuntimeError("Scan paused by user")
-                    else:
+                    if cur_status is None:
                         logger.error(f"[PAUSE_CHECK] No job data found in Redis for {job_id}")
-                except json.JSONDecodeError as jde:
-                    logger.error(f"[PAUSE_CHECK] JSON decode error: {jde}")
+                        return
+                    
+                    is_job_paused = cur_status == "Paused"
+                    
+                    # VERBOSE LOGGING - Log job state details
+                    logger.error(f"[PAUSE_CHECK] job_id={job_id}, queue_paused={is_queue_paused}, status='{cur_status}', paused_flag={has_paused_flag}")
+                    
+                    # Only trigger if BOTH status is "Paused" AND paused flag is True
+                    # This prevents false positives from stale status
+                    if is_queue_paused or (is_job_paused and has_paused_flag):
+                        logger.warning(f"[PAUSE] Scan paused (queue:{is_queue_paused}, job:{is_job_paused}, flag:{has_paused_flag})")
+                        raise RuntimeError("Scan paused by user")
                 except RuntimeError:
                     raise
                 except Exception as pause_err:
@@ -1363,8 +1312,8 @@ Format: X - reason"""
                     except Exception as read_err:
                         logger.warning(f"Could not read existing combined_result.json: {read_err}")
                 
-                # Deep merge existing with new data
-                merged_data = _deep_merge(existing_data, standardized_partial)
+                # Merge existing with new data (new overwrites old)
+                merged_data = {**existing_data, **standardized_partial}
                 
                 # Write atomically with exclusive lock
                 with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', 
@@ -1426,17 +1375,15 @@ Format: X - reason"""
                     if key == 'company_extraction' and isinstance(results[key], dict):
                         company_name = results[key].get('company', 'Unknown')
                         company_domain = results[key].get('company_domain')
-                        entity_updates = {'identified_entities': {'company': company_name}}
+                        entity_updates = {'company': company_name}
                         if company_domain:
-                            entity_updates['identified_entities']['company_domain'] = company_domain
+                            entity_updates['company_domain'] = company_domain
                         logger.info(f"[PROGRESS] Company identified: {company_name}")
                     elif key == 'logo_fetching' and isinstance(results[key], dict):
                         # Logo fetching now returns actual logo URL
                         if results[key].get('success') and results[key].get('logo_url'):
                             logo_url = results[key]['logo_url']
-                            entity_updates = {
-                                'identified_entities': {'company_logo_url': logo_url}
-                            }
+                            entity_updates = {'company_logo_url': logo_url}
                             logger.info(f"[PROGRESS] Company logo fetched: {logo_url}")
                         else:
                             reason = results[key].get('reason', 'Unknown')
@@ -1444,17 +1391,17 @@ Format: X - reason"""
                     elif key == 'auditor_extraction':
                         auditor_name = results[key].get('auditor') if isinstance(results[key], dict) else results[key]
                         if auditor_name:
-                            entity_updates = {'identified_entities': {'auditor': str(auditor_name)}}
+                            entity_updates = {'auditor': str(auditor_name)}
                             logger.info(f"[PROGRESS] Auditor identified: {auditor_name}")
                     elif key == 'product_extraction':
                         product = results[key].get('product') if isinstance(results[key], dict) else results[key]
                         if product:
-                            entity_updates = {'identified_entities': {'product': str(product)}}
+                            entity_updates = {'product': str(product)}
                             logger.info(f"[PROGRESS] Product identified: {product}")
                     elif key == 'report_date_extraction':
                         report_date = results[key].get('report_date') if isinstance(results[key], dict) else results[key]
                         if report_date:
-                            entity_updates = {'identified_entities': {'report_date': str(report_date)}}
+                            entity_updates = {'report_date': str(report_date)}
                             logger.info(f"[PROGRESS] Report date identified: {report_date}")
                     elif key == 'coverage_period_extraction':
                         coverage = results[key].get('coverage_period') if isinstance(results[key], dict) else results[key]
@@ -1471,21 +1418,13 @@ Format: X - reason"""
                                     coverage_str = str(coverage)
                             else:
                                 coverage_str = str(coverage)
-                            entity_updates = {'identified_entities': {'coverage_period': coverage_str}}
+                            entity_updates = {'coverage_period': coverage_str}
                             logger.info(f"[PROGRESS] Coverage period identified: {coverage_str}")
                     
                     if entity_updates:
-                        _update_job_state(job_id, entity_updates, redis_client)
+                        job_hmset(job_id, entity_updates, redis_client)
                 except Exception as entity_err:
                     logger.warning(f"Could not update identified_entities: {entity_err}")
-            
-            # Update job state after each prerequisite extractor
-            # NOTE: combined_result.json will be written once at the end after all extractors complete
-            if job_id and redis_client:
-                try:
-                    _update_job_state(job_id, {}, redis_client)
-                except Exception as update_err:
-                    logger.warning(f"Could not update job state: {update_err}")
             
             # Update checklist in Redis after each sequential extractor
             update_checklist(checklist)
@@ -1516,12 +1455,10 @@ Format: X - reason"""
                 logger.warning(f"[PARALLEL_EXEC] Partial metadata failure: {len(failed)}/{len(metadata_results)} extractors failed: {failed}")
                 if job_id and redis_client:
                     try:
-                        job_json = redis_client.get(f"job:{job_id}")
-                        if job_json:
-                            job = json.loads(job_json)
-                            job['extraction_partial'] = True
-                            job['extraction_failures'] = failed
-                            redis_client.set(f"job:{job_id}", json.dumps(job), ex=86400)
+                        job_hmset(job_id, {
+                            'extraction_partial': True,
+                            'extraction_failures': failed
+                        }, redis_client)
                     except Exception as e:
                         logger.warning(f"[PARALLEL_EXEC] Could not update partial failure status: {e}")
             else:
@@ -1619,7 +1556,7 @@ Format: X - reason"""
                 if job_id and redis_client:
                     try:
                         error_msg = str(e)[:100]  # Truncate error message
-                        _update_job_state(job_id, {
+                        job_hmset(job_id, {
                             'extraction_partial': True,
                             'status': f'Partial: {key} failed - {error_msg}'
                         }, redis_client)
@@ -1720,6 +1657,22 @@ Format: X - reason"""
                     extractor_results[k] = res
                     logger.info(f"Extractor '{k}' completed successfully")
                     
+                    # Update Redis counters after control extraction completes
+                    if k == 'control_extraction' and job_id and redis_client:
+                        try:
+                            controls_count = 0
+                            if isinstance(res, dict) and isinstance(res.get('controls'), list):
+                                controls_count = len(res['controls'])
+                            elif isinstance(res, list):
+                                controls_count = len(res)
+                            job_hmset(job_id, {
+                                'controls_count': controls_count,
+                                'controls_percent': 100,
+                            }, redis_client)
+                            logger.info(f"[COUNTERS] Control extraction complete: {controls_count} controls")
+                        except Exception as counter_err:
+                            logger.warning(f"[COUNTERS] Failed to update control count: {counter_err}")
+                    
                     if k not in completed_extractors:
                         completed_extractors.append(k)
                         save_checkpoint(completed_extractors)
@@ -1732,167 +1685,273 @@ Format: X - reason"""
                             break
                     update_checklist(checklist)
             
-            # Run control framework mapping after control extraction
+            # ======================================================================
+            # PERFORMANCE: Run framework mapping + management response + objective
+            # extraction + subservice orgs concurrently where possible
+            # ======================================================================
+            # Framework mapping reads/writes control_result.json
+            # Objective extraction reads extracted text + sections, writes to DB
+            # Management response reads control_result.json (read-only for deviations)
+            # Subservice orgs reads extracted text + sections only (no control dependency)
+            # These can safely overlap (framework mapping only modifies framework_mapping
+            # fields, while objective extraction writes to a different table, and
+            # subservice orgs operates on independent data)
+            # ======================================================================
+            
+            import concurrent.futures as _cf
+            import threading as _threading
+            
+            _parallel_tasks = {}
+            _parallel_executor = _cf.ThreadPoolExecutor(max_workers=4, thread_name_prefix="post_control")
+            _checkpoint_lock = _threading.Lock()  # Protect completed_extractors + save_checkpoint
+            
+            # Task 1: Framework mapping
             if 'control_extraction' in extractor_results and 'control_framework_mapping' not in completed_extractors:
-                logger.info("Starting control framework mapping")
-                try:
-                    checklist[10]["status"] = "running"  # Index 10 is control_framework_mapping
-                    update_checklist(checklist)
-                    
-                    # Initialize framework mapping state in Redis with total control count
-                    if job_id and redis_client:
+                def _run_framework_mapping_task():
+                    logger.info("Starting control framework mapping (parallel)")
+                    try:
+                        checklist[10]["status"] = "running"
+                        update_checklist(checklist)
+                        
+                        if job_id and redis_client:
+                            try:
+                                control_json_path = data_path('data/json/control_result.json')
+                                if os.path.isfile(control_json_path):
+                                    with open(control_json_path, 'r', encoding='utf-8') as f:
+                                        control_data = json.load(f)
+                                    total_controls = len(control_data.get('controls', []))
+                                    job_hmset(job_id, {
+                                        'status': f'Mapping 0/{total_controls} controls to frameworks...',
+                                        'controls_mapped_count': 0,
+                                        'controls_mapped_percent': 0,
+                                        'total_controls': total_controls
+                                    }, redis_client)
+                            except Exception as init_err:
+                                logger.warning(f"Could not initialize framework mapping state: {init_err}")
+                        
+                        mapping_result = _run_control_framework_mapping()
+                        
+                        # Reload control_result.json to get mapped controls
                         try:
                             control_json_path = data_path('data/json/control_result.json')
                             if os.path.isfile(control_json_path):
                                 with open(control_json_path, 'r', encoding='utf-8') as f:
-                                    control_data = json.load(f)
-                                total_controls = len(control_data.get('controls', []))
-                                _update_job_state(job_id, {
-                                    'status': f'Mapping 0/{total_controls} controls to frameworks...',
-                                    'counters': {
-                                        'controls_mapped_count': 0,
-                                        'controls_mapped_percent': 0,
-                                        'total_controls': total_controls
-                                    }
-                                }, redis_client)
-                                logger.info(f"[FRAMEWORK_MAPPING] Initialized state: 0/{total_controls} controls")
-                        except Exception as init_err:
-                            logger.warning(f"Could not initialize framework mapping state: {init_err}")
-                    
-                    update_progress(50, "Mapping controls to frameworks...")
-                    
-                    mapping_result = _run_control_framework_mapping()
-                    extractor_results['control_framework_mapping'] = mapping_result
-                    
-                    # CRITICAL: Reload control_result.json after framework mapping to get mapped controls
-                    # Framework mapping writes back to control_result.json but doesn't update in-memory results
-                    # This ensures combined_result.json gets controls WITH framework mappings
-                    try:
-                        control_json_path = data_path('data/json/control_result.json')
-                        if os.path.isfile(control_json_path):
-                            with open(control_json_path, 'r', encoding='utf-8') as f:
-                                updated_control_data = json.load(f)
-                            extractor_results['control_extraction'] = updated_control_data
-                            results['control_extraction'] = updated_control_data
-                            logger.info("[FRAMEWORK_MAPPING] Reloaded control_result.json with framework mappings into memory")
-                    except Exception as reload_err:
-                        logger.error(f"Failed to reload control_result.json after framework mapping: {reload_err}")
-                    
-                    checklist[10]["status"] = "done"
-                    update_checklist(checklist)
-                    logger.info("Control framework mapping completed successfully")
-                    
-                    completed_extractors.append('control_framework_mapping')
-                    save_checkpoint(completed_extractors)
-                except Exception as e:
-                    logger.error(f"Control framework mapping failed: {e}\n{traceback.format_exc()}")
-                    checklist[10]["status"] = "error"
-                    update_checklist(checklist)
-                    # Continue with warnings
+                                    updated_control_data = json.load(f)
+                                extractor_results['control_extraction'] = updated_control_data
+                                results['control_extraction'] = updated_control_data
+                                logger.info("[FRAMEWORK_MAPPING] Reloaded control_result.json with framework mappings")
+                        except Exception as reload_err:
+                            logger.error(f"Failed to reload control_result.json after framework mapping: {reload_err}")
+                        
+                        checklist[10]["status"] = "done"
+                        update_checklist(checklist)
+                        with _checkpoint_lock:
+                            completed_extractors.append('control_framework_mapping')
+                            save_checkpoint(completed_extractors)
+                        logger.info("Control framework mapping completed successfully")
+                        return mapping_result
+                    except Exception as e:
+                        logger.error(f"Control framework mapping failed: {e}\n{traceback.format_exc()}")
+                        checklist[10]["status"] = "error"
+                        update_checklist(checklist)
+                        return None
+                
+                _parallel_tasks['framework_mapping'] = _parallel_executor.submit(_run_framework_mapping_task)
             
-            # Run management response extraction step (sequential, after control extraction)
+            # Task 2: Management response extraction
             if 'management_response_extraction' not in completed_extractors:
-                logger.info("[MGMT_RESPONSE] Running management response extraction")
-                try:
-                    import asyncio
-                    # Run async function synchronously
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # We're in an existing event loop, use run_in_executor
-                        import concurrent.futures
-                        with concurrent.futures.ThreadPoolExecutor() as pool:
-                            mgmt_response_result = loop.run_until_complete(
-                                loop.run_in_executor(pool, lambda: asyncio.run(_run_management_response_extraction()))
-                            )
-                    else:
-                        # No event loop running, create one
+                def _run_mgmt_response_task():
+                    logger.info("[MGMT_RESPONSE] Running management response extraction (parallel)")
+                    try:
+                        import asyncio
                         mgmt_response_result = asyncio.run(_run_management_response_extraction())
-                    
-                    logger.info(f"[MGMT_RESPONSE] Extraction complete: {mgmt_response_result}")
-                    checklist[11]["status"] = "done"
-                    update_checklist(checklist)
-                    
-                    completed_extractors.append('management_response_extraction')
-                    save_checkpoint(completed_extractors)
-                except Exception as e:
-                    logger.error(f"Management response extraction failed: {e}\n{traceback.format_exc()}")
-                    checklist[11]["status"] = "error"
-                    update_checklist(checklist)
-                    # Continue with warnings - don't fail entire scan
+                        logger.info(f"[MGMT_RESPONSE] Extraction complete: {mgmt_response_result}")
+                        checklist[11]["status"] = "done"
+                        update_checklist(checklist)
+                        with _checkpoint_lock:
+                            completed_extractors.append('management_response_extraction')
+                            save_checkpoint(completed_extractors)
+                        return mgmt_response_result
+                    except Exception as e:
+                        logger.error(f"Management response extraction failed: {e}\n{traceback.format_exc()}")
+                        checklist[11]["status"] = "error"
+                        update_checklist(checklist)
+                        return None
+                
+                _parallel_tasks['mgmt_response'] = _parallel_executor.submit(_run_mgmt_response_task)
             
-            # Run objective extraction step (sequential, after control extraction)
+            # Task 3: Objective extraction (runs in parallel with framework mapping)
+            # NOTE: The initial GPT extraction of objectives doesn't need framework mapping.
+            # Only the final map_controls_to_objectives() step needs controls in DB,
+            # which happens later during data insertion.
+            _objective_extraction_future = None
             if 'objective_extraction' not in completed_extractors:
-                logger.info("[OBJECTIVE] Running control objective extraction")
-                try:
-                    from .extractors.objective_extractor import extract_objectives
-                    from sqlalchemy import create_engine
-                    from sqlalchemy.orm import sessionmaker
+                def _run_objective_extraction_task():
+                    logger.info("[OBJECTIVE] Running control objective extraction (parallel)")
+                    update_progress(60, "Extracting control objectives...")
+                    # Note: monotonic guard prevents this from going backward
                     
-                    # Create sync database session for objective extraction
-                    sync_db_url = config.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
-                    sync_engine = create_engine(sync_db_url, echo=False)
-                    SessionLocal = sessionmaker(bind=sync_engine)
-                    objective_db_session = SessionLocal()
+                    for item in checklist:
+                        if item.get('name') == 'objective_extraction':
+                            item['status'] = 'running'
+                            break
+                    update_checklist(checklist)
                     
                     try:
-                        # Load extracted text
-                        txt_path = None
-                        candidate_paths = []
-                        if job_paths and isinstance(job_paths, dict) and job_paths.get('temp_dir'):
-                            candidate_paths.append(job_paths['temp_dir'] / 'output.txt')
-                        candidate_paths.append(data_path('data/output/output.txt'))
-
-                        for candidate in candidate_paths:
-                            if os.path.isfile(candidate):
-                                txt_path = candidate
+                        from .extractors.objective_extractor import extract_objectives
+                        from sqlalchemy import create_engine
+                        from sqlalchemy.orm import sessionmaker
+                        
+                        sync_db_url = config.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+                        sync_engine = create_engine(sync_db_url, echo=False)
+                        SessionLocal = sessionmaker(bind=sync_engine)
+                        objective_db_session = SessionLocal()
+                        
+                        try:
+                            txt_path = None
+                            candidate_paths = []
+                            if job_paths and isinstance(job_paths, dict) and job_paths.get('temp_dir'):
+                                candidate_paths.append(job_paths['temp_dir'] / 'output.txt')
+                            candidate_paths.append(data_path('data/output/output.txt'))
+                            
+                            for candidate in candidate_paths:
+                                if os.path.isfile(candidate):
+                                    txt_path = candidate
+                                    break
+                            
+                            if txt_path:
+                                with open(txt_path, 'r', encoding='utf-8') as f:
+                                    extracted_text = f.read()
+                                
+                                sections = []
+                                try:
+                                    section_json_path = job_paths['json_dir'] / 'section_results.json'
+                                    if section_json_path.exists():
+                                        with open(section_json_path, 'r', encoding='utf-8') as sf:
+                                            sections = json.load(sf)
+                                except Exception as e:
+                                    logger.warning(f"[OBJECTIVE] Failed to load sections: {e}")
+                                
+                                objectives = extract_objectives(
+                                    extracted_text=extracted_text,
+                                    scan_id=None,
+                                    db_session=objective_db_session,
+                                    sections=sections,
+                                    job_id=job_id,
+                                    redis_client=redis_client
+                                )
+                                
+                                logger.info(f"[OBJECTIVE] Extracted {len(objectives)} control objectives")
+                                results['objectives'] = objectives
+                                results['objectives_extracted'] = len(objectives)
+                                
+                                for item in checklist:
+                                    if item.get('name') == 'objective_extraction':
+                                        item['status'] = 'done'
+                                        break
+                                update_checklist(checklist)
+                            else:
+                                logger.warning("[OBJECTIVE] Extracted text not found, skipping")
+                                results['objectives_extracted'] = 0
+                                for item in checklist:
+                                    if item.get('name') == 'objective_extraction':
+                                        item['status'] = 'error'
+                                        break
+                                update_checklist(checklist)
+                        finally:
+                            objective_db_session.close()
+                        
+                        with _checkpoint_lock:
+                            completed_extractors.append('objective_extraction')
+                            save_checkpoint(completed_extractors)
+                        return True
+                        
+                    except Exception as obj_err:
+                        logger.error(f"[OBJECTIVE] Objective extraction failed: {obj_err}", exc_info=True)
+                        results['objectives_extracted'] = 0
+                        results['objective_extraction_error'] = str(obj_err)
+                        for item in checklist:
+                            if item.get('name') == 'objective_extraction':
+                                item['status'] = 'error'
+                                item['error'] = str(obj_err)[:100]
                                 break
-
-                        if txt_path:
-                            with open(txt_path, 'r', encoding='utf-8') as f:
-                                extracted_text = f.read()
-
-                            sections = []
-                            try:
-                                section_json_path = job_paths['json_dir'] / 'section_results.json'
-                                if section_json_path.exists():
-                                    with open(section_json_path, 'r', encoding='utf-8') as sf:
-                                        sections = json.load(sf)
-                            except Exception as e:
-                                logger.warning(f"[OBJECTIVE] Failed to load sections: {e}")
-                            
-                            # Extract objectives (returns ControlObjective models)
-                            objectives = extract_objectives(
-                                extracted_text=extracted_text,
-                                scan_id=None,  # Will be set during database insertion
-                                db_session=objective_db_session,
-                                sections=sections,
-                                job_id=job_id,
-                                redis_client=redis_client
-                            )
-                            
-                            logger.info(f"[OBJECTIVE] Extracted {len(objectives)} control objectives")
-                            
-                            # Store objectives in results for later database insertion
-                            results['objectives_extracted'] = len(objectives)
-                            
-                        else:
-                            logger.warning("[OBJECTIVE] Extracted text not found, skipping objective extraction")
-                            results['objectives_extracted'] = 0
-                            
-                    finally:
-                        objective_db_session.close()
-                    
-                    completed_extractors.append('objective_extraction')
-                    save_checkpoint(completed_extractors)
-                    logger.info(f"[OBJECTIVE] Extraction complete: extracted {results.get('objectives_extracted', 0)} objectives")
-                    
-                except Exception as e:
-                    logger.error(f"Objective extraction failed: {e}\n{traceback.format_exc()}")
-                    results['objectives_extracted'] = 0
-                    # Continue with warnings - don't fail entire scan
+                        update_checklist(checklist)
+                        with _checkpoint_lock:
+                            completed_extractors.append('objective_extraction')
+                            save_checkpoint(completed_extractors)
+                        return False
+                
+                _parallel_tasks['objective_extraction'] = _parallel_executor.submit(_run_objective_extraction_task)
             
-            # Run post-control parallel steps (CUEC + subservice_orgs)
-            logger.info("[PARALLEL_EXEC] Running post-control extractors in PARALLEL")
+            # Task 4: Subservice orgs extraction (independent of controls — needs only extracted text/sections)
+            if 'subservice_orgs_extraction' not in completed_extractors:
+                def _run_subservice_orgs_task():
+                    logger.info("[SUBSERVICE_ORGS] Running subservice orgs extraction (parallel)")
+                    update_progress(65, "Running subservice orgs extractor...")
+                    try:
+                        for item in checklist:
+                            if item.get('name') == 'subservice_orgs_extraction':
+                                item['status'] = 'running'
+                                break
+                        update_checklist(checklist)
+                        
+                        result = _run_subservice_orgs_extraction()
+                        
+                        extractor_results['subservice_orgs_extraction'] = result
+                        
+                        # Update Redis counter
+                        if job_id and redis_client and result:
+                            try:
+                                count = 0
+                                if isinstance(result, dict):
+                                    count = len(result.get('subservice_orgs', []))
+                                elif isinstance(result, list):
+                                    count = len(result)
+                                job_hset(job_id, 'subservice_orgs_count', count, redis_client)
+                                logger.info(f"[COUNTERS] Subservice orgs extraction complete: {count} orgs")
+                            except Exception as counter_err:
+                                logger.warning(f"[COUNTERS] Failed to update subservice orgs count: {counter_err}")
+                        
+                        for item in checklist:
+                            if item.get('name') == 'subservice_orgs_extraction':
+                                item['status'] = 'done'
+                                break
+                        update_checklist(checklist)
+                        
+                        with _checkpoint_lock:
+                            completed_extractors.append('subservice_orgs_extraction')
+                            save_checkpoint(completed_extractors)
+                        
+                        logger.info("[SUBSERVICE_ORGS] Subservice orgs extraction completed successfully")
+                        return result
+                    except Exception as e:
+                        logger.error(f"[SUBSERVICE_ORGS] Subservice orgs extraction failed: {e}", exc_info=True)
+                        for item in checklist:
+                            if item.get('name') == 'subservice_orgs_extraction':
+                                item['status'] = 'error'
+                                break
+                        update_checklist(checklist)
+                        return None
+                
+                _parallel_tasks['subservice_orgs'] = _parallel_executor.submit(_run_subservice_orgs_task)
+            
+            # Wait for all parallel tasks to complete
+            logger.info(f"[PARALLEL_POST_CONTROL] Waiting for {len(_parallel_tasks)} parallel tasks: {list(_parallel_tasks.keys())}")
+            for task_name, future in _parallel_tasks.items():
+                try:
+                    result = future.result(timeout=3600)  # 1 hour max per task
+                    logger.info(f"[PARALLEL_POST_CONTROL] {task_name} completed: {result}")
+                except Exception as e:
+                    logger.error(f"[PARALLEL_POST_CONTROL] {task_name} failed: {e}")
+            
+            _parallel_executor.shutdown(wait=False)
+            logger.info("[PARALLEL_POST_CONTROL] All post-control tasks completed")
+            
+            # NOTE: Auto-merge of objectives happens post-save in main.py
+            # scan_id (DB row ID) is not available here — it's assigned after analyze_pdf_file returns
+            
+            # Run remaining post-control steps (CUEC — subservice_orgs already in parallel pool above)
+            logger.info("[PARALLEL_EXEC] Running remaining post-control extractors")
             
             # Filter post-control steps to skip already completed
             remaining_post_control_steps = [(idx, key, func, status, pct) for (idx, key, func, status, pct) in post_control_parallel_steps 
@@ -1904,6 +1963,28 @@ Format: X - reason"""
                     k, res = run_extractor(idx, key, func, status, pct)
                     extractor_results[k] = res
                     logger.info(f"Extractor '{k}' completed successfully")
+                    
+                    # Update Redis counters immediately after each post-control extractor
+                    if job_id and redis_client and res:
+                        try:
+                            if k == 'cuec_extraction':
+                                count = 0
+                                if isinstance(res, dict):
+                                    count = len(res.get('cuecs', []))
+                                elif isinstance(res, list):
+                                    count = len(res)
+                                job_hset(job_id, 'cuecs_count', count, redis_client)
+                                logger.info(f"[COUNTERS] CUEC extraction complete: {count} CUECs")
+                            elif k == 'subservice_orgs_extraction':
+                                count = 0
+                                if isinstance(res, dict):
+                                    count = len(res.get('subservice_orgs', []))
+                                elif isinstance(res, list):
+                                    count = len(res)
+                                job_hset(job_id, 'subservice_orgs_count', count, redis_client)
+                                logger.info(f"[COUNTERS] Subservice orgs extraction complete: {count} orgs")
+                        except Exception as counter_err:
+                            logger.warning(f"[COUNTERS] Failed to update counter for {k}: {counter_err}")
                     
                     if k not in completed_extractors:
                         completed_extractors.append(k)
@@ -1952,17 +2033,17 @@ Format: X - reason"""
                             if key == 'product_extraction':
                                 product = extractor_results[key].get('product') if isinstance(extractor_results[key], dict) else extractor_results[key]
                                 if product:
-                                    entity_updates = {'identified_entities': {'product': str(product)}}
+                                    entity_updates = {'product': str(product)}
                                     logger.info(f"[PROGRESS] Product identified: {product}")
                             elif key == 'report_date_extraction':
                                 report_date = extractor_results[key].get('report_date') if isinstance(extractor_results[key], dict) else extractor_results[key]
                                 if report_date:
-                                    entity_updates = {'identified_entities': {'report_date': str(report_date)}}
+                                    entity_updates = {'report_date': str(report_date)}
                                     logger.info(f"[PROGRESS] Report date identified: {report_date}")
                             elif key == 'coverage_period_extraction':
                                 coverage = extractor_results[key].get('coverage_period') if isinstance(extractor_results[key], dict) else extractor_results[key]
                                 if coverage:
-                                    entity_updates = {'identified_entities': {'coverage_period': str(coverage)}}
+                                    entity_updates = {'coverage_period': str(coverage)}
                                     logger.info(f"[PROGRESS] Coverage period identified: {coverage}")
                             elif key == 'subservice_orgs_extraction':
                                 # Extract subservice orgs count
@@ -1972,7 +2053,7 @@ Format: X - reason"""
                                     count = len(res.get('subservice_orgs', []))
                                 elif isinstance(res, list):
                                     count = len(res)
-                                counter_updates = {'counters': {'subservice_orgs_count': count}}
+                                counter_updates = {'subservice_orgs_count': count}
                                 logger.info(f"[PROGRESS] Found {count} subservice organizations")
                             elif key == 'cuec_extraction':
                                 # Extract CUECs count
@@ -1982,67 +2063,57 @@ Format: X - reason"""
                                     count = len(res.get('cuecs', []))
                                 elif isinstance(res, list):
                                     count = len(res)
-                                counter_updates = {'counters': {'cuecs_count': count}}
+                                counter_updates = {'cuecs_count': count}
                                 logger.info(f"[PROGRESS] Found {count} CUECs")
                             
-                            # Apply entity updates
-                            if entity_updates:
-                                _update_job_state(job_id, entity_updates, redis_client)
-                            # Apply counter updates
-                            if counter_updates:
-                                _update_job_state(job_id, counter_updates, redis_client)
+                            # Apply all updates in one call
+                            all_updates = {}
+                            all_updates.update(entity_updates)
+                            all_updates.update(counter_updates)
+                            if all_updates:
+                                job_hmset(job_id, all_updates, redis_client)
                         except Exception as entity_err:
                             logger.warning(f"Could not update progress for {key}: {entity_err}")
                     
-                    # Update job state after each extractor
-                    # NOTE: combined_result.json will be written once at the end after all extractors complete
-                    results.update(extractor_results)  # Merge extractor results into main results dict
-                    if job_id and redis_client:
-                        try:
-                            _update_job_state(job_id, {}, redis_client)
-                        except Exception as update_err:
-                            logger.warning(f"Could not update job state: {update_err}")
+                    # Merge extractor results into main results dict
+                    results.update(extractor_results)
         
         # Post-extraction progress updates (for both parallel and sequential modes)
         # Update final entity counts and progress state
         if job_id and redis_client:
             try:
+                final_updates = {}
                 for key, result in extractor_results.items():
-                    if result and key not in ['control_extraction']:  # Control extraction already tracked internally
-                        entity_updates = {}
-                        counter_updates = {}
-                        
+                    if result and key not in ['control_extraction']:
                         if key == 'product_extraction':
                             product = result.get('product') if isinstance(result, dict) else result
                             if product:
-                                entity_updates = {'identified_entities': {'product': str(product)}}
+                                final_updates['product'] = str(product)
                         elif key == 'report_date_extraction':
                             report_date = result.get('report_date') if isinstance(result, dict) else result
                             if report_date:
-                                entity_updates = {'identified_entities': {'report_date': str(report_date)}}
+                                final_updates['report_date'] = str(report_date)
                         elif key == 'coverage_period_extraction':
                             coverage = result.get('coverage_period') if isinstance(result, dict) else result
                             if coverage:
-                                entity_updates = {'identified_entities': {'coverage_period': str(coverage)}}
+                                final_updates['coverage_period'] = str(coverage)
                         elif key == 'subservice_orgs_extraction':
                             count = 0
                             if isinstance(result, dict):
                                 count = len(result.get('subservice_orgs', []))
                             elif isinstance(result, list):
                                 count = len(result)
-                            counter_updates = {'counters': {'subservice_orgs_count': count}}
+                            final_updates['subservice_orgs_count'] = count
                         elif key == 'cuec_extraction':
                             count = 0
                             if isinstance(result, dict):
                                 count = len(result.get('cuecs', []))
                             elif isinstance(result, list):
                                 count = len(result)
-                            counter_updates = {'counters': {'cuecs_count': count}}
-                        
-                        if entity_updates:
-                            _update_job_state(job_id, entity_updates, redis_client)
-                        if counter_updates:
-                            _update_job_state(job_id, counter_updates, redis_client)
+                            final_updates['cuecs_count'] = count
+                
+                if final_updates:
+                    job_hmset(job_id, final_updates, redis_client)
             except Exception as final_update_err:
                 logger.warning(f"Could not perform final progress updates: {final_update_err}")
         
@@ -2157,7 +2228,7 @@ Format: X - reason"""
             # Skip logging if we can't write to the file
             pass
         
-        update_progress(100, "Scan Complete")
+        update_progress(85, "Extraction Complete - Finalizing...")
         logger.debug(f"Final standardized results: {standardized_results}")
 
         # Ensure subservice orgs deduplication/enhancement is applied to the

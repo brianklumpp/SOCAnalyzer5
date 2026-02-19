@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { Box, Typography, Button, Tooltip } from '@mui/material';
-import { Refresh as RefreshIcon, PlaylistAdd as ExtractIcon } from '@mui/icons-material';
+import { Refresh as RefreshIcon, PlaylistAdd as ExtractIcon, AccountTree as AccountTreeIcon } from '@mui/icons-material';
 import { CuecsTable } from '../tables/CuecsTable';
 import { CONFIDENCE_THRESHOLD_PERCENT } from '../../../config/report/constants';
 import { SplitViewLayout } from '../SplitViewLayout';
@@ -24,6 +24,7 @@ interface ReportCuecsTabProps {
   onBatchEdit: (changes: { [rowIdx: number]: any }, rows: any[]) => void;
   onRecompute: (row: any) => Promise<void>;
   onRecomputeAllHighConfidence?: () => Promise<void>;
+  onMapAllFrameworks?: () => Promise<void>;
   onIgnore: (row: any) => void;
   onConfirm: (row: any) => void;
   onAddCuec: () => void;
@@ -46,6 +47,7 @@ export const ReportCuecsTab = React.memo(function ReportCuecsTab({
   onBatchEdit,
   onRecompute,
   onRecomputeAllHighConfidence,
+  onMapAllFrameworks,
   onIgnore,
   onConfirm,
   onAddCuec,
@@ -75,7 +77,7 @@ export const ReportCuecsTab = React.memo(function ReportCuecsTab({
     if (row.cuec_page_refs && Array.isArray(row.cuec_page_refs) && row.cuec_page_refs.length > 0) {
       const pageNum = row.cuec_page_refs[0];
       if (typeof pageNum === 'number') {
-        targetPage = pageNum + (tocPageOffset ?? 2);
+        targetPage = pageNum + (tocPageOffset ?? 0);
       }
     }
     
@@ -138,6 +140,19 @@ export const ReportCuecsTab = React.memo(function ReportCuecsTab({
                     sx={{ ml: 1 }}
                   >
                     Recompute All
+                  </Button>
+                </Tooltip>
+              )}
+              {onMapAllFrameworks && (
+                <Tooltip title="Map CUECs to all available frameworks (NIST, ISO 27001, etc.) — only TSC and COSO are mapped during scan">
+                  <Button 
+                    variant="outlined" 
+                    size="small" 
+                    onClick={onMapAllFrameworks}
+                    startIcon={<AccountTreeIcon />}
+                    sx={{ ml: 1 }}
+                  >
+                    Map All Frameworks
                   </Button>
                 </Tooltip>
               )}

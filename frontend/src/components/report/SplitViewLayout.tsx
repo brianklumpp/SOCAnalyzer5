@@ -8,7 +8,7 @@ import { useSplitView } from '../../contexts/SplitViewContext';
 
 interface SplitViewLayoutProps {
   scanId: number;
-  tabName: 'controls' | 'cuecs' | 'subservice_orgs';
+  tabName: 'controls' | 'cuecs' | 'subservice_orgs' | 'objectives';
   children: React.ReactNode;
   onPdfNavigate?: (handler: (snippet: string | null, page?: number | null) => void) => void;
 }
@@ -117,44 +117,16 @@ export const SplitViewLayout: React.FC<SplitViewLayoutProps> = ({
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-      {/* Floating Control Bar */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          bgcolor: 'background.paper',
-          boxShadow: 3,
-          borderRadius: 1,
-          p: 0.5,
-          zIndex: 1100
-        }}
-      >
-        <Tooltip title={orientation === 'horizontal' ? 'Switch to Vertical Split' : 'Switch to Horizontal Split'}>
-          <IconButton size="small" onClick={handleToggleOrientation}>
-            {orientation === 'horizontal' ? <SwapVert /> : <SwapHoriz />}
-          </IconButton>
-        </Tooltip>
-        
-        <Tooltip title="Close Split View">
-          <IconButton size="small" onClick={handleToggleSplitView} color="error">
-            <Close />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
       {/* Split View Panels */}
       <Box sx={{ height: '100%', overflow: 'hidden', position: 'relative' }}>
         <PanelGroup direction={orientation === 'horizontal' ? 'horizontal' : 'vertical'}>
           {/* Table Panel */}
-          <Panel defaultSize={50} minSize={30} maxSize={80} style={{ overflow: 'hidden', position: 'relative' }}>
+          <Panel defaultSize={50} minSize={30} maxSize={80} style={{ overflow: 'hidden', position: 'relative', minWidth: 0 }}>
             <Box 
               sx={{ 
                 height: '100%', 
                 width: '100%',
+                minWidth: 0,
                 overflow: 'auto', 
                 bgcolor: 'background.default', 
                 p: 2,
@@ -191,6 +163,8 @@ export const SplitViewLayout: React.FC<SplitViewLayoutProps> = ({
                 initialPage={targetPage}
                 navigationKey={navigationKey}
                 onClose={handleToggleSplitView}
+                orientation={orientation}
+                onToggleOrientation={handleToggleOrientation}
               />
             </Box>
           </Panel>

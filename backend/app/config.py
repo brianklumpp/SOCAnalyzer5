@@ -105,7 +105,7 @@ DATAIKU_API_BASE = os.getenv("DATAIKU_API_BASE")  # e.g., https://dataiku-dss.co
 DATAIKU_API_KEY = os.getenv("DATAIKU_API_KEY")
 DATAIKU_SERVICE_ID = os.getenv("DATAIKU_SERVICE_ID", "SOLIDIGM_GPT_API_ACCESS")
 DATAIKU_ENDPOINT_ID = os.getenv("DATAIKU_ENDPOINT_ID", "chat-completions")
-DATAIKU_TIMEOUT = float(os.getenv("DATAIKU_TIMEOUT", "45"))  # Reduced from 120 to 45 seconds for faster failure detection
+DATAIKU_TIMEOUT = float(os.getenv("DATAIKU_TIMEOUT", "900"))  # 15 minutes for large deduplication calls
 DATAIKU_VERIFY_SSL = os.getenv("DATAIKU_VERIFY_SSL", "true").lower() == "true"
 DATAIKU_CA_BUNDLE = os.getenv("DATAIKU_CA_BUNDLE")  # optional custom CA path
 
@@ -267,6 +267,14 @@ ENABLE_PARALLEL_MAPPING = os.getenv("ENABLE_PARALLEL_MAPPING", "true").lower() =
 # Note: Higher values may hit API rate limits (but less likely with batched mode)
 CONTROL_FRAMEWORK_MAPPING_BATCH_SIZE = int(os.getenv("CONTROL_FRAMEWORK_MAPPING_BATCH_SIZE", "15"))
 
+# --- Scan Pipeline Default Frameworks ---
+# During scan pipeline, only map to these frameworks by default (speed optimization)
+# Users can trigger full framework mapping from the frontend after scan completes
+# Format: comma-separated framework keys from FRAMEWORK_REGISTRY
+# Default: "TSC,COSO" - Trust Services Criteria + COSO 2013 (core SOC frameworks)
+# Set to "ALL" to map to all applicable frameworks during scan (legacy behavior)
+SCAN_DEFAULT_FRAMEWORKS = os.getenv("SCAN_DEFAULT_FRAMEWORKS", "TSC,COSO")
+
 # --- NEW: Batched Framework Mapping Optimization (20-30x speedup) ---
 # Enable batched framework mapping: Maps control to ALL frameworks in single API call
 # When True: 1 API call per control (all 7 frameworks at once) = 6-7x faster
@@ -296,6 +304,11 @@ FRAMEWORK_MAPPING_TIMEOUT_SECONDS = int(os.getenv("FRAMEWORK_MAPPING_TIMEOUT_SEC
 #   - Map objectives to controls with proper reasoning
 CONTROL_OBJECTIVES_MODEL = os.getenv("CONTROL_OBJECTIVES_MODEL", "gpt-4o")
 
+# Model for objective-to-control alignment scoring (used in mapping phase)
+# This is a simple scoring/matching task - gpt-4o-mini is sufficient and 5-10x faster
+# Alignment scoring makes 100s-1000s of calls per scan, so speed matters here
+OBJECTIVE_ALIGNMENT_MODEL = os.getenv("OBJECTIVE_ALIGNMENT_MODEL", "gpt-4o-mini")
+
 # --- Objective mapping configuration ---
 # Maximum line distance to consider for proximity scoring
 OBJECTIVE_MAPPING_MAX_LINE_DISTANCE = int(os.getenv("OBJECTIVE_MAPPING_MAX_LINE_DISTANCE", "50"))
@@ -306,10 +319,36 @@ OBJECTIVE_MAPPING_WEIGHT_ALIGNMENT = float(os.getenv("OBJECTIVE_MAPPING_WEIGHT_A
 OBJECTIVE_MAPPING_WEIGHT_PROXIMITY = float(os.getenv("OBJECTIVE_MAPPING_WEIGHT_PROXIMITY", "0.3"))
 OBJECTIVE_MAPPING_WEIGHT_OBJECTIVE_CONFIDENCE = float(os.getenv("OBJECTIVE_MAPPING_WEIGHT_OBJECTIVE_CONFIDENCE", "0.1"))
 OBJECTIVE_MAPPING_MIN_ALIGNMENT = float(os.getenv("OBJECTIVE_MAPPING_MIN_ALIGNMENT", "0.5"))
-OBJECTIVE_MAPPING_PRIMARY_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_PRIMARY_THRESHOLD", "0.8"))
-OBJECTIVE_MAPPING_POSSIBLE_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_POSSIBLE_THRESHOLD", "0.6"))
-OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD", "0.6"))
+OBJECTIVE_MAPPING_PRIMARY_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_PRIMARY_THRESHOLD", "0.25"))
+OBJECTIVE_MAPPING_POSSIBLE_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_POSSIBLE_THRESHOLD", "0.15"))
+OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD", "0.1"))  # Very lenient for waterfall approach
 OBJECTIVE_MAPPING_ID_SIMILARITY_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_ID_SIMILARITY_THRESHOLD", "0.8"))
+
+# Tier minimum-score thresholds (combined_score must exceed these to create a mapping)
+OBJECTIVE_MAPPING_TIER0_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER0_MIN_SCORE", "0.50"))
+OBJECTIVE_MAPPING_TIER1_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER1_MIN_SCORE", "0.60"))
+OBJECTIVE_MAPPING_TIER2_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER2_MIN_SCORE", "0.60"))  # was 0.20
+OBJECTIVE_MAPPING_TIER3_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER3_MIN_SCORE", "0.60"))  # was 0.20
+# Tier 0 GPT floor: structural match requires GPT to agree at this level to prevent false positives
+OBJECTIVE_MAPPING_TIER0_GPT_FLOOR = float(os.getenv("OBJECTIVE_MAPPING_TIER0_GPT_FLOOR", "0.50"))
+# Tier 3 page proximity window (max pages apart for any page in the control/objective page arrays)
+OBJECTIVE_MAPPING_TIER3_MAX_PAGE_DISTANCE = int(os.getenv("OBJECTIVE_MAPPING_TIER3_MAX_PAGE_DISTANCE", "3"))
+
+# Enhanced mapping configuration - line proximity and hierarchical ID matching
+ENABLE_LINE_PROXIMITY_SCORING = os.getenv('ENABLE_LINE_PROXIMITY_SCORING', 'true').lower() == 'true'
+ENABLE_HIERARCHICAL_ID_MATCHING = os.getenv('ENABLE_HIERARCHICAL_ID_MATCHING', 'true').lower() == 'true'
+# Tier 4: GPT semantic matching for controls unmapped by proximity/ID — catches inaccurate page refs
+ENABLE_GPT_SEMANTIC_MAPPING = os.getenv('ENABLE_GPT_SEMANTIC_MAPPING', 'true').lower() == 'true'
+# Minimum GPT alignment score for Tier 4 semantic match (no proximity boost, so higher threshold)
+GPT_SEMANTIC_MAPPING_THRESHOLD = float(os.getenv("GPT_SEMANTIC_MAPPING_THRESHOLD", "0.7"))
+# Max lines after control to consider as table structure (objective in same row but left column)
+MAPPING_TABLE_STRUCTURE_LINE_THRESHOLD = int(os.getenv("MAPPING_TABLE_STRUCTURE_LINE_THRESHOLD", "3"))
+# Enhanced scoring weights (sum > 1.0, will be clamped)
+MAPPING_WEIGHT_PAGE = float(os.getenv("MAPPING_WEIGHT_PAGE", "0.3"))  # Page proximity weight
+MAPPING_WEIGHT_LINE = float(os.getenv("MAPPING_WEIGHT_LINE", "0.2"))  # Line proximity weight
+MAPPING_WEIGHT_GPT = float(os.getenv("MAPPING_WEIGHT_GPT", "0.2"))    # GPT alignment weight
+MAPPING_WEIGHT_ID = float(os.getenv("MAPPING_WEIGHT_ID", "0.4"))      # ID hierarchy/similarity weight
+MAPPING_WEIGHT_OBJ_CONF = float(os.getenv("MAPPING_WEIGHT_OBJ_CONF", "0.1"))  # Objective confidence boost weight
 
 # --- CUEC objective mapping configuration ---
 CUEC_OBJECTIVE_MAPPING_CANDIDATE_LIMIT = int(os.getenv("CUEC_OBJECTIVE_MAPPING_CANDIDATE_LIMIT", "5"))
@@ -568,7 +607,7 @@ TOC:
 """
 
 SECTION_IDENTIFICATION_PROMPT = """
-You are an expert SOC report analyst. Your task is to identify the major sections in a SOC 1 or SOC 2 report.
+You are an expert SOC report analyst. Your task is to parse the Table of Contents (TOC) and identify ALL major sections in a SOC 1 or SOC 2 report.
 
 ## Common SOC Report Sections
 SOC reports typically contain these major sections (names may vary):
@@ -576,42 +615,43 @@ SOC reports typically contain these major sections (names may vary):
 2. **Management's Assertion** - Management's statement about controls
 3. **System Description** / **Description of System** - Overview of the system and services
 4. **Control Activities and Tests of Controls** / **Control Descriptions** - Detailed control objectives and tests
+5. **Other Information Provided** (sometimes) - Additional information, appendices, or supplementary details
 
 ## Task
-Analyze the provided text (from the first pages of a SOC report) and identify:
-1. The major section names as they appear in the report
-2. BOTH the TOC page number (from Table of Contents) AND the DOC page number (from === PAGE N === markers)
-3. Your confidence (0-100) that you've correctly identified each section
+Parse the Table of Contents from the provided text and identify:
+1. ALL major section names as listed in the TOC
+2. BOTH the TOC page number AND the DOC page number (from === PAGE N === markers)
+3. Your confidence (0-100) that you've correctly parsed each section entry
 
-## Rules
-1. Focus on identifying the 4 major sections listed above (names may differ)
-2. Use the Table of Contents if present (usually in first few pages)
-3. Look for clear section headings, which may use:
-   - Roman numerals (I, II, III, IV, V)
-   - Arabic numbers (1, 2, 3, 4, 5)
+## Critical Instructions
+1. **Parse the COMPLETE TOC** - Do not stop at the first 4 sections. Extract EVERY major section entry, even if it appears on page 100+.
+2. **Focus on the TOC listing** - The TOC comprehensively lists all sections with page numbers. Parse this listing completely.
+3. **Ignore Subsections:**
+   - ONLY identify MAJOR/TOP-LEVEL sections (e.g., Section I, Section II, Section III)
+   - DO NOT include subsections like "Section II.A", "III.1", "IV.B.2"
+   - EXCEPTION: If a subsection itself is one of the 4-5 core sections (e.g., "Section III.B - Control Descriptions"), include it
+4. **Dual Page Number Tracking:**
+   - `toc_page`: The page number shown in the Table of Contents for this section
+   - `doc_page`: The actual page number from the === PAGE N === marker where the TOC entry appears (NOT where the section content is)
+   - Example: If you see "Section V.....112" in the TOC on page 2 (after === PAGE 2 ===), then toc_page=112, doc_page=2
+5. **Look for all section patterns:**
+   - Roman numerals (I, II, III, IV, V, VI...)
+   - Arabic numbers (1, 2, 3, 4, 5, 6...)
    - Section labels ("Section I", "Section 1")
    - Descriptive titles without numbers
-4. **CRITICAL - Dual Page Number Tracking:**
-   - `toc_page`: The page number shown in the Table of Contents for this section
-   - `doc_page`: The actual page number from the === PAGE N === marker where the section heading/content appears
-   - Example: If TOC shows "Section II.....5" but the section heading appears after "=== PAGE 7 ===", then toc_page=5, doc_page=7
-   - These numbers may differ due to cover pages, TOC pages, or other front matter
-5. Confidence scoring:
-   - 90-100: Found in TOC AND confirmed heading in document
-   - 70-89: Found clear heading in document, no TOC confirmation
-   - 50-69: Probable section based on content keywords
-   - Below 50: Uncertain, multiple candidates
-6. If you cannot reliably identify a section, omit it from results
-7. Return your average confidence across all identified sections
+6. Confidence scoring:
+   - 90-100: Clear TOC entry with page number
+   - 70-89: TOC entry present but formatting unclear
+   - Below 70: Uncertain, ambiguous entry
 
 ## Output Format
 Respond with ONLY valid JSON (no markdown, no commentary):
 {{
   "sections": [
     {{
-      "name": "<section name as it appears in report>",
-      "toc_page": <integer page number from TOC>,
-      "doc_page": <integer page number from === PAGE N === marker>,
+      "name": "<section name as it appears in TOC>",
+      "toc_page": <integer page number from TOC listing>,
+      "doc_page": <integer page number from === PAGE N === marker where TOC entry appears>,
       "confidence": <integer 0-100>
     }}
   ],
@@ -621,8 +661,24 @@ Respond with ONLY valid JSON (no markdown, no commentary):
 }}
 
 ## Important
-- For controls_section_name: Identify which section contains the detailed control objectives and descriptions
-- For system_description_section_name: Identify which section describes the system, services, and business
+- Extract ALL sections from TOC, not just the first 4
+- For controls_section_name: Identify which section contains the detailed control objectives
+- For system_description_section_name: Identify which section describes the system and services
+
+## Example TOC Parsing
+If TOC shows:
+```
+TABLE OF CONTENTS
+                                                                     Page
+Section I - Independent Service Auditor's Report.................... 3
+Section II - Management's Assertion................................. 8
+Section III - Description of System................................. 10
+Section IV - Control Descriptions................................... 46
+Section V - Other Information Provided.............................. 112
+```
+
+Then extract ALL 5 entries with toc_page values of 3, 8, 10, 46, and 112 respectively.
+
 - overall_confidence: Calculate as the arithmetic mean of all individual section confidences
 
 Report Text:
@@ -1245,9 +1301,10 @@ You are an expert SOC auditor. Extract the **report signing date** (the date the
 ## Rules
 1. Focus on the end of the Service Auditor’s Report section, near the signature block.
 2. Identify the most recent complete date (e.g., “June 30, 2024”) and convert it to ISO format (YYYY-MM-DD) when possible.
-3. Ignore coverage period dates and fieldwork references.
-4. If no date is found, set report_date = null.
-5. Always include a short explanation.
+5. Ignore coverage period dates mentioned earlier in the report.
+6. Ignore fieldwork completion references.
+7. If no date is found near the signature, set report_date = null.
+8. Always include a short explanation.
 
 ## Output
 {{
@@ -2607,6 +2664,7 @@ Return a JSON object with a "controls" array containing one object per control f
       "has_deviation": <true or false>,
       "deviation_desc": "<string>",
       "additional_references": [],
+      "start_line": <integer>,
       "end_line": <integer>,
       "control_confidence": <float>,
       "control_gpt_conf_justification": "<short reasoning>",
@@ -2648,23 +2706,51 @@ Stop the block when a new control ID, header, or whitespace separator appears.
 ### 5. Boundary sanity
 If a domain or principle header appears mid-text, treat it as the start of a new section and stop accumulating text.
 
-### 6. Confidence scoring
+### 6. Line references (start_line / end_line)
+- **start_line**: Set to the ║N║ line marker number where the control BEGINS (the line containing the control_id or, if no ID, the first line of the control description). This must be the actual document line number from the ║N║ markers, NOT a chunk-relative offset.
+- **end_line**: Set to the ║N║ line marker number where the control ENDS (last line of test results or deviation description).
+
+### 7. Confidence scoring
 - 0.9–1.0 → found control_id + description + ≥1 test + result.
 - 0.6–0.89 → missing ID but strong control/test/result linkage.
 - 0.3–0.59 → partial or inferred control.
 Include a brief justification.
 
-### 7. Continuation flag
+### 8. Continuation flag
 If this chunk ends mid-control (incomplete description or missing results), set "continuation": true for that control.
 Otherwise, set "continuation": false.
 
-### 8. Multiple controls in chunk
+### 9. Multiple controls in chunk
 Extract ALL complete controls found in this chunk. The chunk may contain:
 - Zero controls (just headers or narrative)
 - One control (typical for sparse reports)
 - Multiple controls (typical for dense reports like Adobe, KPMG)
 - Partial control (starts but doesn't complete - mark as continuation)
 
+### 10. DO NOT EXTRACT as controls (critical false-positive prevention)
+These items appear in SOC reports but are NOT controls. Skip them entirely:
+
+a) **Trust Services Criteria (TSC) text** — Lines that define or restate TSC criteria such as
+   "CC1.1", "CC2.1", "CC3.1", "CC5.2", "CC6.1", "CC7.4", "A1.1", "A1.2", "C1.1", "P1.1", "PI1.1".
+   These identifiers (CC/A/C/P/PI followed by digits) represent **control objectives**, not controls.
+   If the only identifier present matches a TSC pattern and the text restates a criteria definition
+   (e.g., "The entity demonstrates a commitment to integrity..."), it is an objective, not a control.
+
+b) **Standalone auditor test procedures** — Text that ONLY contains auditor testing language
+   ("Inspected media decommissioning tickets...", "Observed whether a user's access is automatically
+   disabled...", "Tested a sample of...") without a preceding control description in the same block.
+   Auditor tests that follow a control description belong in the control's "control_tests" array.
+
+c) **Narrative statements** — Generic organizational descriptions that don't specify a concrete
+   control activity ("The company maintains a culture of integrity", "Security incidents are tracked
+   to resolution"). A real control specifies WHO does WHAT and HOW.
+
+d) **Enumeration fragments** — Isolated list items or bullet fragments that are part of a larger
+   control but extracted out of context ("Changes are implemented by authorized personnel",
+   "Backups are performed daily").
+
+When in doubt, lower the confidence score rather than omitting entirely.
+{control_feedback_block}
 Analyze this text (first line is line {start_line}). Extract ALL control blocks found:
 {text}
 """
@@ -3270,6 +3356,7 @@ Return these fields ONLY:
 Return these fields ONLY:
 - objective_id: The control objective identifier (e.g., CC1.1, AC-01, "Objective 1")
 - objective_text: Full objective description (the goal or intended outcome)
+- line_ref: Approximate line number in the document where this objective appears (count from document start)
 - page_ref: Page number (from === PAGE X === markers)
 - confidence: 0.0-1.0
 
@@ -3564,24 +3651,66 @@ FRAMEWORK_MULTI_MATCH_PROMPT_NIST = FRAMEWORK_MULTI_MATCH_PROMPT_TSC
 # Enable control objective extraction (extracts objectives from varied report formats)
 ENABLE_OBJECTIVE_EXTRACTION = os.getenv('ENABLE_OBJECTIVE_EXTRACTION', 'true').lower() == 'true'
 
+# Enable automatic gap extraction after objective extraction (finds missing objectives)
+ENABLE_GAP_EXTRACTION = os.getenv('ENABLE_GAP_EXTRACTION', 'true').lower() == 'true'
+
+# --- Objective Extraction Performance Optimizations (v2.2.0) ---
+# Enable parallel objective chunk extraction (processes multiple chunks concurrently)
+# When enabled, uses ThreadPoolExecutor with 4 workers for chunk extraction
+# Expected speedup: 3-4x faster for objective extraction phase (30s → 8s)
+ENABLE_PARALLEL_OBJECTIVE_EXTRACTION = os.getenv('ENABLE_PARALLEL_OBJECTIVE_EXTRACTION', 'true').lower() == 'true'
+
+# Enable batch objective validation (validates all objectives in single GPT call)
+# When enabled, validates 20-30 objectives in one API call instead of sequential calls
+# Expected speedup: 8x faster for validation phase (40s → 5s)
+# Batch validation provides 8x speedup over individual validation - enabled by default for production performance
+ENABLE_BATCH_OBJECTIVE_VALIDATION = os.getenv('ENABLE_BATCH_OBJECTIVE_VALIDATION', 'true').lower() == 'true'
+
+# Enable parallel objective-to-control mapping (maps multiple controls concurrently)
+# When enabled, uses ThreadPoolExecutor with 4 workers for mapping phase
+# Expected speedup: 4x faster for mapping phase (1200s → 300s = 15 minutes saved)
+ENABLE_PARALLEL_OBJECTIVE_MAPPING = os.getenv('ENABLE_PARALLEL_OBJECTIVE_MAPPING', 'true').lower() == 'true'
+
+# Enable Redis caching for objective validation results (reduces redundant GPT calls)
+# When enabled, caches validation results by objective text hash with 30-day TTL
+# Expected savings: ~20s on subsequent scans with similar objectives
+ENABLE_OBJECTIVE_VALIDATION_CACHE = os.getenv('ENABLE_OBJECTIVE_VALIDATION_CACHE', 'true').lower() == 'true'
+
+# Number of worker threads for parallel objective extraction and mapping
+OBJECTIVE_WORKER_THREADS = int(os.getenv('OBJECTIVE_WORKER_THREADS', '4'))
+
 # Objective Extraction Settings
-OBJECTIVE_TOKENS_PER_CHUNK = 600  # Balanced for various objective section formats
+OBJECTIVE_TOKENS_PER_CHUNK = 900  # Increased from 600 for fewer chunks and GPT calls
 OBJECTIVE_CHUNK_OVERLAP_TOKENS = 120  # Overlap to catch objectives split across chunks
 OBJECTIVE_MIN_CONFIDENCE = 0.0  # Keep all objectives, let frontend filter by confidence
 OBJECTIVE_MAX_DISTANCE_FROM_KEYWORDS = 30  # Max lines from objective keywords to count
-OBJECTIVE_PATTERN_LEARNER_MODEL = os.getenv("OBJECTIVE_PATTERN_LEARNER_MODEL", "gpt-4o-mini")
+OBJECTIVE_PATTERN_LEARNER_MODEL = os.getenv("OBJECTIVE_PATTERN_LEARNER_MODEL", "gpt-4o")
 OBJECTIVE_PATTERN_ALIGNMENT_BOOST = float(os.getenv("OBJECTIVE_PATTERN_ALIGNMENT_BOOST", "0.2"))
 OBJECTIVE_PATTERN_MIN_OBJECTIVES = int(os.getenv("OBJECTIVE_PATTERN_MIN_OBJECTIVES", "4"))
 OBJECTIVE_PATTERN_MIN_CONTROLS = int(os.getenv("OBJECTIVE_PATTERN_MIN_CONTROLS", "4"))
 
-# Multi-factor confidence weights (must sum to 1.0)
+# Initial scoring weights (3-factor, must sum to 1.0)
+# Used at extraction time BEFORE control mapping is available.
+# Only uses factors that are known at extraction: keyword match, GPT opinion, format.
 OBJECTIVE_CONFIDENCE_WEIGHTS = {
-    'keyword': 0.25,     # Keyword match score (e.g., "control objective", "objective:")
-    'distance': 0.20,    # Proximity to objective keywords
-    'gpt_opinion': 0.30, # GPT's confidence in identification
-    'alignment': 0.15,   # Alignment with extracted controls
-    'format': 0.10       # Format clarity (heading, numbering, table structure)
+    'keyword': 0.40,     # TSC/COSO keyword presence in objective text (strongest signal)
+    'gpt_opinion': 0.25, # GPT's confidence in identification (guarded by empty reasoning check)
+    'format': 0.35       # Format clarity (heading, numbering, table structure)
 }
+
+# Post-mapping recalculation weights (4-factor, must sum to 1.0)
+# Used after control-objective mapping provides alignment scores.
+OBJECTIVE_RECALC_WEIGHTS = {
+    'keyword': 0.30,     # TSC/COSO keyword presence in objective text
+    'gpt_opinion': 0.20, # GPT's confidence in identification
+    'alignment': 0.25,   # Alignment with extracted controls (only available post-mapping)
+    'format': 0.25       # Format clarity
+}
+
+# Objective ID penalty configuration
+OBJECTIVE_ID_MISSING_PENALTY = 0.50  # 50% reduction if no ID when majority have IDs
+OBJECTIVE_ID_OUTLIER_PENALTY = 0.50  # 50% reduction if ID format differs from dominant family
+OBJECTIVE_ID_SUPERMAJORITY_THRESHOLD = 0.80  # Legacy (unused - replaced by plurality in code)
 
 # Objective Section Keywords (for detecting objective sections)
 OBJECTIVE_SECTION_KEYWORDS = [
@@ -3597,15 +3726,47 @@ OBJECTIVE_SECTION_KEYWORDS = [
     "description of service organization's system",
 ]
 
-# Objective Pattern Keywords (for identifying individual objectives)
+# Enhanced Objective Pattern Keywords - TSC Criteria Language
+# Objectives use entity-centric language ("the entity...") while controls use org name
 OBJECTIVE_PATTERN_KEYWORDS = [
+    # Trust Services Criteria common verbs/patterns
+    "the entity demonstrates",
+    "the entity identifies",
+    "the entity establishes",
+    "the entity specifies",
+    "the entity considers",
+    "the entity selects",
+    "the entity develops",
+    "the entity deploys",
+    "the entity obtains",
+    "the entity generates",
+    "the entity communicates",
+    "the entity evaluates",
+    "the entity implements",
+    "the entity manages",
+    "the entity restricts",
+    "the entity authorizes",
+    "the entity protects",
+    "the entity provides",
+    "the entity collects",
+    "the entity disposes",
+    "the entity defines",
+    
+    # Common objective outcome phrases
+    "to enable the identification",
+    "to support the functioning",
+    "to support the achievement",
+    "in the pursuit of objectives",
+    "to meet the entity's objectives",
+    "risks to the achievement",
+    "contribute to the mitigation",
+    "reasonable assurance",
+    
+    # Traditional objective markers (less common but still valid)
     "objective:",
     "control objective:",
     "the objective is",
-    "the control objective",
     "designed to ensure",
-    "ensure that",
-    "controls provide reasonable assurance",
 ]
 
 # Objective Extraction Prompt - Multi-objective extraction with confidence scoring
@@ -3614,36 +3775,150 @@ You are an expert SOC auditor identifying Control Objectives from audit report t
 
 If the provided text does not contain explicit control objectives, return an empty list: {{"objectives": []}}.
 
+## CRITICAL INSTRUCTION - EXTRACTION PHILOSOPHY:
+**YOU MUST BE AGGRESSIVE AND INCLUSIVE IN EXTRACTION.**
+
+Your PRIMARY goal is to FIND and EXTRACT all possible control objectives. It is MUCH BETTER to:
+- Extract something that might be an objective (even with low confidence)
+- Include borderline cases and let downstream filters decide
+- Over-extract rather than under-extract
+
+NEVER skip extracting something because you're "not sure" - just give it a lower confidence score (0.4-0.6).
+
+## ANTI-HALLUCINATION RULE (CRITICAL):
+**NEVER invent, guess, or fabricate an objective_id.**
+- You MUST only use an objective_id if that EXACT ID string appears IN THE PROVIDED TEXT CHUNK.
+- Do NOT assign an ID based on what the objective text SOUNDS LIKE it should map to.
+- Do NOT infer IDs from surrounding context, section headings, or general audit terminology.
+- If no explicit ID is visible adjacent to or within the objective text, set objective_id to null.
+- It is perfectly fine to extract objectives with objective_id: null — many reports (especially SOC 1) use unnumbered objectives.
+
+**AUTO-EXTRACT KNOWN IDS**: If any of these IDs **actually appear in the chunk text**, always extract them with gpt_opinion ≥ 0.85:
+- Common Criteria: CC1.1-CC1.4, CC2.1-CC2.3, CC3.1-CC3.4, CC4.1-CC4.2, CC5.1-CC5.3, CC6.1-CC6.8, CC7.1-CC7.5, CC8.1-CC8.3, CC9.1-CC9.2
+- Confidentiality: C1.1-C1.9
+- Availability: A1.1-A1.3
+- Privacy: P1.1-P8.1
+- Processing Integrity: PI1.1-PI1.5
+These are objectives by definition — always extract with gpt_opinion ≥ 0.85.
+
 ## Background:
 Control objectives describe the intended outcome or goal that controls are designed to achieve.
 They are often found in sections like:
 - "Control Objectives"
-- "Test of Design Objectives"
+- "Test of Design Objectives"  
 - "Description of Service Organization's System"
 - Numbered sections with explicit objectives
 
 ## Text Chunk:
+This chunk starts at line {chunk_start_line} in the original document.
+
 {text_chunk}
 
 ## Task:
 Extract ALL control objectives from this text. For each objective, provide:
 
-1. **objective_id**: The identifier if explicitly stated (e.g., "HR-01", "Access-1", "Objective 2.1"). Use null if unnumbered.
+1. **objective_id**: The identifier EXACTLY as stated in the document. Common patterns:
+   - Trust Services: C1.1, C1.2, CC1.1, CC2.1, CC2.2, CC3.1, CC3.2, CC6.1, A1.1, A1.2, A1.3, PI1.1, P1.1, etc.
+   - Custom objectives: HR-01, IAM-1, SEC-01, etc.
+   - **CRITICAL**: Must match pattern [LETTERS][NUMBER].[NUMBER] (e.g., CC2.1, A1.3)
+   - Use null ONLY if the objective is unnumbered/unidentified
 2. **objective_text**: The complete objective statement (full sentence/paragraph)
-3. **confidence_factors**:
+3. **line_ref**: Approximate line number where this objective appears IN THE CHUNK (count from 0). This will be adjusted to document coordinates.
+4. **page_ref**: Page number if identifiable from context, otherwise null
+5. **confidence_factors**:
    - **keyword_match**: 0.0-1.0 score for presence of objective keywords
    - **format_clarity**: 0.0-1.0 score for structure (explicit heading/numbering = high, inferred = low)
    - **gpt_opinion**: 0.0-1.0 your overall confidence this is a true control objective
-4. **extraction_method**: "heading", "numbered_list", "table", or "gpt_inferred"
-5. **section_heading**: The section name where this objective appears (if identifiable)
-6. **reasoning**: Brief explanation for your confidence scores (max 150 chars)
+6. **extraction_method**: "heading", "numbered_list", "table", or "gpt_inferred"
+7. **section_heading**: The section name where this objective appears (if identifiable)
+8. **reasoning**: Brief explanation for your confidence scores (max 150 chars)
+
+## CRITICAL DISTINCTION - Controls vs Objectives:
+
+### OBJECTIVES (✓ Extract These):
+Objectives describe WHAT needs to be achieved (goals/outcomes), not HOW.
+
+Examples of TRUE objectives with CORRECT ID patterns:
+  # Common Criteria (CC1-CC9) - COMPLETE COVERAGE:
+  ✓ "CC1.1: The entity demonstrates a commitment to integrity and ethical values"
+  ✓ "CC2.1: COSO Principle 2 — The board demonstrates independence from management"
+  ✓ "CC2.2: The board exercises oversight of internal control"
+  ✓ "CC3.1: Management establishes structures, reporting lines, and authorities"
+  ✓ "CC3.2: The entity defines responsibilities and assigns authority"
+  ✓ "CC4.1: The entity demonstrates commitment to attract, develop, and retain competent individuals"
+  ✓ "CC4.2: The entity evaluates competence and addresses shortcomings"
+  ✓ "CC5.1: The entity holds individuals accountable for internal control responsibilities"
+  ✓ "CC5.2: Management establishes performance measures, incentives, and rewards"
+  ✓ "CC6.1: The entity specifies objectives with sufficient clarity"
+  ✓ "CC6.2: The entity identifies and analyzes risks to achievement of objectives"
+  ✓ "CC6.3: The entity considers potential for fraud in risk assessment"
+  ✓ "CC6.6: The entity identifies and assesses changes that could impact internal control"
+  ✓ "CC7.1: The entity selects and develops control activities that mitigate risks"
+  ✓ "CC7.2: The entity selects and develops general control activities over technology"
+  ✓ "CC7.3: The entity deploys control activities through policies and procedures"
+  ✓ "CC8.1: The entity obtains or generates relevant quality information"
+  ✓ "CC8.2: The entity internally communicates information about objectives and responsibilities"
+  ✓ "CC9.1: The entity performs ongoing and separate evaluations of internal control"
+  ✓ "CC9.2: The entity evaluates and communicates internal control deficiencies"
+  # Confidentiality Series (C1.1-C1.9):
+  ✓ "C1.1: Controls provide reasonable assurance that access is restricted to authorized users"
+  ✓ "C1.2: The entity restricts logical and physical access to confidential information"
+  ✓ "C1.5: The entity implements controls to prevent, detect, and mitigate security events"
+  ✓ "C1.7: The entity prevents unauthorized disclosure of confidential information"
+  # Availability (A1.x), Privacy (P1.x), Processing Integrity (PI1.x):
+  ✓ "A1.1: The entity limits physical access to facilities and protected information assets"
+  ✓ "A1.2: Logical access controls restrict access to programs and data"
+  ✓ "A1.3: The entity identifies and authenticates users and recovers from processing interruptions"
+  ✓ "P1.1: The entity provides notice to data subjects about privacy practices"
+  ✓ "P3.1: The entity provides data subjects with choices regarding collection and use"
+  ✓ "PI1.1: The entity obtains or generates, uses, and communicates relevant information"
+  ✓ "PI1.3: The entity communicates processing integrity failures to authorized parties"
+  # Objectives without explicit IDs:
+  ✓ "Objective: Ensure the confidentiality and integrity of customer data" (no ID = null)
+  ✓ "Trust Services Criteria CC7.1: The entity selects control activities" (prefix variation)
+
+### CONTROLS (✗ Do NOT Extract These):
+Controls describe HOW to achieve objectives (specific activities/procedures).
+
+Examples of controls that should NOT be extracted:
+  ✗ "AWS reviews user access lists quarterly"
+  ✗ "Multi-factor authentication is required for VPN access"
+  ✗ "Access logs are monitored daily and alerts sent to security team"
+  ✗ "User accounts are deprovisioned within 24 hours of termination"
+  ✗ "Management performs vulnerability scans on a monthly basis"
+
+### RED FLAGS - If Text Contains These, It's LIKELY a CONTROL (but not always):
+- **Frequency adverbs**: "quarterly", "daily", "weekly", "monthly", "annually", "biannually"
+  - Note: Action verbs alone ("reviews", "verifies", "monitors") are FINE for objectives
+  - It's the FREQUENCY that indicates a control (e.g., "reviews quarterly" vs "reviews are performed")
+- **Specific time constraints**: "within 24 hours", "within 48 hours", "within X business days"
+- **Specific tools WITH implementation details**: "CloudWatch alerts configured to...", "Splunk dashboard monitors..."
+- **Detailed procedural steps**: "process includes steps 1, 2, 3", "procedure for...", "workflow consists of..."
+- **Approval workflows with roles**: "documented and approved by X, then reviewed by Y", "signed off by manager"
+
+NOTE: These are indicators, not absolute rules. Trust Services Criteria objectives 
+(CC1.1-CC9.2, PI1.1-PI1.5, C1.1-C1.5, A1.1-A1.3, etc.) should ALWAYS be extracted even if they contain some of these words.
 
 ## Guidelines:
-- Control objectives typically describe GOALS, not specific control activities
-- Common patterns: "ensure that", "provide reasonable assurance", "designed to"
-- Do NOT extract individual controls as objectives
-- Do NOT extract test procedures or results as objectives
-- Objectives are usually more general than controls (e.g., "ensure access is restricted" is an objective; "multi-factor authentication required" is a control)
+- **ALWAYS EXTRACT = HIGH CONFIDENCE**: ALL Trust Services Criteria (CC1.x-CC9.x, C1.x, A1.x, P1.x-P8.x, PI1.x)
+  - CRITICAL: CC4, CC5, CC7, CC8, CC9 are commonly missed but MUST be extracted
+  - Set gpt_opinion = 0.85-0.95 for these (they are objectives by definition)
+  - Extract even if they appear in unexpected locations or have unusual wording
+- **Default action: INCLUDE as objective** - Extract first, filter later
+- **When uncertain about controls vs objectives**: 
+  - If it has a Trust Services ID (CC, C, A, PI, P) → EXTRACT (gpt_opinion 0.7-0.8)
+  - If it's high-level/strategic language → EXTRACT (gpt_opinion 0.6-0.8)
+  - If it has red flags but seems important → EXTRACT (gpt_opinion 0.4-0.6)
+  - Only skip if it's clearly a detailed procedure/control
+- **Confidence scoring strategy**:
+  - Certain objective (Trust Services, explicit heading) → gpt_opinion 0.85-0.95
+  - Likely objective (numbered, strategic language) → gpt_opinion 0.70-0.85
+  - Possible objective (uncertain, borderline) → gpt_opinion 0.50-0.70
+  - Weak signal (has red flags, procedural) → gpt_opinion 0.30-0.50
+- Objectives are strategic/high-level (goals/outcomes); controls are tactical/specific (activities/procedures)
+- Objectives describe WHAT needs to be achieved; controls describe HOW to achieve it
+- Do NOT extract test procedures, test results, or auditor opinions
+- Better to have false positives with low confidence than to miss real objectives
 
 ## Output Format:
 Return a JSON array:
@@ -3652,6 +3927,8 @@ Return a JSON array:
     {{
       "objective_id": "HR-01" or null,
       "objective_text": "Complete objective statement",
+      "line_ref": 42,
+      "page_ref": 15 or null,
       "confidence_factors": {{
         "keyword_match": 0.85,
         "format_clarity": 0.90,
@@ -3693,22 +3970,31 @@ High-Confidence Controls:
 {control_samples}
 
 Return JSON only:
-{
-    "id_pattern": {
+{{{{
+    "id_pattern": {{{{
         "present": true/false,
         "description": "natural-language description of the ID pattern",
         "examples": ["example1", "example2"]
-    },
+    }}}},
     "text_cues": ["Objective:", "Control Objective", "Trust Services Criteria", "COSO Principle", "TSC"],
     "alignment_notes": "brief guidance on how objective IDs relate to control IDs, if any",
     "confidence": 0.0-1.0
-}
+}}}}
 """
 
 # Objective Gap Extraction Settings
 OBJECTIVE_GAP_PROBE_LIMIT = int(os.getenv("OBJECTIVE_GAP_PROBE_LIMIT", "10"))
 OBJECTIVE_GAP_LOG_LIMIT = int(os.getenv("OBJECTIVE_GAP_LOG_LIMIT", "200"))
 OBJECTIVE_GAP_LOG_TTL_DAYS = int(os.getenv("OBJECTIVE_GAP_LOG_TTL_DAYS", "14"))
+
+# TSC Expected Ranges - Always check these full ranges for TSC objectives
+TSC_EXPECTED_RANGES = {
+    "CC": {"min": 1, "max": 9},   # CC1.x through CC9.x
+    "C": {"min": 1, "max": 1, "sub_max": 9},  # C1.1 through C1.9
+    "A": {"min": 1, "max": 1, "sub_max": 3},  # A1.1 through A1.3
+    "P": {"min": 1, "max": 8},    # P1.x through P8.x
+    "PI": {"min": 1, "max": 1, "sub_max": 5}  # PI1.1 through PI1.5
+}
 
 # Objective Gap Pattern Prompt - infer ID series and last-segment increment
 OBJECTIVE_GAP_PATTERN_PROMPT = """
@@ -3731,25 +4017,25 @@ Existing Objective IDs (total: {total_ids}):
 {objective_ids}
 
 Return JSON in this exact structure:
-{{
+{{{{
     "groups": [
-        {{
+        {{{{
             "prefix": "C2.",
             "segment_type": "number",
             "separator": ".",
             "examples": ["C2.1", "C2.2", "C2.3"],
             "notes": "C2.x series"
-        }},
-        {{
+        }}}},
+        {{{{
             "prefix": "P1.",
             "segment_type": "letter",
             "separator": ".",
             "examples": ["P1.A", "P1.B"],
             "notes": "P1.A/B series"
-        }}
+        }}}}
     ],
     "notes": "Brief overall notes"
-}}
+}}}}
 """
 
 # Objective Pattern Rescan Prompt - find additional objectives using learned patterns
@@ -3768,61 +4054,140 @@ Task:
 3) Only return objectives not already in the existing list.
 4) If you are unsure, do NOT include it.
 
-Text:
+CRITICAL RULES:
+
+1) OBJECTIVE vs CONTROL DISTINCTION:
+   - ONLY extract OBJECTIVES (goals/outcomes), NOT controls (activities)
+   - If text describes HOW something is done → it's a CONTROL, skip it
+   - If text describes WHAT needs to be achieved → it's an OBJECTIVE, extract it
+   - RED FLAGS for controls: action verbs (reviews, verifies, tests), frequencies (quarterly, daily), 
+     specific tools (CloudTrail, Jira), procedures ("process includes")
+
+2) OBJECTIVE_ID EXTRACTION:
+   - ONLY extract objective_id if you can SEE it explicitly in the text (e.g., "CC1.5:", "Objective CC1.5")
+   - Do NOT infer, guess, or assign IDs based on content similarity
+   - Do NOT create IDs that aren't visible in the text
+   - If no ID is visible, set objective_id to null
+   - The ID must appear ADJACENT to or WITHIN the objective text itself
+
+Text Chunk (starts at line {chunk_start_line} in the document):
 {text_chunk}
 
-Return JSON only:
-{
+Return JSON only (NO trailing commas, NO comments):
+{{{{
     "objectives": [
-        {
+        {{{{
             "objective_id": "CC1.5" or null,
             "objective_text": "Full objective sentence or paragraph",
-            "confidence_factors": {
+            "line_ref": approximate line number IN THE CHUNK (count from 0),
+            "confidence_factors": {{{{
                 "keyword_match": 0.0-1.0,
                 "format_clarity": 0.0-1.0,
                 "gpt_opinion": 0.0-1.0
-            },
+            }}}},
             "section_heading": "Control Objectives" or null,
             "reasoning": "brief reasoning",
             "pattern_alignment": true/false
-        }
+        }}}}
     ]
-}
+}}}}
 """
 
 # Objective Deduplication Prompt - Consolidate duplicate objectives across chunks
 OBJECTIVE_DEDUPLICATION_PROMPT = """
-You are consolidating duplicate control objectives extracted from overlapping text chunks.
+You are removing ONLY EXACT character-for-character duplicate control objectives from overlapping chunks.
 
 ## Objective Candidates:
 {objective_list}
 
-## Task:
-Group objectives that represent the SAME underlying objective, even if wording varies slightly.
+## ULTRA-FORGIVING RULES - Read Carefully:
+1. **Default action: KEEP AS SEPARATE OBJECTIVES**
+2. **ONLY merge if ALL of these are true:**
+   - Both have the SAME objective_id (e.g., both are "CC6.1")
+   - AND the objective_text is 100% IDENTICAL byte-for-byte
+   - Character-for-character exact match, including punctuation and spacing
+3. **If objective_id is null/missing on either objective = NEVER MERGE**
+4. **Similar wording but not identical = NEVER MERGE**
+5. **When in ANY doubt = KEEP SEPARATE**
 
-## Guidelines:
-- Objectives with same objective_id are definitely duplicates
-- Objectives with similar text (>80% semantic similarity) are likely duplicates
-- Choose the BEST version (clearest wording, highest confidence) as the primary
-- Preserve unique objectives (different goals/purposes)
+## Examples that should STAY SEPARATE (DO NOT MERGE):
+- objective_id: null vs null → KEEP BOTH (can't verify they're the same)
+- objective_id: "CC6.1" vs "CC6.2" → KEEP BOTH (different IDs)
+- Same ID but text "ensures security" vs "ensure security" → KEEP BOTH (not identical)
+- Same ID but text differs by 1 character → KEEP BOTH (not identical)
+- objective_id: "CC6.1" vs null → KEEP BOTH (one missing ID)
+
+## Only merge these:
+- objective_id: "CC6.1" + text: "System is secure." 
+  AND objective_id: "CC6.1" + text: "System is secure."
+  → MERGE (exact ID and exact text)
 
 ## Output Format:
-Return JSON with deduplicated objectives:
-{{
+{{{{
   "deduplicated": [
-    {{
+    {{{{
       "objective_id": "HR-01",
       "objective_text": "Best version of objective text",
-      "confidence_factors": {{"keyword_match": 0.85, "format_clarity": 0.90, "gpt_opinion": 0.88}},
+      "line_ref": 1234,
+      "page_ref": 42,
+      "confidence_factors": {{{{"keyword_match": 0.85, "format_clarity": 0.90, "gpt_opinion": 0.88}}}},
       "extraction_method": "heading",
       "section_heading": "Control Objectives",
-      "duplicate_count": 2,
-      "merged_from_indices": [0, 3]
-    }}
+      "reasoning": "Brief explanation",
+      "duplicate_count": 1,
+      "merged_from_indices": [0]
+    }}}}
   ]
+}}}}
+
+**CRITICAL**: Always preserve the `line_ref` and `page_ref` fields from the input objectives. When merging duplicates, use the line_ref/page_ref from the best version (first occurrence or highest confidence).
+
+**TARGET**: Preserve 95-99% of input objectives. Most should be kept separate.
+**REMINDER**: If objective_id is null, NEVER merge with anything (treat each as unique).
+"""
+
+# Objective Validation Prompt - GPT-based semantic validation (replaces strict regex)
+OBJECTIVE_VALIDATION_PROMPT = """
+You are validating control objectives extracted from a SOC 1 or SOC 2 audit report.
+
+## Task:
+Evaluate if this is a valid control objective (not a control, not a CUEC, not extraction noise).
+
+## Objective to Validate:
+- **ID**: {objective_id}
+- **Text**: {objective_text}
+
+## Validation Criteria:
+1. **ID Format Flexibility**: Does the ID look reasonable for an objective?
+   - Common patterns: CC1.1, CC2.1, A1.2, PI1.3 (Trust Services Criteria)
+   - Custom patterns: HR-01, IAM-1, SEC-023, OBJ-123, ID-45
+   - Variations: "CC 1.1", "CC1.1:", "CC1.1 -", or even unnumbered
+   - Be VERY flexible - 1000s of different formats exist across auditors
+
+2. **Semantic Quality**: Is this describing a strategic GOAL/OUTCOME (objective) or tactical HOW/ACTIVITY (control)?
+   - ✓ Objective: "Ensure logical access is restricted to authorized users"
+   - ✗ Control: "Reviews user access quarterly and generates exception reports"
+   - Objectives are WHAT should be achieved, controls are HOW to achieve it
+
+3. **Text Quality**: Is the text coherent and meaningful?
+   - ✓ Valid: Complete sentences describing goals
+   - ✗ Invalid: Garbled text, partial sentences, obvious extraction errors
+
+## Remember:
+- SOC 1 and SOC 2 reports vary dramatically in format
+- Different auditors use different ID schemes
+- Some reports have no IDs at all (unnumbered objectives)
+- Focus on semantic quality: does it describe a strategic goal?
+- When in doubt, ACCEPT the objective (better to have analyst review than lose data)
+
+## Output Format:
+{{
+  "valid": true/false,
+  "confidence": 0.0-1.0,
+  "reasoning": "Brief explanation (max 100 chars)"
 }}
 
-Return ALL unique objectives, choosing the best representative for duplicates.
+Respond ONLY with JSON. No markdown, no code fences.
 """
 
 # Objective-Control Alignment Prompt - Calculate alignment between objectives and controls
@@ -3853,6 +4218,40 @@ Assess how well this control fulfills or supports the stated objective.
 }}
 
 Respond ONLY with JSON.
+"""
+
+# Batch alignment prompt for scoring multiple objectives against one control
+OBJECTIVE_CONTROL_ALIGNMENT_BATCH_PROMPT = """
+You are analyzing how well a control aligns with multiple control objectives.
+
+## Control:
+{control_desc}
+
+## Candidate Objectives:
+{objectives_json}
+{feedback_examples}
+## Task:
+For each objective, assess how well this control fulfills or supports it.
+
+## Scoring Guidelines:
+- **1.0**: Control directly implements the objective (perfect match)
+- **0.8-0.9**: Control strongly supports the objective (clear alignment)
+- **0.6-0.7**: Control partially addresses the objective (related but not complete)
+- **0.4-0.5**: Control tangentially related to objective (weak connection)
+- **0.0-0.3**: Control unrelated or contradictory to objective
+
+## Output Format:
+Return a JSON array with one entry per objective:
+[
+  {{
+    "objective_id": "ID from input",
+    "alignment_score": 0.0-1.0,
+    "reasoning": "Brief explanation (max 150 chars)"
+  }},
+  ...
+]
+
+Respond ONLY with the JSON array. Do not include any additional text.
 """
 
 # Objective-Enhanced Framework Mapping - Use objectives as context for better TSC/COSO matching

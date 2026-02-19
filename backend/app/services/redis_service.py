@@ -1,12 +1,18 @@
 """
 Redis Service
 Handles Redis connection pooling and job management operations.
+Now delegates to job_state.py (Redis Hash) instead of JSON blobs.
 """
 
 import json
 import logging
 import redis
 from typing import Optional, Dict, Any
+
+from ..job_state import (
+    get_job_compat, job_hmset, job_delete, job_exists,
+    flatten_job_dict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +47,7 @@ def get_redis_client(redis_url: str):
 
 def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
     """
-    Get job data from Redis.
+    Get job data from Redis Hash, returning a backward-compatible nested dict.
     
     Args:
         job_id: The job ID
@@ -55,17 +61,10 @@ def get_job(job_id: str, redis_client=None) -> Optional[Dict[str, Any]]:
         redis_client = get_redis_client(REDIS_URL)
         
     try:
-        job_json = redis_client.get(f"job:{job_id}")
+        return get_job_compat(job_id, redis_client)
     except Exception as e:
         logger.warning(f"[get_job] Redis access failed: {e}")
         return None
-        
-    if job_json:
-        try:
-            return json.loads(job_json)
-        except Exception:
-            return None
-    return None
 
 
 def set_job(
@@ -75,23 +74,22 @@ def set_job(
     expiry_seconds: int = 60*60*24  # 24 hours default
 ) -> None:
     """
-    Save job data to Redis with expiry.
+    Save job data to Redis Hash with expiry.
+    Flattens any nested dicts (identified_entities, counters, phase_completion)
+    before writing.
     
     Args:
         job_id: The job ID
-        job_dict: Job data dictionary
+        job_dict: Job data dictionary (may contain nested dicts)
         redis_client: Optional Redis client (will create one if not provided)
         expiry_seconds: Time until expiry (default: 24 hours)
     """
     if redis_client is None:
         from ..config import REDIS_URL
         redis_client = get_redis_client(REDIS_URL)
-        
-    redis_client.set(
-        f"job:{job_id}", 
-        json.dumps(job_dict), 
-        ex=expiry_seconds
-    )
+    
+    flat = flatten_job_dict(job_dict)
+    job_hmset(job_id, flat, redis_client)
 
 
 def del_job(job_id: str, redis_client=None) -> None:
@@ -106,4 +104,4 @@ def del_job(job_id: str, redis_client=None) -> None:
         from ..config import REDIS_URL
         redis_client = get_redis_client(REDIS_URL)
         
-    redis_client.delete(f"job:{job_id}")
+    job_delete(job_id, redis_client)

@@ -5,10 +5,10 @@
  * Includes confidence tooltip/modal integration and duplicate detection.
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { IconButton, Tooltip, CircularProgress, Box, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography } from '@mui/material';
 import { Refresh as RefreshIcon, Link as LinkIcon, Warning as WarningIcon, WarningAmber as WarningAmberIcon } from '@mui/icons-material';
-import { Transform as ConvertIcon } from '@mui/icons-material';
+import { Transform as ConvertIcon, OpenInNew as OpenEditPanelIcon, CheckCircleOutline as AcceptIcon, Block as IgnoreIcon } from '@mui/icons-material';
 import EditableTable from '../../EditableTable';
 import { controlColumns, defaultVisibleControlColumns } from '../../../config/report/columnDefinitions';
 import { MergeSuggestionsPanel } from './MergeSuggestionsPanel';
@@ -55,6 +55,7 @@ interface ControlsTableProps {
   objectiveMappings?: Map<string | number, any>;
   onObjectivesRefresh?: () => void;
   showToast?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
+  onOpenEditPanel?: (control: any) => void;
 }
 
 export const ControlsTable = React.memo(function ControlsTable({ 
@@ -78,7 +79,8 @@ export const ControlsTable = React.memo(function ControlsTable({
   objectivesLoading,
   objectiveMappings: objectiveMappingsProp,
   onObjectivesRefresh,
-  showToast
+  showToast,
+  onOpenEditPanel
 }: ControlsTableProps) {
   const [recomputingIds, setRecomputingIds] = useState<Set<number>>(new Set());
   const [togglingDeviationIds, setTogglingDeviationIds] = useState<Set<number>>(new Set());
@@ -89,6 +91,8 @@ export const ControlsTable = React.memo(function ControlsTable({
   const [objectiveEditorOpen, setObjectiveEditorOpen] = useState(false);
   const [objectiveEditorControl, setObjectiveEditorControl] = useState<any>(null);
   const [tableResetCounter, setTableResetCounter] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState<string | null>(null); // 'convert' | 'ignore' | 'accept' | 'recompute'
   
   // Use cached objective mappings from props, or fallback to fetching if not provided
   const [localObjectiveMappings, setLocalObjectiveMappings] = useState<Map<string | number, any>>(new Map());
@@ -103,7 +107,7 @@ export const ControlsTable = React.memo(function ControlsTable({
         // Fetch all objectives for this scan
         const objectives = await getObjectives(scanId);
         
-        // Build a map of control_db_id -> primary objective
+        // Build a map of control_db_id -> highest-confidence objective
         const mappingsMap = new Map<string | number, any>();
         
         // For each objective, fetch its controls and mappings
@@ -112,13 +116,19 @@ export const ControlsTable = React.memo(function ControlsTable({
             try {
               const result = await getObjectiveControls(scanId, objective.id);
               
-              // For each control mapping, if it's primary, store it
+              // For each control mapping, keep the highest-confidence one
               result.controls.forEach((controlMapping: any) => {
-                if (controlMapping.is_primary) {
-                  const controlDbId = controlMapping.control_db_id;
-                  const controlId = controlMapping.control_id;
-                  const mappingPayload = { ...controlMapping, objective };
+                const controlDbId = controlMapping.control_db_id;
+                const controlId = controlMapping.control_id;
+                const mappingPayload = { ...controlMapping, objective };
+                const confidence = controlMapping.mapping_confidence ?? 0;
 
+                // Only replace if this mapping has higher confidence
+                const existingByDbId = controlDbId != null ? mappingsMap.get(controlDbId) : undefined;
+                const existingByCtrlId = controlId != null ? mappingsMap.get(controlId) : undefined;
+                const existingConfidence = (existingByDbId?.mapping_confidence ?? existingByCtrlId?.mapping_confidence) ?? -1;
+
+                if (confidence > existingConfidence) {
                   if (controlDbId !== undefined && controlDbId !== null) {
                     mappingsMap.set(controlDbId, mappingPayload);
                   }
@@ -328,8 +338,96 @@ export const ControlsTable = React.memo(function ControlsTable({
     }
   };
 
+  // --- Bulk action handlers ---
+  const getSelectedControls = useCallback(() => {
+    return controls.filter(c => selectedIds.has(c.id));
+  }, [controls, selectedIds]);
+
+  const handleBulkConvert = useCallback(async () => {
+    const selected = getSelectedControls();
+    if (selected.length === 0) return;
+    setBulkProcessing('convert');
+    try {
+      let successes = 0;
+      for (const ctrl of selected) {
+        try {
+          await convertControlToObjective(scanId, ctrl.id);
+          successes++;
+        } catch (e) {
+          console.error(`Failed to convert control ${ctrl.control_id}:`, e);
+        }
+      }
+      showToast?.(`Converted ${successes}/${selected.length} controls to objectives`, successes === selected.length ? 'success' : 'warning');
+      setSelectedIds(new Set());
+      onObjectivesRefresh?.();
+      onRefresh?.();
+    } finally {
+      setBulkProcessing(null);
+    }
+  }, [getSelectedControls, scanId, showToast, onObjectivesRefresh, onRefresh]);
+
+  const handleBulkIgnore = useCallback(async () => {
+    const selected = getSelectedControls();
+    if (selected.length === 0 || !onIgnore) return;
+    setBulkProcessing('ignore');
+    try {
+      for (const ctrl of selected) {
+        onIgnore(ctrl);
+      }
+      showToast?.(`Ignored ${selected.length} controls`, 'success');
+      setSelectedIds(new Set());
+    } finally {
+      setBulkProcessing(null);
+    }
+  }, [getSelectedControls, onIgnore, showToast]);
+
+  const handleBulkAccept = useCallback(async () => {
+    const selected = getSelectedControls();
+    if (selected.length === 0 || !onConfirm) return;
+    setBulkProcessing('accept');
+    try {
+      for (const ctrl of selected) {
+        onConfirm(ctrl);
+      }
+      showToast?.(`Accepted ${selected.length} controls`, 'success');
+      setSelectedIds(new Set());
+    } finally {
+      setBulkProcessing(null);
+    }
+  }, [getSelectedControls, onConfirm, showToast]);
+
+  const handleBulkRecompute = useCallback(async () => {
+    const selected = getSelectedControls();
+    if (selected.length === 0) return;
+    setBulkProcessing('recompute');
+    try {
+      let successes = 0;
+      for (const ctrl of selected) {
+        try {
+          await onRecompute(ctrl);
+          successes++;
+        } catch (e) {
+          console.error(`Failed to recompute control ${ctrl.control_id}:`, e);
+        }
+      }
+      showToast?.(`Recomputed ${successes}/${selected.length} controls`, successes === selected.length ? 'success' : 'warning');
+      setSelectedIds(new Set());
+    } finally {
+      setBulkProcessing(null);
+    }
+  }, [getSelectedControls, onRecompute, showToast]);
+
   const actionsRenderer = (row: any) => (
-    <Box sx={{ display: 'flex', gap: 0.5 }}>
+    <>
+      {onOpenEditPanel && (
+        <Tooltip title="Open Edit Panel">
+          <span>
+            <IconButton size="small" onClick={() => onOpenEditPanel(row)} color="primary">
+              <OpenEditPanelIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
       <Tooltip title="Convert to Objective">
         <span>
           <IconButton size="small" onClick={() => handleConvertControlToObjective(row)}>
@@ -372,7 +470,7 @@ export const ControlsTable = React.memo(function ControlsTable({
           </span>
         </Tooltip>
       )}
-    </Box>
+    </>
   );
 
   return (
@@ -429,7 +527,7 @@ export const ControlsTable = React.memo(function ControlsTable({
         defaultVisibleColumns={defaultVisibleControlColumns}
         storageKey="report_controls_all_v3"
         additionalButtons={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             {additionalButtons}
             <Button variant="outlined" size="small" onClick={handleResetTablePrefs}>
               Reset Table View
@@ -438,10 +536,49 @@ export const ControlsTable = React.memo(function ControlsTable({
               scanId={scanId} 
               onMergeComplete={() => onRefresh?.()} 
             />
+            {selectedIds.size > 0 && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1, pl: 1, borderLeft: '2px solid', borderColor: 'primary.main' }}>
+                <Chip label={`${selectedIds.size} selected`} size="small" color="primary" onDelete={() => setSelectedIds(new Set())} />
+                <Tooltip title="Accept selected controls (set confidence to 100%)">
+                  <span>
+                    <Button size="small" variant="outlined" color="success" onClick={handleBulkAccept} disabled={bulkProcessing !== null || !onConfirm}
+                      startIcon={bulkProcessing === 'accept' ? <CircularProgress size={14} /> : <AcceptIcon />} sx={{ fontSize: 11, minWidth: 0, textTransform: 'none' }}>
+                      Accept
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Tooltip title="Ignore selected controls">
+                  <span>
+                    <Button size="small" variant="outlined" color="error" onClick={handleBulkIgnore} disabled={bulkProcessing !== null || !onIgnore}
+                      startIcon={bulkProcessing === 'ignore' ? <CircularProgress size={14} /> : <IgnoreIcon />} sx={{ fontSize: 11, minWidth: 0, textTransform: 'none' }}>
+                      Ignore
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Tooltip title="Recompute framework mappings for selected">
+                  <span>
+                    <Button size="small" variant="outlined" onClick={handleBulkRecompute} disabled={bulkProcessing !== null}
+                      startIcon={bulkProcessing === 'recompute' ? <CircularProgress size={14} /> : <RefreshIcon />} sx={{ fontSize: 11, minWidth: 0, textTransform: 'none' }}>
+                      Recompute
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Tooltip title="Convert selected controls to objectives">
+                  <span>
+                    <Button size="small" variant="outlined" color="secondary" onClick={handleBulkConvert} disabled={bulkProcessing !== null}
+                      startIcon={bulkProcessing === 'convert' ? <CircularProgress size={14} /> : <ConvertIcon />} sx={{ fontSize: 11, minWidth: 0, textTransform: 'none' }}>
+                      To Objectives
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Box>
+            )}
           </Box>
         }
         actionsRenderer={actionsRenderer}
         onRowClick={onRowClick}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
       />
 
       <Dialog open={criteriaOpen} onClose={() => setCriteriaOpen(false)} maxWidth="sm" fullWidth>

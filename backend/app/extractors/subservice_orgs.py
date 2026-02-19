@@ -169,11 +169,8 @@ def extract_subservice_orgs(job_paths: Optional[Dict[str, Path]] = None, job_id:
     # Update Redis status if job_id provided
     if job_id and redis_client:
         try:
-            job_json = redis_client.get(f"job:{job_id}")
-            if job_json:
-                job_data = json.loads(job_json)
-                job_data["status"] = "Analyzing subservice organizations..."
-                redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=86400)
+            from ..job_state import job_hset
+            job_hset(job_id, "status", "Analyzing subservice organizations...", redis_client)
         except Exception:
             pass  # Fail silently
     

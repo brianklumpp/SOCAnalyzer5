@@ -246,7 +246,7 @@ async def update_max_concurrent_scans(request: Request, current_user: User = Dep
         queue_updated = False
         old_value = None
         try:
-            from ..threading.scan_queue import get_scan_queue
+            from ..scan_threading.scan_queue import get_scan_queue
             queue = get_scan_queue()
             old_value = queue.max_concurrent
             queue.max_concurrent = max_concurrent

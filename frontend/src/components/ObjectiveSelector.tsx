@@ -12,8 +12,6 @@ import {
   Chip,
   Autocomplete,
   TextField,
-  FormControlLabel,
-  Checkbox,
   Card,
   CardContent,
   IconButton,
@@ -24,15 +22,12 @@ import {
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
-  Star as StarIcon,
-  StarBorder as StarBorderIcon,
 } from '@mui/icons-material';
 import {
   getObjectives,
   getControlObjectives,
   createMapping,
   deleteMapping,
-  updateMapping,
   formatConfidence,
   getConfidenceColor,
   type ControlObjective,
@@ -42,7 +37,6 @@ interface ObjectiveMapping {
   id?: number;
   objective_id: number;
   objective: ControlObjective;
-  is_primary: boolean;
   mapping_confidence: number;
 }
 
@@ -120,7 +114,6 @@ export const ObjectiveSelector: React.FC<ObjectiveSelectorProps> = ({
             id: entry.mapping_id,
             objective_id: entry.objective?.id,
             objective: entry.objective,
-            is_primary: entry.is_primary,
             mapping_confidence: entry.mapping_confidence ?? 1.0,
           })) as ObjectiveMapping[];
           setSelectedMappings(mapped);
@@ -144,7 +137,6 @@ export const ObjectiveSelector: React.FC<ObjectiveSelectorProps> = ({
     const newMapping: ObjectiveMapping = {
       objective_id: objective.id,
       objective,
-      is_primary: selectedMappings.length === 0, // First mapping is primary by default
       mapping_confidence: 1.0, // Default confidence
     };
     
@@ -155,7 +147,6 @@ export const ObjectiveSelector: React.FC<ObjectiveSelectorProps> = ({
         const result = await createMapping(scanId, {
           control_id: controlId,
           objective_id: objective.id,
-          is_primary: newMapping.is_primary,
           mapping_confidence: newMapping.mapping_confidence,
         });
         newMapping.id = result.id ?? (result as any).mapping_id;
@@ -189,34 +180,6 @@ export const ObjectiveSelector: React.FC<ObjectiveSelectorProps> = ({
     }
     
     const updatedMappings = selectedMappings.filter((m) => m.objective_id !== mapping.objective_id);
-    setSelectedMappings(updatedMappings);
-    onChange?.(updatedMappings);
-  };
-
-  const handleTogglePrimary = async (mapping: ObjectiveMapping) => {
-    const updatedMappings = selectedMappings.map((m) =>
-      m.objective_id === mapping.objective_id
-        ? { ...m, is_primary: !m.is_primary }
-        : { ...m, is_primary: false } // Only one primary
-    );
-    
-    // If control exists and mapping has ID, update backend
-    if (controlId && mapping.id) {
-      setSaving(true);
-      try {
-        await updateMapping(scanId, mapping.id, {
-          is_primary: !mapping.is_primary,
-          mapping_confidence: 1.0,
-        });
-      } catch (err: any) {
-        console.error('Failed to update mapping:', err);
-        setError('Failed to update primary objective');
-        setSaving(false);
-        return;
-      }
-      setSaving(false);
-    }
-    
     setSelectedMappings(updatedMappings);
     onChange?.(updatedMappings);
   };
@@ -314,7 +277,7 @@ export const ObjectiveSelector: React.FC<ObjectiveSelectorProps> = ({
                   <Box sx={{ flex: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                       <Typography variant="body2" fontWeight="bold">
-                        {mapping.objective.objective_id}
+                        {mapping.objective.objective_id_normalized || mapping.objective.objective_id}
                       </Typography>
                       <Chip
                         label={formatConfidence(mapping.objective.final_confidence)}
@@ -326,34 +289,29 @@ export const ObjectiveSelector: React.FC<ObjectiveSelectorProps> = ({
                           fontSize: '0.65rem',
                         }}
                       />
-                      {mapping.is_primary && (
-                        <Chip
-                          label="Primary"
-                          size="small"
-                          color="primary"
-                          sx={{ height: 18, fontSize: '0.65rem' }}
-                        />
-                      )}
+
                     </Box>
                     <Typography variant="body2" color="textSecondary">
                       {mapping.objective.objective_text}
                     </Typography>
+                    {mapping.mapping_justification && (
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          display: 'block', 
+                          mt: 0.5, 
+                          fontSize: '0.75em', 
+                          color: 'text.secondary',
+                          whiteSpace: 'pre-line',
+                          fontFamily: 'monospace'
+                        }}
+                      >
+                        {mapping.mapping_justification}
+                      </Typography>
+                    )}
                   </Box>
                   
                   <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    <Tooltip title={mapping.is_primary ? 'Remove primary designation' : 'Set as primary'}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleTogglePrimary(mapping)}
-                        disabled={disabled || saving}
-                      >
-                        {mapping.is_primary ? (
-                          <StarIcon fontSize="small" color="primary" />
-                        ) : (
-                          <StarBorderIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
                     <Tooltip title="Remove objective">
                       <IconButton
                         size="small"
@@ -374,14 +332,6 @@ export const ObjectiveSelector: React.FC<ObjectiveSelectorProps> = ({
         <Typography variant="body2" color="textSecondary" sx={{ fontStyle: 'italic', p: 2, textAlign: 'center' }}>
           No objectives linked. Select from the dropdown above to link objectives to this control.
         </Typography>
-      )}
-      
-      {selectedMappings.length > 0 && (
-        <Box sx={{ mt: 1, p: 1, bgcolor: 'info.light', borderRadius: 1 }}>
-          <Typography variant="caption" color="textSecondary">
-            💡 Tip: Mark one objective as "Primary" to display it in the controls table
-          </Typography>
-        </Box>
       )}
     </Box>
   );

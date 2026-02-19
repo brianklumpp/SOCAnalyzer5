@@ -17,6 +17,8 @@ import {
 } from '@mui/icons-material';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 import { deduplicateCuecs } from '../../../services/report/reportUtils';
+import { ObjectivesCoverageTab } from './ObjectivesCoverageTab';
+import { SplitViewLayout } from '../SplitViewLayout';
 import api from '../../../api/client';
 
 interface FrameworkCriteria {
@@ -32,13 +34,23 @@ interface ReportCoverageTabProps {
   highConfCuecsFiltered: any[];
   onOpenCuecModal: (cuec: any) => void;
   onOpenControlModal?: (control: any) => void;
+  scanId?: number;
+  highConfObjectives?: any[];
+  onRefresh?: () => void;
+  tocPageOffset?: number;
+  onCreateControlForObjective?: (objectiveId: number) => void;
 }
 
 export const ReportCoverageTab = React.memo(function ReportCoverageTab({
   highConfControlsForCoverage,
   highConfCuecsFiltered,
   onOpenCuecModal,
-  onOpenControlModal
+  onOpenControlModal,
+  scanId,
+  highConfObjectives,
+  onRefresh,
+  tocPageOffset,
+  onCreateControlForObjective
 }: ReportCoverageTabProps) {
   const [frameworkCriteria, setFrameworkCriteria] = useState<{ [key: string]: FrameworkCriteria }>({});
   const [loading, setLoading] = useState(true);
@@ -47,17 +59,15 @@ export const ReportCoverageTab = React.memo(function ReportCoverageTab({
   const [availableFrameworks, setAvailableFrameworks] = useState<string[]>([]);
   const [controlPopoverAnchor, setControlPopoverAnchor] = useState<{el: HTMLElement, controls: any[]} | null>(null);
   const [cuecPopoverAnchor, setCuecPopoverAnchor] = useState<{el: HTMLElement, cuecs: any[]} | null>(null);
+  const [pdfNavigateHandler, setPdfNavigateHandler] = useState<((snippet: string | null, page?: number | null) => void) | null>(null);
 
-  // Fetch framework criteria from backend
+  // Fetch framework criteria from backend (static data, fetch once)
   useEffect(() => {
     const fetchCriteria = async () => {
       try {
         setLoading(true);
         const response = await api.get('/framework_criteria');
         setFrameworkCriteria(response.data);
-        
-        // Detect which frameworks have data in controls
-        detectAvailableFrameworks(response.data);
         setLoading(false);
       } catch (err: any) {
         console.error('Failed to load framework criteria:', err);
@@ -67,7 +77,14 @@ export const ReportCoverageTab = React.memo(function ReportCoverageTab({
     };
     
     fetchCriteria();
-  }, [highConfControlsForCoverage]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-detect available frameworks when controls change (no loading spinner)
+  useEffect(() => {
+    if (Object.keys(frameworkCriteria).length > 0) {
+      detectAvailableFrameworks(frameworkCriteria);
+    }
+  }, [highConfControlsForCoverage, frameworkCriteria]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect which frameworks are actually present in the control data
   const detectAvailableFrameworks = (criteria: { [key: string]: FrameworkCriteria }) => {
@@ -367,27 +384,62 @@ export const ReportCoverageTab = React.memo(function ReportCoverageTab({
     );
   }
 
-  return (
+  // Total number of sub-tabs = frameworks + objective coverage (if scanId present)
+  const hasObjectiveCoverage = scanId !== undefined;
+  const totalTabs = availableFrameworks.length + (hasObjectiveCoverage ? 1 : 0);
+  const objectiveCoverageTabIndex = availableFrameworks.length;
+  const isObjectivesTab = selectedTab === objectiveCoverageTabIndex && hasObjectiveCoverage;
+
+  const mainContent = (
     <>
       <Typography variant="h5" gutterBottom sx={{ fontSize: 18, mb: 2 }}>
-        Framework Coverage
+        Coverage
       </Typography>
 
-      {availableFrameworks.length > 1 && (
+      {totalTabs > 1 && (
         <Tabs value={selectedTab} onChange={(e, newValue) => setSelectedTab(newValue)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
           {availableFrameworks.map((fwKey, index) => (
             <Tab key={fwKey} label={frameworkCriteria[fwKey]?.display_name || fwKey.toUpperCase()} />
           ))}
+          {hasObjectiveCoverage && (
+            <Tab label="Objective Coverage" />
+          )}
         </Tabs>
       )}
 
-      <Box sx={{ height: 'calc(100vh - 350px)', overflow: 'auto', pr: 1 }}>
-        {availableFrameworks.length > 0 ? (
+      <Box sx={{ height: 'calc(100vh - 350px)', overflow: 'auto', pr: 1, minWidth: 0 }}>
+        {isObjectivesTab ? (
+          <ObjectivesCoverageTab
+            scanId={scanId!}
+            objectives={highConfObjectives || []}
+            allControls={highConfControlsForCoverage}
+            onRefresh={onRefresh}
+            tocPageOffset={tocPageOffset}
+            pdfNavigateHandler={pdfNavigateHandler}
+            onCreateControlForObjective={onCreateControlForObjective}
+          />
+        ) : availableFrameworks.length > 0 && selectedTab < availableFrameworks.length ? (
           renderFrameworkSection(availableFrameworks[selectedTab])
-        ) : (
+        ) : !hasObjectiveCoverage ? (
           <Alert severity="info">No framework coverage data available</Alert>
-        )}
+        ) : null}
       </Box>
+    </>
+  );
+
+  return (
+    <>
+      {isObjectivesTab ? (
+        <SplitViewLayout
+          scanId={scanId || 0}
+          tabName="objectives"
+          onPdfNavigate={(handler) => setPdfNavigateHandler(() => handler)}
+        >
+          {mainContent}
+        </SplitViewLayout>
+      ) : (
+        mainContent
+      )}
 
 
       {/* Control Popover */}

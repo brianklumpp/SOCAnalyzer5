@@ -10,14 +10,15 @@ from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, Body, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.future import select
-from sqlalchemy import and_, func
+from sqlalchemy import and_, or_, func, delete
 
-from ..models import ControlObjective, ControlObjectiveMapping, Control, Scan, User
+from ..models import ControlObjective, ControlObjectiveMapping, Control, Scan, User, MappingFeedback, ControlFeedback
 from ..database import get_db
 from ..services.scan_service import mark_executive_summary_stale
 from ..auth.dependencies import get_current_active_user
 from ..utils.redis_helpers import _get_redis
 from ..extractors.objective_extractor import calculate_alignment_score, _proximity_score, _page_proximity_score, _min_page_ref
+from ..utils.objective_id_normalizer import normalize_objective_id
 from .. import config
 from ..gpt_client import gpt_extract
 
@@ -232,11 +233,25 @@ def _index_to_letter(value: int, min_width: int = 1) -> str:
     return result
 
 
+def _clean_newlines_from_dict(obj):
+    """Recursively strip newlines from all string values in a dict/list structure."""
+    if isinstance(obj, dict):
+        return {k: _clean_newlines_from_dict(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_clean_newlines_from_dict(item) for item in obj]
+    elif isinstance(obj, str):
+        # Strip newlines, carriage returns, and tabs from all strings
+        return obj.replace('\n', '').replace('\r', '').replace('\t', ' ').strip()
+    else:
+        return obj
+
+
 def _extract_json_from_gpt(text: str) -> Dict[str, Any]:
     if text is None:
         raise ValueError("Empty GPT response")
     if isinstance(text, (dict, list)):
-        return text
+        # CRITICAL FIX: Clean newlines even if already parsed
+        return _clean_newlines_from_dict(text)
 
     raw = str(text).strip()
     if not raw:
@@ -255,14 +270,16 @@ def _extract_json_from_gpt(text: str) -> Dict[str, Any]:
     decoder = json.JSONDecoder()
     try:
         parsed, _ = decoder.raw_decode(raw)
-        return parsed
+        # CRITICAL FIX: Strip newlines from all string values
+        return _clean_newlines_from_dict(parsed)
     except Exception:
         end_obj = raw.rfind("}")
         end_arr = raw.rfind("]")
         end_pos = max(end_obj, end_arr)
         if end_pos != -1:
             parsed, _ = decoder.raw_decode(raw[: end_pos + 1])
-            return parsed
+            # CRITICAL FIX: Strip newlines from all string values
+            return _clean_newlines_from_dict(parsed)
         raise
 
 
@@ -318,9 +335,17 @@ async def create_objective(
         if status == "approved":
             final_confidence_value = 1.0
 
+        # Normalize the objective ID
+        original_objective_id = data.get("objective_id")
+        if original_objective_id:
+            original_objective_id = original_objective_id.strip()
+        normalized_objective_id = normalize_objective_id(original_objective_id) if original_objective_id else None
+
         obj = ControlObjective(
             scan_id=scan_id,
-            objective_id=data.get("objective_id"),
+            objective_id=normalized_objective_id,  # FIXED: Use normalized version
+            objective_id_normalized=normalized_objective_id,
+            objective_id_original=original_objective_id,
             objective_text=objective_text,
             status=status,
             extraction_method="manual",
@@ -345,6 +370,39 @@ async def create_objective(
         await db.refresh(obj)
 
         await mark_executive_summary_stale(scan_id, db)
+        
+        # Automatically map the new objective to controls
+        try:
+            from ..extractors.objective_extractor import map_controls_to_objectives
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+            
+            sync_db_url = config.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+            sync_engine = create_engine(sync_db_url, echo=False)
+            SessionLocal = sessionmaker(bind=sync_engine)
+            map_session = SessionLocal()
+            
+            try:
+                mappings_created = map_controls_to_objectives(
+                    scan_id=scan_id,
+                    db_session=map_session,
+                    job_id=None,
+                    redis_client=None,
+                    force=False
+                )
+                logger.info(f"[MANUAL_OBJECTIVE_AUTO_MAP] Created {mappings_created} new mappings for scan {scan_id}")
+            finally:
+                map_session.close()
+        except Exception as map_err:
+            logger.error(f"[MANUAL_OBJECTIVE_AUTO_MAP] Failed to create mappings: {map_err}")
+            # Don't fail the objective creation if mapping fails
+        
+        # Merge duplicates after adding new objective
+        try:
+            merge_result = await _merge_duplicates_internal(scan_id, db, current_user.id)
+            logger.info(f"Auto-merge after objective creation: {merge_result}")
+        except Exception as merge_err:
+            logger.warning(f"Failed to auto-merge after objective creation: {merge_err}")
 
         status_value = obj.status
         if status_value == "converted_to_control":
@@ -382,6 +440,8 @@ async def get_objectives(
     - min_confidence: Minimum confidence threshold (0.0-1.0)
     """
     try:
+        logger.info(f"[GET_OBJECTIVES] scan_id={scan_id}, status={status}, min_confidence={min_confidence}")
+        
         # Build query with filters
         query = select(ControlObjective).where(ControlObjective.scan_id == scan_id)
         
@@ -397,6 +457,8 @@ async def get_objectives(
         
         result = await db.execute(query)
         objectives = result.scalars().all()
+        
+        logger.info(f"[GET_OBJECTIVES] Found {len(objectives)} objectives for scan_id={scan_id}")
         
         # Convert to dict with mapping counts
         objectives_data = []
@@ -416,6 +478,8 @@ async def get_objectives(
                 "id": obj.id,
                 "scan_id": obj.scan_id,
                 "objective_id": obj.objective_id,
+                "objective_id_normalized": obj.objective_id_normalized,
+                "objective_id_original": obj.objective_id_original,
                 "objective_text": obj.objective_text,
                 "keyword_confidence": obj.keyword_confidence,
                 "distance_confidence": obj.distance_confidence,
@@ -425,7 +489,7 @@ async def get_objectives(
                 "final_confidence": obj.final_confidence,
                 "confidence_calc": obj.confidence_calc,
                 "gpt_reasoning": obj.gpt_reasoning,
-                "page_refs": obj.page_refs,
+                "page_refs": list(obj.page_refs) if obj.page_refs and isinstance(obj.page_refs, (list, tuple)) else (obj.page_refs if obj.page_refs else []),
                 "line_ref": obj.line_ref,
                 "source_context": obj.source_context,
                 "extraction_method": obj.extraction_method,
@@ -550,7 +614,14 @@ async def update_objective(
         
         # Update allowed fields
         if "objective_id" in data:
-            obj.objective_id = data["objective_id"]
+            # FIXED: Normalize the objective ID before storing
+            new_objective_id = data["objective_id"]
+            if new_objective_id:
+                new_objective_id = new_objective_id.strip()
+            normalized = normalize_objective_id(new_objective_id) if new_objective_id else None
+            obj.objective_id = normalized
+            obj.objective_id_normalized = normalized
+            obj.objective_id_original = new_objective_id
         
         if "objective_text" in data:
             obj.objective_text = data["objective_text"]
@@ -565,9 +636,26 @@ async def update_objective(
                     status_code=400,
                     detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
                 )
+            
+            old_status = obj.status
             obj.status = status_value
+            
             if status_value == "approved":
                 obj.final_confidence = 1.0
+                
+                # If approving a low-confidence objective, trigger mapping
+                if old_status != "approved":
+                    # This will be handled by frontend calling map endpoint
+                    pass
+            
+            elif status_value == "rejected":
+                # Unmap all controls from this objective
+                await db.execute(
+                    delete(ControlObjectiveMapping).where(
+                        ControlObjectiveMapping.objective_id == objective_id
+                    )
+                )
+                logger.info(f"[OBJECTIVE_REJECTION] Unmapped all controls from rejected objective {objective_id}")
         
         # Update audit fields
         obj.updated_at = datetime.datetime.utcnow()
@@ -586,7 +674,8 @@ async def update_objective(
             "objective_text": obj.objective_text,
             "status": obj.status,
             "final_confidence": obj.final_confidence,
-            "updated_at": obj.updated_at.isoformat() if obj.updated_at else None
+            "updated_at": obj.updated_at.isoformat() if obj.updated_at else None,
+            "needs_mapping": status_value == "approved" and old_status != "approved"  # Signal frontend to trigger mapping
         }
         
     except HTTPException:
@@ -635,6 +724,194 @@ async def delete_objective(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _merge_duplicates_internal(scan_id: int, db, user_id: Optional[int] = None):
+    """Internal helper to merge duplicates without HTTP overhead."""
+    result = await db.execute(
+        select(ControlObjective).where(ControlObjective.scan_id == scan_id)
+    )
+    objectives = result.scalars().all()
+
+    grouped: Dict[str, List[ControlObjective]] = {}
+    for obj in objectives:
+        key = _normalize_objective_key(obj)
+        if not key:
+            continue
+        grouped.setdefault(key, []).append(obj)
+
+    if not grouped:
+        return {"merged": 0, "deleted": 0, "status": "no_duplicates"}
+
+    mapping_counts: Dict[int, int] = {}
+    mapping_count_rows = await db.execute(
+        select(ControlObjectiveMapping.objective_id, func.count(ControlObjectiveMapping.id))
+        .group_by(ControlObjectiveMapping.objective_id)
+    )
+    for obj_id, count in mapping_count_rows.all():
+        mapping_counts[int(obj_id)] = int(count)
+
+    merged = 0
+    deleted = 0
+
+    for _, group in grouped.items():
+        if len(group) <= 1:
+            continue
+
+        target = _select_merge_target(group, mapping_counts)
+        duplicates = [obj for obj in group if obj.id != target.id]
+
+        # Phase A: Union all line_refs and page_refs from duplicates into target
+        all_lines = set(target.all_line_refs or [])
+        all_pages = set(target.all_page_refs or [])
+        if target.line_ref is not None:
+            all_lines.add(target.line_ref)
+        for pr in (target.page_refs or []):
+            all_pages.add(pr)
+
+        for dup in duplicates:
+            if dup.line_ref is not None:
+                all_lines.add(dup.line_ref)
+            for lr in (dup.all_line_refs or []):
+                all_lines.add(lr)
+            for pr in (dup.page_refs or []):
+                all_pages.add(pr)
+            for pr in (dup.all_page_refs or []):
+                all_pages.add(pr)
+
+            mappings_result = await db.execute(
+                select(ControlObjectiveMapping).where(ControlObjectiveMapping.objective_id == dup.id)
+            )
+            mappings = mappings_result.scalars().all()
+
+            for mapping in mappings:
+                existing_mapping = (await db.execute(
+                    select(ControlObjectiveMapping).where(
+                        and_(
+                            ControlObjectiveMapping.objective_id == target.id,
+                            ControlObjectiveMapping.control_id == mapping.control_id
+                        )
+                    )
+                )).scalar_one_or_none()
+
+                if existing_mapping:
+                    if mapping.mapping_confidence and (
+                        existing_mapping.mapping_confidence is None
+                        or mapping.mapping_confidence > existing_mapping.mapping_confidence
+                    ):
+                        existing_mapping.mapping_confidence = mapping.mapping_confidence
+                    await db.delete(mapping)
+                else:
+                    mapping.objective_id = target.id
+                    db.add(mapping)
+                merged += 1
+
+            await db.delete(dup)
+            deleted += 1
+
+        # Persist collected location refs on the merge target
+        if all_lines:
+            target.all_line_refs = sorted(all_lines)
+        if all_pages:
+            target.all_page_refs = sorted(all_pages)
+        target.updated_at = datetime.datetime.utcnow()
+        if user_id:
+            target.updated_by_user_id = user_id
+        db.add(target)
+
+    await db.commit()
+    await mark_executive_summary_stale(scan_id, db)
+    
+    return {"merged": merged, "deleted": deleted, "status": "merged"}
+
+
+def _merge_duplicates_sync(db_session, scan_id: int) -> Dict[str, Any]:
+    """Synchronous version of merge for use in background threads (non-async context)."""
+    objectives = db_session.execute(
+        select(ControlObjective).where(ControlObjective.scan_id == scan_id)
+    ).scalars().all()
+
+    grouped: Dict[str, List[ControlObjective]] = {}
+    for obj in objectives:
+        key = _normalize_objective_key(obj)
+        if not key:
+            continue
+        grouped.setdefault(key, []).append(obj)
+
+    mapping_count_rows = db_session.execute(
+        select(ControlObjectiveMapping.objective_id, func.count(ControlObjectiveMapping.id))
+        .group_by(ControlObjectiveMapping.objective_id)
+    ).all()
+    mapping_counts = {int(obj_id): int(count) for obj_id, count in mapping_count_rows}
+
+    merged = 0
+    deleted = 0
+
+    for _, group in grouped.items():
+        if len(group) <= 1:
+            continue
+
+        target = _select_merge_target(group, mapping_counts)
+        duplicates = [obj for obj in group if obj.id != target.id]
+
+        # Phase A: Union all line_refs and page_refs from duplicates into target
+        all_lines = set(target.all_line_refs or [])
+        all_pages = set(target.all_page_refs or [])
+        if target.line_ref is not None:
+            all_lines.add(target.line_ref)
+        for pr in (target.page_refs or []):
+            all_pages.add(pr)
+
+        for dup in duplicates:
+            if dup.line_ref is not None:
+                all_lines.add(dup.line_ref)
+            for lr in (dup.all_line_refs or []):
+                all_lines.add(lr)
+            for pr in (dup.page_refs or []):
+                all_pages.add(pr)
+            for pr in (dup.all_page_refs or []):
+                all_pages.add(pr)
+
+            mappings = db_session.execute(
+                select(ControlObjectiveMapping).where(ControlObjectiveMapping.objective_id == dup.id)
+            ).scalars().all()
+
+            for mapping in mappings:
+                existing_mapping = db_session.execute(
+                    select(ControlObjectiveMapping).where(
+                        and_(
+                            ControlObjectiveMapping.objective_id == target.id,
+                            ControlObjectiveMapping.control_id == mapping.control_id
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                if existing_mapping:
+                    if mapping.mapping_confidence and (
+                        existing_mapping.mapping_confidence is None
+                        or mapping.mapping_confidence > existing_mapping.mapping_confidence
+                    ):
+                        existing_mapping.mapping_confidence = mapping.mapping_confidence
+                    db_session.delete(mapping)
+                else:
+                    mapping.objective_id = target.id
+                    db_session.add(mapping)
+                merged += 1
+
+            db_session.delete(dup)
+            deleted += 1
+
+        # Persist collected location refs on the merge target
+        if all_lines:
+            target.all_line_refs = sorted(all_lines)
+        if all_pages:
+            target.all_page_refs = sorted(all_pages)
+        target.updated_at = datetime.datetime.utcnow()
+        db_session.add(target)
+
+    db_session.commit()
+    logger.info(f"[MERGE_SYNC] Merged {merged} mappings, deleted {deleted} duplicate objectives for scan {scan_id}")
+    return {"merged": merged, "deleted": deleted, "status": "merged"}
+
+
 @router.post("/report/{scan_id}/objectives/merge-duplicates")
 async def merge_duplicate_objectives(
     scan_id: int,
@@ -643,81 +920,7 @@ async def merge_duplicate_objectives(
 ):
     """Merge duplicate objectives by objective_id (preferred) or objective_text."""
     try:
-        result = await db.execute(
-            select(ControlObjective).where(ControlObjective.scan_id == scan_id)
-        )
-        objectives = result.scalars().all()
-
-        grouped: Dict[str, List[ControlObjective]] = {}
-        for obj in objectives:
-            key = _normalize_objective_key(obj)
-            if not key:
-                continue
-            grouped.setdefault(key, []).append(obj)
-
-        if not grouped:
-            return {"merged": 0, "deleted": 0, "status": "no_duplicates"}
-
-        mapping_counts: Dict[int, int] = {}
-        mapping_count_rows = await db.execute(
-            select(ControlObjectiveMapping.objective_id, func.count(ControlObjectiveMapping.id))
-            .group_by(ControlObjectiveMapping.objective_id)
-        )
-        for obj_id, count in mapping_count_rows.all():
-            mapping_counts[int(obj_id)] = int(count)
-
-        merged = 0
-        deleted = 0
-
-        for _, group in grouped.items():
-            if len(group) <= 1:
-                continue
-
-            target = _select_merge_target(group, mapping_counts)
-            duplicates = [obj for obj in group if obj.id != target.id]
-
-            for dup in duplicates:
-                mappings_result = await db.execute(
-                    select(ControlObjectiveMapping).where(ControlObjectiveMapping.objective_id == dup.id)
-                )
-                mappings = mappings_result.scalars().all()
-
-                for mapping in mappings:
-                    existing_mapping = (await db.execute(
-                        select(ControlObjectiveMapping).where(
-                            and_(
-                                ControlObjectiveMapping.objective_id == target.id,
-                                ControlObjectiveMapping.control_id == mapping.control_id
-                            )
-                        )
-                    )).scalar_one_or_none()
-
-                    if existing_mapping:
-                        if mapping.is_primary and not existing_mapping.is_primary:
-                            existing_mapping.is_primary = True
-                        if mapping.mapping_confidence and (
-                            existing_mapping.mapping_confidence is None
-                            or mapping.mapping_confidence > existing_mapping.mapping_confidence
-                        ):
-                            existing_mapping.mapping_confidence = mapping.mapping_confidence
-                        await db.delete(mapping)
-                    else:
-                        mapping.objective_id = target.id
-                        db.add(mapping)
-                    merged += 1
-
-                await db.delete(dup)
-                deleted += 1
-
-            target.updated_at = datetime.datetime.utcnow()
-            target.updated_by_user_id = current_user.id
-            db.add(target)
-
-        await db.commit()
-        await mark_executive_summary_stale(scan_id, db)
-
-        return {"merged": merged, "deleted": deleted, "status": "merged"}
-
+        return await _merge_duplicates_internal(scan_id, db, current_user.id)
     except Exception as e:
         await db.rollback()
         logger.error(f"Failed to merge duplicate objectives for scan {scan_id}: {e}")
@@ -752,6 +955,764 @@ async def get_objective_gap_extract_status(
     if not status:
         return {"status": "idle"}
     return status
+
+
+def _run_gap_extraction_internal(text: str, scan_id_val: int, redis_client: Any) -> None:
+    """
+    Module-level gap extraction implementation.
+    Can be called from both automatic and manual gap extraction flows.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    sync_db_url = config.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+    sync_engine = create_engine(sync_db_url, echo=False)
+    SessionLocal = sessionmaker(bind=sync_engine)
+    sync_db_session = SessionLocal()
+
+    started_at = datetime.datetime.utcnow()
+    status_payload: Dict[str, Any] = {
+        "status": "running",
+        "progress_status": "Inferring objective ID patterns...",
+        "total_probed": 0,
+        "total_found": 0,
+        "total_extracted": 0,
+        "started_at": started_at.isoformat(),
+        "updated_at": started_at.isoformat(),
+        "log": [],
+        "extracted_ids": [],
+        "pattern_output": None,
+        "cancel_requested": False
+    }
+    _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+    logger.info(f"[objective_gap] starting gap extraction for scan_id={scan_id_val}")
+
+    log_entries: List[Dict[str, Any]] = []
+    extracted_ids: List[str] = []
+    total_probed = 0
+    total_found = 0
+    total_extracted = 0
+
+    try:
+        logger.info(f"[objective_gap] Querying objective IDs from database for scan_id={scan_id_val}")
+        id_rows = sync_db_session.execute(
+            select(ControlObjective.objective_id).where(
+                and_(
+                    ControlObjective.scan_id == scan_id_val,
+                    ControlObjective.objective_id.isnot(None)
+                )
+            )
+        ).scalars().all()
+        logger.info(f"[objective_gap] Database query returned {len(id_rows) if id_rows else 0} rows")
+        objective_ids = [str(val).strip() for val in id_rows if val]
+        logger.info(f"[objective_gap] Processed {len(objective_ids)} objective IDs. Sample: {objective_ids[:5]}")
+        if not objective_ids:
+            status_payload.update({
+                "status": "skipped",
+                "progress_status": "No objective IDs available to infer patterns.",
+                "total_probed": 0,
+                "total_found": 0,
+                "total_extracted": 0,
+                "ended_at": datetime.datetime.utcnow().isoformat(),
+                "duration_seconds": 0.0,
+                "log": [],
+                "extracted_ids": [],
+                "pattern_output": None
+            })
+            _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+            return
+
+        logger.info(f"[objective_gap] Preparing prompt. Total IDs: {len(objective_ids)}")
+        max_ids = min(len(objective_ids), 200)
+        logger.info(f"[objective_gap] Formatting prompt with {max_ids} IDs")
+        try:
+            prompt = config.OBJECTIVE_GAP_PATTERN_PROMPT.format(
+                objective_ids=json.dumps(objective_ids[:max_ids], ensure_ascii=False),
+                total_ids=len(objective_ids)
+            )
+            logger.info(f"[objective_gap] Prompt formatted successfully. Length: {len(prompt)} chars")
+        except Exception as fmt_err:
+            logger.error(f"[objective_gap] Prompt formatting failed: {type(fmt_err).__name__}: {fmt_err}")
+            raise
+        logger.info(f"[objective_gap] Sending pattern detection prompt. Prompt length: {len(prompt)} chars, {len(objective_ids)} objective IDs")
+        logger.debug(f"[objective_gap] Prompt preview: {prompt[:500]}...")
+
+        pattern_raw = ""
+        try:
+            primary_model = getattr(config, "OBJECTIVE_PATTERN_LEARNER_MODEL", None)
+            fallback_model = getattr(config, "CONTROL_OBJECTIVES_MODEL", None) or getattr(config, "DEFAULT_GPT_MODEL", None)
+            logger.info(f"[objective_gap] Calling gpt_extract with primary_model={primary_model}, fallback_model={fallback_model}")
+            pattern_raw = gpt_extract(prompt, "objective_gap_pattern", override_model=primary_model)
+            logger.info(f"[objective_gap] GPT response received. Type: {type(pattern_raw).__name__}, Length: {len(str(pattern_raw)) if pattern_raw is not None else 0}")
+            logger.debug(f"[objective_gap] GPT response preview: {str(pattern_raw)[:500]!r}")
+            if not (pattern_raw or "").strip() and fallback_model and fallback_model != primary_model:
+                logger.warning(f"[objective_gap] Primary model returned empty response, trying fallback model {fallback_model}")
+                status_payload["progress_status"] = "Empty GPT response; retrying with fallback model..."
+                _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+                pattern_raw = gpt_extract(prompt, "objective_gap_pattern_fallback", override_model=fallback_model)
+                logger.info(f"[objective_gap] Fallback GPT response. Type: {type(pattern_raw).__name__}, Length: {len(str(pattern_raw)) if pattern_raw is not None else 0}")
+        except Exception as gpt_err:
+            logger.error(f"[objective_gap] GPT call failed: {type(gpt_err).__name__}: {gpt_err}")
+            status_payload["pattern_output"] = f"GPT error: {type(gpt_err).__name__}: {gpt_err}"
+            status_payload["status"] = "failed"
+            status_payload["error"] = str(gpt_err)
+            _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+            raise
+        if pattern_raw is None:
+            logger.warning(f"[objective_gap] pattern_raw is None, converting to empty string")
+            pattern_raw = ""
+        pattern_raw = str(pattern_raw)
+        logger.info(f"[objective_gap] pattern_raw after str(): type={type(pattern_raw).__name__}, len={len(pattern_raw)}, stripped_len={len(pattern_raw.strip())}")
+        if not pattern_raw.strip():
+            logger.error(f"[objective_gap] GPT returned empty/whitespace response")
+            status_payload["pattern_output"] = "<empty GPT response>"
+            status_payload["status"] = "failed"
+            status_payload["error"] = "GPT returned empty response for pattern detection"
+            status_payload["updated_at"] = datetime.datetime.utcnow().isoformat()
+            _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+            raise RuntimeError("GPT returned empty response for pattern detection")
+        else:
+            logger.info(f"[objective_gap] Storing pattern_raw in status. Preview: {pattern_raw[:200]!r}")
+            status_payload["pattern_output"] = pattern_raw
+        status_payload["updated_at"] = datetime.datetime.utcnow().isoformat()
+        _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+        logger.info(f"[objective_gap] pattern_raw length={len(pattern_raw)} preview={pattern_raw[:200]!r}")
+
+        def _safe_parse_pattern(raw_text: str) -> Dict[str, Any]:
+            try:
+                parsed = _extract_json_from_gpt(raw_text)
+                if isinstance(parsed, dict):
+                    return parsed
+                raise ValueError(f"Parsed pattern is not a JSON object: {type(parsed).__name__}")
+            except Exception:
+                candidate_text = raw_text.strip()
+                if (candidate_text.startswith("\"") and candidate_text.endswith("\"")) or (
+                    candidate_text.startswith("'") and candidate_text.endswith("'")
+                ):
+                    candidate_text = candidate_text[1:-1].strip()
+
+                if candidate_text.startswith("\"groups\"") or candidate_text.startswith("'groups'"):
+                    candidate_text = "{" + candidate_text + "}"
+                else:
+                    match = re.search(r'"groups"\s*:\s*(\[.*\])', candidate_text, re.DOTALL)
+                    if match:
+                        candidate_text = "{" + match.group(0) + "}"
+
+                try:
+                    parsed = json.loads(candidate_text)
+                    if isinstance(parsed, dict):
+                        return parsed
+                    raise ValueError(f"Parsed pattern is not a JSON object: {type(parsed).__name__}")
+                except Exception:
+                    repair_prompt = (
+                        "You will be given content that should be JSON. "
+                        "Return ONLY a valid JSON object that matches this schema: "
+                        "{\"groups\":[{\"prefix\":string,\"segment_type\":\"number\"|\"letter\","
+                        "\"separator\":string,\"examples\":[string],\"notes\":string}],\"notes\":string}. "
+                        "If the content cannot be repaired, return {\"groups\":[],\"notes\":\"unparseable\"}.\n\n"
+                        f"Content:\n{raw_text}"
+                    )
+                    repaired = gpt_extract(repair_prompt, "objective_gap_pattern_fix")
+                    status_payload["pattern_output"] = str(repaired)
+                    parsed = _extract_json_from_gpt(str(repaired))
+                    if isinstance(parsed, dict):
+                        return parsed
+                    raise ValueError(f"Repaired pattern is not a JSON object: {type(parsed).__name__}")
+
+        try:
+            logger.info(f"[objective_gap] Attempting to parse pattern_raw (len={len(pattern_raw)})")
+            pattern_data = _safe_parse_pattern(pattern_raw)
+            logger.info(f"[objective_gap] Pattern parsed successfully. Groups: {len(pattern_data.get('groups', []))}")
+        except Exception as parse_err:
+            logger.error(f"[objective_gap] Pattern parse error: {type(parse_err).__name__}: {parse_err}")
+            logger.error(f"[objective_gap] pattern_raw that failed to parse (len={len(pattern_raw)}): {pattern_raw[:1000]!r}")
+            if not status_payload.get("pattern_output") and (pattern_raw or "").strip():
+                logger.info(f"[objective_gap] Restoring pattern_raw to pattern_output in status")
+                status_payload["pattern_output"] = pattern_raw
+            if not status_payload.get("pattern_output"):
+                logger.warning(f"[objective_gap] No pattern_output available, setting to '<no output>'")
+                status_payload["pattern_output"] = "<no output>"
+            status_payload["error"] = f"Pattern parse failed: {type(parse_err).__name__}: {parse_err}"
+            status_payload["status"] = "failed"
+            status_payload["updated_at"] = datetime.datetime.utcnow().isoformat()
+            _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+            raise
+
+        if not isinstance(pattern_data, dict) or not pattern_data.get("groups"):
+            raise ValueError("GPT did not return any pattern groups")
+
+        # Store pattern_info on the scan record for future use
+        try:
+            scan_row = sync_db_session.execute(
+                select(Scan).where(Scan.id == scan_id_val)
+            ).scalars().first()
+            if scan_row:
+                scan_row.pattern_info = pattern_data
+                sync_db_session.add(scan_row)
+                sync_db_session.commit()
+                logger.info(f"[objective_gap] Stored pattern_info on scan {scan_id_val}")
+        except Exception as pattern_store_err:
+            logger.warning(f"[objective_gap] Failed to store pattern_info: {pattern_store_err}")
+            # Non-critical, continue execution
+
+        status_payload["pattern_output"] = pattern_data
+        status_payload["progress_status"] = "Scanning for missing objectives..."
+        status_payload["updated_at"] = datetime.datetime.utcnow().isoformat()
+        _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+
+        existing_ids_lower = {val.lower() for val in objective_ids}
+
+        def _record_log(objective_id: str, status: str, message: str, extracted_id: Optional[str] = None) -> None:
+            nonlocal log_entries
+            entry = {
+                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "objective_id": objective_id,
+                "status": status,
+                "message": message,
+            }
+            if extracted_id:
+                entry["extracted_id"] = extracted_id
+            log_entries = _append_gap_log(log_entries, entry)
+
+        def _update_status(progress: Optional[str] = None) -> None:
+            status_payload.update({
+                "total_probed": total_probed,
+                "total_found": total_found,
+                "total_extracted": total_extracted,
+                "log": log_entries,
+                "extracted_ids": extracted_ids,
+                "updated_at": datetime.datetime.utcnow().isoformat()
+            })
+            if progress:
+                status_payload["progress_status"] = progress
+            _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+
+        def _extract_objective_from_text(search_text: str) -> Dict[str, Any]:
+            occurrences = []
+            start_idx = 0
+            search_lower = search_text.lower()
+            text_lower = text.lower()
+            while True:
+                idx = text_lower.find(search_lower, start_idx)
+                if idx == -1:
+                    break
+                occurrences.append(idx)
+                start_idx = idx + 1
+
+            if not occurrences:
+                return {"found": False}
+
+            # For gap extraction, always try to extract even with many occurrences
+            # Cap at 20 occurrences to avoid massive prompts
+            if len(occurrences) > 20:
+                # Take first 10 and last 10 occurrences
+                occurrences = occurrences[:10] + occurrences[-10:]
+
+            context_window = 2000
+            contexts = []
+            for occ_idx in occurrences:
+                start = max(0, occ_idx - context_window)
+                end = min(len(text), occ_idx + len(search_text) + context_window)
+                context = text[start:end]
+                contexts.append(context)
+
+            combined_context = "\n\n=== OCCURRENCE SEPARATOR ===\n\n".join(contexts)
+            prompt_text = config.ENTITY_EXTRACTION_FROM_CONTEXT_PROMPT.format(
+                entity_type="objective",
+                search_text=search_text,
+                occurrence_count=len(contexts),
+                text_context=combined_context
+            )
+
+            try:
+                result_text = gpt_extract(prompt_text, "entity_extraction_objective")
+                extracted_data = _extract_json_from_gpt(result_text)
+                return {"found": True, "extracted": extracted_data}
+            except Exception as e:
+                return {"found": True, "error": str(e)}
+
+        def _find_line_and_page_refs(objective_text: str, objective_id: str) -> tuple[Optional[int], Optional[List[int]]]:
+            """Search the full document for the objective text and return line/page refs."""
+            text_lower = text.lower()
+            idx = -1
+            
+            # FIXED: Search for objective ID FIRST (more precise), then fall back to text
+            if objective_id:
+                # Use word boundaries to ensure exact match (e.g., "C1.2" won't match "CC1.2")
+                import re
+                pattern = r'\b' + re.escape(objective_id.lower()) + r'\b'
+                match = re.search(pattern, text_lower)
+                if match:
+                    idx = match.start()
+            
+            # Fall back to text search if ID not found
+            if idx == -1 and objective_text and len(objective_text) >= 20:
+                search_text = objective_text[:100].lower().strip()
+                idx = text_lower.find(search_text)
+            
+            if idx == -1:
+                logger.warning(f"Could not find objective ID or text in document for gap objective: {objective_id}")
+                return None, None
+            
+            # Count lines up to this position
+            line_number = text[:idx].count('\n') + 1
+            
+            # Find page number by scanning backwards for page markers
+            page_number = None
+            try:
+                # Look backwards from the found position for the most recent page marker
+                text_before = text[:idx]
+                # Find all page markers like "==== Page 5 ====" or "=== PAGE 5 ==="
+                import re
+                page_markers = list(re.finditer(r'====?\s*(?:Page|PAGE)\s+(\d+)\s*====?', text_before))
+                if page_markers:
+                    # Get the last page marker before this position
+                    last_marker = page_markers[-1]
+                    page_number = int(last_marker.group(1))
+            except Exception as e:
+                logger.warning(f"Error finding page number for gap objective: {e}")
+            
+            return line_number, [page_number] if page_number else None
+
+        def _create_objective_from_extraction(search_id: str, extracted: Dict[str, Any]) -> Dict[str, Any]:
+            objective_text = (extracted.get("objective_text") or "").strip()
+            objective_id = (extracted.get("objective_id") or search_id or "").strip()
+            if not objective_text:
+                return {"created": False, "message": "Extraction returned no objective_text"}
+
+            # Normalize the objective ID for consistency
+            original_objective_id = objective_id
+            normalized_objective_id = normalize_objective_id(objective_id) if objective_id else None
+            logger.info(f"Creating gap objective: original_id='{original_objective_id}' → normalized_id='{normalized_objective_id}'")
+
+            if objective_id:
+                # Check both objective_id and objective_id_normalized for duplicates
+                existing = sync_db_session.execute(
+                    select(ControlObjective).where(
+                        and_(
+                            ControlObjective.scan_id == scan_id_val,
+                            or_(
+                                func.lower(ControlObjective.objective_id) == objective_id.lower(),
+                                func.lower(ControlObjective.objective_id_normalized) == (normalized_objective_id or objective_id).lower()
+                            )
+                        )
+                    )
+                ).scalars().first()
+                if existing:
+                    return {"created": False, "message": "Objective ID already exists"}
+
+            # Search the full document to find line/page refs
+            line_ref, page_refs = _find_line_and_page_refs(objective_text, objective_id)
+            
+            now = datetime.datetime.utcnow()
+            new_obj = ControlObjective(
+                scan_id=scan_id_val,
+                objective_id=normalized_objective_id or None,  # FIXED: Use normalized version to prevent \n
+                objective_id_normalized=normalized_objective_id,
+                objective_id_original=original_objective_id,
+                objective_text=objective_text,
+                status="pending",
+                extraction_method="gap_search",
+                keyword_confidence=0.0,
+                distance_confidence=0.0,
+                gpt_confidence=0.0,
+                alignment_confidence=0.0,
+                format_confidence=0.0,
+                final_confidence=0.50,  # Low-medium confidence for gap-extracted objectives (speculative)
+                gpt_reasoning=f"Gap extraction: {extracted.get('gpt_reasoning', '')}",
+                page_refs=page_refs,  # Now searching full document for accurate refs
+                line_ref=line_ref,  # Now searching full document for accurate line number
+                source_context=extracted.get("source_context", objective_text[:500]),
+                section_heading=extracted.get("section_heading"),
+                created_at=now,
+                updated_at=now
+            )
+            sync_db_session.add(new_obj)
+            sync_db_session.commit()
+            sync_db_session.refresh(new_obj)
+            return {"created": True, "objective_id": new_obj.objective_id or objective_id, "db_id": new_obj.id}
+
+        def _process_candidate(candidate_id: str, allow_miss_count: bool = False) -> bool:
+            nonlocal total_probed, total_found, total_extracted, extracted_ids, existing_ids_lower
+            total_probed += 1
+            if candidate_id.lower() in existing_ids_lower:
+                _record_log(candidate_id, "Skipped", "Objective already exists")
+                return False
+
+            extraction_result = _extract_objective_from_text(candidate_id)
+            if not extraction_result.get("found"):
+                _record_log(candidate_id, "Not Found", "No occurrences found")
+                return True if allow_miss_count else False
+
+            total_found += 1
+            if extraction_result.get("error"):
+                _record_log(candidate_id, "Failed", extraction_result.get("error"))
+                return False
+
+            extracted = extraction_result.get("extracted") or {}
+            create_result = _create_objective_from_extraction(candidate_id, extracted)
+            if create_result.get("created"):
+                total_extracted += 1
+                created_id = create_result.get("objective_id") or candidate_id
+                extracted_ids.append(created_id)
+                existing_ids_lower.add(created_id.lower())
+                _record_log(candidate_id, "Extracted", "Objective created", created_id)
+            else:
+                _record_log(candidate_id, "Skipped", create_result.get("message", "Skipped"))
+            return False
+
+        groups = pattern_data.get("groups") or []
+
+        for group in groups:
+            prefix = (group.get("prefix") or "").strip()
+            segment_type = (group.get("segment_type") or "").strip().lower()
+            separator = (group.get("separator") or "").strip()
+            examples = group.get("examples") or []
+
+            if not prefix or segment_type not in {"number", "letter"}:
+                _record_log(prefix or "(unknown)", "Skipped", "Invalid or missing pattern group")
+                _update_status()
+                continue
+
+            # CRITICAL: Use examples to determine the actual format pattern
+            # Extract the format template from the first example if available
+            format_template = None
+            if examples:
+                first_example = str(examples[0]).strip()
+                # Extract everything before the segment (the actual prefix as it appears)
+                # For "CC 6.1", we want "CC " and "."; for "ID-23", we want "ID-"
+                # Find where the variable segment starts by looking at all examples
+                
+                # Try to find the pattern: extract prefix part and separator pattern
+                if segment_type == "number":
+                    # Match everything up to the last number sequence
+                    match = re.match(r'^(.*?)(\d+)$', first_example)
+                    if match:
+                        format_template = match.group(1)  # Everything before the number
+                else:  # letter
+                    # Match everything up to the last letter sequence
+                    match = re.match(r'^(.*?)([A-Za-z]+)$', first_example)
+                    if match:
+                        format_template = match.group(1)
+            
+            # Fallback to constructed prefix if no examples or can't parse
+            if not format_template:
+                format_template = prefix
+                if separator and not format_template.endswith(separator):
+                    format_template = f"{format_template}{separator}"
+            
+            # For matching existing IDs, normalize both to remove spaces/special chars
+            # This allows flexible matching regardless of format variations
+            format_template_normalized = re.sub(r'[^A-Za-z0-9]', '', format_template)
+
+            segment_strings: List[str] = []
+            for obj_id in objective_ids:
+                # Normalize both for comparison
+                obj_id_normalized = re.sub(r'[^A-Za-z0-9]', '', obj_id)
+                if not obj_id_normalized.lower().startswith(format_template_normalized.lower()):
+                    continue
+                remainder = obj_id_normalized[len(format_template_normalized):]
+                if not remainder:
+                    continue
+                if segment_type == "number" and not remainder.isdigit():
+                    continue
+                if segment_type == "letter" and not remainder.isalpha():
+                    continue
+                segment_strings.append(remainder)
+
+            if not segment_strings:
+                _record_log(format_template, "Skipped", "No matching IDs for this pattern")
+                _update_status()
+                continue
+
+            width = max(len(seg) for seg in segment_strings)
+            if segment_type == "number":
+                values = [int(seg) for seg in segment_strings]
+            else:
+                values = [val for seg in segment_strings if (val := _letter_to_index(seg)) is not None]
+
+            if not values:
+                _record_log(format_template, "Skipped", "Unable to parse segment values")
+                _update_status()
+                continue
+
+            min_val, max_val = min(values), max(values)
+            existing_values = set(values)
+            gap_values = [val for val in range(min_val, max_val + 1) if val not in existing_values]
+
+            def _format_segment(val: int) -> str:
+                if segment_type == "number":
+                    segment = str(val)
+                    return segment.zfill(width) if width > len(segment) else segment
+                return _index_to_letter(val, width)
+
+            # Use format_template (from examples) for generating gap IDs
+            gap_ids = [f"{format_template}{_format_segment(val)}" for val in gap_values]
+            
+            # Probe backwards from min_val
+            probe_backward_ids = [
+                f"{format_template}{_format_segment(val)}"
+                for val in range(min_val - 1, max(0 if segment_type == "number" else 1, min_val - config.OBJECTIVE_GAP_PROBE_LIMIT) - 1, -1)
+            ]
+            
+            # Probe forward from max_val
+            probe_forward_ids = [
+                f"{format_template}{_format_segment(val)}"
+                for val in range(max_val + 1, max_val + config.OBJECTIVE_GAP_PROBE_LIMIT + 1)
+            ]
+
+            # Process backward probes first
+            miss_streak = 0
+            for idx, candidate_id in enumerate(probe_backward_ids):
+                if miss_streak >= 2:
+                    remaining = probe_backward_ids[idx:]
+                    for rem_id in remaining:
+                        total_probed += 1
+                        _record_log(rem_id, "Skipped", "Backward range ended after consecutive misses")
+                    break
+
+                was_miss = _process_candidate(candidate_id, allow_miss_count=True)
+                _update_status(f"Searching {candidate_id} (backward)...")
+                if was_miss:
+                    miss_streak += 1
+                else:
+                    miss_streak = 0
+
+                if _gap_cancel_requested(redis_client, scan_id_val):
+                    remaining = probe_backward_ids[idx + 1:] + gap_ids + probe_forward_ids
+                    for rem_id in remaining:
+                        total_probed += 1
+                        _record_log(rem_id, "Cancelled", "Cancelled by user")
+                    _update_status("Cancelled by user")
+                    raise RuntimeError("cancelled")
+
+            # Process gap fills
+            for idx, candidate_id in enumerate(gap_ids):
+                _process_candidate(candidate_id)
+                _update_status(f"Searching {candidate_id}...")
+                if _gap_cancel_requested(redis_client, scan_id_val):
+                    remaining = gap_ids[idx + 1:] + probe_forward_ids
+                    for rem_id in remaining:
+                        total_probed += 1
+                        _record_log(rem_id, "Cancelled", "Cancelled by user")
+                    _update_status("Cancelled by user")
+                    raise RuntimeError("cancelled")
+
+            # Process forward probes
+            miss_streak = 0
+            for idx, candidate_id in enumerate(probe_forward_ids):
+                if miss_streak >= 2:
+                    remaining = probe_forward_ids[idx:]
+                    for rem_id in remaining:
+                        total_probed += 1
+                        _record_log(rem_id, "Skipped", "Forward range ended after consecutive misses")
+                    _update_status("Forward range ended after consecutive misses")
+                    break
+
+                was_miss = _process_candidate(candidate_id, allow_miss_count=True)
+                _update_status(f"Searching {candidate_id} (forward)...")
+                if was_miss:
+                    miss_streak += 1
+                else:
+                    miss_streak = 0
+
+                if _gap_cancel_requested(redis_client, scan_id_val):
+                    remaining = probe_forward_ids[idx + 1:]
+                    for rem_id in remaining:
+                        total_probed += 1
+                        _record_log(rem_id, "Cancelled", "Cancelled by user")
+                    _update_status("Cancelled by user")
+                    raise RuntimeError("cancelled")
+
+        # Second pass: Re-check for new gaps after extractions
+        if total_extracted > 0:
+            _update_status("Running second pass to check for newly revealed gaps...")
+            
+            # Re-query database to get updated objective IDs
+            updated_id_rows = sync_db_session.execute(
+                select(ControlObjective.objective_id).where(
+                    and_(
+                        ControlObjective.scan_id == scan_id_val,
+                        ControlObjective.objective_id.isnot(None)
+                    )
+                )
+            ).scalars().all()
+            updated_objective_ids = [str(val).strip() for val in updated_id_rows if val]
+            updated_existing_ids_lower = {val.lower() for val in updated_objective_ids}
+            
+            logger.info(f"[objective_gap] Second pass: found {len(updated_objective_ids)} total objectives")
+            
+            # Re-process each group to find newly revealed gaps
+            for group in groups:
+                prefix = (group.get("prefix") or "").strip()
+                segment_type = (group.get("segment_type") or "").strip().lower()
+                separator = (group.get("separator") or "").strip()
+                examples = group.get("examples") or []
+                
+                if not prefix or segment_type not in {"number", "letter"}:
+                    continue
+                
+                # Extract format template from examples (same logic as first pass)
+                format_template = None
+                if examples:
+                    first_example = str(examples[0]).strip()
+                    if segment_type == "number":
+                        match = re.match(r'^(.*?)(\d+)$', first_example)
+                        if match:
+                            format_template = match.group(1)
+                    else:  # letter
+                        match = re.match(r'^(.*?)([A-Za-z]+)$', first_example)
+                        if match:
+                            format_template = match.group(1)
+                
+                if not format_template:
+                    format_template = prefix
+                    if separator and not format_template.endswith(separator):
+                        format_template = f"{format_template}{separator}"
+                
+                format_template_normalized = re.sub(r'[^A-Za-z0-9]', '', format_template)
+                
+                # Extract segments for this group
+                segment_strings: List[str] = []
+                for obj_id in updated_objective_ids:
+                    obj_id_normalized = re.sub(r'[^A-Za-z0-9]', '', obj_id)
+                    if not obj_id_normalized.lower().startswith(format_template_normalized.lower()):
+                        continue
+                    remainder = obj_id_normalized[len(format_template_normalized):]
+                    if not remainder:
+                        continue
+                    if segment_type == "number" and not remainder.isdigit():
+                        continue
+                    if segment_type == "letter" and not remainder.isalpha():
+                        continue
+                    segment_strings.append(remainder)
+                
+                if not segment_strings:
+                    continue
+                
+                width = max(len(seg) for seg in segment_strings)
+                if segment_type == "number":
+                    values = [int(seg) for seg in segment_strings]
+                else:
+                    values = [val for seg in segment_strings if (val := _letter_to_index(seg)) is not None]
+                
+                if not values:
+                    continue
+                
+                min_val, max_val = min(values), max(values)
+                existing_values = set(values)
+                new_gap_values = [val for val in range(min_val, max_val + 1) if val not in existing_values]
+                
+                def _format_segment_pass2(val: int) -> str:
+                    if segment_type == "number":
+                        segment = str(val)
+                        return segment.zfill(width) if width > len(segment) else segment
+                    return _index_to_letter(val, width)
+                
+                new_gap_ids = [f"{format_template}{_format_segment_pass2(val)}" for val in new_gap_values]
+                
+                for candidate_id in new_gap_ids:
+                    if candidate_id.lower() not in updated_existing_ids_lower:
+                        _process_candidate(candidate_id)
+                        _update_status(f"Second pass: Searching {candidate_id}...")
+                        if _gap_cancel_requested(redis_client, scan_id_val):
+                            _update_status("Cancelled by user during second pass")
+                            raise RuntimeError("cancelled")
+
+        status_payload.update({
+            "status": "completed",
+            "progress_status": "Gap extraction completed",
+            "total_probed": total_probed,
+            "total_found": total_found,
+            "total_extracted": total_extracted,
+            "log": log_entries,
+            "extracted_ids": extracted_ids,
+            "ended_at": datetime.datetime.utcnow().isoformat()
+        })
+        duration = datetime.datetime.utcnow() - started_at
+        status_payload["duration_seconds"] = round(duration.total_seconds(), 2)
+        _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+        
+        # Automatically map gap-extracted objectives to controls
+        if total_extracted > 0:
+            try:
+                from ..extractors.objective_extractor import map_controls_to_objectives
+                logger.info(f"[GAP_EXTRACT_AUTO_MAP] Mapping {total_extracted} gap-extracted objectives to controls for scan {scan_id_val}")
+                mappings_created = map_controls_to_objectives(
+                    scan_id=scan_id_val,
+                    db_session=sync_db_session,
+                    job_id=None,
+                    redis_client=redis_client,
+                    force=False
+                )
+                logger.info(f"[GAP_EXTRACT_AUTO_MAP] Created {mappings_created} new mappings")
+            except Exception as map_err:
+                logger.error(f"[GAP_EXTRACT_AUTO_MAP] Failed to create mappings: {map_err}")
+
+        # Mark executive summary stale
+        scan_row = sync_db_session.execute(
+            select(Scan).where(Scan.id == scan_id_val)
+        ).scalars().first()
+        if scan_row:
+            scan_row.executive_summary_stale = True
+            sync_db_session.add(scan_row)
+            sync_db_session.commit()
+        
+        # Merge duplicates after gap extraction (sync version for thread context)
+        if total_extracted > 0:
+            try:
+                logger.info(f"[GAP_MERGE] Merging duplicate objectives after gap extraction for scan {scan_id_val}")
+                _merge_duplicates_sync(sync_db_session, scan_id_val)
+                logger.info(f"[GAP_MERGE] Duplicate merge completed for scan {scan_id_val}")
+            except Exception as merge_err:
+                logger.error(f"[GAP_MERGE] Failed to merge duplicates: {merge_err}")
+
+    except RuntimeError as e:
+        if str(e) == "cancelled":
+            status_payload.update({
+                "status": "cancelled",
+                "progress_status": "Cancelled by user",
+                "total_probed": total_probed,
+                "total_found": total_found,
+                "total_extracted": total_extracted,
+                "log": log_entries,
+                "extracted_ids": extracted_ids,
+                "ended_at": datetime.datetime.utcnow().isoformat()
+            })
+            duration = datetime.datetime.utcnow() - started_at
+            status_payload["duration_seconds"] = round(duration.total_seconds(), 2)
+            _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+        else:
+            raise
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Objective gap extraction failed for scan {scan_id_val}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception message: {e}")
+        logger.error(f"Exception repr: {repr(e)}")
+        logger.error(f"Full traceback:\n{error_traceback}")
+        if not status_payload.get("pattern_output"):
+            pattern_output_value = pattern_raw if "pattern_raw" in locals() else "<no output>"
+            logger.info(f"[objective_gap] Setting pattern_output to: {pattern_output_value[:100]}")
+            status_payload["pattern_output"] = pattern_output_value
+        error_message = f"{type(e).__name__}: {e}"
+        logger.info(f"[objective_gap] Setting error message: {error_message}")
+        status_payload.update({
+            "status": "failed",
+            "error": error_message,
+            "total_probed": total_probed,
+            "total_found": total_found,
+            "total_extracted": total_extracted,
+            "log": log_entries,
+            "extracted_ids": extracted_ids,
+            "ended_at": datetime.datetime.utcnow().isoformat()
+        })
+        duration = datetime.datetime.utcnow() - started_at
+        status_payload["duration_seconds"] = round(duration.total_seconds(), 2)
+        _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+    finally:
+        sync_db_session.close()
 
 
 def run_gap_extraction_sync(scan_id: int, extracted_text: str) -> Dict[str, Any]:
@@ -794,34 +1755,41 @@ def run_gap_extraction_sync(scan_id: int, extracted_text: str) -> Dict[str, Any]
                 logger.info(f"[objective_gap_sync] No objective IDs found, skipping")
                 return {"status": "skipped", "message": "No objectives found"}
             
-            # Import the nested function's logic (we'll inline it here)
-            # This is a simplified version - for production, extract the full logic
-            logger.info(f"[objective_gap_sync] Found {len(objective_ids)} objectives")
+            logger.info(f"[objective_gap_sync] Found {len(objective_ids)} objectives, starting thread")
             
-            # Make HTTP call to the endpoint to trigger it properly
-            # This ensures all the logic runs correctly
-            import requests
-            try:
-                response = requests.post(
-                    f"http://localhost:8000/report/{scan_id}/objectives/gap-extract",
-                    json={},
-                    timeout=600
-                )
-                if response.status_code == 200:
-                    logger.info(f"[objective_gap_sync] Gap extraction triggered successfully")
-                    return response.json()
-                else:
-                    logger.warning(f"[objective_gap_sync] Unexpected status: {response.status_code}")
-                    return {"status": "error", "message": f"HTTP {response.status_code}"}
-            except Exception as req_err:
-                logger.error(f"[objective_gap_sync] HTTP request failed: {req_err}")
-                return {"status": "error", "message": str(req_err)}
+            # Call the module-level function in a thread
+            import threading
+            
+            def _run_in_thread():
+                try:
+                    import traceback
+                    logger.info(f"[objective_gap_sync_thread] Starting gap extraction for scan_id={scan_id}")
+                    # Get a fresh redis client in the thread
+                    thread_redis = _get_redis()
+                    # Call the module-level function
+                    _run_gap_extraction_internal(extracted_text, scan_id, thread_redis)
+                    logger.info(f"[objective_gap_sync_thread] Gap extraction completed for scan_id={scan_id}")
+                except Exception as e:
+                    import traceback
+                    error_traceback = traceback.format_exc()
+                    logger.error(f"[objective_gap_sync_thread] Thread error: {type(e).__name__}: {e}")
+                    logger.error(f"[objective_gap_sync_thread] Full traceback:\n{error_traceback}")
+                    
+            # Start thread and return immediately
+            thread = threading.Thread(target=_run_in_thread, daemon=True)
+            thread.start()
+            
+            logger.info(f"[objective_gap_sync] Gap extraction thread started successfully")
+            return {"status": "running", "message": "Gap extraction started"}
                 
         finally:
             sync_db_session.close()
             
     except Exception as e:
-        logger.error(f"[objective_gap_sync] Failed: {e}")
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"[objective_gap_sync] Failed: {type(e).__name__}: {e}")
+        logger.error(f"[objective_gap_sync] Full traceback:\n{error_traceback}")
         return {"status": "error", "message": str(e)}
 
 
@@ -886,7 +1854,21 @@ async def start_objective_gap_extract(
         if not scan.extracted_text:
             raise HTTPException(status_code=404, detail="Extracted text not available for this scan")
 
+        # Extract only the Control_Descriptions section for gap extraction
         extracted_text = scan.extracted_text
+        if scan.result_json and isinstance(scan.result_json, dict):
+            sections = scan.result_json.get('sections', [])
+            control_section = next((s for s in sections if s.get('topic') == 'Control_Descriptions'), None)
+            if control_section and control_section.get('start_line') and control_section.get('end_line'):
+                start_line = control_section['start_line']
+                end_line = control_section['end_line']
+                lines = extracted_text.split('\n')
+                # Extract only the Control_Descriptions section (line numbers are 1-indexed)
+                control_text = '\n'.join(lines[start_line-1:end_line])
+                logger.info(f"[objective_gap] Limiting gap extraction to Control_Descriptions section: lines {start_line}-{end_line} ({len(control_text)} chars)")
+                extracted_text = control_text
+            else:
+                logger.warning(f"[objective_gap] Control_Descriptions section not found in result_json, searching full document")
 
         def _run_gap_extraction(text: str, scan_id_val: int) -> None:
             from sqlalchemy import create_engine
@@ -1068,6 +2050,20 @@ async def start_objective_gap_extract(
                 if not isinstance(pattern_data, dict) or not pattern_data.get("groups"):
                     raise ValueError("GPT did not return any pattern groups")
 
+                # Store pattern_info on the scan record for future use
+                try:
+                    scan_row = sync_db_session.execute(
+                        select(Scan).where(Scan.id == scan_id_val)
+                    ).scalars().first()
+                    if scan_row:
+                        scan_row.pattern_info = pattern_data
+                        sync_db_session.add(scan_row)
+                        sync_db_session.commit()
+                        logger.info(f"[objective_gap] Stored pattern_info on scan {scan_id_val}")
+                except Exception as pattern_store_err:
+                    logger.warning(f"[objective_gap] Failed to store pattern_info: {pattern_store_err}")
+                    # Non-critical, continue execution
+
                 status_payload["pattern_output"] = pattern_data
                 status_payload["progress_status"] = "Scanning for missing objectives..."
                 status_payload["updated_at"] = datetime.datetime.utcnow().isoformat()
@@ -1144,11 +2140,59 @@ async def start_objective_gap_extract(
                     except Exception as e:
                         return {"found": True, "error": str(e)}
 
+                def _find_line_and_page_refs(objective_text: str, objective_id: str) -> tuple[Optional[int], Optional[List[int]]]:
+                    """Search the full document for the objective text and return line/page refs."""
+                    text_lower = text.lower()
+                    idx = -1
+                    
+                    # FIXED: Search for objective ID FIRST (more precise), then fall back to text
+                    if objective_id:
+                        # Use word boundaries to ensure exact match (e.g., "C1.2" won't match "CC1.2")
+                        import re
+                        pattern = r'\b' + re.escape(objective_id.lower()) + r'\b'
+                        match = re.search(pattern, text_lower)
+                        if match:
+                            idx = match.start()
+                    
+                    # Fall back to text search if ID not found
+                    if idx == -1 and objective_text and len(objective_text) >= 20:
+                        search_text = objective_text[:100].lower().strip()
+                        idx = text_lower.find(search_text)
+                    
+                    if idx == -1:
+                        logger.warning(f"Could not find objective ID or text in document for gap objective: {objective_id}")
+                        return None, None
+                    
+                    # Count lines up to this position
+                    line_number = text[:idx].count('\n') + 1
+                    
+                    # Find page number by scanning backwards for page markers
+                    page_number = None
+                    try:
+                        # Look backwards from the found position for the most recent page marker
+                        text_before = text[:idx]
+                        # Find all page markers like "==== Page 5 ====" or "=== PAGE 5 ==="
+                        import re
+                        page_markers = list(re.finditer(r'====?\s*(?:Page|PAGE)\s+(\d+)\s*====?', text_before))
+                        if page_markers:
+                            # Get the last page marker before this position
+                            last_marker = page_markers[-1]
+                            page_number = int(last_marker.group(1))
+                    except Exception as e:
+                        logger.warning(f"Error finding page number for gap objective: {e}")
+                    
+                    return line_number, [page_number] if page_number else None
+
                 def _create_objective_from_extraction(search_id: str, extracted: Dict[str, Any]) -> Dict[str, Any]:
                     objective_text = (extracted.get("objective_text") or "").strip()
                     objective_id = (extracted.get("objective_id") or search_id or "").strip()
                     if not objective_text:
                         return {"created": False, "message": "Extraction returned no objective_text"}
+
+                    # Normalize the objective ID for consistency
+                    original_objective_id = objective_id
+                    normalized_objective_id = normalize_objective_id(objective_id) if objective_id else None
+                    logger.info(f"Creating gap objective: original_id='{original_objective_id}' → normalized_id='{normalized_objective_id}'")
 
                     if objective_id:
                         existing = sync_db_session.execute(
@@ -1162,10 +2206,15 @@ async def start_objective_gap_extract(
                         if existing:
                             return {"created": False, "message": "Objective ID already exists"}
 
+                    # Search the full document to find line/page refs
+                    line_ref, page_refs = _find_line_and_page_refs(objective_text, objective_id)
+                    
                     now = datetime.datetime.utcnow()
                     new_obj = ControlObjective(
                         scan_id=scan_id_val,
-                        objective_id=objective_id or None,
+                        objective_id=normalized_objective_id or None,  # FIXED: Use normalized version to prevent \n
+                        objective_id_normalized=normalized_objective_id,
+                        objective_id_original=original_objective_id,
                         objective_text=objective_text,
                         status="pending",
                         extraction_method="gap_search",
@@ -1174,10 +2223,10 @@ async def start_objective_gap_extract(
                         gpt_confidence=0.0,
                         alignment_confidence=0.0,
                         format_confidence=0.0,
-                        final_confidence=1.0,
-                        gpt_reasoning=extracted.get("gpt_reasoning", ""),
-                        page_refs=extracted.get("page_refs"),
-                        line_ref=extracted.get("line_ref"),
+                        final_confidence=0.75,  # Medium confidence for gap-extracted objectives
+                        gpt_reasoning=f"Gap extraction: {extracted.get('gpt_reasoning', '')}",
+                        page_refs=page_refs,  # Now searching full document for accurate refs
+                        line_ref=line_ref,  # Now searching full document for accurate line number
                         source_context=extracted.get("source_context", objective_text[:500]),
                         section_heading=extracted.get("section_heading"),
                         created_at=now,
@@ -1490,6 +2539,22 @@ async def start_objective_gap_extract(
                 duration = datetime.datetime.utcnow() - started_at
                 status_payload["duration_seconds"] = round(duration.total_seconds(), 2)
                 _set_objective_gap_status(redis_client, scan_id_val, status_payload)
+                
+                # Automatically map gap-extracted objectives to controls
+                if total_extracted > 0:
+                    try:
+                        from ..extractors.objective_extractor import map_controls_to_objectives
+                        logger.info(f"[GAP_EXTRACT_AUTO_MAP] Mapping {total_extracted} gap-extracted objectives to controls for scan {scan_id_val}")
+                        mappings_created = map_controls_to_objectives(
+                            scan_id=scan_id_val,
+                            db_session=sync_db_session,
+                            job_id=None,
+                            redis_client=redis_client,
+                            force=False
+                        )
+                        logger.info(f"[GAP_EXTRACT_AUTO_MAP] Created {mappings_created} new mappings")
+                    except Exception as map_err:
+                        logger.error(f"[GAP_EXTRACT_AUTO_MAP] Failed to create mappings: {map_err}")
 
                 # Mark executive summary stale
                 scan_row = sync_db_session.execute(
@@ -1548,9 +2613,9 @@ async def start_objective_gap_extract(
                 sync_db_session.close()
 
         if background_tasks is not None:
-            background_tasks.add_task(_run_gap_extraction, extracted_text, scan_id)
+            background_tasks.add_task(_run_gap_extraction_internal, extracted_text, scan_id, redis_client)
         else:
-            _run_gap_extraction(extracted_text, scan_id)
+            _run_gap_extraction_internal(extracted_text, scan_id, redis_client)
 
         return {
             "status": "started",
@@ -1848,7 +2913,7 @@ async def get_control_objectives(
             select(ControlObjectiveMapping, ControlObjective)
             .join(ControlObjective, ControlObjectiveMapping.objective_id == ControlObjective.id)
             .where(ControlObjectiveMapping.control_id == control_db_id)
-            .order_by(ControlObjectiveMapping.is_primary.desc(), ControlObjectiveMapping.mapping_confidence.desc())
+            .order_by(ControlObjectiveMapping.mapping_confidence.desc())
         )
         rows = result.all()
 
@@ -1863,6 +2928,8 @@ async def get_control_objectives(
                 "line_proximity_score": getattr(mapping, "line_proximity_score", None),
                 "gpt_alignment_score": getattr(mapping, "gpt_alignment_score", None),
                 "id_alignment_score": getattr(mapping, "id_alignment_score", None),
+                "objective_gpt_confidence_boost": getattr(mapping, "objective_gpt_confidence_boost", None),
+                "mapping_justification": getattr(mapping, "mapping_justification", None),
                 "objective": {
                     "id": objective.id,
                     "scan_id": objective.scan_id,
@@ -1897,7 +2964,7 @@ async def get_primary_objective_criteria(
     db=Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get mapping criteria for the primary objective linked to a control."""
+    """Get mapping criteria for the highest-confidence objective linked to a control."""
     try:
         control = (await db.execute(
             select(Control).where(
@@ -1917,15 +2984,15 @@ async def get_primary_objective_criteria(
             .where(
                 and_(
                     ControlObjectiveMapping.control_id == control_db_id,
-                    ControlObjectiveMapping.is_primary.is_(True),
                     ControlObjective.scan_id == scan_id
                 )
             )
+            .order_by(ControlObjectiveMapping.mapping_confidence.desc())
         )
         mapping_row = mapping_result.first()
 
         if not mapping_row:
-            raise HTTPException(status_code=404, detail="Primary objective mapping not found")
+            raise HTTPException(status_code=404, detail="Objective mapping not found")
 
         mapping, objective = mapping_row
 
@@ -1996,23 +3063,27 @@ async def get_primary_objective_mappings(
     db=Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get primary objective mapping for all controls in a scan."""
+    """Get highest-confidence objective mapping for all controls in a scan."""
     try:
         mappings_result = await db.execute(
             select(ControlObjectiveMapping, ControlObjective, Control)
             .join(ControlObjective, ControlObjectiveMapping.objective_id == ControlObjective.id)
             .join(Control, ControlObjectiveMapping.control_id == Control.id)
             .where(
-                and_(
-                    Control.scan_id == scan_id,
-                    ControlObjectiveMapping.is_primary.is_(True)
-                )
+                Control.scan_id == scan_id
             )
+            .order_by(ControlObjectiveMapping.mapping_confidence.desc())
         )
         rows = mappings_result.all()
 
-        mappings = []
+        # Keep only the highest-confidence mapping per control
+        best_per_control: dict = {}
         for mapping, objective, control in rows:
+            if control.id not in best_per_control:
+                best_per_control[control.id] = (mapping, objective, control)
+
+        mappings = []
+        for mapping, objective, control in best_per_control.values():
             mappings.append({
                 "control_db_id": control.id,
                 "control_id": control.control_id,
@@ -2027,7 +3098,9 @@ async def get_primary_objective_mappings(
                 },
                 "mapping_confidence": mapping.mapping_confidence,
                 "mapping_method": mapping.mapping_method,
-                "is_primary": mapping.is_primary
+                "is_primary": mapping.is_primary,
+                "objective_gpt_confidence_boost": getattr(mapping, "objective_gpt_confidence_boost", None),
+                "mapping_justification": getattr(mapping, "mapping_justification", None)
             })
 
         return {
@@ -2066,7 +3139,7 @@ async def get_objective_controls(
             select(ControlObjectiveMapping, Control).join(
                 Control, ControlObjectiveMapping.control_id == Control.id
             ).where(ControlObjectiveMapping.objective_id == objective_id)
-            .order_by(ControlObjectiveMapping.is_primary.desc(), ControlObjectiveMapping.mapping_confidence.desc())
+            .order_by(ControlObjectiveMapping.mapping_confidence.desc())
         )
         mappings = mappings_result.all()
         
@@ -2078,6 +3151,12 @@ async def get_objective_controls(
                 "control_db_id": control.id,
                 "control_desc": control.control_desc,
                 "control_confidence": control.control_confidence,
+                "has_deviation": control.has_deviation,
+                "deviation_desc": control.deviation_desc,
+                "management_response_text": control.management_response_text,
+                "control_page_refs": control.control_page_refs,
+                "control_line_ref": control.control_line_ref,
+                "pdf_snippet": getattr(control, "pdf_snippet", None),
                 "mapping_confidence": mapping.mapping_confidence,
                 "mapping_method": mapping.mapping_method,
                 "is_primary": mapping.is_primary,
@@ -2085,12 +3164,18 @@ async def get_objective_controls(
                 "line_proximity_score": getattr(mapping, "line_proximity_score", None),
                 "gpt_alignment_score": getattr(mapping, "gpt_alignment_score", None),
                 "id_alignment_score": getattr(mapping, "id_alignment_score", None),
+                "objective_gpt_confidence_boost": getattr(mapping, "objective_gpt_confidence_boost", None),
+                "mapping_justification": getattr(mapping, "mapping_justification", None),
+                "confirmed": getattr(mapping, "confirmed", False) or False,
+                "confirmed_at": mapping.confirmed_at.isoformat() if getattr(mapping, "confirmed_at", None) else None,
                 "created_at": mapping.created_at.isoformat() if mapping.created_at else None
             })
         
         return {
             "objective_id": objective_id,
             "objective_text": obj.objective_text,
+            "objective_page_refs": obj.page_refs,
+            "objective_line_ref": obj.line_ref,
             "controls": controls,
             "total": len(controls)
         }
@@ -2116,7 +3201,6 @@ async def link_control_to_objective(
     
     Body:
     - mapping_confidence: Optional confidence score (0.0-1.0), defaults to 1.0
-    - is_primary: Optional bool, defaults to False
     """
     try:
         # Verify objective exists
@@ -2159,18 +3243,40 @@ async def link_control_to_objective(
         if existing:
             raise HTTPException(status_code=409, detail="Mapping already exists")
         
-        # Create mapping
+        # Create mapping — manual mappings are auto-confirmed
+        now = datetime.datetime.utcnow()
         mapping = ControlObjectiveMapping(
             control_id=control_db_id,
             objective_id=objective_id,
             mapping_confidence=data.get("mapping_confidence", 1.0),
             mapping_method='manual',
             is_primary=data.get("is_primary", False),
-            created_at=datetime.datetime.utcnow(),
+            confirmed=True,
+            confirmed_at=now,
+            confirmed_by_user_id=current_user.id,
+            created_at=now,
             created_by_user_id=current_user.id
         )
         
         db.add(mapping)
+        
+        # Phase D: Log feedback for future few-shot learning
+        feedback = MappingFeedback(
+            scan_id=scan_id,
+            control_id=control_db_id,
+            objective_id=objective_id,
+            action='added',
+            original_confidence=None,
+            original_method=None,
+            control_id_text=control.control_id,
+            control_desc_snippet=(control.control_desc or "")[:300],
+            objective_id_text=obj.objective_id,
+            objective_text_snippet=(obj.objective_text or "")[:300],
+            user_id=current_user.id,
+            created_at=datetime.datetime.utcnow(),
+        )
+        db.add(feedback)
+        
         await db.commit()
         await db.refresh(mapping)
         
@@ -2218,6 +3324,32 @@ async def unlink_control_from_objective(
         
         if not mappings:
             raise HTTPException(status_code=404, detail="Mapping not found")
+        
+        # Phase D: Log 'removed' feedback for each mapping before deleting
+        # Fetch control and objective for snapshot data
+        control = (await db.execute(
+            select(Control).where(Control.id == control_db_id)
+        )).scalar_one_or_none()
+        obj = (await db.execute(
+            select(ControlObjective).where(ControlObjective.id == objective_id)
+        )).scalar_one_or_none()
+        
+        for mapping in mappings:
+            feedback = MappingFeedback(
+                scan_id=scan_id,
+                control_id=control_db_id,
+                objective_id=objective_id,
+                action='removed',
+                original_confidence=mapping.mapping_confidence,
+                original_method=mapping.mapping_method,
+                control_id_text=control.control_id if control else None,
+                control_desc_snippet=(control.control_desc or "")[:300] if control else None,
+                objective_id_text=obj.objective_id if obj else None,
+                objective_text_snippet=(obj.objective_text or "")[:300] if obj else None,
+                user_id=current_user.id,
+                created_at=datetime.datetime.utcnow(),
+            )
+            db.add(feedback)
         
         # Delete all matching mappings (in case of duplicates)
         for mapping in mappings:
@@ -2276,6 +3408,38 @@ async def update_mapping(
         if "is_primary" in data:
             mapping.is_primary = data["is_primary"]
         
+        if "confirmed" in data:
+            mapping.confirmed = bool(data["confirmed"])
+            if mapping.confirmed:
+                mapping.confirmed_at = datetime.datetime.utcnow()
+                mapping.confirmed_by_user_id = current_user.id
+                
+                # Phase D: Log 'confirmed' feedback
+                control = (await db.execute(
+                    select(Control).where(Control.id == mapping.control_id)
+                )).scalar_one_or_none()
+                obj = (await db.execute(
+                    select(ControlObjective).where(ControlObjective.id == mapping.objective_id)
+                )).scalar_one_or_none()
+                feedback = MappingFeedback(
+                    scan_id=scan_id,
+                    control_id=mapping.control_id,
+                    objective_id=mapping.objective_id,
+                    action='confirmed',
+                    original_confidence=mapping.mapping_confidence,
+                    original_method=mapping.mapping_method,
+                    control_id_text=control.control_id if control else None,
+                    control_desc_snippet=(control.control_desc or "")[:300] if control else None,
+                    objective_id_text=obj.objective_id if obj else None,
+                    objective_text_snippet=(obj.objective_text or "")[:300] if obj else None,
+                    user_id=current_user.id,
+                    created_at=datetime.datetime.utcnow(),
+                )
+                db.add(feedback)
+            else:
+                mapping.confirmed_at = None
+                mapping.confirmed_by_user_id = None
+        
         db.add(mapping)
         await db.commit()
         await db.refresh(mapping)
@@ -2286,7 +3450,9 @@ async def update_mapping(
         return {
             "id": mapping.id,
             "mapping_confidence": mapping.mapping_confidence,
-            "is_primary": mapping.is_primary
+            "is_primary": mapping.is_primary,
+            "confirmed": mapping.confirmed or False,
+            "confirmed_at": mapping.confirmed_at.isoformat() if mapping.confirmed_at else None
         }
         
     except HTTPException:
@@ -2362,6 +3528,7 @@ async def reject_objective(
             raise HTTPException(status_code=404, detail="Objective not found")
         
         obj.status = 'rejected'
+        obj.final_confidence = 0.0  # Set confidence to 0% for rejected objectives
         obj.updated_at = datetime.datetime.utcnow()
         obj.updated_by_user_id = current_user.id
         
@@ -2495,6 +3662,8 @@ async def convert_objective_to_control(
         await db.refresh(new_control)
 
         await mark_executive_summary_stale(scan_id, db)
+        
+        logger.info(f"[CONVERT_OBJECTIVE] Successfully {action} control {new_control.control_id} from objective {objective_id}")
 
         return {
             "status": action,
@@ -2576,25 +3745,6 @@ async def convert_control_to_objective(
         timestamp = now.strftime("%Y-%m-%d %I:%M %p")
 
         if existing_objective:
-            mapping = (await db.execute(
-                select(ControlObjectiveMapping).where(
-                    and_(
-                        ControlObjectiveMapping.objective_id == existing_objective.id,
-                        ControlObjectiveMapping.control_id == control.id
-                    )
-                )
-            )).scalar_one_or_none()
-
-            if not mapping:
-                mapping = ControlObjectiveMapping(
-                    objective_id=existing_objective.id,
-                    control_id=control.id,
-                    mapping_confidence=1.0,
-                    is_primary=True,
-                    mapping_method="manual"
-                )
-                db.add(mapping)
-
             existing_objective.status = "approved"
             existing_objective.updated_at = now
             existing_objective.updated_by_user_id = current_user.id
@@ -2621,15 +3771,6 @@ async def convert_control_to_objective(
             db.add(new_objective)
             await db.flush()
 
-            mapping = ControlObjectiveMapping(
-                objective_id=new_objective.id,
-                control_id=control.id,
-                mapping_confidence=1.0,
-                is_primary=True,
-                mapping_method="manual"
-            )
-            db.add(mapping)
-
             action = "created"
             objective_db_id = new_objective.id
             objective_identifier = new_objective.objective_id
@@ -2637,6 +3778,23 @@ async def convert_control_to_objective(
         control.control_confidence = 0.0
         if hasattr(control, "final_confidence"):
             control.final_confidence = 0.0
+        
+        # Remove ALL objective mappings for this converted control —
+        # it is now an objective, not a control, so it should not appear
+        # as a mapped control under any objective.
+        all_ctrl_mappings = (await db.execute(
+            select(ControlObjectiveMapping).where(
+                ControlObjectiveMapping.control_id == control.id
+            )
+        )).scalars().all()
+        if all_ctrl_mappings:
+            logger.info(
+                f"[CONVERT] Removing {len(all_ctrl_mappings)} objective mappings "
+                f"for converted control {control.control_id} (db_id={control.id})"
+            )
+            for sm in all_ctrl_mappings:
+                await db.delete(sm)
+        
         ignore_note = "Converted to control objective; control auto-ignored (confidence set to 0)"
         existing_calc = control.confidence_calc or ""
         separator = "\n" if existing_calc and not existing_calc.endswith("\n") else ""
@@ -2646,10 +3804,41 @@ async def convert_control_to_objective(
         control.updated_at = now
         control.updated_by_user_id = current_user.id
 
+        # ── Control Feedback Learning System ──
+        try:
+            import re as _re
+            _TSC_RE = _re.compile(r'^(CC|A|C|P|PI)\d+\.\d+$', _re.IGNORECASE)
+            cid = (control.control_id or "").strip()
+            reason = "tsc_criteria" if _TSC_RE.match(cid) else "other"
+            fb = ControlFeedback(
+                scan_id=scan_id,
+                control_db_id=control.id,
+                action="converted_to_objective",
+                original_confidence=confidence,  # from before zeroing
+                control_id_text=(control.control_id or "")[:128],
+                control_desc_snippet=(control.control_desc or "")[:300],
+                rejection_reason=reason,
+                user_id=current_user.id,
+            )
+            db.add(fb)
+            logger.info(
+                f"[CONTROL_FEEDBACK] Recorded converted_to_objective for "
+                f"{control.control_id or control.id} (scan={scan_id}, reason={reason})"
+            )
+        except Exception as fb_err:
+            logger.warning(f"[CONTROL_FEEDBACK] Failed to record feedback: {fb_err}")
+
         db.add(control)
         await db.commit()
 
         await mark_executive_summary_stale(scan_id, db)
+        
+        # Merge duplicates after conversion
+        try:
+            merge_result = await _merge_duplicates_internal(scan_id, db, current_user.id)
+            logger.info(f"Auto-merge after control-to-objective conversion: {merge_result}")
+        except Exception as merge_err:
+            logger.warning(f"Failed to auto-merge after conversion: {merge_err}")
 
         return {
             "status": action,
@@ -2756,6 +3945,7 @@ async def bulk_reject_objectives(
         
         for obj in objectives:
             obj.status = 'rejected'
+            obj.final_confidence = 0.0  # Set confidence to 0% for rejected objectives
             obj.updated_at = datetime.datetime.utcnow()
             obj.updated_by_user_id = current_user.id
             db.add(obj)

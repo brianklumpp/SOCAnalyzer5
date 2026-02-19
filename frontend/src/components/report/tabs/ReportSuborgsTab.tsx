@@ -65,7 +65,7 @@ export const ReportSuborgsTab = React.memo(function ReportSuborgsTab({
     
     if (pageRef) {
       // third_party_page_ref is a single page number
-      const offset = tocPageOffset ?? 2;
+      const offset = tocPageOffset ?? 0;
       targetPage = pageRef + offset;
     }
     

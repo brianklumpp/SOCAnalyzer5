@@ -336,6 +336,85 @@
   border-left: 4px solid var(--border-warning);
   background: transparent;
 }
+/* Objective Coverage table: 7-column layout (Actions, Control ID, Description, Page, Line, Deviation, Mgmt Response) */
+.objective-coverage-table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+}
+/* Reset ALL column constraints inherited from .tsc-coso-table */
+.objective-coverage-table th,
+.objective-coverage-table td {
+  min-width: 0 !important;
+  max-width: none !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Col 1: Actions (x / →) */
+.objective-coverage-table th:nth-child(1),
+.objective-coverage-table td:nth-child(1) {
+  width: 46px;
+  text-align: center;
+  overflow: visible;
+}
+/* Col 2: Control ID */
+.objective-coverage-table th:nth-child(2),
+.objective-coverage-table td:nth-child(2) {
+  width: 80px;
+}
+/* Col 3: Description — gets remaining space */
+.objective-coverage-table th:nth-child(3),
+.objective-coverage-table td:nth-child(3) {
+  width: auto;
+}
+/* Col 4: Page */
+.objective-coverage-table th:nth-child(4),
+.objective-coverage-table td:nth-child(4) {
+  width: 48px;
+  text-align: center;
+}
+/* Col 5: Line */
+.objective-coverage-table th:nth-child(5),
+.objective-coverage-table td:nth-child(5) {
+  width: 44px;
+  text-align: center;
+}
+/* Col 6: Deviation */
+.objective-coverage-table th:nth-child(6),
+.objective-coverage-table td:nth-child(6) {
+  width: 15%;
+}
+/* Col 7: Management Response */
+.objective-coverage-table th:nth-child(7),
+.objective-coverage-table td:nth-child(7) {
+  width: 15%;
+}
+/* Clickable rows in objective coverage */
+.objective-coverage-table tbody tr {
+  cursor: pointer;
+}
+.objective-coverage-table tbody tr:hover {
+  background-color: rgba(25, 118, 210, 0.04);
+}
+
+/* ── Column resize handles ─────────────────────────────────────────────────── */
+.objective-coverage-table th {
+  position: relative;
+  user-select: none;
+}
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+.col-resize-handle:hover,
+.col-resize-handle.resizing {
+  background: rgba(25, 118, 210, 0.35);
+}
 @media (max-width: 900px) {
   .key-stats-row, .tsc-coso-row {
     flex-direction: column;
@@ -393,4 +472,79 @@
 .MuiTimelineItem-root::before {
   flex: 0 !important;
   padding: 0 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Control Edit Panel — fixed overlay above controls table
+   ═══════════════════════════════════════════════════════════════ */
+.control-edit-panel {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(60, 60, 120, 0.12);
+  margin-bottom: 8px;
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.control-edit-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  background: var(--bg-secondary, #fafafa);
+  border-radius: 8px 8px 0 0;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 36px;
+}
+
+.control-edit-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px 10px 4px;
+}
+
+.control-edit-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.control-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.control-edit-field > label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary, #666);
+  margin: 0;
+}
+
+.control-edit-section {
+  padding: 4px 10px 6px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+/* Theme overrides for the panel in dark mode */
+[data-theme="dark"] .control-edit-panel {
+  background: var(--bg-primary, #1e1e1e);
+  border-color: var(--border-color, #444);
+}
+[data-theme="dark"] .control-edit-toolbar {
+  background: var(--bg-secondary, #252525);
+  border-color: var(--border-color, #444);
 }

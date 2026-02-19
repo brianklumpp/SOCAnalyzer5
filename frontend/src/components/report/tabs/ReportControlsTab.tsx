@@ -4,12 +4,13 @@
  * Displays high and low confidence controls with add button.
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useState, useMemo, useCallback } from 'react';
 import { Box, Typography, Button, Collapse, Chip, Tooltip } from '@mui/material';
-import { ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import { ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Refresh as RefreshIcon, AccountTree as AccountTreeIcon } from '@mui/icons-material';
 import { ControlsTable } from '../tables/ControlsTable';
 import { CONFIDENCE_THRESHOLD_PERCENT } from '../../../config/report/constants';
 import { SplitViewLayout } from '../SplitViewLayout';
+import { ControlEditPanel } from '../ControlEditPanel';
 
 interface ReportControlsTabProps {
   scanId: string | undefined;
@@ -22,6 +23,7 @@ interface ReportControlsTabProps {
   onBatchEdit: (changes: { [rowIdx: number]: any }, sectionRows: any[]) => void;
   onRecompute: (row: any) => Promise<void>;
   onRecomputeAllHighConfidence?: () => Promise<void>;
+  onMapAllFrameworks?: () => Promise<void>;
   onToggleDeviation?: (row: any, hasDeviation: boolean) => Promise<void>;
   onIgnore: (row: any) => void;
   onConfirm: (row: any) => void;
@@ -40,6 +42,7 @@ interface ReportControlsTabProps {
   isAdmin?: boolean;
   onObjectivesRefresh?: () => void;
   showToast?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
+  onConvertToObjective?: (control: any) => void;
 }
 
 export const ReportControlsTab = React.memo(function ReportControlsTab({
@@ -53,6 +56,7 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
   onBatchEdit,
   onRecompute,
   onRecomputeAllHighConfidence,
+  onMapAllFrameworks,
   onToggleDeviation,
   onIgnore,
   onConfirm,
@@ -70,10 +74,33 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
   onOpenObjectivesModal,
   isAdmin,
   onObjectivesRefresh,
-  showToast
+  showToast,
+  onConvertToObjective
 }: ReportControlsTabProps) {
   const lowConfSectionRef = useRef<HTMLDivElement>(null);
   const [pdfNavigateHandler, setPdfNavigateHandler] = React.useState<((snippet: string | null, page?: number | null) => void) | null>(null);
+  const [editPanelControl, setEditPanelControl] = useState<any>(null);
+
+  // Combined controls list for edit panel navigation (high conf + low conf when visible)
+  const allNavigableControls = useMemo(() => {
+    const combined = [...filteredHighConfControls];
+    if (showLowConfidence) {
+      combined.push(...filteredLowConfControls);
+    }
+    return combined;
+  }, [filteredHighConfControls, filteredLowConfControls, showLowConfidence]);
+
+  const handleOpenEditPanel = useCallback((control: any) => {
+    setEditPanelControl(control);
+  }, []);
+
+  const handleEditPanelNavigate = useCallback((control: any) => {
+    setEditPanelControl(control);
+  }, []);
+
+  const handleEditPanelClose = useCallback(() => {
+    setEditPanelControl(null);
+  }, []);
 
   const handleRowClick = React.useCallback((row: any) => {
     if (!pdfNavigateHandler) return;
@@ -92,14 +119,12 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
     let targetPage: number | null = null;
     
     if (Array.isArray(pageRefs) && pageRefs.length > 0) {
-      // control_page_refs contains document page numbers (from === PAGE X === markers)
-      // Add TOC offset to convert document page to PDF page
-      // Default to 2 for existing scans that don't have toc_page_offset stored
-      const offset = tocPageOffset ?? 2;
+      // control_page_refs already stores physical PDF page numbers (from === PAGE N === markers)
+      const offset = tocPageOffset ?? 0;
       targetPage = pageRefs[0] + offset;
     } else if (row.control_page_ref) {
       // Fallback to singular control_page_ref if refs array doesn't exist
-      const offset = tocPageOffset ?? 2;
+      const offset = tocPageOffset ?? 0;
       targetPage = row.control_page_ref + offset;
     }
     
@@ -132,6 +157,30 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
         Controls
       </Typography>
 
+      {/* Control Edit Panel (overlay) */}
+      {editPanelControl && (
+        <ControlEditPanel
+          control={editPanelControl}
+          controls={allNavigableControls}
+          scanId={scanId ? parseInt(scanId) : 0}
+          onClose={handleEditPanelClose}
+          onSave={onEdit}
+          onIgnore={onIgnore}
+          onConfirm={onConfirm}
+          onRecompute={onRecompute}
+          onToggleDeviation={onToggleDeviation}
+          onNavigate={handleEditPanelNavigate}
+          onConvertToObjective={onConvertToObjective}
+          pdfNavigateHandler={pdfNavigateHandler}
+          tocPageOffset={tocPageOffset}
+          frameworkCriteria={frameworkCriteria}
+          onOpenMappingDetails={onOpenMappingDetails}
+          onObjectivesRefresh={onObjectivesRefresh}
+          onRefresh={onRefresh}
+          showToast={showToast}
+        />
+      )}
+
       {/* High Confidence Controls */}
       <Box className={`sticky-table-container ${darkMode ? 'dark-mode' : 'light-mode'}`}>
         <ControlsTable
@@ -155,6 +204,7 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
           objectiveMappings={objectiveMappings}
           onObjectivesRefresh={onObjectivesRefresh}
           showToast={showToast}
+          onOpenEditPanel={handleOpenEditPanel}
           additionalButtons={
             <>
               <Button variant="outlined" size="small" onClick={onAddControl}>
@@ -170,6 +220,19 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
                     sx={{ ml: 1 }}
                   >
                     Recompute All
+                  </Button>
+                </Tooltip>
+              )}
+              {onMapAllFrameworks && (
+                <Tooltip title="Map controls to all available frameworks (NIST, ISO 27001, etc.) — only TSC and COSO are mapped during scan">
+                  <Button 
+                    variant="outlined" 
+                    size="small" 
+                    onClick={onMapAllFrameworks}
+                    startIcon={<AccountTreeIcon />}
+                    sx={{ ml: 1 }}
+                  >
+                    Map All Frameworks
                   </Button>
                 </Tooltip>
               )}
@@ -231,6 +294,7 @@ export const ReportControlsTab = React.memo(function ReportControlsTab({
               objectivesLoading={objectivesLoading}
               objectiveMappings={objectiveMappings}
               showToast={showToast}
+              onOpenEditPanel={handleOpenEditPanel}
             />
           </Box>
         </Collapse>

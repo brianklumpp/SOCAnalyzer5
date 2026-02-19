@@ -5,9 +5,10 @@ import json
 import psycopg2
 import psycopg2.extras
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 import logging
+import traceback
 from . import config
 from .logo_service import fetch_logo_with_gpt
 from sqlalchemy import create_engine
@@ -85,7 +86,7 @@ def _parse_datetime(val):
         return val
     return None
 
-def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = None, user_id: int = None):
+def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = None, user_id: int = None, start_time: float = None):
     # Validate required parameters for job isolation
     if not job_id or not user_id:
         raise ValueError("[DB_INSERT] job_id and user_id are required for job isolation")
@@ -232,6 +233,15 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
         active_frameworks = data.get("active_frameworks", [])
         active_frameworks_json = json.dumps(active_frameworks, ensure_ascii=False) if active_frameworks else None
         
+        # Use start_time if provided, otherwise fall back to current time
+        # Convert start_time (Unix timestamp) to datetime for scan_date
+        if start_time is not None:
+            scan_date_value = datetime.fromtimestamp(start_time, tz=timezone.utc)
+            logging.info(f"[SCAN_DATE] Using scan start_time: {scan_date_value} (start_time={start_time})")
+        else:
+            scan_date_value = datetime.utcnow()
+            logging.warning(f"[SCAN_DATE] start_time not provided, falling back to utcnow: {scan_date_value}")
+        
         scan_values = [
             sanitize_value(product_name),
             report_date_norm,
@@ -239,7 +249,7 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
             end_date,
             sanitize_value(auditor_name),
             json.dumps(data_for_json, ensure_ascii=False),
-            datetime.utcnow(),
+            scan_date_value,
             sanitize_value(data.get("gpt_cost")),
             sanitize_value(data.get("gpt_model")),
             sanitize_value(data.get("estimated_time_seconds")),
@@ -296,7 +306,68 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
         # Insert controls
         controls = data.get("controls")
         if controls:
-            for idx, ctrl in enumerate(controls):
+            # ── Pre-insert deduplication ──────────────────────────────────
+            # Multiple chunks may extract the same control independently.
+            # Deduplicate by control_id (string) before inserting.  For
+            # controls that share the same control_id, keep the one with
+            # the highest confidence and merge key text fields.
+            seen_ctrl: dict = {}  # control_id_str -> best control dict
+            deduped_controls: list = []
+            for ctrl in controls:
+                cid = (ctrl.get("control_id") or "").strip()
+                if not cid:
+                    # Controls without an ID can't be deduped — keep all
+                    deduped_controls.append(ctrl)
+                    continue
+                if cid not in seen_ctrl:
+                    seen_ctrl[cid] = ctrl
+                else:
+                    existing = seen_ctrl[cid]
+                    # Keep higher confidence, merge description/test if needed
+                    existing_conf = existing.get("control_confidence") or 0
+                    new_conf = ctrl.get("control_confidence") or 0
+                    if new_conf > existing_conf:
+                        # New one wins, but merge text from old
+                        for field in ("control_desc", "control_test", "control_test_results", "deviation_desc"):
+                            old_text = (existing.get(field) or "").strip()
+                            new_text = (ctrl.get(field) or "").strip()
+                            if old_text and not new_text:
+                                ctrl[field] = old_text
+                            elif old_text and new_text and old_text not in new_text:
+                                ctrl[field] = new_text + " " + old_text
+                        # Merge page refs
+                        old_pages = existing.get("control_page_refs") or []
+                        new_pages = ctrl.get("control_page_refs") or []
+                        if isinstance(old_pages, list) and isinstance(new_pages, list):
+                            ctrl["control_page_refs"] = sorted(set(old_pages + new_pages))
+                        # Carry over deviation flag
+                        if existing.get("has_deviation"):
+                            ctrl["has_deviation"] = True
+                            if not ctrl.get("deviation_desc"):
+                                ctrl["deviation_desc"] = existing.get("deviation_desc")
+                        seen_ctrl[cid] = ctrl
+                    else:
+                        # Existing wins, but capture any missing text from new
+                        for field in ("control_desc", "control_test", "control_test_results", "deviation_desc"):
+                            old_text = (existing.get(field) or "").strip()
+                            new_text = (ctrl.get(field) or "").strip()
+                            if new_text and not old_text:
+                                existing[field] = new_text
+                        old_pages = existing.get("control_page_refs") or []
+                        new_pages = ctrl.get("control_page_refs") or []
+                        if isinstance(old_pages, list) and isinstance(new_pages, list):
+                            existing["control_page_refs"] = sorted(set(old_pages + new_pages))
+                        if ctrl.get("has_deviation"):
+                            existing["has_deviation"] = True
+                            if not existing.get("deviation_desc"):
+                                existing["deviation_desc"] = ctrl.get("deviation_desc")
+            deduped_controls.extend(seen_ctrl.values())
+            dup_count = len(controls) - len(deduped_controls)
+            if dup_count > 0:
+                logging.info(f"[DEDUP] Pre-insert deduplication: {len(controls)} -> {len(deduped_controls)} controls ({dup_count} duplicates merged)")
+            # ── End deduplication ─────────────────────────────────────────
+            
+            for idx, ctrl in enumerate(deduped_controls):
                 try:
                     cur.execute("SAVEPOINT control_insert")
                     # Backward-compatible mapping for new fields
@@ -454,6 +525,14 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
                                 if success:
                                     logging.info(f"[LOGO_SERVICE] ✓ Cached logo (GPT): {company_name} ({domain}): {logo_url}")
                                     summary["logos_fetched"] = summary.get("logos_fetched", 0) + 1
+                                    
+                                    # Also update scan.company field with the company name
+                                    try:
+                                        cur.execute("UPDATE scan SET company = %s WHERE id = %s", (company_name, scan_id))
+                                        conn.commit()
+                                        logging.info(f"[LOGO_SERVICE] Updated scan.company field: {company_name}")
+                                    except Exception as update_err:
+                                        logging.error(f"[LOGO_SERVICE] Failed to update scan.company: {update_err}")
                                 else:
                                     logging.warning(f"[LOGO_SERVICE] ✗ No logo (GPT): {company_name} ({domain})")
                             except Exception as logo_error:
@@ -463,21 +542,14 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
                     
                     db_session.commit()
                     
-                    # Update phase_completion.logo_fetched
+                    # Update logo_fetched phase flag
                     if redis_client and job_id:
                         try:
-                            import json as _json
-                            job_key = f"job:{job_id}"
-                            job_data = redis_client.get(job_key)
-                            if job_data:
-                                job_dict = _json.loads(job_data)
-                                if "phase_completion" not in job_dict:
-                                    job_dict["phase_completion"] = {}
-                                job_dict["phase_completion"]["logo_fetched"] = True
-                                redis_client.setex(job_key, 86400, _json.dumps(job_dict))
-                                logging.info(f"[PHASE] Updated phase_completion.logo_fetched=True for job {job_id}")
+                            from .job_state import job_hset
+                            job_hset(job_id, "logo_fetched", True, redis_client)
+                            logging.info(f"[PHASE] Updated logo_fetched=True for job {job_id}")
                         except Exception as phase_err:
-                            logging.warning(f"Could not update phase_completion.logo_fetched: {phase_err}")
+                            logging.warning(f"Could not update logo_fetched: {phase_err}")
                     
                 sync_engine.dispose()
             except Exception as logo_fetch_error:
@@ -489,28 +561,21 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
             logging.error(f"COMMIT FAILED: {commit_error}")
             raise
             
-        # Update phase_completion.db_uploaded after successful commit
+        # Update db_uploaded phase flag after successful commit
         if redis_client and job_id:
             try:
-                import json as _json
-                job_key = f"job:{job_id}"
-                job_data = redis_client.get(job_key)
-                if job_data:
-                    job_dict = _json.loads(job_data)
-                    if "phase_completion" not in job_dict:
-                        job_dict["phase_completion"] = {}
-                    job_dict["phase_completion"]["db_uploaded"] = True
-                    redis_client.setex(job_key, 86400, _json.dumps(job_dict))
-                    logging.info(f"[PHASE] Updated phase_completion.db_uploaded=True for job {job_id}")
+                from .job_state import job_hset
+                job_hset(job_id, "db_uploaded", True, redis_client)
+                logging.info(f"[PHASE] Updated db_uploaded=True for job {job_id}")
             except Exception as phase_err:
-                logging.warning(f"Could not update phase_completion.db_uploaded: {phase_err}")
+                logging.warning(f"Could not update db_uploaded: {phase_err}")
 
         # Kick off objective extraction + mapping after DB commit
         try:
             if config.ENABLE_OBJECTIVE_EXTRACTION:
                 extracted_text_for_objectives = data.get("extracted_text")
                 if extracted_text_for_objectives:
-                    from .extractors.objective_extractor import extract_objectives, map_controls_to_objectives
+                    from .extractors.objective_extractor import extract_objectives
                     import threading
 
                     def _run_objectives_post_insert(scan_id_val: int, text: str):
@@ -529,18 +594,12 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
                                     redis_client=None
                                 )
                                 logging.info(f"[OBJECTIVES] Extracted {len(objectives)} objectives for scan {scan_id_val}")
-
-                                if objectives:
-                                    mappings_created = map_controls_to_objectives(
-                                        scan_id=scan_id_val,
-                                        db_session=db_session,
-                                        job_id=None,
-                                        redis_client=None
-                                    )
-                                    logging.info(f"[OBJECTIVES] Created {mappings_created} mappings for scan {scan_id_val}")
+                                # NOTE: Control-objective mapping is handled by extract_objectives()
+                                # via its _run_gap_and_map background thread. No separate call needed.
                             sync_engine.dispose()
                         except Exception as obj_err:
                             logging.error(f"[OBJECTIVES] Post-insert extraction failed for scan {scan_id_val}: {obj_err}")
+                            logging.error(f"[OBJECTIVES] Traceback: {traceback.format_exc()}")
 
                     threading.Thread(
                         target=_run_objectives_post_insert,

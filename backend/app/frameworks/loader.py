@@ -67,9 +67,14 @@ def load_framework_criteria(framework_name: str) -> Optional[List[Dict[str, Any]
     return None
 
 
-def get_available_frameworks(report_type: str, detected_standards: Optional[List[str]] = None) -> Dict[str, Dict[str, Any]]:
+def get_available_frameworks(
+    report_type: str,
+    detected_standards: Optional[List[str]] = None,
+    scan_default_only: bool = False,
+    framework_keys: Optional[List[str]] = None
+) -> Dict[str, Dict[str, Any]]:
     """
-    Get all frameworks available for a given report type and detected standards.
+    Get frameworks available for a given report type and detected standards.
     
     DETECTION STRATEGY:
     - Primary signal: report_type (SOC1 → Financial Assertions, SOC2 → TSC, etc.)
@@ -80,24 +85,52 @@ def get_available_frameworks(report_type: str, detected_standards: Optional[List
         report_type: "SOC1", "SOC2", or "COMBINED"
         detected_standards: Optional list of framework names detected from text 
                           (e.g., ["TSC", "COSO", "ISAE3402"])
+        scan_default_only: If True, limit to SCAN_DEFAULT_FRAMEWORKS config
+                          (default: TSC,COSO for pipeline speed optimization)
+        framework_keys: Explicit list of framework keys to load (overrides all other filters)
         
     Returns:
         Dictionary of {framework_name: {info: FrameworkInfo, criteria: List[Dict]}}
     """
+    from ..config import SCAN_DEFAULT_FRAMEWORKS
+    
     try:
         report_type_enum = ReportType(report_type)
     except ValueError:
         # Default to SOC2 if invalid
         report_type_enum = ReportType.SOC2
     
-    # Get frameworks by report type
-    applicable_frameworks = get_frameworks_by_report_type(report_type_enum)
-    
-    # Expand with frameworks detected from standards
-    if detected_standards:
-        for standard in detected_standards:
-            standard_frameworks = get_frameworks_by_standard(standard)
-            applicable_frameworks.update(standard_frameworks)
+    if framework_keys:
+        # Explicit framework list provided — load only those
+        applicable_frameworks = {
+            name: info
+            for name, info in FRAMEWORK_REGISTRY.items()
+            if name in framework_keys
+        }
+    elif scan_default_only and SCAN_DEFAULT_FRAMEWORKS.upper() != "ALL":
+        # Pipeline mode: limit to configured default frameworks
+        default_keys = [k.strip() for k in SCAN_DEFAULT_FRAMEWORKS.split(",") if k.strip()]
+        # Get all frameworks for report type, then filter to defaults
+        all_for_report = get_frameworks_by_report_type(report_type_enum)
+        applicable_frameworks = {
+            name: info
+            for name, info in all_for_report.items()
+            if name in default_keys
+        }
+        import logging
+        logging.getLogger(__name__).info(
+            f"[FRAMEWORK_LOADER] scan_default_only=True, using {list(applicable_frameworks.keys())} "
+            f"(config: {default_keys}, available for {report_type}: {list(all_for_report.keys())})"
+        )
+    else:
+        # Full mode: all frameworks for report type + detected standards
+        applicable_frameworks = get_frameworks_by_report_type(report_type_enum)
+        
+        # Expand with frameworks detected from standards
+        if detected_standards:
+            for standard in detected_standards:
+                standard_frameworks = get_frameworks_by_standard(standard)
+                applicable_frameworks.update(standard_frameworks)
     
     # Load criteria for each framework
     result = {}

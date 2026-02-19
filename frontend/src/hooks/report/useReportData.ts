@@ -8,6 +8,7 @@ interface UseReportDataReturn {
   loading: boolean;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
   refreshReport: (scanId: string) => Promise<void>;
+  silentRefresh: (scanId: string) => Promise<void>;
 }
 
 export function useReportData(scanId: string | undefined): UseReportDataReturn {
@@ -27,6 +28,17 @@ export function useReportData(scanId: string | undefined): UseReportDataReturn {
     }
   }, []);
 
+  // Silent refresh: update report data without showing the full-page loading spinner.
+  // Prevents tab state (sub-tabs, scroll positions) from being destroyed by unmount/remount.
+  const silentRefresh = useCallback(async (id: string) => {
+    try {
+      const res = await api.get(`${API_URL}${id}`, { timeout: 60000 });
+      setReport(res.data);
+    } catch (err) {
+      console.error('Silent refresh failed:', err);
+    }
+  }, []);
+
   useEffect(() => {
     if (!scanId) return;
     refreshReport(scanId);
@@ -37,6 +49,7 @@ export function useReportData(scanId: string | undefined): UseReportDataReturn {
     setReport,
     loading,
     setLoading,
-    refreshReport
+    refreshReport,
+    silentRefresh
   };
 }

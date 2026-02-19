@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Any, Dict, List
 from .. import config
 from ..gpt_client import gpt_extract
+from ..utils.objective_id_normalizer import normalize_objective_id
 from ..models import CUEC, ControlObjective, CUECObjectiveMapping, Scan
 from ..database import sync_engine
 from sqlalchemy.orm import sessionmaker
@@ -338,14 +339,6 @@ def map_cuecs_to_objectives(
         for cuec in cuecs:
             existing_for_cuec = mappings_by_cuec.get(cuec.id, [])
             if existing_for_cuec and not force:
-                primary_existing = [m for m in existing_for_cuec if m.is_primary]
-                if not primary_existing:
-                    best_existing = max(
-                        existing_for_cuec,
-                        key=lambda m: m.mapping_confidence if m.mapping_confidence is not None else 0.0
-                    )
-                    best_existing.is_primary = True
-                    mappings_updated += 1
                 continue
 
             if force and existing_for_cuec:
@@ -429,7 +422,7 @@ def map_cuecs_to_objectives(
                     objective_id=best_objective.id,
                     mapping_confidence=max(0.0, best_score),
                     mapping_method='auto_weighted',
-                    is_primary=True,
+                    is_primary=False,
                     page_proximity_score=best_scores.get("page_proximity_score"),
                     line_proximity_score=best_scores.get("line_proximity_score"),
                     gpt_alignment_score=best_scores.get("gpt_alignment_score"),
@@ -622,8 +615,8 @@ def extract_cuecs(report_type: str = "SOC2", job_paths: Optional[Dict[str, Path]
     logging.info(f"Using CUEC keywords for {report_type}: {cuec_keywords[:5]}...")
     
     try:
-        available_frameworks = get_available_frameworks(report_type=report_type)
-        logging.info(f"Loaded {len(available_frameworks)} frameworks for {report_type} CUEC mapping: {list(available_frameworks.keys())}")
+        available_frameworks = get_available_frameworks(report_type=report_type, scan_default_only=True)
+        logging.info(f"Loaded {len(available_frameworks)} frameworks for {report_type} CUEC mapping (scan_default_only): {list(available_frameworks.keys())}")
     except Exception as e:
         logging.error(f"Failed to load frameworks: {e}, falling back to config TSC/COSO")
         available_frameworks = {
@@ -950,10 +943,16 @@ def extract_cuecs(report_type: str = "SOC2", job_paths: Optional[Dict[str, Path]
                 if cuec['cuec_confidence'] >= config.HIGH_CONFIDENCE_THRESHOLD and not skip_framework_mapping:
                     _, _, _, _, mapping_result = map_cuec_to_frameworks(cuec.get('cuec_description', ''), available_frameworks)
                     
+                    # Normalize the criterion ID
+                    original_criterion_id = mapping_result.get('primary_criterion_id')
+                    normalized_criterion_id = normalize_objective_id(original_criterion_id) if original_criterion_id else None
+                    
                     # Store full framework mappings (new multi-framework support)
                     cuec['framework_mappings'] = mapping_result.get('framework_mappings', {})
                     cuec['primary_framework'] = mapping_result.get('primary_framework')
-                    cuec['primary_criterion_id'] = mapping_result.get('primary_criterion_id')
+                    cuec['primary_criterion_id'] = original_criterion_id
+                    cuec['primary_criterion_id_normalized'] = normalized_criterion_id
+                    cuec['primary_criterion_id_original'] = original_criterion_id
                     cuec['primary_confidence'] = mapping_result.get('primary_confidence', 0.0)
                     logging.info(f"CUEC seq={cuec['cuec_seq']} mapped to framework: {cuec['primary_framework']} / {cuec['primary_criterion_id']}")
                 else:
@@ -961,6 +960,8 @@ def extract_cuecs(report_type: str = "SOC2", job_paths: Optional[Dict[str, Path]
                     cuec['framework_mappings'] = {}
                     cuec['primary_framework'] = None
                     cuec['primary_criterion_id'] = None
+                    cuec['primary_criterion_id_normalized'] = None
+                    cuec['primary_criterion_id_original'] = None
                     cuec['primary_confidence'] = 0.0
                     if cuec['cuec_confidence'] < config.HIGH_CONFIDENCE_THRESHOLD:
                         logging.info(f"CUEC seq={cuec['cuec_seq']} skipped framework mapping (confidence {cuec['cuec_confidence']} < {config.HIGH_CONFIDENCE_THRESHOLD})")
@@ -1014,19 +1015,12 @@ def extract_cuecs(report_type: str = "SOC2", job_paths: Optional[Dict[str, Path]
                 if job_id and redis_client and len(cuec_results) % 5 == 0:
                     try:
                         cuecs_count = len(cuec_results)
-                        job_json = redis_client.get(f"job:{job_id}")
-                        if job_json:
-                            job_data = json.loads(job_json)
-                            if "counters" not in job_data:
-                                job_data["counters"] = {}
-                            job_data["counters"]["cuecs_count"] = cuecs_count
-                            
-                            # Update status every 5 CUECs
-                            if cuecs_count % 5 == 0:
-                                job_data["status"] = f"Extracting CUECs: {cuecs_count} found..."
-                            
-                            redis_client.set(f"job:{job_id}", json.dumps(job_data), ex=86400)
-                            logging.info(f"[PROGRESS] {cuecs_count} CUECs identified...")
+                        from ..job_state import job_hmset
+                        updates = {'cuecs_count': cuecs_count}
+                        if cuecs_count % 5 == 0:
+                            updates['status'] = f"Extracting CUECs: {cuecs_count} found..."
+                        job_hmset(job_id, updates, redis_client)
+                        logging.info(f"[PROGRESS] {cuecs_count} CUECs identified...")
                     except Exception as progress_err:
                         logging.warning(f"Could not update CUEC progress: {progress_err}")
                 

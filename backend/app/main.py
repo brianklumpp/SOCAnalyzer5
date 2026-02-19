@@ -152,7 +152,7 @@ async def _init_db_on_startup():
     try:
         print("[STARTUP] Initializing scan queue...")
         import redis as sync_redis
-        from .threading.scan_queue import initialize_scan_queue
+        from .scan_threading.scan_queue import initialize_scan_queue
         from . import config as cfg
         
         logging.info("[STARTUP] Initializing scan queue...")
@@ -178,7 +178,7 @@ async def _init_db_on_startup():
         logging.info(f"[STARTUP] Scan queue initialized successfully (max_concurrent={max_concurrent})")
         
         # Start queue worker thread
-        from .threading.scan_queue import start_queue_worker
+        from .scan_threading.scan_queue import start_queue_worker
         print("[STARTUP] Starting queue worker thread...")
         logging.info("[STARTUP] Starting queue worker thread...")
         start_queue_worker()
@@ -581,7 +581,7 @@ async def estimate_processing_time(report_type: str = "SOC2", db=Depends(get_db)
 async def get_scan_queue():
     """Get all scans in the queue with their status"""
     try:
-        from .threading.scan_queue import get_scan_queue
+        from .scan_threading.scan_queue import get_scan_queue
         queue = get_scan_queue()
         status = queue.get_status()
         return {
@@ -602,7 +602,7 @@ async def get_scan_queue():
 async def get_scan_queue_stats():
     """Get queue statistics"""
     try:
-        from .threading.scan_queue import get_scan_queue
+        from .scan_threading.scan_queue import get_scan_queue
         queue = get_scan_queue()
         status = queue.get_status()
         return status.get("stats", {
@@ -628,7 +628,7 @@ async def get_scan_queue_stats():
 async def cancel_scan_in_queue(job_id: str):
     """Cancel a scan in the queue"""
     try:
-        from .threading.scan_queue import get_scan_queue
+        from .scan_threading.scan_queue import get_scan_queue
         queue = get_scan_queue()
         queue.cancel(job_id)
         return {"status": "cancelled", "job_id": job_id}
@@ -643,7 +643,7 @@ async def cancel_scan_in_queue(job_id: str):
 async def pause_scan_queue():
     """Pause the scan queue"""
     try:
-        from .threading.scan_queue import get_scan_queue
+        from .scan_threading.scan_queue import get_scan_queue
         queue = get_scan_queue()
         queue.pause()
         return {"status": "paused"}
@@ -658,7 +658,7 @@ async def pause_scan_queue():
 async def resume_scan_queue():
     """Resume the scan queue"""
     try:
-        from .threading.scan_queue import get_scan_queue
+        from .scan_threading.scan_queue import get_scan_queue
         queue = get_scan_queue()
         queue.resume()
         return {"status": "resumed"}
@@ -673,7 +673,7 @@ async def resume_scan_queue():
 async def clear_completed_scans():
     """Clear completed scans from queue history"""
     try:
-        from .threading.scan_queue import get_scan_queue
+        from .scan_threading.scan_queue import get_scan_queue
         queue = get_scan_queue()
         # Note: clear_completed method needs to be added to ScanQueue class
         # For now, return 0
@@ -926,8 +926,8 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
     
     # Mark scan as running in queue
     try:
-        from .threading.scan_queue import get_scan_queue
-        from .threading.scan_queue import ScanQueueStatus
+        from .scan_threading.scan_queue import get_scan_queue
+        from .scan_threading.scan_queue import ScanQueueStatus
         queue = get_scan_queue()
         scan = queue._load_scan(job_id)
         if scan:
@@ -946,11 +946,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
             from datetime import datetime, timedelta
             
             # Update job status to show detection in progress
+            from .job_state import job_hmset as _jhmset
             redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
-            job = _json.loads(redis_client.get(f"job:{job_id}") or "{}")
-            job["status"] = "Detecting report type..."
-            job["progress"] = 1
-            redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+            _jhmset(job_id, {"status": "Detecting report type...", "progress": 1}, redis_client)
             
             logging.info(f"[REPORT_TYPE_DETECTION] Starting auto-detection for job_id={job_id}")
             
@@ -988,17 +986,14 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                         
                         # Update Redis job status with cached detection
                         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
-                        job = _json.loads(redis_client.get(f"job:{job_id}") or "{}")
-                        job["status"] = f"Detected: {report_type}"
-                        job["progress"] = 2
-                        job["detected_report_type"] = report_type
-                        job["detected_subtype"] = cached_detection.detected_subtype  # No default - let None propagate
-                        job["detection_confidence"] = cached_detection.confidence
-                        # Update identified_entities with report_type
-                        if "identified_entities" not in job:
-                            job["identified_entities"] = {}
-                        job["identified_entities"]["report_type"] = report_type
-                        redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+                        job_hmset(job_id, {
+                            "status": f"Detected: {report_type}",
+                            "progress": 2,
+                            "detected_report_type": report_type,
+                            "detected_subtype": cached_detection.detected_subtype or "",
+                            "detection_confidence": cached_detection.confidence,
+                            "report_type": report_type,
+                        }, redis_client)
                         logging.info(f"[REPORT_TYPE_DETECTION] Updated job status with cached detection")
                         logging.info(f"[PROGRESS] Report type identified: {report_type}")
                 
@@ -1046,14 +1041,14 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                         
                         # Update job status to await confirmation
                         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
-                        job = _json.loads(redis_client.get(f"job:{job_id}") or "{}")
-                        job["status"] = "AWAITING_CONFIRMATION"
-                        job["awaiting_confirmation"] = True
-                        job["detection_result"] = detection_result
-                        job["pdf_hash"] = pdf_hash
-                        job["temp_pdf_path"] = temp_pdf_path
-                        job["filename"] = filename
-                        redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+                        job_hmset(job_id, {
+                            "status": "AWAITING_CONFIRMATION",
+                            "awaiting_confirmation": True,
+                            "detection_result": detection_result,
+                            "pdf_hash": pdf_hash,
+                            "temp_pdf_path": temp_pdf_path,
+                            "filename": filename,
+                        }, redis_client)
                         
                         # Exit thread - will resume when user confirms
                         logging.info(f"[REPORT_TYPE_DETECTION] Paused for user confirmation")
@@ -1066,19 +1061,16 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                             f"(confidence={detection_result['confidence']:.2f})"
                         )
                         
-                        # Update job status with detected type and identified_entities
+                        # Update job status with detected type
                         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
-                        job = _json.loads(redis_client.get(f"job:{job_id}") or "{}")
-                        job["status"] = f"Detected: {report_type}"
-                        job["progress"] = 2
-                        job["detected_report_type"] = report_type
-                        job["detected_subtype"] = detection_result.get('detected_subtype')  # No default - let None propagate
-                        job["detection_confidence"] = detection_result['confidence']
-                        # Update identified_entities with report_type
-                        if "identified_entities" not in job:
-                            job["identified_entities"] = {}
-                        job["identified_entities"]["report_type"] = report_type
-                        redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+                        job_hmset(job_id, {
+                            "status": f"Detected: {report_type}",
+                            "progress": 2,
+                            "detected_report_type": report_type,
+                            "detected_subtype": detection_result.get('detected_subtype') or "",
+                            "detection_confidence": detection_result['confidence'],
+                            "report_type": report_type,
+                        }, redis_client)
                         logging.info(f"[PROGRESS] Report type identified: {report_type}")
             finally:
                 # Close sync session
@@ -1094,27 +1086,22 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
     last_progress_ts = {"ts": time.time()}
 
     def progress_callback(percent, status=None):
-        # logging.info(f"[INFO] progress_callback: job_id={job_id}, percent={percent}, status={status}")
+        from .job_state import job_hmset, job_hget
         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
-        job_json = redis_client.get(f"job:{job_id}")
-        if isinstance(job_json, str):
-            job = _json.loads(job_json)
-        else:
-            job = {}
-        # Only update progress and status, do not set 'done' or 'error' here
-        job["progress"] = percent
         
-        # **FIX**: Preserve GPT service warning in status if flag is set
-        new_status = status or job.get("status", "")
-        if job.get("gpt_service_warning"):
-            # Prepend warning icon if not already in the status
-            if not new_status.startswith("⚠️"):
-                new_status = f"⚠️ GPT service degraded. {new_status}"
-        job["status"] = new_status
+        # Build update dict with only progress/status fields
+        updates = {"progress": percent}
+        if status:
+            # Check if GPT service warning should be prepended
+            try:
+                if job_hget(job_id, 'gpt_service_warning', redis_client) and not status.startswith("⚠️"):
+                    status = f"⚠️ GPT service degraded. {status}"
+            except Exception:
+                pass
+            updates["status"] = status
         
-        job.pop("done", None)
-        job.pop("error", None)
-        redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+        job_hmset(job_id, updates, redis_client)
+        
         # Update watchdog trackers
         try:
             last_progress_value["val"] = int(percent or 0)
@@ -1135,17 +1122,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
             logger = logging.getLogger('checklist')
             logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
             logger.info(f"[checklist_callback] job_id={job_id}, checklist={extractor_statuses}")
+        from .job_state import job_hset
         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
-        job_json = redis_client.get(f"job:{job_id}")
-        if isinstance(job_json, str):
-            job = _json.loads(job_json)
-        else:
-            job = {}
-        # Only update checklist, do not set 'done' or 'error' here
-        job["checklist"] = extractor_statuses
-        job.pop("done", None)
-        job.pop("error", None)
-        redis_client.set(f"job:{job_id}", _json.dumps(job), ex=60*60*24)
+        job_hset(job_id, 'checklist', extractor_statuses, redis_client)
     # Watchdog to finalize from disk if job stalls after high progress
     stop_event = threading.Event()
     def _watchdog():
@@ -1212,11 +1191,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
         from .analyze import analyze_pdf_file
         redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
         # Check for cancellation before starting
-        job_json = redis_client.get(f"job:{job_id}")
-        if job_json and isinstance(job_json, str):
-            job = _json.loads(job_json)
-            if job.get("cancelled"):
-                raise Exception("Scan cancelled by user")
+        from .job_state import job_hget
+        if job_hget(job_id, 'cancelled', redis_client):
+            raise Exception("Scan cancelled by user")
         
         # Initialize IntelligentTaskExecutor and ProgressTracker for parallel execution (v2.1.0)
         executor = None
@@ -1224,8 +1201,8 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
         
         if cfg.ENABLE_PARALLEL_EXTRACTION or cfg.ENABLE_PARALLEL_MAPPING:
             try:
-                from .threading.intelligent_executor import IntelligentTaskExecutor
-                from .threading.progress_tracker import ProgressTracker
+                from .scan_threading.intelligent_executor import IntelligentTaskExecutor
+                from .scan_threading.progress_tracker import ProgressTracker
                 
                 # Create executor with configuration
                 executor = IntelligentTaskExecutor(
@@ -1327,11 +1304,9 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
         except Exception as _werr:
             logging.error(f"[run_analysis_job] Failed to write combined_result.json: {_werr}")
         # Check for cancellation after analysis
-        job_json = redis_client.get(f"job:{job_id}")
-        if job_json and isinstance(job_json, str):
-            job = _json.loads(job_json)
-            if job.get("cancelled"):
-                raise Exception("Scan cancelled by user")
+        from .job_state import job_hget as _jhget_cancel
+        if _jhget_cancel(job_id, 'cancelled', redis_client):
+            raise Exception("Scan cancelled by user")
         
         # AUTOMATICALLY INSERT INTO DATABASE when scan completes
         try:
@@ -1357,7 +1332,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                     logging.error(f"[PDF_DECRYPT] Failed to decrypt PDF for storage, using original: {decrypt_err}")
             
             # Insert into database with PDF path for storage
-            summary = insert_extracted_data(tmp_path, pdf_path=pdf_path_for_db, job_id=job_id, user_id=user_id)
+            summary = insert_extracted_data(tmp_path, pdf_path=pdf_path_for_db, job_id=job_id, user_id=user_id, start_time=start_time)
             logging.error(f"[SUCCESS] Database insertion completed: {summary}")
             
             # Clean up decrypted temp file if created
@@ -1388,9 +1363,15 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                     scan = scan_db.query(Scan).filter(Scan.id == scan_id).first()
                     if scan:
                         scan.elapsed_seconds = elapsed_seconds
-                        scan.progress_status = "Scan Complete"
+                        # Don't mark as "Scan Complete" yet if objective extraction is enabled
+                        # Let the objective extraction thread update this to 100%
+                        if cfg.ENABLE_OBJECTIVE_EXTRACTION:
+                            scan.progress_status = "Finalizing..."
+                            logging.info(f"[ELAPSED_TIME] Stored elapsed_seconds={elapsed_seconds:.1f}s and progress_status='Finalizing...' for scan_id={scan_id}")
+                        else:
+                            scan.progress_status = "Scan Complete"
+                            logging.info(f"[ELAPSED_TIME] Stored elapsed_seconds={elapsed_seconds:.1f}s and progress_status='Scan Complete' for scan_id={scan_id}")
                         scan_db.commit()
-                        logging.info(f"[ELAPSED_TIME] Stored elapsed_seconds={elapsed_seconds:.1f}s and progress_status='Scan Complete' for scan_id={scan_id}")
 
                     # Kick off objective extraction + mapping after scan insert
                     if cfg.ENABLE_OBJECTIVE_EXTRACTION:
@@ -1421,6 +1402,18 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                                     if isinstance(result_json, dict):
                                         sections = result_json.get("sections") or []
 
+                                    # Update progress: Starting objective extraction (92%)
+                                    try:
+                                        from .job_state import job_hmset, job_hset
+                                        thread_redis = _get_redis()
+                                        job_hmset(job_id, {
+                                            'progress': 92,
+                                            'status': 'Control Objective Extraction in Progress'
+                                        }, thread_redis)
+                                        logging.info(f"[OBJECTIVES] Phase 1: Starting objective extraction for scan {scan_id_val}")
+                                    except Exception as prog_err:
+                                        logging.warning(f"[OBJECTIVES] Failed to update progress to 92%: {prog_err}")
+                                    
                                     objectives = extract_objectives(
                                         extracted_text=scan_row.extracted_text,
                                         scan_id=scan_id_val,
@@ -1431,24 +1424,174 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                                     )
                                     logging.info(f"[OBJECTIVES] Extracted {len(objectives)} objectives for scan {scan_id_val}")
 
-                                    mappings_created = map_controls_to_objectives(
-                                        scan_id=scan_id_val,
-                                        db_session=sync_db_session,
-                                        job_id=None,
-                                        redis_client=None
-                                    )
-                                    logging.info(f"[OBJECTIVES] Created {mappings_created} mappings for scan {scan_id_val}")
+                                    # Update objectives counter in Redis
+                                    try:
+                                        from .job_state import job_hset
+                                        thread_redis = _get_redis()
+                                        job_hset(job_id, 'objectives_count', len(objectives), thread_redis)
+                                    except Exception as cnt_err:
+                                        logging.warning(f"[OBJECTIVES] Failed to update objectives counter: {cnt_err}")
+
+                                    # Run gap extraction to find missing objectives
+                                    if cfg.ENABLE_GAP_EXTRACTION:
+                                        try:
+                                            # Update progress: Starting gap extraction (95%)
+                                            try:
+                                                from .job_state import job_hmset
+                                                thread_redis = _get_redis()
+                                                job_hmset(job_id, {
+                                                    'progress': 95,
+                                                    'status': 'Identifying Control Objective Gaps'
+                                                }, thread_redis)
+                                                logging.info(f"[OBJECTIVES] Phase 2: Starting gap extraction for scan {scan_id_val}")
+                                            except Exception as prog_err:
+                                                logging.warning(f"[OBJECTIVES] Failed to update progress to 95%: {prog_err}")
+                                            
+                                            from .routers.objective_router import run_gap_extraction_sync
+                                            logging.info(f"[OBJECTIVES] Running gap extraction for scan {scan_id_val}")
+                                            
+                                            # Extract only Control_Descriptions section for gap extraction
+                                            gap_text = scan_row.extracted_text
+                                            control_section = next((s for s in sections if s.get('topic') == 'Control_Descriptions'), None)
+                                            if control_section and control_section.get('start_line') and control_section.get('end_line'):
+                                                start_line = control_section['start_line']
+                                                end_line = control_section['end_line']
+                                                lines = scan_row.extracted_text.split('\n')
+                                                # Extract only the Control_Descriptions section (line numbers are 1-indexed)
+                                                gap_text = '\n'.join(lines[start_line-1:end_line])
+                                                logging.info(f"[OBJECTIVES] Limiting gap extraction to Control_Descriptions section: lines {start_line}-{end_line} ({len(gap_text)} chars)")
+                                            else:
+                                                logging.warning(f"[OBJECTIVES] Control_Descriptions section not found, searching full document")
+                                            
+                                            gap_result = run_gap_extraction_sync(
+                                                scan_id=scan_id_val,
+                                                extracted_text=gap_text
+                                            )
+                                            if gap_result.get("status") == "completed":
+                                                gap_count = gap_result.get("gap_objectives_extracted", 0)
+                                                logging.info(f"[OBJECTIVES] Gap extraction found {gap_count} additional objectives")
+                                            else:
+                                                logging.warning(f"[OBJECTIVES] Gap extraction status: {gap_result.get('status')}")
+                                        except Exception as gap_err:
+                                            logging.error(f"[OBJECTIVES] Gap extraction failed for scan {scan_id_val}: {gap_err}")
+                                    
+                                    # Update progress: Starting mapping (98%)
+                                    # NOTE: Control-objective mapping is now handled by extract_objectives()
+                                    # via its _run_gap_and_map background thread, which calls
+                                    # map_controls_to_objectives(force=True) AFTER gap extraction completes.
+                                    # Calling it here again would create duplicate mappings due to race conditions.
+                                    try:
+                                        from .job_state import job_hmset
+                                        thread_redis = _get_redis()
+                                        # Update final objectives count (includes gap-extracted)
+                                        sync_db_session.expire_all()
+                                        from .models import ControlObjective as CO_model
+                                        total_obj_count = sync_db_session.query(CO_model).filter_by(scan_id=scan_id_val).count()
+                                        job_hmset(job_id, {
+                                            'progress': 98,
+                                            'status': 'Mapping Control Objectives to Controls',
+                                            'objectives_count': total_obj_count
+                                        }, thread_redis)
+                                        logging.info(f"[OBJECTIVES] Phase 3: Objective-control mapping handled by extractor for scan {scan_id_val}")
+                                    except Exception as prog_err:
+                                        logging.warning(f"[OBJECTIVES] Failed to update progress to 98%: {prog_err}")
+                                    
+                                    # Update progress: Objective extraction complete (100%)
+                                    try:
+                                        from .job_state import job_hmset
+                                        thread_redis = _get_redis()
+                                        job_hmset(job_id, {
+                                            'progress': 100,
+                                            'status': 'Complete',
+                                            'done': True
+                                        }, thread_redis)
+                                        logging.info(f"[OBJECTIVES] Phase 4: All objective extraction and mapping phases complete for scan {scan_id_val}")
+                                        
+                                        # Mark scan as completed in queue NOW (objectives are done)
+                                        try:
+                                            from .scan_threading.scan_queue import get_scan_queue
+                                            from .scan_threading.scan_queue import ScanQueueStatus
+                                            queue = get_scan_queue()
+                                            scan = queue._load_scan(job_id)
+                                            if scan:
+                                                scan.status = ScanQueueStatus.COMPLETED
+                                                scan.completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+                                                queue._save_scan(scan)
+                                                queue.redis.delete(queue.KEY_CURRENT)
+                                                queue.redis.hincrby(queue.KEY_STATS, "total_completed", 1)
+                                                logging.info(f"[QUEUE] Objectives thread marked scan as COMPLETED: job_id={job_id}")
+                                                
+                                                # Broadcast completion to WebSocket
+                                                try:
+                                                    import asyncio
+                                                    from .websocket_manager import manager, ScanUpdateMessage
+                                                    msg = ScanUpdateMessage(
+                                                        type="scan_completed",
+                                                        scan_id=job_id,
+                                                        status="COMPLETED",
+                                                        timestamp=time.time()
+                                                    )
+                                                    loop = getattr(app.state, 'loop', None)
+                                                    if loop and loop.is_running():
+                                                        asyncio.run_coroutine_threadsafe(
+                                                            manager.broadcast_to_scan(job_id, msg.dict()),
+                                                            loop
+                                                        )
+                                                except Exception as ws_err:
+                                                    logging.debug(f"[QUEUE] WebSocket broadcast error: {ws_err}")
+                                        except Exception as queue_err:
+                                            logging.warning(f"[QUEUE] Failed to mark scan complete in objective thread: {queue_err}")
+                                        
+                                        # Broadcast completion to WebSocket clients
+                                        try:
+                                            loop = getattr(app.state, 'loop', None)
+                                            if loop and loop.is_running():
+                                                asyncio.run_coroutine_threadsafe(broadcast_progress(100, "Complete"), loop)
+                                                asyncio.run_coroutine_threadsafe(broadcast_done(), loop)
+                                        except Exception as broadcast_err:
+                                            logging.debug(f"Failed to broadcast completion: {broadcast_err}")
+                                    except Exception as prog_err:
+                                        logging.warning(f"[OBJECTIVES] Failed to update progress to 100%: {prog_err}")
+                                    
+                                    # Update database scan status to complete and recalculate elapsed time
+                                    try:
+                                        scan_row_update = sync_db_session.query(Scan).filter(Scan.id == scan_id_val).first()
+                                        if scan_row_update:
+                                            scan_row_update.progress_status = "Scan Complete"
+                                            # Recalculate elapsed_seconds to include objective extraction time
+                                            if scan_row_update.scan_date:
+                                                from datetime import timezone
+                                                scan_date_aware = scan_row_update.scan_date.replace(tzinfo=timezone.utc) if scan_row_update.scan_date.tzinfo is None else scan_row_update.scan_date
+                                                now = datetime.now(timezone.utc)
+                                                total_elapsed = (now - scan_date_aware).total_seconds()
+                                                scan_row_update.elapsed_seconds = total_elapsed
+                                                logging.info(f"[OBJECTIVES] Updated scan {scan_id_val} elapsed_seconds to {total_elapsed:.1f}s (includes objective extraction time)")
+                                            sync_db_session.commit()
+                                            logging.info(f"[OBJECTIVES] Updated scan {scan_id_val} progress_status to 'Scan Complete'")
+                                    except Exception as db_err:
+                                        logging.warning(f"[OBJECTIVES] Failed to update scan progress_status: {db_err}")
                                 except Exception as obj_err:
                                     logging.error(f"[OBJECTIVES] Post-insert extraction failed for scan {scan_id_val}: {obj_err}")
+                                    # Mark scan as complete even on error
+                                    try:
+                                        scan_row_fail = sync_db_session.query(Scan).filter(Scan.id == scan_id_val).first()
+                                        if scan_row_fail:
+                                            scan_row_fail.progress_status = f"Scan Complete (Objective extraction error: {str(obj_err)[:100]})"
+                                            sync_db_session.commit()
+                                    except Exception:
+                                        pass
                                 finally:
                                     sync_db_session.close()
 
-                            threading.Thread(
+                            # Use non-daemon thread so it completes even if main process restarts
+                            thread = threading.Thread(
                                 target=_run_objectives_post_insert,
                                 args=(scan_id,),
                                 name=f"objective-extract-{scan_id}",
-                                daemon=True
-                            ).start()
+                                daemon=False  # Changed from True - ensures thread completes
+                            )
+                            thread.start()
+                            logging.info(f"[OBJECTIVES] Started non-daemon objective extraction thread for scan {scan_id}")
                         except Exception as obj_init_err:
                             logging.error(f"[OBJECTIVES] Failed to start post-insert extraction: {obj_init_err}")
                 except Exception as elapsed_err:
@@ -1475,34 +1618,27 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
             if scan_id:
                 try:
                     redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
-                    job_json = redis_client.get(f"job:{job_id}")
-                    if job_json:
-                        job_data = _json.loads(job_json)
-                        # Add scan_id to job
-                        job_data["scan_id"] = scan_id
+                    enrich_fields = {"scan_id": scan_id}
+                    
+                    # Fetch auditor and logo from database
+                    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+                    if scan:
+                        if scan.auditor:
+                            enrich_fields["auditor"] = scan.auditor
+                            logging.info(f"[REDIS_UPDATE] Added auditor to job: {scan.auditor}")
                         
-                        # Fetch auditor and logo from database and add to identified_entities
-                        scan = db.query(Scan).filter(Scan.id == scan_id).first()
-                        if scan:
-                            if "identified_entities" not in job_data:
-                                job_data["identified_entities"] = {}
-                            
-                            if scan.auditor:
-                                job_data["identified_entities"]["auditor"] = scan.auditor
-                                logging.info(f"[REDIS_UPDATE] Added auditor to job: {scan.auditor}")
-                            
-                            if scan.company:
-                                job_data["identified_entities"]["company"] = scan.company
-                                # Query company logo
-                                from .models import Company
-                                company = db.query(Company).filter(Company.name == scan.company).first()
-                                if company and company.logo_url:
-                                    job_data["identified_entities"]["company_logo_url"] = company.logo_url
-                                    job_data["logo_url"] = company.logo_url  # Also add to top level for queue card
-                                    logging.info(f"[REDIS_UPDATE] Added logo to job: {company.logo_url}")
-                        
-                        redis_client.set(f"job:{job_id}", _json.dumps(job_data), ex=60*60*24)
-                        logging.info(f"[REDIS_UPDATE] Added scan_id={scan_id} and enriched identified_entities")
+                        if scan.company:
+                            enrich_fields["company"] = scan.company
+                            # Query company logo
+                            from .models import Company
+                            company = db.query(Company).filter(Company.name == scan.company).first()
+                            if company and company.logo_url:
+                                enrich_fields["company_logo_url"] = company.logo_url
+                                enrich_fields["logo_url"] = company.logo_url
+                                logging.info(f"[REDIS_UPDATE] Added logo to job: {company.logo_url}")
+                    
+                    job_hmset(job_id, enrich_fields, redis_client)
+                    logging.info(f"[REDIS_UPDATE] Added scan_id={scan_id} and enriched entities")
                 except Exception as redis_err:
                     logging.error(f"[ERROR] Failed to update Redis with scan_id: {redis_err}")
             
@@ -1519,42 +1655,55 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
             # Filter out pdf_file bytes before storing in Redis
             results_for_redis = {k: v for k, v in results.items() if k != 'pdf_file'}
             job["result"] = results_for_redis
-            job["done"] = True
+            # If objective extraction is enabled, don't mark as done yet
+            if cfg.ENABLE_OBJECTIVE_EXTRACTION:
+                job["done"] = False
+            else:
+                job["done"] = True
             job["error"] = None
             # Only mark as saved if no DB insertion error was captured
             job["db_saved"] = ("db_insertion_error" not in results)
             # Preserve progress, status, checklist if present
-            job["progress"] = job.get("progress", 100)
-            job["status"] = job.get("status", "Complete")
+            # If objective extraction is enabled, don't mark as complete yet
+            if cfg.ENABLE_OBJECTIVE_EXTRACTION:
+                job["progress"] = job.get("progress", 90)
+                job["status"] = job.get("status", "Processing Objectives")
+            else:
+                job["progress"] = job.get("progress", 100)
+                job["status"] = job.get("status", "Complete")
             job["checklist"] = job.get("checklist", [])
             set_job(job_id, job, redis_client)
             
-            # Mark scan as completed in queue
-            try:
-                from .threading.scan_queue import get_scan_queue
-                from .threading.scan_queue import ScanQueueStatus
-                queue = get_scan_queue()
-                scan = queue._load_scan(job_id)
-                if scan:
-                    scan.status = ScanQueueStatus.COMPLETED
-                    scan.completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
-                    queue._save_scan(scan)
-                    # Clear from current job slot
-                    queue.redis.delete(queue.KEY_CURRENT)
-                    # Update stats
-                    queue.redis.hincrby(queue.KEY_STATS, "total_completed", 1)
-                    logging.info(f"[QUEUE] Marked scan as COMPLETED: job_id={job_id}")
-                    
-                    # Broadcast queue update to WebSocket clients
-                    try:
-                        from .routers.scan_router import broadcast_queue_update
-                        loop = asyncio.get_running_loop()
-                        loop.create_task(broadcast_queue_update())
-                        logging.info(f"[QUEUE] Broadcasted queue update to WebSocket clients")
-                    except Exception as broadcast_err:
-                        logging.debug(f"Failed to broadcast queue update: {broadcast_err}")
-            except Exception as queue_err:
-                logging.warning(f"[QUEUE] Failed to mark scan complete: {queue_err}")
+            # Mark scan as completed in queue ONLY if objectives are disabled
+            # If objectives enabled, this will be done in the objective thread
+            if not cfg.ENABLE_OBJECTIVE_EXTRACTION:
+                try:
+                    from .scan_threading.scan_queue import get_scan_queue
+                    from .scan_threading.scan_queue import ScanQueueStatus
+                    queue = get_scan_queue()
+                    scan = queue._load_scan(job_id)
+                    if scan:
+                        scan.status = ScanQueueStatus.COMPLETED
+                        scan.completed_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+                        queue._save_scan(scan)
+                        # Clear from current job slot
+                        queue.redis.delete(queue.KEY_CURRENT)
+                        # Update stats
+                        queue.redis.hincrby(queue.KEY_STATS, "total_completed", 1)
+                        logging.info(f"[QUEUE] Marked scan as COMPLETED: job_id={job_id}")
+                        
+                        # Broadcast queue update to WebSocket clients
+                        try:
+                            from .routers.scan_router import broadcast_queue_update
+                            loop = asyncio.get_running_loop()
+                            loop.create_task(broadcast_queue_update())
+                            logging.info(f"[QUEUE] Broadcasted queue update to WebSocket clients")
+                        except Exception as broadcast_err:
+                            logging.debug(f"Failed to broadcast queue update: {broadcast_err}")
+                except Exception as queue_err:
+                    logging.warning(f"[QUEUE] Failed to mark scan complete: {queue_err}")
+            else:
+                logging.info(f"[QUEUE] Skipping queue completion - objectives extraction in progress")
         try:
             loop = asyncio.get_running_loop()
             if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -1601,8 +1750,8 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
             
             # Mark scan as failed in queue
             try:
-                from .threading.scan_queue import get_scan_queue
-                from .threading.scan_queue import ScanQueueStatus
+                from .scan_threading.scan_queue import get_scan_queue
+                from .scan_threading.scan_queue import ScanQueueStatus
                 queue = get_scan_queue()
                 scan = queue._load_scan(job_id)
                 if scan:
@@ -1714,38 +1863,41 @@ async def analyze_pdf_bg(
     
     job_id = str(uuid.uuid4())
     logging.error(f"[DEBUG /analyze/] Creating job {job_id} with report_type='{report_type}'")
-    set_job(job_id, {
+    from .job_state import job_init
+    _init_redis = sync_redis.from_url(REDIS_URL, decode_responses=True)
+    job_init(job_id, {
         "status": "Queued",
         "progress": 0,
         "done": False,
-        "result": None,
-        "error": None,
+        "error": "",
         "checklist": [],
         "filename": filename,
-        "report_type": report_type,
+        "report_type": report_type or "",
         "start_time": time.time(),
-        "identified_entities": {},
-        "counters": {
-            "subservice_orgs_count": 0,
-            "controls_count": 0,
-            "controls_total_estimate": 0,
-            "controls_percent": 0,
-            "controls_mapped_count": 0,
-            "controls_mapped_percent": 0,
-            "cuecs_count": 0
-        },
-        "phase_completion": {
-            "logo_fetched": False,
-            "cleanup_done": False,
-            "db_uploaded": False
-        },
-        "extraction_partial": False
-    })
+        "controls_count": 0,
+        "controls_total_estimate": 0,
+        "controls_percent": 0,
+        "controls_mapped_count": 0,
+        "controls_mapped_percent": 0,
+        "total_controls": 0,
+        "cuecs_count": 0,
+        "subservice_orgs_count": 0,
+        "objectives_count": 0,
+        "objectives_percent": 0,
+        "logo_fetched": False,
+        "db_uploaded": False,
+        "extraction_partial": False,
+        "cancelled": False,
+        "paused": False,
+        "gpt_service_warning": False,
+        "finalized": False,
+        "db_saved": False,
+    }, _init_redis)
     
     # Add scan to queue (v2.1.0)
     try:
         logging.error(f"[DEBUG /analyze/] About to enqueue scan: job_id={job_id}")
-        from .threading.scan_queue import get_scan_queue
+        from .scan_threading.scan_queue import get_scan_queue
         logging.error(f"[DEBUG /analyze/] Import successful")
         queue = get_scan_queue()
         logging.error(f"[DEBUG /analyze/] Got queue instance: {queue}")
@@ -4071,9 +4223,66 @@ async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
         if not desc and not str(data.get("control_id", "")).strip():
             raise HTTPException(status_code=400, detail="control_desc or control_id is required")
         conf = _norm_pct_like(data.get("control_confidence"))
+        # Clean control_id: remove newlines, tabs, and excess whitespace
+        raw_control_id = str(data.get("control_id") or "").strip().replace('\n', '').replace('\r', '').replace('\t', ' ')
+
+        # ── Dedup guard: if a control with this (scan_id, control_id) already
+        # exists, update it in place instead of creating a duplicate row.
+        if raw_control_id:
+            existing = (await db.execute(
+                select(Control).where(
+                    Control.scan_id == scan_id,
+                    Control.control_id == raw_control_id,
+                )
+            )).scalar_one_or_none()
+            if existing:
+                # Update existing control with incoming data
+                existing.control_desc = desc or existing.control_desc
+                existing.control_test = (str(data.get("control_test") or "").strip() or existing.control_test)
+                existing.control_test_results = (str(data.get("control_test_results") or "").strip() or existing.control_test_results)
+                if data.get("has_deviation") is not None:
+                    existing.has_deviation = data.get("has_deviation")
+                existing.deviation_desc = (str(data.get("deviation_desc") or "").strip() or existing.deviation_desc)
+                if data.get("framework_mappings"):
+                    existing.framework_mappings = data.get("framework_mappings")
+                if data.get("primary_framework"):
+                    existing.primary_framework = data.get("primary_framework")
+                if data.get("primary_criterion_id"):
+                    existing.primary_criterion_id = data.get("primary_criterion_id")
+                if data.get("primary_confidence") is not None:
+                    existing.primary_confidence = data.get("primary_confidence")
+                if conf is not None:
+                    existing.control_confidence = conf
+                existing.annotation = data.get("annotation") or existing.annotation
+                scan_row = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalar_one_or_none()
+                if scan_row:
+                    scan_row.executive_summary_stale = True
+                    db.add(scan_row)
+                await db.commit()
+                await db.refresh(existing)
+                return {
+                    "id": existing.id,
+                    "control_id": existing.control_id,
+                    "control_desc": existing.control_desc,
+                    "control_test": existing.control_test,
+                    "control_test_results": existing.control_test_results,
+                    "has_deviation": existing.has_deviation,
+                    "deviation_desc": existing.deviation_desc,
+                    "framework_mappings": existing.framework_mappings,
+                    "primary_framework": existing.primary_framework,
+                    "primary_criterion_id": existing.primary_criterion_id,
+                    "primary_confidence": existing.primary_confidence,
+                    "control_confidence": existing.control_confidence,
+                    "control_page_refs": existing.control_page_refs,
+                    "control_line_ref": existing.control_line_ref,
+                    "control_seq": existing.control_seq,
+                    "annotation": existing.annotation,
+                    "_updated_existing": True,
+                }
+
         ctrl = Control(
             scan_id=scan_id,
-            control_id=(str(data.get("control_id") or "").strip() or None),
+            control_id=(raw_control_id or None),
             control_desc=(desc or None),
             control_test=(str(data.get("control_test") or "").strip() or None),
             control_test_results=(str(data.get("control_test_results") or "").strip() or None),
@@ -4086,6 +4295,7 @@ async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
             control_confidence=conf,
             control_page_refs=_parse_page_refs(data.get("control_page_refs") or data.get("control_page_ref")),
             control_line_ref=_as_float_or_none(data.get("control_line_ref")),
+            all_line_refs=[int(data["control_line_ref"])] if data.get("control_line_ref") else [],
             control_seq=_as_float_or_none(data.get("control_seq")),
             annotation=data.get("annotation"),
         )
