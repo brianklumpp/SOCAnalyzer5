@@ -163,6 +163,7 @@ services:
 volumes:
   postgres_data:
     name: socanalyzer_postgres_data
+    external: true
   frontend_node_modules:
 
 
