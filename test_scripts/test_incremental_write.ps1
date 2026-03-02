@@ -4,7 +4,7 @@
 Write-Host "=== Testing Incremental Write Feature ===" -ForegroundColor Cyan
 Write-Host ""
 
-$checkpointFile = "c:\Users\bklumpp\OneDrive - NANDPS\Documents\Python Scripts\SOCAnalyzer5\data\json\control_result_checkpoint.json"
+$checkpointFile = Join-Path $PSScriptRoot "..\data\json\control_result_checkpoint.json"
 
 # Clean up any existing checkpoint file
 if (Test-Path $checkpointFile) {

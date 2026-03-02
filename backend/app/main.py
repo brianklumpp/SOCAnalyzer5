@@ -1414,7 +1414,7 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                                     except Exception as prog_err:
                                         logging.warning(f"[OBJECTIVES] Failed to update progress to 92%: {prog_err}")
                                     
-                                    objectives = extract_objectives(
+                                    result = extract_objectives(
                                         extracted_text=scan_row.extracted_text,
                                         scan_id=scan_id_val,
                                         db_session=sync_db_session,
@@ -1422,6 +1422,11 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                                         job_id=None,
                                         redis_client=None
                                     )
+                                    # extract_objectives returns (objectives, gap_map_thread_or_None)
+                                    if isinstance(result, tuple):
+                                        objectives, gap_map_thread = result
+                                    else:
+                                        objectives, gap_map_thread = result, None
                                     logging.info(f"[OBJECTIVES] Extracted {len(objectives)} objectives for scan {scan_id_val}")
 
                                     # Update objectives counter in Redis
@@ -1433,47 +1438,12 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                                         logging.warning(f"[OBJECTIVES] Failed to update objectives counter: {cnt_err}")
 
                                     # Run gap extraction to find missing objectives
-                                    if cfg.ENABLE_GAP_EXTRACTION:
-                                        try:
-                                            # Update progress: Starting gap extraction (95%)
-                                            try:
-                                                from .job_state import job_hmset
-                                                thread_redis = _get_redis()
-                                                job_hmset(job_id, {
-                                                    'progress': 95,
-                                                    'status': 'Identifying Control Objective Gaps'
-                                                }, thread_redis)
-                                                logging.info(f"[OBJECTIVES] Phase 2: Starting gap extraction for scan {scan_id_val}")
-                                            except Exception as prog_err:
-                                                logging.warning(f"[OBJECTIVES] Failed to update progress to 95%: {prog_err}")
-                                            
-                                            from .routers.objective_router import run_gap_extraction_sync
-                                            logging.info(f"[OBJECTIVES] Running gap extraction for scan {scan_id_val}")
-                                            
-                                            # Extract only Control_Descriptions section for gap extraction
-                                            gap_text = scan_row.extracted_text
-                                            control_section = next((s for s in sections if s.get('topic') == 'Control_Descriptions'), None)
-                                            if control_section and control_section.get('start_line') and control_section.get('end_line'):
-                                                start_line = control_section['start_line']
-                                                end_line = control_section['end_line']
-                                                lines = scan_row.extracted_text.split('\n')
-                                                # Extract only the Control_Descriptions section (line numbers are 1-indexed)
-                                                gap_text = '\n'.join(lines[start_line-1:end_line])
-                                                logging.info(f"[OBJECTIVES] Limiting gap extraction to Control_Descriptions section: lines {start_line}-{end_line} ({len(gap_text)} chars)")
-                                            else:
-                                                logging.warning(f"[OBJECTIVES] Control_Descriptions section not found, searching full document")
-                                            
-                                            gap_result = run_gap_extraction_sync(
-                                                scan_id=scan_id_val,
-                                                extracted_text=gap_text
-                                            )
-                                            if gap_result.get("status") == "completed":
-                                                gap_count = gap_result.get("gap_objectives_extracted", 0)
-                                                logging.info(f"[OBJECTIVES] Gap extraction found {gap_count} additional objectives")
-                                            else:
-                                                logging.warning(f"[OBJECTIVES] Gap extraction status: {gap_result.get('status')}")
-                                        except Exception as gap_err:
-                                            logging.error(f"[OBJECTIVES] Gap extraction failed for scan {scan_id_val}: {gap_err}")
+                                    # NOTE: Gap extraction is now triggered INSIDE extract_objectives()
+                                    # via its _run_gap_and_map background thread. Calling it here too
+                                    # causes duplicate extraction with constraint violations that poison
+                                    # the DB session (InFailedSqlTransaction).
+                                    # if cfg.ENABLE_GAP_EXTRACTION:
+                                    #     ... removed — handled by extract_objectives() internally
                                     
                                     # Update progress: Starting mapping (98%)
                                     # NOTE: Control-objective mapping is now handled by extract_objectives()
@@ -1484,17 +1454,33 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                                         from .job_state import job_hmset
                                         thread_redis = _get_redis()
                                         # Update final objectives count (includes gap-extracted)
+                                        # Safety rollback to clear any aborted transaction state
+                                        try:
+                                            sync_db_session.rollback()
+                                        except Exception:
+                                            pass
                                         sync_db_session.expire_all()
                                         from .models import ControlObjective as CO_model
                                         total_obj_count = sync_db_session.query(CO_model).filter_by(scan_id=scan_id_val).count()
                                         job_hmset(job_id, {
-                                            'progress': 98,
+                                            'progress': 96,
                                             'status': 'Mapping Control Objectives to Controls',
                                             'objectives_count': total_obj_count
                                         }, thread_redis)
                                         logging.info(f"[OBJECTIVES] Phase 3: Objective-control mapping handled by extractor for scan {scan_id_val}")
                                     except Exception as prog_err:
-                                        logging.warning(f"[OBJECTIVES] Failed to update progress to 98%: {prog_err}")
+                                        logging.warning(f"[OBJECTIVES] Failed to update progress to 96%: {prog_err}")
+                                    
+                                    # Wait for gap extraction + mapping thread to finish
+                                    # before declaring completion. This prevents premature
+                                    # "Complete" status while mapping is still running.
+                                    if gap_map_thread is not None:
+                                        logging.info(f"[OBJECTIVES] Waiting for gap extraction + mapping thread for scan {scan_id_val}...")
+                                        gap_map_thread.join(timeout=600)  # 10 min max wait
+                                        if gap_map_thread.is_alive():
+                                            logging.warning(f"[OBJECTIVES] Gap extraction thread still running after 600s for scan {scan_id_val}")
+                                        else:
+                                            logging.info(f"[OBJECTIVES] Gap extraction + mapping thread completed for scan {scan_id_val}")
                                     
                                     # Update progress: Objective extraction complete (100%)
                                     try:
@@ -1555,6 +1541,11 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                                     
                                     # Update database scan status to complete and recalculate elapsed time
                                     try:
+                                        # Safety rollback to clear any aborted transaction state
+                                        try:
+                                            sync_db_session.rollback()
+                                        except Exception:
+                                            pass
                                         scan_row_update = sync_db_session.query(Scan).filter(Scan.id == scan_id_val).first()
                                         if scan_row_update:
                                             scan_row_update.progress_status = "Scan Complete"
@@ -1574,6 +1565,10 @@ def run_analysis_job(job_id, temp_pdf_path, filename, report_type, db, user_id=N
                                     logging.error(f"[OBJECTIVES] Post-insert extraction failed for scan {scan_id_val}: {obj_err}")
                                     # Mark scan as complete even on error
                                     try:
+                                        try:
+                                            sync_db_session.rollback()
+                                        except Exception:
+                                            pass
                                         scan_row_fail = sync_db_session.query(Scan).filter(Scan.id == scan_id_val).first()
                                         if scan_row_fail:
                                             scan_row_fail.progress_status = f"Scan Complete (Objective extraction error: {str(obj_err)[:100]})"
@@ -4306,6 +4301,38 @@ async def create_control(scan_id: int, data: dict, db=Depends(get_db)):
             db.add(scan_row)
         await db.commit()
         await db.refresh(ctrl)
+
+        # Fire-and-forget: map this new control to objectives in background
+        _scan_id_for_map = scan_id
+        try:
+            import threading as _threading
+            from .extractors.objective_extractor import map_controls_to_objectives as _map_c2o
+            from sqlalchemy import create_engine as _ce
+            from sqlalchemy.orm import sessionmaker as _sm
+
+            def _bg_objective_map():
+                try:
+                    sync_url = cfg.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+                    eng = _ce(sync_url, echo=False)
+                    Sess = _sm(bind=eng)
+                    s = Sess()
+                    try:
+                        n = _map_c2o(scan_id=_scan_id_for_map, db_session=s, force=False)
+                        logging.info(f"[CREATE_CONTROL_AUTO_MAP] Created {n} mapping(s) for scan {_scan_id_for_map}")
+                    finally:
+                        s.close()
+                        eng.dispose()
+                except Exception as _thread_err:
+                    logging.error(f"[CREATE_CONTROL_AUTO_MAP] Background thread failed: {_thread_err}", exc_info=True)
+
+            _threading.Thread(
+                target=_bg_objective_map,
+                name=f"create-ctrl-map-{_scan_id_for_map}",
+                daemon=True
+            ).start()
+        except Exception as _map_err:
+            logging.warning(f"[CREATE_CONTROL_AUTO_MAP] Failed to trigger: {_map_err}")
+
         return {
             "id": ctrl.id,
             "control_id": ctrl.control_id,

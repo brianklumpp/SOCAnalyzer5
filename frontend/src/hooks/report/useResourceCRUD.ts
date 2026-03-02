@@ -603,7 +603,7 @@ export function useResourceCRUD({
         endpoint = `${API_URL}${scanId}/controls/id/${row.id}/recompute_frameworks`;
       }
 
-      const resp = await api.post(endpoint);
+      const resp = await api.post(endpoint, {}, { timeout: 300000 }); // 5 min — sequential GPT calls per framework
       const data = resp.data;
       const upd = type === 'cuecs' ? data?.cuec || {} : data?.control || {};
 
@@ -669,7 +669,7 @@ export function useResourceCRUD({
 
       showToast('Recomputing framework mappings for high confidence items...', 'info');
       
-      const resp = await api.post(endpoint);
+      const resp = await api.post(endpoint, {}, { timeout: 600000 }); // 10 min — bulk sequential GPT calls
       const data = resp.data;
 
       if (data.success) {
@@ -782,7 +782,7 @@ export function useResourceCRUD({
       const label = type === 'cuecs' ? 'CUECs' : 'controls';
       showToast(`Mapping ${label} to all available frameworks... This may take a few minutes.`, 'info');
       
-      const resp = await api.post(endpoint, {});
+      const resp = await api.post(endpoint, {}, { timeout: 600000 }); // 10 min — bulk sequential GPT calls
       const data = resp.data;
 
       if (data.success) {

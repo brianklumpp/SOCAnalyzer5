@@ -15,7 +15,8 @@ import json
 # Use the most recent scan
 SCAN_ID = "6d8534eb-9b05-4b49-8087-b3b2085a5fb8"  # Update this with your scan ID
 JOB_ID = 1
-BASE_PATH = Path(r"c:\Users\bklumpp\OneDrive - NANDPS\Documents\Python Scripts\SOCAnalyzer5\data\jobs") / str(JOB_ID) / SCAN_ID
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+BASE_PATH = PROJECT_ROOT / "data" / "jobs" / str(JOB_ID) / SCAN_ID
 
 print(f"Running CUEC extraction on scan: {SCAN_ID}")
 print(f"Base path: {BASE_PATH}")
@@ -39,7 +40,7 @@ print(f"[OK] Found section_results.json")
 job_paths = {
     'output_dir': BASE_PATH / "temp",
     'json_dir': BASE_PATH / "json",
-    'logs_dir': Path(r"c:\Users\bklumpp\OneDrive - NANDPS\Documents\Python Scripts\SOCAnalyzer5\data\logs"),
+    'logs_dir': PROJECT_ROOT / "data" / "logs",
     'temp_dir': BASE_PATH / "temp"
 }
 

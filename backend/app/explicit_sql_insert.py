@@ -585,7 +585,7 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
                             SessionLocal = sessionmaker(bind=sync_engine)
                             with SessionLocal() as db_session:
                                 sections = data.get("sections") or []
-                                objectives = extract_objectives(
+                                _result = extract_objectives(
                                     extracted_text=text,
                                     scan_id=scan_id_val,
                                     db_session=db_session,
@@ -593,6 +593,7 @@ def insert_extracted_data(json_path: str, pdf_path: str = None, job_id: str = No
                                     job_id=None,
                                     redis_client=None
                                 )
+                                objectives = _result[0] if isinstance(_result, tuple) else _result
                                 logging.info(f"[OBJECTIVES] Extracted {len(objectives)} objectives for scan {scan_id_val}")
                                 # NOTE: Control-objective mapping is handled by extract_objectives()
                                 # via its _run_gap_and_map background thread. No separate call needed.

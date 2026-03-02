@@ -23,7 +23,6 @@ import {
   CircularProgress,
   Alert,
   IconButton,
-  Tooltip,
   Autocomplete,
   TextField,
   Snackbar,
@@ -66,17 +65,35 @@ const pageDist = (entityPageRefs: any, refPage: number): number => {
   return p === Infinity || refPage === Infinity ? Infinity : Math.abs(p - refPage);
 };
 
-/** Sort controls by proximity to a reference page, then by control_id alphanumeric. */
-const sortByProximity = (controls: any[], refPage: number): any[] =>
-  [...controls].sort((a, b) => {
-    const da = pageDist(a.control_page_refs, refPage);
-    const db = pageDist(b.control_page_refs, refPage);
-    if (da !== db) return da - db;
-    const la = a.control_line_ref ?? Infinity;
-    const lb = b.control_line_ref ?? Infinity;
-    if (la !== lb) return la - lb;
+/** Parse all page refs into a Set of numbers. */
+const allPages = (refs: any): Set<number> => {
+  if (!refs) return new Set();
+  const arr = Array.isArray(refs) ? refs : typeof refs === 'string' ? (() => { try { return JSON.parse(refs); } catch { return []; } })() : [];
+  const s = new Set<number>();
+  for (const v of arr) { const n = Number(v); if (Number.isFinite(n)) s.add(n); }
+  return s;
+};
+
+/**
+ * Sort controls for the "Add" picker:
+ *   Group 1 — controls sharing any page with the objective, sorted by control_id
+ *   Group 2 — all other controls, sorted by control_id
+ */
+const sortByProximity = (controls: any[], _refPage: number, objPageRefs?: any): any[] => {
+  const objPages = allPages(objPageRefs);
+  const sharesPage = (c: any): boolean => {
+    if (objPages.size === 0) return false;
+    const cp = allPages(c.control_page_refs);
+    for (const p of cp) { if (objPages.has(p)) return true; }
+    return false;
+  };
+  return [...controls].sort((a, b) => {
+    const aShares = sharesPage(a) ? 0 : 1;
+    const bShares = sharesPage(b) ? 0 : 1;
+    if (aShares !== bShares) return aShares - bShares;
     return (a.control_id || '').localeCompare(b.control_id || '', undefined, { numeric: true });
   });
+};
 
 /** Sort objectives by proximity to a control's page, then by objective_id. */
 const sortObjectivesByProximity = (objectives: ControlObjective[], controlPageRefs: any): ControlObjective[] => {
@@ -119,6 +136,8 @@ interface ObjectivesCoverageTabProps {
   tocPageOffset?: number;
   pdfNavigateHandler?: ((snippet: string | null, page?: number | null) => void) | null;
   onCreateControlForObjective?: (objectiveId: number) => void;
+  /** When set, triggers a targeted reload of just this objective's controls. */
+  refreshObjectiveId?: { objectiveId: number; ts: number } | null;
 }
 
 export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
@@ -129,12 +148,19 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
   tocPageOffset,
   pdfNavigateHandler,
   onCreateControlForObjective,
+  refreshObjectiveId,
 }) => {
   // ── Data state ───────────────────────────────────────────────────────────────
   const [objectiveControls, setObjectiveControls] = useState<Map<number, any[]>>(new Map());
-  const [objectiveMeta, setObjectiveMeta] = useState<Map<number, { page_refs?: number[]; line_ref?: number }>>(new Map());
+  const [objectiveMeta, setObjectiveMeta] = useState<Map<number, { page_refs?: number[]; all_page_refs?: number[]; line_ref?: number }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const initialLoadDone = useRef(false);
+
+  // ── Controlled accordion expanded state ──────────────────────────────────────
+  // Tracks which objective IDs are expanded. Survives data refreshes.
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const expandedInitialized = useRef(false);
 
   // ── Picker / action state ────────────────────────────────────────────────────
   // Only one picker open at a time.  Key format: "add-{objId}" | "redirect-{objId}-{ctrlDbId}"
@@ -283,11 +309,14 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // Only show loading spinner on initial load, not on refresh
+    if (!initialLoadDone.current) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const controlsMap = new Map<number, any[]>();
-      const metaMap = new Map<number, { page_refs?: number[]; line_ref?: number }>();
+      const metaMap = new Map<number, { page_refs?: number[]; all_page_refs?: number[]; line_ref?: number }>();
       await Promise.all(
         objectives.map(async (obj) => {
           try {
@@ -295,6 +324,7 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
             controlsMap.set(obj.id, result.controls || []);
             metaMap.set(obj.id, {
               page_refs: (result as any).objective_page_refs,
+              all_page_refs: (result as any).objective_all_page_refs,
               line_ref: (result as any).objective_line_ref,
             });
           } catch {
@@ -308,10 +338,25 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
       setError(err.message || 'Failed to load objective controls');
     } finally {
       setLoading(false);
+      // On first load, auto-expand the first objective
+      if (!initialLoadDone.current) {
+        initialLoadDone.current = true;
+        if (!expandedInitialized.current && objectives.length > 0) {
+          expandedInitialized.current = true;
+          setExpandedIds(new Set([objectives[0].id]));
+        }
+      }
     }
   }, [scanId, objectives]);
 
   useEffect(() => { loadAllControls(); }, [loadAllControls]);
+
+  // ── Targeted refresh of a single objective's controls (triggered by parent) ──
+  useEffect(() => {
+    if (refreshObjectiveId?.objectiveId) {
+      loadControlsForObjective(refreshObjectiveId.objectiveId);
+    }
+  }, [refreshObjectiveId, loadControlsForObjective]);
 
   // ── Escape key to close picker ───────────────────────────────────────────────
   useEffect(() => {
@@ -384,6 +429,7 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
     try {
       await deleteMapping(scanId, objectiveId, ctrlDbId);
       setToast({ message: `Unmapped ${control.control_id || 'control'}`, severity: 'success' });
+      onRefresh?.();  // Propagate to parent so ControlsTable updates
     } catch (err: any) {
       setToast({ message: `Failed to remove mapping: ${err.message || err}`, severity: 'error' });
       await loadControlsForObjective(objectiveId);    // revert
@@ -430,6 +476,7 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
       });
       // Refresh target accordion's controls
       await loadControlsForObjective(targetObjective.id);
+      onRefresh?.();  // Propagate to parent so ControlsTable updates
     } catch (err: any) {
       setToast({ message: `Redirect failed: ${err.message || err}`, severity: 'error' });
       // Re-fetch source to restore
@@ -460,6 +507,7 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
       });
       // Refresh to get full mapping data from backend
       await loadControlsForObjective(objectiveId);
+      onRefresh?.();  // Propagate to parent so ControlsTable updates
     } catch (err: any) {
       setToast({ message: `Failed to add mapping: ${err.message || err}`, severity: 'error' });
     } finally {
@@ -506,8 +554,10 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
       (objectiveControls.get(objectiveId) || []).map((c: any) => c.control_db_id ?? c.id)
     );
     const candidates = allControls.filter((c: any) => !alreadyMapped.has(c.id));
-    const objPage = firstPage(objective.page_refs || objectiveMeta.get(objectiveId)?.page_refs);
-    return sortByProximity(candidates, objPage);
+    const meta = objectiveMeta.get(objectiveId);
+    const objPageRefs = objective.all_page_refs || objective.page_refs || meta?.all_page_refs || meta?.page_refs;
+    const objPage = firstPage(objPageRefs);
+    return sortByProximity(candidates, objPage, objPageRefs);
   }, [allControls, objectiveControls, objectiveMeta]);
 
   // ── Build the "Redirect" picker options (all other objectives) ──────────────
@@ -559,7 +609,7 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
         const addPickerOpen = activePickerKey === addPickerKey;
 
         return (
-          <Accordion key={objective.id} defaultExpanded={index === 0} sx={{ mb: 1, boxShadow: 1, minWidth: 0, maxWidth: '100%', overflow: 'hidden', width: '100%' }}>
+          <Accordion key={objective.id} expanded={expandedIds.has(objective.id)} onChange={(_e, isExpanded) => { setExpandedIds(prev => { const next = new Set(prev); if (isExpanded) next.add(objective.id); else next.delete(objective.id); return next; }); }} sx={{ mb: 1, boxShadow: 1, minWidth: 0, maxWidth: '100%', overflow: 'hidden', width: '100%' }}>
             {/* ── Accordion header ────────────────────────────────────────── */}
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: 'grey.50', '&:hover': { bgcolor: 'grey.100' }, minWidth: 0, maxWidth: '100%', overflow: 'hidden', '& .MuiAccordionSummary-content': { minWidth: 0, overflow: 'hidden' } }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minWidth: 0, overflow: 'hidden', pr: 2 }}>
@@ -672,17 +722,14 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
                               <CircularProgress size={14} />
                             ) : (
                               <>
-                                <Tooltip title="Remove mapping" arrow>
-                                  <IconButton
+                                <IconButton
                                     size="small"
                                     onClick={(e) => handleRemove(objective.id, control, e)}
                                     sx={{ p: '2px', color: '#d32f2f', '&:hover': { bgcolor: 'error.light', color: '#fff' } }}
                                   >
                                     <CloseIcon sx={{ fontSize: 15 }} />
                                   </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Move to different objective" arrow>
-                                  <IconButton
+                                <IconButton
                                     size="small"
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -697,9 +744,7 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
                                   >
                                     <RedoIcon sx={{ fontSize: 15 }} />
                                   </IconButton>
-                                </Tooltip>
-                                <Tooltip title={isConfirmed ? 'Unconfirm mapping' : 'Confirm mapping'} arrow>
-                                  <IconButton
+                                <IconButton
                                     size="small"
                                     onClick={(e) => handleConfirmMapping(objective.id, control, e)}
                                     sx={{
@@ -710,7 +755,6 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
                                   >
                                     <CheckCircleIcon sx={{ fontSize: 15 }} />
                                   </IconButton>
-                                </Tooltip>
                               </>
                             )}
                           </td>
@@ -841,16 +885,24 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
                             )}
                             renderOption={(props, option) => {
                               const { key, ...rest } = props as any;
+                              const objAllPages = allPages(objective.all_page_refs || objective.page_refs || objectiveMeta.get(objective.id)?.all_page_refs || objectiveMeta.get(objective.id)?.page_refs);
+                              const ctrlPages = allPages(option.control_page_refs);
+                              let shares = false;
+                              for (const p of ctrlPages) { if (objAllPages.has(p)) { shares = true; break; } }
                               const dist = pageDist(option.control_page_refs, firstPage(objective.page_refs || objectiveMeta.get(objective.id)?.page_refs));
                               return (
                                 <li key={option.id} {...rest} style={{ fontSize: 12, padding: '4px 8px' }}>
                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 1 }}>
                                     <span>{controlLabel(option)}</span>
-                                    {dist !== Infinity && (
-                                      <Typography sx={{ fontSize: 10, color: 'text.disabled', flexShrink: 0 }}>
-                                        {dist === 0 ? 'same page' : `${dist}p away`}
+                                    {shares ? (
+                                      <Typography sx={{ fontSize: 10, color: 'success.main', fontWeight: 600, flexShrink: 0 }}>
+                                        same page
                                       </Typography>
-                                    )}
+                                    ) : dist !== Infinity ? (
+                                      <Typography sx={{ fontSize: 10, color: 'text.disabled', flexShrink: 0 }}>
+                                        {`${dist}p away`}
+                                      </Typography>
+                                    ) : null}
                                   </Box>
                                 </li>
                               );
@@ -867,18 +919,15 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
                         </Box>
                       ) : (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Tooltip title="Add existing control to this objective" arrow>
-                            <IconButton
-                              size="small"
-                              onClick={() => setActivePickerKey(addPickerKey)}
-                              disabled={busyKey !== null}
-                              sx={{ p: '2px', color: '#2e7d32', '&:hover': { bgcolor: 'success.light', color: '#fff' } }}
-                            >
-                              <AddIcon sx={{ fontSize: 16 }} />
-                            </IconButton>
-                          </Tooltip>
+                          <IconButton
+                            size="small"
+                            onClick={() => setActivePickerKey(addPickerKey)}
+                            disabled={busyKey !== null}
+                            sx={{ p: '2px', color: '#2e7d32', '&:hover': { bgcolor: 'success.light', color: '#fff' } }}
+                          >
+                            <AddIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
                           {onCreateControlForObjective && (
-                            <Tooltip title="Create new control and map to this objective" arrow>
                               <IconButton
                                 size="small"
                                 onClick={() => onCreateControlForObjective(objective.id)}
@@ -887,7 +936,6 @@ export const ObjectivesCoverageTab: React.FC<ObjectivesCoverageTabProps> = ({
                               >
                                 <NoteAddIcon sx={{ fontSize: 16 }} />
                               </IconButton>
-                            </Tooltip>
                           )}
                         </Box>
                       )}

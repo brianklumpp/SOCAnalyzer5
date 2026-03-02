@@ -8,9 +8,9 @@ from typing import Dict, Any, Tuple
 
 from fastapi import APIRouter, Depends, Body, HTTPException
 from fastapi.responses import JSONResponse
-from sqlalchemy import and_, delete
+from sqlalchemy import and_, delete, func
 from sqlalchemy.future import select
-from sqlalchemy.exc import MultipleResultsFound
+from sqlalchemy.exc import MultipleResultsFound, IntegrityError
 
 from ..models import Control, Scan, ControlObjectiveMapping, ControlFeedback
 from ..models import User
@@ -48,21 +48,37 @@ async def _cleanup_mappings_if_low_confidence(ctrl: Control, db, current_user: U
     threshold = getattr(cfg, 'HIGH_CONFIDENCE_THRESHOLD', 0.75)
     confidence = getattr(ctrl, 'control_confidence', None)
     if confidence is not None and confidence < threshold:
+        # Delete control-objective mappings
         result = await db.execute(
             delete(ControlObjectiveMapping).where(
                 ControlObjectiveMapping.control_id == ctrl.id
             )
         )
         deleted = result.rowcount
-        if deleted > 0:
+        
+        # Also clear framework mappings (JSON column + primary fields)
+        framework_cleared = False
+        if ctrl.framework_mappings:
+            ctrl.framework_mappings = None
+            ctrl.primary_framework = None
+            ctrl.primary_criterion_id = None
+            ctrl.primary_confidence = None
+            framework_cleared = True
+        
+        if deleted > 0 or framework_cleared:
+            parts = []
+            if deleted > 0:
+                parts.append(f"{deleted} objective mapping(s)")
+            if framework_cleared:
+                parts.append("framework mappings")
             logging.info(
-                f"[MAPPING CLEANUP] Removed {deleted} objective mapping(s) for control "
+                f"[MAPPING CLEANUP] Removed {' and '.join(parts)} for control "
                 f"id={ctrl.id} (control_id={ctrl.control_id}) — confidence {confidence} "
                 f"< threshold {threshold}"
             )
             _append_edit_log(
                 ctrl,
-                f"Auto-removed {deleted} objective mapping(s) — confidence {confidence} "
+                f"Auto-removed {' and '.join(parts)} — confidence {confidence} "
                 f"below threshold {threshold} by {current_user.username} ({now})"
             )
         return deleted
@@ -114,6 +130,8 @@ async def _record_control_feedback(
     action: str,
     user_id: int,
     *,
+    original_confidence: float = None,
+    original_control_id: str = None,
     corrected_control_id: str = None,
     rejection_reason: str = None,
     rejection_notes: str = None,
@@ -127,12 +145,15 @@ async def _record_control_feedback(
         if action in ("rejected", "converted_to_objective") and not rejection_reason:
             rejection_reason = _classify_rejection_reason(ctrl)
 
+        # Use original_control_id for snapshot if provided (before the edit)
+        snapshot_id = original_control_id if original_control_id is not None else (ctrl.control_id or "")
+
         fb = ControlFeedback(
             scan_id=scan_id,
             control_db_id=ctrl.id,
             action=action,
-            original_confidence=ctrl.control_confidence,
-            control_id_text=(ctrl.control_id or "")[:128],
+            original_confidence=original_confidence if original_confidence is not None else ctrl.control_confidence,
+            control_id_text=(snapshot_id or "")[:128],
             control_desc_snippet=(ctrl.control_desc or "")[:300],
             corrected_control_id=corrected_control_id,
             rejection_reason=rejection_reason,
@@ -204,6 +225,7 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
         changed = False
         if "control_confidence" in data:
             old = getattr(ctrl, "control_confidence", None)
+            ctrl._feedback_old_confidence = old  # for learning system
             new_val = None
             try:
                 val = data["control_confidence"]
@@ -306,28 +328,27 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
         
         # ── Control Feedback Learning System ──
         # Record feedback when analyst zeroes confidence (rejection)
-        if "control_confidence" in data:
-            old_conf = old if 'old' in dir() else None  # old from confidence block above
-            # Recalculate old — it was set above but may be out of scope
-            if ctrl.control_confidence is not None and ctrl.control_confidence < 0.01:
-                await _record_control_feedback(
-                    db, ctrl, scan_id, "rejected", current_user.id,
-                )
+        if "control_confidence" in data and ctrl.control_confidence is not None and ctrl.control_confidence < 0.01:
+            await _record_control_feedback(
+                db, ctrl, scan_id, "rejected", current_user.id,
+                original_confidence=getattr(ctrl, '_feedback_old_confidence', None),
+                original_control_id=getattr(ctrl, '_feedback_old_control_id', None),
+            )
         # Record feedback when control_id is corrected
-        if "control_id" in data:
-            old_cid = data.get("_old_control_id")  # set below in control_id handling
-            new_cid = ctrl.control_id
-            # We stored the old value earlier; check if it actually changed
-            if hasattr(ctrl, '_feedback_old_control_id') and ctrl._feedback_old_control_id != new_cid:
+        if "control_id" in data and hasattr(ctrl, '_feedback_old_control_id'):
+            if ctrl._feedback_old_control_id != ctrl.control_id:
                 await _record_control_feedback(
                     db, ctrl, scan_id, "id_corrected", current_user.id,
-                    corrected_control_id=new_cid,
+                    original_confidence=getattr(ctrl, '_feedback_old_confidence', ctrl.control_confidence),
+                    original_control_id=ctrl._feedback_old_control_id,
+                    corrected_control_id=ctrl.control_id,
                 )
         # Record feedback when description is materially edited
         if "control_desc" in data and hasattr(ctrl, '_feedback_old_desc'):
             if ctrl._feedback_old_desc != ctrl.control_desc:
                 await _record_control_feedback(
                     db, ctrl, scan_id, "desc_corrected", current_user.id,
+                    original_confidence=getattr(ctrl, '_feedback_old_confidence', ctrl.control_confidence),
                 )
         
         # Mark executive summary stale
@@ -358,6 +379,14 @@ async def patch_control(scan_id: int, control_id: str, data: Dict[str, Any] = Bo
         if mappings_removed > 0:
             result["mappings_removed"] = mappings_removed
         return result
+    except IntegrityError as e:
+        await db.rollback()
+        err_str = str(e.orig) if hasattr(e, 'orig') else str(e)
+        if 'uq_control_scan_control_id' in err_str or 'duplicate key' in err_str.lower():
+            logging.warning(f"/report/{scan_id}/controls/{control_id} duplicate control_id: {e}")
+            return JSONResponse({"error": "A control with that ID already exists in this scan."}, status_code=409)
+        logging.error(f"/report/{scan_id}/controls/{control_id} integrity error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=409)
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/controls/{control_id} DB error: {e}")
@@ -378,6 +407,7 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
         large_fields = {"control_desc", "control_test", "control_test_results", "deviation_desc", "annotation", "confidence_calc"}
         if "control_confidence" in data:
             old = getattr(ctrl, "control_confidence", None)
+            ctrl._feedback_old_confidence = old  # for learning system
             new_val = None
             try:
                 val = data["control_confidence"]
@@ -468,21 +498,25 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
             mappings_removed = await _cleanup_mappings_if_low_confidence(ctrl, db, current_user, now)
         
         # ── Control Feedback Learning System ──
-        if "control_confidence" in data:
-            if ctrl.control_confidence is not None and ctrl.control_confidence < 0.01:
-                await _record_control_feedback(
-                    db, ctrl, scan_id, "rejected", current_user.id,
-                )
+        if "control_confidence" in data and ctrl.control_confidence is not None and ctrl.control_confidence < 0.01:
+            await _record_control_feedback(
+                db, ctrl, scan_id, "rejected", current_user.id,
+                original_confidence=getattr(ctrl, '_feedback_old_confidence', None),
+                original_control_id=getattr(ctrl, '_feedback_old_control_id', None),
+            )
         if "control_id" in data:
             if hasattr(ctrl, '_feedback_old_control_id') and ctrl._feedback_old_control_id != ctrl.control_id:
                 await _record_control_feedback(
                     db, ctrl, scan_id, "id_corrected", current_user.id,
+                    original_confidence=getattr(ctrl, '_feedback_old_confidence', ctrl.control_confidence),
+                    original_control_id=ctrl._feedback_old_control_id,
                     corrected_control_id=ctrl.control_id,
                 )
         if "control_desc" in data and hasattr(ctrl, '_feedback_old_desc'):
             if ctrl._feedback_old_desc != ctrl.control_desc:
                 await _record_control_feedback(
                     db, ctrl, scan_id, "desc_corrected", current_user.id,
+                    original_confidence=getattr(ctrl, '_feedback_old_confidence', ctrl.control_confidence),
                 )
         
         await mark_executive_summary_stale(scan_id, db)
@@ -522,6 +556,14 @@ async def patch_control_by_db_id(scan_id: int, control_db_id: int, data: Dict[st
         if mappings_removed > 0:
             result["mappings_removed"] = mappings_removed
         return result
+    except IntegrityError as e:
+        await db.rollback()
+        err_str = str(e.orig) if hasattr(e, 'orig') else str(e)
+        if 'uq_control_scan_control_id' in err_str or 'duplicate key' in err_str.lower():
+            logging.warning(f"/report/{scan_id}/controls/{control_db_id} duplicate control_id: {e}")
+            return JSONResponse({"error": "A control with that ID already exists in this scan."}, status_code=409)
+        logging.error(f"/report/{scan_id}/controls/{control_db_id} integrity error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=409)
     except Exception as e:
         await db.rollback()
         logging.error(f"/report/{scan_id}/controls/{control_db_id} DB error: {e}")

@@ -9,7 +9,7 @@ param(
     [switch]$ListReports,
     
     [Parameter()]
-    [switch]$Verbose,
+    [switch]$DetailedLog,
     
     [Parameter()]
     [switch]$NoDbInsert,
@@ -63,18 +63,18 @@ if ($ListReports) {
     Write-Host "  .\run_scan.ps1 <pdf-file>               # Analyze a PDF"
     Write-Host "  .\run_scan.ps1 -ListReports             # List available reports"
     Write-Host "  .\run_scan.ps1 Okta.pdf                 # Short form (looks in soc2_reports/)"
-    Write-Host "  .\run_scan.ps1 -Verbose                 # Enable debug logging"
+    Write-Host "  .\run_scan.ps1 -DetailedLog              # Enable debug logging"
     Write-Host "  .\run_scan.ps1 -NoDbInsert              # Skip database insertion"
     Write-Host ""
     Write-Host "Examples:"
     Write-Host "  .\run_scan.ps1 soc2_reports\Okta.pdf"
-    Write-Host "  .\run_scan.ps1 Okta.pdf -Verbose"
+    Write-Host "  .\run_scan.ps1 Okta.pdf -DetailedLog"
     Write-Host "  .\run_scan.ps1 -ListReports"
     Write-Host ""
     exit 0
 }
 
-if ($Verbose) {
+if ($DetailedLog) {
     $args += "--verbose"
 }
 

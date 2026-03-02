@@ -839,15 +839,15 @@ def calculate_multi_factor_confidence(
     """
     Calculate weighted multi-factor confidence score for an objective.
     
-    Initial scoring uses 3 factors (alignment is NOT available yet — control mapping
-    happens after scoring):
+    Initial scoring uses 3 factors (alignment and distance are NOT available yet —
+    control mapping happens after scoring):
     - keyword_match (40%): TSC/COSO keyword presence in objective text
     - gpt_opinion (25%): GPT's confidence assessment (zeroed if reasoning is empty)
     - format_clarity (35%): Format clarity score (heading, numbering, table structure)
     
-    NOTE: distance_confidence is DEPRECATED — it measured proximity to section headers
-    like "control objective" which is not a meaningful signal. The keyword_confidence
-    factor already measures TSC/COSO keyword alignment in the objective text itself.
+    NOTE: distance_confidence and alignment_confidence are computed post-mapping
+    in update_objective_alignment_confidence(). distance_confidence measures page
+    proximity between the objective and its mapped controls.
     
     Args:
         objective: Objective dictionary with confidence_factors
@@ -1134,7 +1134,7 @@ def find_page_refs(objective_text: str, extracted_text: str) -> List[int]:
     return pages
 
 
-def _is_likely_control_not_objective(text: str, control_ids: set) -> tuple:
+def _is_likely_control_not_objective(text: str, control_ids: set, objective_id: str = None) -> tuple:
     """
     Determine if extracted text is actually a control, not an objective.
     
@@ -1144,6 +1144,7 @@ def _is_likely_control_not_objective(text: str, control_ids: set) -> tuple:
     Args:
         text: Extracted objective text to validate
         control_ids: Set of known control IDs from the scan (uppercase)
+        objective_id: The ID assigned to this objective candidate (e.g. "CC1.1.1")
         
     Returns:
         Tuple of (is_control: bool, reason: str)
@@ -1152,6 +1153,15 @@ def _is_likely_control_not_objective(text: str, control_ids: set) -> tuple:
     """
     if not text or not isinstance(text, str):
         return (False, "No text provided")
+    
+    import re
+    
+    # Check 0 (PRIORITY): objective_id directly matches a known control ID in the DB.
+    # This is data-driven and works for ANY numbering scheme (TSC, COSO, custom, SOC1).
+    if objective_id:
+        obj_id_upper = objective_id.strip().upper()
+        if obj_id_upper in control_ids:
+            return (True, f"Objective ID matches control ID from database: {objective_id}")
     
     text_lower = text.lower()
     
@@ -1194,9 +1204,8 @@ def _is_likely_control_not_objective(text: str, control_ids: set) -> tuple:
         return (True, f"Describes procedure/method: '{procedure_matches[0]}'")
     
     # Check 4: Matches known control ID from controls table
-    # Extract potential IDs (alphanumeric tokens with dashes/dots)
-    import re
-    potential_ids = re.findall(r'\b[A-Z]{1,4}[-.]?\d{1,3}(?:[-.]\d{1,3})?\b', text.upper())
+    # Extract potential IDs (alphanumeric tokens with dashes/dots, including 3-segment like CC1.1.1)
+    potential_ids = re.findall(r'\b[A-Z]{1,4}[-.]?\d{1,3}(?:[-.]\d{1,3}){0,2}\b', text.upper())
     
     for potential_id in potential_ids:
         # Normalize: remove trailing punctuation
@@ -1444,7 +1453,8 @@ def extract_objectives(
         
         for obj in deduplicated_objectives:
             objective_text = obj.get('objective_text', '')
-            is_control, reason = _is_likely_control_not_objective(objective_text, control_ids)
+            objective_id = obj.get('objective_id', '')
+            is_control, reason = _is_likely_control_not_objective(objective_text, control_ids, objective_id)
             
             if is_control:
                 logger.info(
@@ -1681,7 +1691,7 @@ def extract_objectives(
             objective_id_original=original_objective_id,
             objective_text=objective_text,
             keyword_confidence=factors.get('keyword_match', 0.0),
-            distance_confidence=0.0,  # DEPRECATED: was section-header proximity, not meaningful
+            distance_confidence=0.0,  # Calculated post-mapping: page proximity to mapped controls
             gpt_confidence=factors.get('gpt_opinion', 0.0),
             alignment_confidence=0.0,  # Calculated after control mapping
             format_confidence=factors.get('format_clarity', 0.0),
@@ -2187,6 +2197,7 @@ Return JSON with key "validations" containing array of results:
             
             # Extract only Control_Descriptions section for gap extraction
             gap_text = extracted_text
+            gap_offset = 0  # offset to convert section-relative → document-absolute line numbers
             control_section = next((s for s in sections if s.get('topic') == 'Control_Descriptions'), None)
             if control_section and control_section.get('start_line') and control_section.get('end_line'):
                 start_line = control_section['start_line']
@@ -2194,14 +2205,15 @@ Return JSON with key "validations" containing array of results:
                 lines = extracted_text.split('\n')
                 # Extract only the Control_Descriptions section (line numbers are 1-indexed)
                 gap_text = '\n'.join(lines[start_line-1:end_line])
-                logger.info(f"[OBJECTIVE_GAP_AUTO] Limiting gap extraction to Control_Descriptions section: lines {start_line}-{end_line} ({len(gap_text)} chars)")
+                gap_offset = start_line - 1  # e.g., 1907 for start_line=1908
+                logger.info(f"[OBJECTIVE_GAP_AUTO] Limiting gap extraction to Control_Descriptions section: lines {start_line}-{end_line} ({len(gap_text)} chars), offset={gap_offset}")
             else:
                 logger.warning(f"[OBJECTIVE_GAP_AUTO] Control_Descriptions section not found, searching full document")
             
             # Run gap extraction in background thread to avoid blocking
             def _run_gap_and_map():
                 try:
-                    result = run_gap_extraction_sync(scan_id, gap_text)
+                    result = run_gap_extraction_sync(scan_id, gap_text, gap_offset)
                     logger.info(f"[OBJECTIVE_GAP_AUTO] Gap extraction completed: {result.get('status')}")
                     
                     # CRITICAL: Map controls to objectives AFTER gap extraction.
@@ -2257,16 +2269,19 @@ Return JSON with key "validations" containing array of results:
                     except Exception as map_err:
                         logger.error(f"[OBJECTIVE_GAP_AUTO] Fallback mapping also failed: {map_err}")
             
-            threading.Thread(
+            gap_map_thread = threading.Thread(
                 target=_run_gap_and_map,
                 name=f"gap-extract-auto-{scan_id}",
                 daemon=True
-            ).start()
+            )
+            gap_map_thread.start()
             
         except Exception as trigger_err:
             logger.warning(f"[OBJECTIVE_GAP_AUTO] Failed to trigger: {trigger_err}")
     
-    return objective_models
+    # Return both objective models AND the background thread handle (if any)
+    # so callers can optionally wait for gap extraction + mapping to finish.
+    return objective_models, locals().get('gap_map_thread', None)
 
 
 def _proximity_score(control_line: Optional[int], objective_line: Optional[int]) -> float:
@@ -2577,27 +2592,36 @@ def _id_alignment_score(control_id: Optional[str], objective_id: Optional[str]) 
 
 
 def _control_page_proximity_score(control_page: Optional[int], objective_page: Optional[int]) -> float:
-    """Score page proximity. Objectives typically appear BEFORE the control (like headings).
-    Allowance: 0-2 pages before (strong), 3 pages before (weak), 1 page after (edge case)."""
+    """Score page proximity between a control page and an objective page.
+
+    In SOC reports, objectives typically appear BEFORE controls (section headings).
+    distance > 0 means objective is BEFORE control (normal).
+    distance < 0 means objective is AFTER control (rare layout edge case).
+
+    Scan 8 learning: Boosted same-page from 0.6→0.85 so co-located content
+    needs only moderate GPT confirmation.
+    Scan 9 learning: Reverted to 3-page window. At Tier 3 threshold 0.80,
+    4-5 page distances can never reach 0.80 (max combined = 0.745).
+    Same-page (0.85) needs GPT ≥ 0.78 — solid semantic alignment.
+    """
     if control_page is None or objective_page is None:
         return 0.0
 
     # distance > 0 means objective is BEFORE control (normal: objective is heading above controls)
     # distance < 0 means objective is AFTER control (rare edge case)
     distance = control_page - objective_page
+    abs_dist = abs(distance)
 
-    if distance == 0:
-        return 0.6  # Same page — strongest signal
-    elif distance == 1:
-        return 0.5  # Objective 1 page before control — very common
-    elif distance == 2:
-        return 0.3  # Objective 2 pages before — still reasonable
-    elif distance == 3:
-        return 0.1  # Objective 3 pages before — weak but possible
-    elif distance == -1:
-        return 0.1  # Objective 1 page AFTER control — rare table/layout edge case
+    if abs_dist == 0:
+        return 0.85  # Same page — strongest signal
+    elif abs_dist == 1:
+        return 0.70 if distance > 0 else 0.40  # 1 page: common before, occasional after
+    elif abs_dist == 2:
+        return 0.50 if distance > 0 else 0.20  # 2 pages: reasonable before, weak after
+    elif abs_dist == 3:
+        return 0.30 if distance > 0 else 0.10  # 3 pages: possible before, marginal after
     else:
-        return 0.0  # Too far in either direction
+        return 0.0  # Beyond 3 pages — too far (scan 9: reverted from 5)
 
 
 def _select_candidate_objectives(
@@ -2613,9 +2637,9 @@ def _select_candidate_objectives(
             obj_page = _min_page_ref(obj.page_refs)
             if obj_page is None:
                 continue
-            if obj_page > control_page + 1:  # At most 1 page after (rare edge case)
+            if obj_page > control_page + 3:  # At most 3 pages after
                 continue
-            if obj_page < control_page - 3:  # At most 3 pages before (objective as heading)
+            if obj_page < control_page - 3:  # At most 3 pages before
                 continue
             after_flag = 1 if obj_page > control_page else 0
             distance = abs(control_page - obj_page)
@@ -2740,28 +2764,160 @@ def _find_all_structural_objectives(
     structure_map: List[Dict[str, Any]],
 ) -> List[int]:
     """
-    For controls with multiple positions (all_line_refs), find the nearest
-    preceding objective for *each* occurrence.  Returns a deduplicated
-    list of objective DB ids.
+    Find the single nearest preceding objective for a control's PRIMARY
+    position (first occurrence).  Returns a list with at most one element
+    for backward compatibility.
+
+    Scan 11 learning: returning multiple objectives (one per all_line_refs
+    occurrence) caused adjacent-objective confusion — GPT alignment cannot
+    distinguish CC1.1 from CC1.2 when both are semantically close.
+    Limiting to the single primary position matches Approach A (100%
+    precision) while Tier 3 handles legitimate secondary mappings.
     """
-    ctrl_indices = [
-        i for i, e in enumerate(structure_map)
-        if e["type"] == "control" and e["db_id"] == control_db_id
-    ]
-    if not ctrl_indices:
+    # Find the FIRST (primary) occurrence of this control in the structure map.
+    # Using only the primary position prevents adjacent-objective FPs from
+    # secondary mentions (e.g. references in Tests of Controls columns).
+    ctrl_index = next(
+        (i for i, e in enumerate(structure_map)
+         if e["type"] == "control" and e["db_id"] == control_db_id),
+        None,
+    )
+    if ctrl_index is None:
         return []
 
-    obj_ids: List[int] = []
-    seen = set()
-    for ci in ctrl_indices:
-        for i in range(ci - 1, -1, -1):
-            if structure_map[i]["type"] == "objective":
-                oid = structure_map[i]["db_id"]
-                if oid not in seen:
-                    seen.add(oid)
-                    obj_ids.append(oid)
-                break  # found the nearest for this occurrence
-    return obj_ids
+    # Walk backward from the primary position to the nearest objective heading.
+    for i in range(ctrl_index - 1, -1, -1):
+        if structure_map[i]["type"] == "objective":
+            return [structure_map[i]["db_id"]]
+    return []
+
+
+def build_section_assignments(
+    structure_map: List[Dict[str, Any]],
+) -> Dict[int, List[int]]:
+    """
+    Assign each control to its document section's objective.
+
+    Walks the line-ordered structure map tracking the current objective
+    heading.  Every control encountered between two objective headings is
+    assigned to the preceding objective — this is the **primary** mapping
+    derived purely from document layout, not probabilistic scoring.
+
+    Returns:
+        Dict mapping ``objective_db_id`` → ``[control_db_id, ...]``
+    """
+    assignments: Dict[int, List[int]] = {}
+    current_obj: Optional[int] = None
+
+    for entry in structure_map:
+        if entry["type"] == "objective":
+            current_obj = entry["db_id"]
+            assignments.setdefault(current_obj, [])
+        elif entry["type"] == "control" and current_obj is not None:
+            assignments[current_obj].append(entry["db_id"])
+
+    # Log section map for visibility
+    ctrl_count = sum(len(v) for v in assignments.values())
+    logger.info(
+        f"[SECTION_MAP] Built section assignments: "
+        f"{len(assignments)} sections, {ctrl_count} control assignments"
+    )
+    return assignments
+
+
+def classify_control_objectives(
+    control_id: str,
+    control_desc: str,
+    primary_objective_id: Optional[str],
+    all_objectives: List,
+    feedback_text: str = "",
+) -> List[Dict[str, Any]]:
+    """
+    Ask GPT to classify which objectives a control supports.
+
+    Sends the control description together with the **full** list of
+    available objectives so GPT can make relative judgments.  This is a
+    *classification* call — GPT returns a list of matching objectives —
+    rather than the pairwise *scoring* approach used previously.
+
+    Args:
+        control_id: Human-readable control ID (e.g. ``AM-01-01``).
+        control_desc: Full control description text.
+        primary_objective_id: Structural primary (from section map), or None.
+        all_objectives: List of ControlObjective model instances.
+        feedback_text: Optional few-shot feedback block for prompt injection.
+
+    Returns:
+        List of dicts: ``[{"objective_id": str, "confidence": float,
+        "reasoning": str}, ...]``
+    """
+    if not all_objectives or not control_desc:
+        return []
+
+    # Build compact objective reference list
+    obj_lines = []
+    for obj in all_objectives:
+        text = (obj.objective_text or "")[:160].replace("\n", " ")
+        obj_lines.append(f"- {obj.objective_id}: {text}")
+
+    primary_hint = (
+        f'This control is listed under objective "{primary_objective_id}" '
+        f"in the report's document structure."
+        if primary_objective_id
+        else "No structural objective heading was identified for this control."
+    )
+
+    prompt = config.OBJECTIVE_CLASSIFICATION_PROMPT.format(
+        control_id=control_id,
+        control_desc=(control_desc or "")[:600],
+        primary_hint=primary_hint,
+        objectives_list="\n".join(obj_lines),
+        feedback_examples=feedback_text or "",
+    )
+
+    try:
+        response = gpt_extract(
+            prompt=prompt,
+            extractor_name="objective_classification",
+            override_model=OBJECTIVE_ALIGNMENT_MODEL,
+        )
+        parsed = json.loads(response)
+
+        # Accept both {"objectives": [...]} and bare [...]
+        if isinstance(parsed, dict):
+            items = parsed.get("objectives", [])
+        elif isinstance(parsed, list):
+            items = parsed
+        else:
+            logger.warning(
+                f"[CLASSIFY] Unexpected GPT response type: {type(parsed)}"
+            )
+            return []
+
+        results = []
+        for item in items:
+            oid = item.get("objective_id") or item.get("id", "")
+            conf = float(item.get("confidence", 0.8))
+            reasoning = item.get("reasoning", "")
+            if oid:
+                results.append({
+                    "objective_id": str(oid).strip(),
+                    "confidence": min(max(conf, 0.0), 1.0),
+                    "reasoning": str(reasoning)[:200],
+                })
+
+        logger.debug(
+            f"[CLASSIFY] {control_id}: GPT returned {len(results)} objectives "
+            f"(primary={primary_objective_id})"
+        )
+        return results
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"[CLASSIFY] JSON parse error for {control_id}: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"[CLASSIFY] GPT call failed for {control_id}: {e}")
+        return []
 
 
 def map_controls_to_objectives(
@@ -2818,6 +2974,28 @@ def map_controls_to_objectives(
         .filter(Control.control_id != '')
         .all()
     )
+
+    # ── Quality pre-filter: skip controls with malformed/truncated IDs ──
+    # Scan 11 learning: controls like "1-02", "VM-", "3-01" are FP extractions
+    # (generic statements or truncated IDs) that generate cascading FP mappings.
+    # Filter criteria:
+    #   - control_id shorter than 3 chars (truncated fragments)
+    #   - control_id has no alphabetic prefix (e.g. "1-02", "3-01")
+    #   - control_id ends with '-' (truncated like "VM-")
+    import re as _re
+    pre_filter_count = len(controls)
+    controls = [
+        c for c in controls
+        if len(c.control_id) >= 3
+        and not c.control_id.endswith('-')
+        and _re.match(r'[A-Za-z]', c.control_id)
+    ]
+    filtered_out = pre_filter_count - len(controls)
+    if filtered_out:
+        logger.info(
+            f"[MAPPING] Quality pre-filter removed {filtered_out} controls "
+            f"with malformed IDs (truncated, numeric-prefix, or trailing dash)"
+        )
     
     if not objectives or not controls:
         logger.info("No approved objectives or controls found, skipping mapping")
@@ -2825,11 +3003,33 @@ def map_controls_to_objectives(
     
     logger.info(f"Found {len(objectives)} approved objectives and {len(controls)} controls for mapping")
     
-    # Phase B: Build document structure map for Tier 0
+    # Phase B: Build document structure map
     structure_map = build_document_structure_map(controls, objectives)
-    # Pre-build objective lookup by DB id for Tier 0
+    # Pre-build objective lookup by DB id
     objectives_by_db_id: Dict[int, ControlObjective] = {obj.id: obj for obj in objectives}
-    
+
+    # Build deterministic section assignments from document structure
+    # Maps objective_db_id → [control_db_ids] and reverse lookup for structural primary
+    section_assignments = build_section_assignments(structure_map) if structure_map else {}
+    section_primary: Dict[int, int] = {}
+    for obj_db_id, ctrl_db_ids in section_assignments.items():
+        for ctrl_db_id in ctrl_db_ids:
+            section_primary[ctrl_db_id] = obj_db_id
+
+    # Build page → objectives index for page-based secondary mapping
+    # Each page maps to all approved objectives whose page_refs include that page
+    page_to_objectives_index: Dict[int, list] = {}
+    for obj in objectives:
+        obj_pages = _all_page_refs(getattr(obj, 'all_page_refs', None)) or _all_page_refs(obj.page_refs)
+        for pg in obj_pages:
+            page_to_objectives_index.setdefault(pg, []).append(obj)
+    if page_to_objectives_index:
+        logger.info(
+            f"[PAGE_INDEX] Built page→objectives index: "
+            f"{len(page_to_objectives_index)} pages, "
+            f"{sum(len(v) for v in page_to_objectives_index.values())} entries"
+        )
+
     # Phase D: Load feedback examples once for few-shot prompt injection
     feedback_text = _get_feedback_examples_text(scan_id, db_session)
     if feedback_text:
@@ -2887,7 +3087,16 @@ def map_controls_to_objectives(
     # Helper function to map single control (for parallelization)
     def map_single_control_through_tiers(control) -> Tuple[List[ControlObjectiveMapping], int]:
         """
-        Map one control through the waterfall tiers.
+        Map one control to its objective(s).
+
+        When ENABLE_GPT_OBJECTIVE_CLASSIFICATION (default, scan 9+):
+          1. Section Assignment — deterministic primary from document line order
+          2. ID Hierarchy — data-driven hierarchical ID matching
+          3. GPT Classification — one call per control, returns secondary objectives
+
+        When disabled, falls back to legacy 4-tier proximity scoring
+        (Tier 0 structure+GPT, Tier 1 ID, Tier 2 line, Tier 3 page).
+
         Returns (new_mappings_list, updates_count)
         """
         new_mappings = []
@@ -2905,60 +3114,211 @@ def map_controls_to_objectives(
         control_line = control.control_line_ref
         control_page = _min_page_ref(control.control_page_refs)
         
-        # Collect ALL candidate mappings across tiers (multi-objective support)
-        # Each candidate: (combined_score, obj, tier_name, justification, scores_dict)
+        # Collect ALL candidate mappings across steps
+        # Each candidate: (combined_score, obj, justification, scores_dict)
         all_candidates = []
-        # Track which objective IDs we've already scored to avoid duplicates
         scored_objective_ids = set()
-        
-        # ===== TIER 0: Document Structure (Phase C) =====
-        # Uses the interleaved document-order map to find objectives that
-        # structurally "own" this control (control appears right after
-        # objective heading in the PDF).  High confidence because SOC
-        # reports follow a strict objective → controls structure.
-        if structure_map:
-            structural_obj_ids = _find_all_structural_objectives(control.id, structure_map)
-            if structural_obj_ids:
-                structural_objs = [
-                    (objectives_by_db_id[oid], 1.0, "structural")
-                    for oid in structural_obj_ids
-                    if oid in objectives_by_db_id
-                ]
-                if structural_objs:
-                    # GPT-validate structural candidates to filter false positives
-                    batch_scores = calculate_alignment_scores_batch(
-                        control.control_desc or "",
-                        structural_objs,
-                        alignment_cache=alignment_cache,
-                        feedback_text=feedback_text,
-                    )
-                    for obj, _, _ in structural_objs:
+        primary_obj_id_str = None  # Used by classification prompt hint
+        _hierarchy_parent_found = False  # Set when STEP 1 finds a parent-ID match
+
+        # ═════════════════════════════════════════════════════════════
+        # STEP 1: Primary Objective — Section Assignment or Legacy Tier 0
+        # ═════════════════════════════════════════════════════════════
+        if config.ENABLE_GPT_OBJECTIVE_CLASSIFICATION:
+            # ── Section Assignment (deterministic, no GPT gate) ──
+            # Document structure is the source of truth: each control
+            # belongs to the nearest preceding objective heading.
+            primary_obj_db_id = section_primary.get(control.id)
+            if primary_obj_db_id and primary_obj_db_id in objectives_by_db_id:
+                obj = objectives_by_db_id[primary_obj_db_id]
+                primary_obj_id_str = obj.objective_id
+
+                # ── Hierarchy Override (section-aware, proximity-gated) ──
+                # If the control has a hierarchical ID (e.g. CC1.2.1),
+                # check whether a parent-prefix objective (CC1.2) is
+                # the correct section owner.  Three conditions must ALL
+                # hold for the override to fire:
+                #   1. The parent objective appears BEFORE the control
+                #   2. No other objective sits between them (i.e. the
+                #      control is in the parent's "section")
+                #   3. They are within reasonable proximity (same page
+                #      or close line range)
+                # This prevents coincidental prefix matches like
+                # Control 1.8 being moved to Objective 1 when it
+                # actually sits under Objective 3 in the document.
+                if control.control_id and obj.objective_id:
+                    ctrl_prefix, ctrl_parts = _parse_hierarchical_id(control.control_id)
+                    if ctrl_prefix and ctrl_parts and len(ctrl_parts) >= 2:
+                        # Build the expected parent ID (drop last segment)
+                        parent_parts = ctrl_parts[:-1]
+
+                        # Check if structural primary already matches
+                        _, struct_parts = _parse_hierarchical_id(obj.objective_id)
+                        if struct_parts != parent_parts:
+                            # Search all objectives for the true parent
+                            parent_candidate = None
+                            for candidate_obj in objectives_by_db_id.values():
+                                cand_prefix, cand_parts = _parse_hierarchical_id(
+                                    candidate_obj.objective_id or ""
+                                )
+                                if cand_prefix == ctrl_prefix and cand_parts == parent_parts:
+                                    parent_candidate = candidate_obj
+                                    break
+
+                            if parent_candidate:
+                                ctrl_line = control.control_line_ref
+                                parent_line = getattr(parent_candidate, 'line_ref', None)
+
+                                # Condition 1: control must be AFTER the parent
+                                after_parent = (
+                                    ctrl_line is not None
+                                    and parent_line is not None
+                                    and ctrl_line >= parent_line
+                                )
+
+                                # Condition 2: no intervening objective between
+                                # parent and control (same section)
+                                intervening = False
+                                if after_parent:
+                                    for other_obj in objectives_by_db_id.values():
+                                        if other_obj.id == parent_candidate.id:
+                                            continue
+                                        other_line = getattr(other_obj, 'line_ref', None)
+                                        if (
+                                            other_line is not None
+                                            and parent_line < other_line < ctrl_line
+                                        ):
+                                            intervening = True
+                                            break
+
+                                # Condition 3: reasonable proximity
+                                ctrl_pages = set(_all_page_refs(control.control_page_refs))
+                                parent_pages = set(
+                                    _all_page_refs(getattr(parent_candidate, 'page_refs', None))
+                                    + _all_page_refs(getattr(parent_candidate, 'all_page_refs', None))
+                                )
+                                same_page = bool(ctrl_pages & parent_pages)
+                                line_dist = (
+                                    abs(ctrl_line - parent_line)
+                                    if ctrl_line and parent_line else None
+                                )
+                                max_line_dist = getattr(
+                                    config, 'HIERARCHY_OVERRIDE_MAX_LINE_DISTANCE', 300
+                                )
+                                close_enough = same_page or (
+                                    line_dist is not None and line_dist <= max_line_dist
+                                )
+
+                                if after_parent and not intervening and close_enough:
+                                    logger.info(
+                                        f"  Hierarchy override: {control.control_id} "
+                                        f"structural={obj.objective_id} → "
+                                        f"parent={parent_candidate.objective_id} "
+                                        f"(after_parent=True, intervening=False, "
+                                        f"same_page={same_page}, line_dist={line_dist})"
+                                    )
+                                    obj = parent_candidate
+                                    primary_obj_id_str = obj.objective_id
+                                    primary_obj_db_id = obj.id
+                                    _hierarchy_parent_found = True
+                                else:
+                                    reason = []
+                                    if not after_parent:
+                                        reason.append("control before parent")
+                                    if intervening:
+                                        reason.append("intervening objective")
+                                    if not close_enough:
+                                        reason.append(f"too far (line_dist={line_dist})")
+                                    logger.info(
+                                        f"  Hierarchy override SKIPPED: {control.control_id} "
+                                        f"parent={parent_candidate.objective_id} — "
+                                        f"{', '.join(reason)}; keeping structural "
+                                        f"{obj.objective_id}"
+                                    )
+                        else:
+                            # Structural primary already matches the parent ID
+                            _hierarchy_parent_found = True
+
+                # GPT alignment score — informational only, NOT a gate
+                # Skip by default (SKIP_PRIMARY_GPT_INFO_CHECK=true) to save API calls.
+                gpt_score = 0.0
+                if not getattr(config, 'SKIP_PRIMARY_GPT_INFO_CHECK', True):
+                    try:
+                        batch_scores = calculate_alignment_scores_batch(
+                            control.control_desc or "",
+                            [(obj, 1.0, "structural_primary")],
+                            alignment_cache=alignment_cache,
+                            feedback_text=feedback_text,
+                        )
                         if obj.id in batch_scores:
-                            gpt_score, gpt_reasoning = batch_scores[obj.id]
-                            # Structure provides high base confidence (0.6 weight),
-                            # GPT validation prevents false positives (0.4 weight).
-                            combined_score = 0.6 + (gpt_score * 0.4)
-                            if combined_score > config.OBJECTIVE_MAPPING_TIER0_MIN_SCORE and gpt_score >= config.OBJECTIVE_MAPPING_TIER0_GPT_FLOOR:
-                                justification = (
-                                    f"Tier 0 (Document Structure): structural=1.00 + "
-                                    f"GPT={gpt_score:.2f} = {combined_score:.2f}"
-                                )
-                                all_candidates.append((combined_score, obj, justification, {
-                                    'page_proximity_score': 0.0,
-                                    'line_proximity_score': 0.0,
-                                    'gpt_alignment_score': gpt_score,
-                                    'id_alignment_score': 0.0,
-                                }))
-                                scored_objective_ids.add(obj.objective_id)
-                                logger.debug(
-                                    f"  Tier 0: {control.control_id} → {obj.objective_id} "
-                                    f"(structural + GPT={gpt_score:.2f} = {combined_score:.2f})"
-                                )
-        
-        # ===== TIER 1: ID Hierarchy Matching =====
+                            gpt_score, _ = batch_scores[obj.id]
+                    except Exception as e:
+                        logger.warning(
+                            f"  GPT alignment info-check failed for {control.control_id}: {e}"
+                        )
+
+                structural_confidence = 0.95
+                justification = (
+                    f"Section Assignment (structural primary): "
+                    f"document_structure=1.00, GPT_info={gpt_score:.2f}"
+                )
+                all_candidates.append((structural_confidence, obj, justification, {
+                    'page_proximity_score': 0.0,
+                    'line_proximity_score': 0.0,
+                    'gpt_alignment_score': gpt_score,
+                    'id_alignment_score': 0.0,
+                }))
+                scored_objective_ids.add(obj.objective_id)
+                logger.debug(
+                    f"  Section: {control.control_id} → {obj.objective_id} "
+                    f"(structural primary, GPT_info={gpt_score:.2f})"
+                )
+            else:
+                logger.debug(
+                    f"  Section: {control.control_id} — no structural primary found"
+                )
+        else:
+            # ── Legacy Tier 0: Document Structure + GPT validation ──
+            if structure_map:
+                structural_obj_ids = _find_all_structural_objectives(control.id, structure_map)
+                if structural_obj_ids:
+                    structural_objs = [
+                        (objectives_by_db_id[oid], 1.0, "structural")
+                        for oid in structural_obj_ids
+                        if oid in objectives_by_db_id
+                    ]
+                    if structural_objs:
+                        batch_scores = calculate_alignment_scores_batch(
+                            control.control_desc or "",
+                            structural_objs,
+                            alignment_cache=alignment_cache,
+                            feedback_text=feedback_text,
+                        )
+                        for obj, _, _ in structural_objs:
+                            if obj.id in batch_scores:
+                                gpt_score, gpt_reasoning = batch_scores[obj.id]
+                                combined_score = 0.6 + (gpt_score * 0.4)
+                                if combined_score > config.OBJECTIVE_MAPPING_TIER0_MIN_SCORE and gpt_score >= config.OBJECTIVE_MAPPING_TIER0_GPT_FLOOR:
+                                    justification = (
+                                        f"Tier 0 (Document Structure): structural=1.00 + "
+                                        f"GPT={gpt_score:.2f} = {combined_score:.2f}"
+                                    )
+                                    all_candidates.append((combined_score, obj, justification, {
+                                        'page_proximity_score': 0.0,
+                                        'line_proximity_score': 0.0,
+                                        'gpt_alignment_score': gpt_score,
+                                        'id_alignment_score': 0.0,
+                                    }))
+                                    scored_objective_ids.add(obj.objective_id)
+
+        # ═════════════════════════════════════════════════════════════
+        # STEP 2: ID Hierarchy Matching (both paths)
+        # ═════════════════════════════════════════════════════════════
         if config.ENABLE_HIERARCHICAL_ID_MATCHING:
             id_matched_objectives = []
             for obj in objectives:
+                if obj.objective_id in scored_objective_ids:
+                    continue  # Skip already-mapped from section assignment
                 id_score, id_explanation = _calculate_hierarchical_id_score(
                     control.control_id,
                     obj.objective_id
@@ -2990,127 +3350,293 @@ def map_controls_to_objectives(
                             }))
                             scored_objective_ids.add(obj.objective_id)
         
-        # ===== TIER 2: Line Proximity =====
-        if control_line:
-            line_nearby_objectives = []
-            for obj in objectives:
-                obj_line = obj.line_ref
-                if obj_line:
-                    signed_distance = control_line - obj_line
-                    if signed_distance < -10 or signed_distance > 30:
+        # ═════════════════════════════════════════════════════════════
+        # STEP 3: Secondary Mapping — Page-Based or GPT Classification
+        # ═════════════════════════════════════════════════════════════
+        if config.ENABLE_GPT_OBJECTIVE_CLASSIFICATION:
+            # ── Skip secondaries when hierarchy already resolved ──
+            # Only when the control's ID is a clear child of an objective
+            # ID (e.g. CC1.2.1 → CC1.2).  Reports where control IDs use
+            # a different scheme than objectives (PR-03-03 under CC2.2)
+            # are unaffected — _hierarchy_parent_found stays False.
+            _skip_secondary = _hierarchy_parent_found
+            if _skip_secondary:
+                logger.debug(
+                    f"  ✂ Skipping secondaries for {control.control_id} "
+                    f"(hierarchical sub-control, parent already assigned)"
+                )
+
+            if not _skip_secondary and getattr(config, 'ENABLE_GPT_SECONDARY_CLASSIFICATION', False):
+                # ── GPT Classification: one call per control, all objectives ──
+                # Sends control description + the full objective list so GPT can
+                # make relative judgments.  Returns only objectives the control
+                # genuinely supports.  Replaces Tier 2 (line) + Tier 3 (page).
+                classification_results = classify_control_objectives(
+                    control_id=control.control_id or f"ctrl_{control.id}",
+                    control_desc=control.control_desc or "",
+                    primary_objective_id=primary_obj_id_str,
+                    all_objectives=objectives,
+                    feedback_text=feedback_text,
+                )
+
+                obj_by_str_id = {obj.objective_id: obj for obj in objectives}
+                max_secondary = config.GPT_CLASSIFICATION_MAX_SECONDARY
+                secondary_count = 0
+
+                for result in classification_results:
+                    obj_id_str = result["objective_id"]
+                    if obj_id_str in scored_objective_ids:
+                        continue  # Already mapped from Step 1 or 2
+
+                    obj = obj_by_str_id.get(obj_id_str)
+                    if not obj:
+                        logger.debug(f"  Classification: unknown objective '{obj_id_str}' — skipped")
                         continue
-                    line_distance = abs(signed_distance)
-                    if line_distance <= 30:
-                        line_score = max(0.0, 1.0 - (line_distance / 30.0))
-                        if line_score >= 0.1:
-                            if obj_line > control_line:
-                                line_explanation = f"{obj_line - control_line}L after"
-                            elif obj_line == control_line:
-                                line_explanation = "same line"
+
+                    secondary_count += 1
+                    if secondary_count > max_secondary:
+                        logger.debug(
+                            f"  ✂ Classification cap: dropping {obj_id_str} "
+                            f"(#{secondary_count} > max={max_secondary})"
+                        )
+                        continue
+
+                    confidence = result["confidence"]
+                    reasoning = result["reasoning"]
+                    justification = (
+                        f"GPT Classification (secondary): "
+                        f"confidence={confidence:.2f}, {reasoning}"
+                    )
+                    all_candidates.append((confidence, obj, justification, {
+                        'page_proximity_score': 0.0,
+                        'line_proximity_score': 0.0,
+                        'gpt_alignment_score': confidence,
+                        'id_alignment_score': 0.0,
+                    }))
+                    scored_objective_ids.add(obj_id_str)
+                    logger.debug(
+                        f"  Classification: {control.control_id} → {obj_id_str} "
+                        f"(confidence={confidence:.2f})"
+                    )
+
+                if secondary_count > max_secondary:
+                    logger.info(
+                        f"Control {control.control_id}: Classification cap — "
+                        f"kept {max_secondary}/{secondary_count} secondary mappings"
+                    )
+            elif not _skip_secondary:
+                # ── Page-Based Secondaries (no GPT calls) ──
+                # For each page the control appears on, find the nearest
+                # preceding objective on that page.  This is deterministic
+                # and matches the "Approach C" simulation from quality analysis.
+                # Confidence = page proximity score (same-page = 0.85).
+                # Threshold: PAGE_SECONDARY_MIN_CONFIDENCE (default 0.85 = same-page only).
+                control_pages = _all_page_refs(control.control_page_refs)
+                page_secondary_min = getattr(config, 'PAGE_SECONDARY_MIN_CONFIDENCE', 0.85)
+                page_secondary_count = 0
+
+                if control_pages:
+                    for pg in control_pages:
+                        page_objs = page_to_objectives_index.get(pg, [])
+                        if not page_objs:
+                            continue
+
+                        # Find nearest preceding objective on this page
+                        best_obj = None
+                        if control_line:
+                            preceding = [
+                                o for o in page_objs
+                                if o.line_ref and o.line_ref <= control_line
+                            ]
+                            if preceding:
+                                best_obj = max(preceding, key=lambda o: o.line_ref)
                             else:
-                                line_explanation = f"{control_line - obj_line}L before"
-                            line_nearby_objectives.append((obj, line_score, line_explanation))
-            
-            if line_nearby_objectives:
-                logger.debug(f"Control {control.control_id}: Tier 2 - {len(line_nearby_objectives)} line-nearby objectives")
-                
-                batch_scores = calculate_alignment_scores_batch(
-                    control.control_desc or "",
-                    line_nearby_objectives,
-                    alignment_cache=alignment_cache,
-                    feedback_text=feedback_text,
-                )
-                
-                for obj, line_score, line_explanation in line_nearby_objectives:
-                    if obj.id in batch_scores:
-                        gpt_score, gpt_reasoning = batch_scores[obj.id]
-                        combined_score = (line_score * 0.4) + (gpt_score * 0.6)
-                        logger.debug(f"  → Obj {obj.objective_id}: line={line_score:.2f}, gpt={gpt_score:.2f}, combined={combined_score:.2f}")
-                        
-                        if combined_score > config.OBJECTIVE_MAPPING_TIER2_MIN_SCORE:
-                            justification = f"Tier 2 (Line Proximity): Line={line_score:.2f} ({line_explanation}) + GPT={gpt_score:.2f} = {combined_score:.2f}"
-                            all_candidates.append((combined_score, obj, justification, {
-                                'page_proximity_score': 0.0, 'line_proximity_score': line_score,
-                                'gpt_alignment_score': gpt_score, 'id_alignment_score': 0.0,
-                            }))
-                            scored_objective_ids.add(obj.objective_id)
-        
-        # ===== TIER 3: Page Proximity (all-pages cross-product) =====
-        # Check ALL pages of both control and objective, not just the minimum page.
-        # Many controls span multiple pages (e.g. referenced on pages [54, 57, 111]);
-        # using only the min page misses objectives that share a later page.
-        control_pages = _all_page_refs(control.control_page_refs)
-        max_page_dist = config.OBJECTIVE_MAPPING_TIER3_MAX_PAGE_DISTANCE
-        if control_pages:
-            page_nearby_objectives = []
-            for obj in objectives:
-                obj_pages = _all_page_refs(obj.page_refs)
-                if not obj_pages:
-                    continue
-                # Find best (minimum) page distance across all page pairs
-                best_distance = None
-                best_ctrl_pg = None
-                best_obj_pg = None
-                for cp in control_pages:
-                    for op in obj_pages:
-                        d = abs(cp - op)
-                        if best_distance is None or d < best_distance:
-                            best_distance = d
-                            best_ctrl_pg = cp
-                            best_obj_pg = op
-                if best_distance is not None and best_distance <= max_page_dist:
-                    page_score = _control_page_proximity_score(best_ctrl_pg, best_obj_pg)
-                    if page_score >= 0.1:
-                        if best_obj_pg > best_ctrl_pg:
-                            page_explanation = f"{best_obj_pg - best_ctrl_pg}pg after (pg {best_ctrl_pg}↔{best_obj_pg})"
-                        elif best_obj_pg == best_ctrl_pg:
-                            page_explanation = f"same page ({best_ctrl_pg})"
+                                # No preceding objective — find nearest by absolute distance
+                                with_lines = [
+                                    o for o in page_objs if o.line_ref
+                                ]
+                                if with_lines:
+                                    best_obj = min(
+                                        with_lines,
+                                        key=lambda o: abs(o.line_ref - control_line)
+                                    )
                         else:
-                            page_explanation = f"{best_ctrl_pg - best_obj_pg}pg before (pg {best_ctrl_pg}↔{best_obj_pg})"
-                        page_nearby_objectives.append((obj, page_score, page_explanation))
-            
-            if page_nearby_objectives:
-                logger.debug(f"Control {control.control_id}: Tier 3 - {len(page_nearby_objectives)} page-nearby objectives (all-pages)")
-                
-                batch_scores = calculate_alignment_scores_batch(
-                    control.control_desc or "",
-                    page_nearby_objectives,
-                    alignment_cache=alignment_cache,
-                    feedback_text=feedback_text,
-                )
-                
-                for obj, page_score, page_explanation in page_nearby_objectives:
-                    if obj.id in batch_scores:
-                        gpt_score, gpt_reasoning = batch_scores[obj.id]
-                        combined_score = (page_score * 0.3) + (gpt_score * 0.7)
-                        logger.debug(f"  → Obj {obj.objective_id}: page={page_score:.2f}, gpt={gpt_score:.2f}, combined={combined_score:.2f}")
-                        
-                        if combined_score > config.OBJECTIVE_MAPPING_TIER3_MIN_SCORE:
-                            justification = f"Tier 3 (Page Proximity): Page={page_score:.2f} ({page_explanation}) + GPT={gpt_score:.2f} = {combined_score:.2f}"
-                            all_candidates.append((combined_score, obj, justification, {
-                                'page_proximity_score': page_score, 'line_proximity_score': 0.0,
-                                'gpt_alignment_score': gpt_score, 'id_alignment_score': 0.0,
+                            # No line_ref on control — pick first objective on page
+                            if page_objs:
+                                best_obj = page_objs[0]
+
+                        if not best_obj:
+                            continue
+                        if best_obj.objective_id in scored_objective_ids:
+                            continue
+
+                        # Confidence = same-page score (0.85 for same page)
+                        page_score = _control_page_proximity_score(
+                            control_page or pg, _min_page_ref(best_obj.page_refs) or pg
+                        )
+                        if page_score >= page_secondary_min:
+                            page_secondary_count += 1
+                            justification = (
+                                f"Page Secondary: page_score={page_score:.2f} "
+                                f"(page {pg}, nearest preceding)"
+                            )
+                            all_candidates.append((page_score, best_obj, justification, {
+                                'page_proximity_score': page_score,
+                                'line_proximity_score': 0.0,
+                                'gpt_alignment_score': 0.0,
+                                'id_alignment_score': 0.0,
                             }))
-                            scored_objective_ids.add(obj.objective_id)
-        
-        # ===== Create mappings from all candidates =====
+                            scored_objective_ids.add(best_obj.objective_id)
+                            logger.debug(
+                                f"  Page secondary: {control.control_id} → "
+                                f"{best_obj.objective_id} "
+                                f"(page={pg}, score={page_score:.2f})"
+                            )
+
+                if page_secondary_count:
+                    logger.debug(
+                        f"Control {control.control_id}: {page_secondary_count} "
+                        f"page-based secondary mapping(s)"
+                    )
+        else:
+            # ── Legacy Tier 2: Line Proximity ──
+            if control_line and config.ENABLE_LINE_PROXIMITY_SCORING:
+                line_nearby_objectives = []
+                for obj in objectives:
+                    obj_line = obj.line_ref
+                    if obj_line:
+                        signed_distance = control_line - obj_line
+                        if signed_distance < -10 or signed_distance > 30:
+                            continue
+                        line_distance = abs(signed_distance)
+                        if line_distance <= 30:
+                            line_score = max(0.0, 1.0 - (line_distance / 30.0))
+                            if line_score >= 0.1:
+                                if obj_line > control_line:
+                                    line_explanation = f"{obj_line - control_line}L after"
+                                elif obj_line == control_line:
+                                    line_explanation = "same line"
+                                else:
+                                    line_explanation = f"{control_line - obj_line}L before"
+                                line_nearby_objectives.append((obj, line_score, line_explanation))
+
+                if line_nearby_objectives:
+                    logger.debug(f"Control {control.control_id}: Tier 2 - {len(line_nearby_objectives)} line-nearby objectives")
+                    batch_scores = calculate_alignment_scores_batch(
+                        control.control_desc or "",
+                        line_nearby_objectives,
+                        alignment_cache=alignment_cache,
+                        feedback_text=feedback_text,
+                    )
+                    for obj, line_score, line_explanation in line_nearby_objectives:
+                        if obj.id in batch_scores:
+                            gpt_score, gpt_reasoning = batch_scores[obj.id]
+                            combined_score = (line_score * 0.4) + (gpt_score * 0.6)
+                            if combined_score > config.OBJECTIVE_MAPPING_TIER2_MIN_SCORE:
+                                justification = f"Tier 2 (Line Proximity): Line={line_score:.2f} ({line_explanation}) + GPT={gpt_score:.2f} = {combined_score:.2f}"
+                                all_candidates.append((combined_score, obj, justification, {
+                                    'page_proximity_score': 0.0, 'line_proximity_score': line_score,
+                                    'gpt_alignment_score': gpt_score, 'id_alignment_score': 0.0,
+                                }))
+                                scored_objective_ids.add(obj.objective_id)
+
+            # ── Legacy Tier 3: Page Proximity (all-pages cross-product) ──
+            control_pages = _all_page_refs(control.control_page_refs)
+            max_page_dist = config.OBJECTIVE_MAPPING_TIER3_MAX_PAGE_DISTANCE
+            if control_pages:
+                page_nearby_objectives = []
+                for obj in objectives:
+                    obj_pages = _all_page_refs(obj.all_page_refs) or _all_page_refs(obj.page_refs)
+                    if not obj_pages:
+                        continue
+                    best_distance = None
+                    best_ctrl_pg = None
+                    best_obj_pg = None
+                    for cp in control_pages:
+                        for op in obj_pages:
+                            d = abs(cp - op)
+                            if best_distance is None or d < best_distance:
+                                best_distance = d
+                                best_ctrl_pg = cp
+                                best_obj_pg = op
+                    if best_distance is not None and best_distance <= max_page_dist:
+                        page_score = _control_page_proximity_score(best_ctrl_pg, best_obj_pg)
+                        if page_score >= 0.1:
+                            if best_obj_pg > best_ctrl_pg:
+                                page_explanation = f"{best_obj_pg - best_ctrl_pg}pg after (pg {best_ctrl_pg}↔{best_obj_pg})"
+                            elif best_obj_pg == best_ctrl_pg:
+                                page_explanation = f"same page ({best_ctrl_pg})"
+                            else:
+                                page_explanation = f"{best_ctrl_pg - best_obj_pg}pg before (pg {best_ctrl_pg}↔{best_obj_pg})"
+                            page_nearby_objectives.append((obj, page_score, page_explanation))
+
+                if page_nearby_objectives:
+                    logger.debug(f"Control {control.control_id}: Tier 3 - {len(page_nearby_objectives)} page-nearby objectives (all-pages)")
+                    batch_scores = calculate_alignment_scores_batch(
+                        control.control_desc or "",
+                        page_nearby_objectives,
+                        alignment_cache=alignment_cache,
+                        feedback_text=feedback_text,
+                    )
+                    for obj, page_score, page_explanation in page_nearby_objectives:
+                        if obj.id in batch_scores:
+                            gpt_score, gpt_reasoning = batch_scores[obj.id]
+                            combined_score = (page_score * 0.3) + (gpt_score * 0.7)
+                            if combined_score > config.OBJECTIVE_MAPPING_TIER3_MIN_SCORE:
+                                justification = f"Tier 3 (Page Proximity): Page={page_score:.2f} ({page_explanation}) + GPT={gpt_score:.2f} = {combined_score:.2f}"
+                                all_candidates.append((combined_score, obj, justification, {
+                                    'page_proximity_score': page_score, 'line_proximity_score': 0.0,
+                                    'gpt_alignment_score': gpt_score, 'id_alignment_score': 0.0,
+                                }))
+                                scored_objective_ids.add(obj.objective_id)
+
+        # ═════════════════════════════════════════════════════════════
+        # Create mappings from all candidates
+        # ═════════════════════════════════════════════════════════════
         # Deduplicate candidates by objective_id (keep highest score per objective)
         best_by_objective: Dict[str, tuple] = {}
         for combined_score, obj, justification, scores_dict in all_candidates:
             obj_key = obj.objective_id or str(obj.id)
             if obj_key not in best_by_objective or combined_score > best_by_objective[obj_key][0]:
                 best_by_objective[obj_key] = (combined_score, obj, justification, scores_dict)
-        
+
         if best_by_objective:
-            # Sort by score descending — highest is primary
             sorted_candidates = sorted(best_by_objective.values(), key=lambda x: x[0], reverse=True)
-            
-            for idx, (combined_score, obj, justification, scores_dict) in enumerate(sorted_candidates):
+
+            # Legacy Tier 3 cap (only applies when classification is disabled)
+            # Cap of 0 = disabled (no limit). Min-score threshold is sufficient.
+            if not config.ENABLE_GPT_OBJECTIVE_CLASSIFICATION:
+                tier3_cap = getattr(config, 'OBJECTIVE_MAPPING_TIER3_MAX_PER_CONTROL', 0)
+                if tier3_cap > 0:
+                    capped = []
+                    tier3_count = 0
+                    for candidate in sorted_candidates:
+                        _, obj, justification, _ = candidate
+                        if justification.startswith("Tier 3"):
+                            tier3_count += 1
+                            if tier3_count > tier3_cap:
+                                logger.debug(
+                                    f"  ✂ Tier 3 cap: dropping {obj.objective_id} "
+                                    f"(#{tier3_count} > cap={tier3_cap})"
+                                )
+                                continue
+                        capped.append(candidate)
+                    sorted_candidates = capped
+
+            mapping_method = (
+                'auto_combined'
+                if config.ENABLE_GPT_OBJECTIVE_CLASSIFICATION
+                and not getattr(config, 'ENABLE_GPT_SECONDARY_CLASSIFICATION', False)
+                else 'auto_classified'
+                if config.ENABLE_GPT_OBJECTIVE_CLASSIFICATION
+                else 'auto_tiered'
+            )
+            for combined_score, obj, justification, scores_dict in sorted_candidates:
                 mapping = ControlObjectiveMapping(
                     control_id=control.id,
                     objective_id=obj.id,
                     mapping_confidence=combined_score,
-                    mapping_method='auto_tiered',
+                    mapping_method=mapping_method,
                     is_primary=False,
                     page_proximity_score=scores_dict['page_proximity_score'],
                     line_proximity_score=scores_dict['line_proximity_score'],
@@ -3121,12 +3647,15 @@ def map_controls_to_objectives(
                     created_at=datetime.utcnow()
                 )
                 new_mappings.append(mapping)
-                logger.debug(f"✓ mapping: {control.control_id} → {obj.objective_id} (score={combined_score:.2f}, {justification[:50]})")
-            
+                logger.debug(
+                    f"✓ mapping: {control.control_id} → {obj.objective_id} "
+                    f"(score={combined_score:.2f}, {justification[:60]})"
+                )
+
             logger.debug(f"Control {control.control_id}: {len(sorted_candidates)} objective mapping(s) created")
         else:
-            logger.debug(f"Control {control.control_id}: No mapping after all tiers - UNMAPPED")
-        
+            logger.debug(f"Control {control.control_id}: No mapping — UNMAPPED")
+
         return (new_mappings, updates_count)
     
     # Parallel or sequential processing based on feature flag
@@ -3221,6 +3750,35 @@ def map_controls_to_objectives(
         except Exception as e:
             logger.warning(f"Failed to update mapping completion: {e}")
     
+    # ===== Multi-page mapping verification =====
+    # Log controls whose page_ref count far exceeds their mapping count.
+    # User hypothesis: a control on N pages typically maps to ~N objectives.
+    try:
+        mapping_counts: Dict[int, int] = {}
+        for m in all_new_mappings:
+            mapping_counts[m.control_id] = mapping_counts.get(m.control_id, 0) + 1
+
+        under_mapped = []
+        for control in controls:
+            pages = _all_page_refs(control.control_page_refs)
+            n_pages = len(pages) if pages else 0
+            n_mappings = mapping_counts.get(control.id, 0)
+            if n_pages >= 3 and n_mappings < (n_pages - 1):
+                under_mapped.append((control.control_id, n_pages, n_mappings))
+
+        if under_mapped:
+            logger.warning(
+                f"[MULTI_PAGE_CHECK] {len(under_mapped)} multi-page control(s) may be under-mapped:"
+            )
+            for cid, n_pages, n_maps in under_mapped:
+                logger.warning(
+                    f"  {cid}: {n_pages} page_refs but only {n_maps} objective mapping(s)"
+                )
+        else:
+            logger.info("[MULTI_PAGE_CHECK] All multi-page controls have adequate mapping coverage")
+    except Exception as e:
+        logger.warning(f"[MULTI_PAGE_CHECK] Verification failed (non-fatal): {e}")
+    
     return mappings_created
 
 
@@ -3231,34 +3789,62 @@ def map_controls_to_objectives(
 def _get_feedback_examples_text(
     scan_id: int,
     db_session: Session,
-    max_examples: int = 8,
+    max_examples: int = 20,
 ) -> str:
     """
     Query MappingFeedback for this scan (and optionally global) and
     format as a few-shot block that can be injected into the alignment prompt.
     
+    Prioritises corrective signals (removed/added) over confirmations,
+    since those carry the strongest learning value.
+    
     Returns an empty string if no feedback exists.
     """
     try:
-        # First try scan-specific feedback
-        rows = (
+        # Budget: corrective first (removed + added), then confirmed for balance
+        corrective_budget = max(max_examples * 3 // 4, 6)  # 75% for corrections
+        confirm_budget = max_examples - corrective_budget     # 25% for positive signal
+
+        # 1. Corrective signals from this scan (removed + added)
+        corrective_rows = (
             db_session.query(MappingFeedback)
-            .filter(MappingFeedback.scan_id == scan_id)
+            .filter(
+                MappingFeedback.scan_id == scan_id,
+                MappingFeedback.action.in_(["removed", "added", "redirected"]),
+            )
             .order_by(MappingFeedback.created_at.desc())
-            .limit(max_examples)
+            .limit(corrective_budget)
             .all()
         )
-        
-        # If scan has < 3 examples, supplement with global feedback
-        if len(rows) < 3:
+
+        # 2. Confirmed signals from this scan (positive examples)
+        confirmed_rows = (
+            db_session.query(MappingFeedback)
+            .filter(
+                MappingFeedback.scan_id == scan_id,
+                MappingFeedback.action == "confirmed",
+            )
+            .order_by(MappingFeedback.created_at.desc())
+            .limit(confirm_budget)
+            .all()
+        )
+
+        rows = corrective_rows + confirmed_rows
+
+        # If scan has < 5 examples total, supplement with global feedback
+        if len(rows) < 5:
+            seen_ids = {r.id for r in rows}
             global_rows = (
                 db_session.query(MappingFeedback)
-                .filter(MappingFeedback.scan_id != scan_id)
+                .filter(
+                    MappingFeedback.scan_id != scan_id,
+                    MappingFeedback.action.in_(["removed", "added", "redirected"]),
+                )
                 .order_by(MappingFeedback.created_at.desc())
                 .limit(max_examples - len(rows))
                 .all()
             )
-            rows.extend(global_rows)
+            rows.extend(r for r in global_rows if r.id not in seen_ids)
         
         if not rows:
             return ""
@@ -3279,13 +3865,13 @@ def _get_feedback_examples_text(
                 )
             elif fb.action == "removed":
                 lines.append(
-                    f"- WRONG mapping (removed): Control {ctrl_text} (\"{desc_snip}\") should NOT map to "
-                    f"Objective {obj_text} (\"{obj_snip}\") [auto-confidence was {fb.original_confidence or '?'}]"
+                    f"- WRONG mapping (removed by analyst): Control {ctrl_text} (\"{desc_snip}\") should NOT map to "
+                    f"Objective {obj_text} (\"{obj_snip}\") [auto-confidence was {fb.original_confidence or '?'} — score was too high]"
                 )
             elif fb.action == "added":
                 lines.append(
-                    f"- MISSING mapping (added manually): Control {ctrl_text} (\"{desc_snip}\") → "
-                    f"Objective {obj_text} (\"{obj_snip}\")"
+                    f"- MISSING mapping (added by analyst): Control {ctrl_text} (\"{desc_snip}\") → "
+                    f"Objective {obj_text} (\"{obj_snip}\") — the system missed this; score higher"
                 )
             elif fb.action == "redirected":
                 redir_text = fb.redirected_to_objective_text or "?"
@@ -3487,8 +4073,14 @@ def calculate_alignment_scores_batch(
 
 def update_objective_alignment_confidence(scan_id: int, db_session: Session):
     """
-    Update alignment_confidence for all objectives based on control mappings.
-    
+    Update alignment_confidence and distance_confidence for all objectives
+    based on control mappings, then recalculate final_confidence using
+    the 5-factor formula.
+
+    - alignment_confidence: average mapping_confidence across mapped controls
+    - distance_confidence: average page proximity between objective and mapped
+      controls (using all page refs for both)
+
     Args:
         scan_id: Scan ID to process
         db_session: SQLAlchemy session
@@ -3502,6 +4094,37 @@ def update_objective_alignment_confidence(scan_id: int, db_session: Session):
             # Average of all mapping confidences
             avg_alignment = sum(m.mapping_confidence for m in mappings) / len(mappings)
             objective.alignment_confidence = avg_alignment
+
+            # ── distance_confidence: page proximity between objective and mapped controls ──
+            obj_pages = _all_page_refs(objective.all_page_refs) or _all_page_refs(objective.page_refs)
+            if obj_pages:
+                control_ids = [m.control_id for m in mappings]
+                mapped_controls = (
+                    db_session.query(Control)
+                    .filter(Control.id.in_(control_ids))
+                    .all()
+                ) if control_ids else []
+
+                page_proximity_scores = []
+                for ctrl in mapped_controls:
+                    ctrl_pages = _all_page_refs(ctrl.control_page_refs)
+                    if not ctrl_pages:
+                        continue
+                    # Best (closest) page pair for this control-objective pair
+                    best_score = 0.0
+                    for cp in ctrl_pages:
+                        for op in obj_pages:
+                            score = _control_page_proximity_score(cp, op)
+                            if score > best_score:
+                                best_score = score
+                    page_proximity_scores.append(best_score)
+
+                if page_proximity_scores:
+                    objective.distance_confidence = sum(page_proximity_scores) / len(page_proximity_scores)
+                else:
+                    objective.distance_confidence = 0.0
+            else:
+                objective.distance_confidence = 0.0
             
             # FIXED: Skip confidence recalculation for gap_search objectives
             # Gap extraction uses fixed 0.50 confidence, boost slightly if mapped successfully
@@ -3524,7 +4147,7 @@ def update_objective_alignment_confidence(scan_id: int, db_session: Session):
                     f"reasoning={'yes' if has_reasoning else 'no'}) → {objective.final_confidence:.2f}"
                 )
             else:
-                # Recalculate with 4-factor weights (alignment now available post-mapping)
+                # Recalculate with 5-factor weights (alignment + distance now available post-mapping)
                 # CRITICAL: Apply empty reasoning guard (same as initial calculation)
                 gpt_score_for_recalc = objective.gpt_confidence or 0.0
                 empty_reasoning_stubs = {'', 'Gap extraction:', 'Gap extraction', 'N/A', 'None'}
@@ -3537,12 +4160,14 @@ def update_objective_alignment_confidence(scan_id: int, db_session: Session):
                         )
                         gpt_score_for_recalc = 0.0
                 
-                # Use 4-factor recalculation weights (includes alignment)
+                # Use 5-factor recalculation weights (includes alignment + distance)
                 weights = config.OBJECTIVE_RECALC_WEIGHTS
+                dist_conf = objective.distance_confidence or 0.0
                 final_confidence = (
                     objective.keyword_confidence * weights['keyword'] +
                     gpt_score_for_recalc * weights['gpt_opinion'] +
                     avg_alignment * weights['alignment'] +
+                    dist_conf * weights['distance'] +
                     objective.format_confidence * weights['format']
                 )
 
@@ -3565,6 +4190,7 @@ def update_objective_alignment_confidence(scan_id: int, db_session: Session):
                     f"keyword={objective.keyword_confidence:.2f}*{weights['keyword']:.2f} + "
                     f"gpt={gpt_score_for_recalc:.2f}*{weights['gpt_opinion']:.2f} + "
                     f"alignment={avg_alignment:.2f}*{weights['alignment']:.2f} + "
+                    f"distance={dist_conf:.2f}*{weights['distance']:.2f} + "
                     f"format={objective.format_confidence:.2f}*{weights['format']:.2f} = "
                     f"{final_confidence:.3f}"
                 )
@@ -3581,7 +4207,7 @@ def update_objective_alignment_confidence(scan_id: int, db_session: Session):
             objective.confidence_calc = confidence_calc
     
     db_session.commit()
-    logger.info(f"Updated alignment confidence for {len(objectives)} objectives")
+    logger.info(f"Updated alignment + distance confidence for {len(objectives)} objectives")
     
     # Re-run auto-approval after confidence updates (use 0.65 threshold)
     AUTO_APPROVE_THRESHOLD = 0.65

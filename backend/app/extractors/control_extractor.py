@@ -829,9 +829,52 @@ def merge_two_controls(base: Dict[str, Any], addition: Dict[str, Any]) -> Dict[s
         addition_end = addition["end_line"] or 0
         merged["end_line"] = max(merged_end, addition_end)
     
-    # Average confidence
-    if "control_confidence" in addition and "control_confidence" in merged:
-        merged["control_confidence"] = (merged["control_confidence"] + addition["control_confidence"]) / 2
+    # ── Merge confidence re-evaluation ──
+    # Instead of averaging (which punishes complete merges), re-score based
+    # on the merged content's completeness.  A control that was split across
+    # chunks often has a low score on the partial chunk; averaging drags
+    # down the confidence of the now-complete merged result.
+    #
+    # Strategy:
+    #   1. Start with the MAX of the two original confidences (the chunk
+    #      that already had a mostly-complete view).
+    #   2. If the merge added missing components (tests, results, description
+    #      expansion), give a small boost because the merged result is more
+    #      complete than either piece alone.
+    base_conf = merged.get("control_confidence", 0)
+    add_conf = addition.get("control_confidence", 0)
+    max_conf = max(base_conf, add_conf)
+
+    # Check which components the merged result now has
+    has_id = bool(merged.get("control_id"))
+    has_desc = len((merged.get("control_desc") or "").strip()) >= 20
+    has_tests = bool(merged.get("control_tests"))
+    has_results = bool(merged.get("control_test_results"))
+    component_count = sum([has_id, has_desc, has_tests, has_results])
+
+    if component_count == 4:
+        # All components present — the merged control is complete.
+        # Boost up to 0.90 if the max component score allows it, but
+        # never *lower* confidence below the max original score.
+        merged["control_confidence"] = max(max_conf, 0.90)
+        logging.info(
+            f"[MERGE_RESCORE] '{merged.get('control_id', '?')}' complete after merge: "
+            f"base={base_conf:.2f}, add={add_conf:.2f} → {merged['control_confidence']:.2f} (4/4 components)"
+        )
+    elif component_count >= 3:
+        # 3 of 4 — mostly complete
+        merged["control_confidence"] = max(max_conf, 0.80)
+        logging.info(
+            f"[MERGE_RESCORE] '{merged.get('control_id', '?')}' mostly complete after merge: "
+            f"base={base_conf:.2f}, add={add_conf:.2f} → {merged['control_confidence']:.2f} ({component_count}/4 components)"
+        )
+    else:
+        # Still incomplete — use max rather than average to avoid dragging down
+        merged["control_confidence"] = max_conf
+        logging.info(
+            f"[MERGE_RESCORE] '{merged.get('control_id', '?')}' still partial after merge: "
+            f"base={base_conf:.2f}, add={add_conf:.2f} → max={max_conf:.2f} ({component_count}/4 components)"
+        )
     
     # Prefer non-null control_id
     if not merged.get("control_id") and addition.get("control_id"):
@@ -928,6 +971,345 @@ def filter_tsc_criteria(controls: List[Dict[str, Any]]) -> Tuple[List[Dict[str, 
         )
     
     return real_controls, tsc_flagged
+
+
+# Auditor test procedure language patterns
+_AUDITOR_TEST_PATTERNS = [
+    re.compile(r'\b(?:inspected|observed|inquired|examined|reviewed|tested)\b.*\bto determine whether\b', re.IGNORECASE),
+    re.compile(r'\b(?:inspected|observed|inquired|examined)\b.*\bfor a selection of\b', re.IGNORECASE),
+    re.compile(r'\b(?:inspected|observed)\b.*\bevidence\b.*\bfor a selection\b', re.IGNORECASE),
+    re.compile(r'\binspected.*(?:completion records|documentation|evidence|records)\b.*\bfor a selection\b', re.IGNORECASE),
+]
+
+# Generic / vague statement patterns
+_GENERIC_STATEMENT_PATTERNS = [
+    re.compile(r'^(?:corrective action is taken|changes are implemented|ability to make changes)', re.IGNORECASE),
+    re.compile(r'^(?:the entity implements data classification|the company evaluates configurations)', re.IGNORECASE),
+]
+
+
+def filter_auditor_and_generic(
+    controls: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Post-extraction filter: penalize controls that look like auditor test procedures
+    or generic/vague statements. Learned from control_feedback rejection data:
+      - 14 auditor_test_procedure rejections (avg conf 0.38)
+      - 18 generic_statement rejections (avg conf 0.29)
+
+    Instead of removing outright, these are confidence-penalized so
+    they sort to the bottom and the user can decide.
+    """
+    clean = []
+    flagged = []
+
+    for control in controls:
+        desc = (control.get("control_desc") or "").strip()
+
+        # --- auditor test procedure check ---
+        # Only flag if the description STARTS with auditor language (first 80 chars)
+        # or if the MAJORITY of the text is auditor test procedures.
+        # GPT sometimes concatenates test text onto a valid description —
+        # we should not penalize if there's real control text at the start.
+        is_auditor = False
+        for p in _AUDITOR_TEST_PATTERNS:
+            m = p.search(desc)
+            if m:
+                # If the match starts within the first 30 chars, it's primarily auditor text
+                # If it starts later, the description leads with real control text
+                if m.start() < 30:
+                    is_auditor = True
+                    break
+                # Also flag if >60% of the description is after the auditor match start
+                # (meaning the description is mostly test procedure text)
+                elif m.start() < len(desc) * 0.4:
+                    is_auditor = True
+                    break
+
+        # --- generic statement check (short + no specific actor/system) ---
+        is_generic = any(p.search(desc) for p in _GENERIC_STATEMENT_PATTERNS)
+        # Also flag very short descriptions (< 60 chars) that lack a named subject
+        if not is_generic and len(desc) < 60 and not re.search(r'[A-Z][a-z]+(?:\s[A-Z][a-z]+)*', desc):
+            # Short description with no proper noun → likely generic fragment
+            is_generic = True
+
+        if is_auditor or is_generic:
+            reason = "auditor_test_procedure" if is_auditor else "generic_statement"
+            orig_conf = control.get("control_confidence", 0)
+            # Penalty: cap at 0.15 so they don't pollute mapping
+            new_conf = min(orig_conf, 0.15)
+            control["_quality_flagged"] = reason
+            control["_original_confidence"] = orig_conf
+            control["control_confidence"] = new_conf
+            control["control_gpt_conf_justification"] = (
+                f"Auto-flagged as {reason}. "
+                f"Original confidence: {orig_conf:.2f} → {new_conf:.2f}. "
+                f"Description: \"{desc[:80]}…\""
+            )
+            flagged.append(control)
+            logging.info(
+                f"[QUALITY_FILTER] Flagged '{control.get('control_id', '?')}' as {reason} "
+                f"(conf {orig_conf:.2f} → {new_conf:.2f})"
+            )
+        else:
+            clean.append(control)
+
+    if flagged:
+        logging.info(
+            f"[QUALITY_FILTER] {len(flagged)} controls flagged "
+            f"(auditor/generic), {len(clean)} retained"
+        )
+
+    return clean, flagged
+
+
+def apply_short_description_penalty(
+    controls: List[Dict[str, Any]],
+    min_chars: int = 50,
+    penalty_factor: float = 0.9,
+) -> List[Dict[str, Any]]:
+    """
+    Post-extraction penalty: controls with very short descriptions
+    (< min_chars) get a mild confidence reduction.
+
+    Learned from scan 8 review: 5 of 6 manually-boosted controls were
+    solely penalized by this function. Short descriptions with a valid
+    control_id and high GPT confidence are often legitimate, complete
+    controls (e.g. "Adobe restricted data at rest is encrypted." — 43 chars).
+    Softened from 0.6× to 0.9× so these controls remain in the
+    high-confidence bucket unless other penalties also apply.
+    """
+    for control in controls:
+        desc = (control.get("control_desc") or "").strip()
+        if len(desc) < min_chars:
+            orig_conf = control.get("control_confidence", 0)
+            new_conf = round(orig_conf * penalty_factor, 3)
+            control["_short_desc_penalty"] = True
+            control["_original_confidence"] = control.get("_original_confidence", orig_conf)
+            control["control_confidence"] = new_conf
+            logging.info(
+                f"[SHORT_DESC_PENALTY] '{control.get('control_id', '?')}' "
+                f"desc={len(desc)} chars → conf {orig_conf:.2f} × {penalty_factor} = {new_conf:.2f}"
+            )
+    return controls
+
+
+def augment_page_refs_from_text(
+    controls: List[Dict[str, Any]],
+    text_lines: List[str],
+) -> List[Dict[str, Any]]:
+    """
+    Post-extraction pass: scan the full document text for each control's ID
+    to discover page references that GPT may have missed during chunk-level
+    extraction.
+
+    For each control with a non-empty control_id, we search the document text
+    for occurrences of that ID (exact, case-insensitive).  For each occurrence,
+    we determine its page number via the ``=== PAGE N ===`` markers in the
+    extracted text and add it to ``control_page_refs``.
+
+    This is especially important for multi-page controls that appear under
+    multiple objectives — the initial chunk-level extraction may only capture
+    the first occurrence.
+
+    Returns the controls list (mutated in place) with augmented page_refs.
+    """
+    from ..pdf_handler import get_page_for_line as _get_page
+
+    if not text_lines:
+        logging.warning("[PAGE_REF_SEARCH] No text_lines provided — skipping augmentation")
+        return controls
+
+    # Build a set of control IDs to search for
+    id_map: Dict[str, List[Dict[str, Any]]] = {}
+    for ctrl in controls:
+        cid = (ctrl.get("control_id") or "").strip()
+        if cid:
+            id_map.setdefault(cid.lower(), []).append(ctrl)
+
+    if not id_map:
+        return controls
+
+    augmented_count = 0
+    total_new_pages = 0
+
+    for line_idx, line in enumerate(text_lines):
+        line_lower = line.lower()
+        for cid_lower, ctrls in id_map.items():
+            if cid_lower in line_lower:
+                # Determine the page for this line occurrence
+                page = _get_page(text_lines, line_idx + 1)  # line_idx is 0-based; get_page expects 1-based
+                if page:
+                    for ctrl in ctrls:
+                        existing = ctrl.get("control_page_refs") or []
+                        if isinstance(existing, str):
+                            existing = [int(p.strip()) for p in existing.split(",") if p.strip().isdigit()]
+                        if page not in existing:
+                            existing.append(page)
+                            ctrl["control_page_refs"] = sorted(set(existing))
+                            total_new_pages += 1
+
+    augmented_count = sum(
+        1 for ctrl in controls
+        if len(ctrl.get("control_page_refs") or []) > len(ctrl.get("_original_page_refs") or ctrl.get("control_page_refs") or [])
+    )
+
+    # Snapshot originals for comparison logging
+    # We take the snapshot BEFORE the first run, so use a flag
+    for ctrl in controls:
+        if "_page_ref_augmented" not in ctrl:
+            ctrl["_page_ref_augmented"] = True
+
+    if total_new_pages > 0:
+        logging.info(
+            f"[PAGE_REF_SEARCH] Augmented page_refs: {total_new_pages} new page(s) "
+            f"discovered across controls"
+        )
+    else:
+        logging.info("[PAGE_REF_SEARCH] No additional page references found (text search matched existing refs)")
+
+    return controls
+
+
+def apply_missing_id_penalty(
+    controls: List[Dict[str, Any]],
+    penalty_factor: float = 0.70,
+) -> List[Dict[str, Any]]:
+    """
+    Post-extraction penalty: controls without a control_id get their
+    confidence lowered so they move from high-confidence to low-confidence.
+
+    The GPT prompt instructs 0.6-0.89 for "missing ID" yet GPT routinely
+    assigns 0.85-0.95 to no-ID controls.  This enforces that guidance.
+
+    With a 0.70 multiplier:
+    - 0.95 → 0.665 (below 0.75, appears in low-confidence for review)
+    - 0.80 → 0.56  (still above 0.50, remains visible)
+    - 0.60 → 0.42  (low but retained)
+
+    Controls are NOT removed — only moved to the low-confidence bucket.
+    """
+    penalized = 0
+    for control in controls:
+        cid = (control.get("control_id") or "").strip()
+        if not cid:
+            orig_conf = control.get("control_confidence", 0)
+            new_conf = round(orig_conf * penalty_factor, 3)
+            control["_missing_id_penalty"] = True
+            control["_original_confidence"] = control.get("_original_confidence", orig_conf)
+            control["control_confidence"] = new_conf
+            penalized += 1
+            logging.info(
+                f"[MISSING_ID_PENALTY] No control_id → "
+                f"conf {orig_conf:.2f} × {penalty_factor} = {new_conf:.2f}  "
+                f"desc='{(control.get('control_desc') or '')[:60]}…'"
+            )
+
+    if penalized:
+        logging.info(f"[MISSING_ID_PENALTY] Penalized {penalized} controls without IDs")
+    return controls
+
+
+def detect_subset_controls(
+    controls: List[Dict[str, Any]],
+    penalty_factor: float = 0.65,
+) -> List[Dict[str, Any]]:
+    """
+    Post-extraction penalty: detect controls that are **chunking fragments**
+    — i.e. no control_id AND their description is a true substring of another
+    control's description.
+
+    Key distinction (per domain expertise):
+    - A control can legitimately appear multiple times in a SOC report under
+      different control objectives.  Auditors may intentionally shorten or
+      tailor the description for each objective context.  These all carry
+      their own control_id and should NOT be penalized.
+    - A chunking artifact is a fragment where GPT re-extracted part of a
+      control from an overlapping chunk but couldn't identify the control_id.
+      These have NO control_id and their text is a literal substring of the
+      full control.  Only these should be penalized.
+
+    Additional heuristic: if the no-ID fragment ends mid-sentence (no
+    terminal punctuation), it's almost certainly a chunk boundary cut-off.
+    If it ends cleanly, we apply a lighter penalty.
+
+    O(n²) — fine for typical n < 200.
+    """
+    if len(controls) < 2:
+        return controls
+
+    import re as _re
+    norm_descs = []
+    for ctrl in controls:
+        desc = (ctrl.get("control_desc") or "").strip()
+        norm = _re.sub(r'\s+', ' ', desc.lower())
+        norm_descs.append(norm)
+
+    # Track which index is a subset of which
+    penalized_map: dict = {}  # idx -> superset_idx
+
+    for i in range(len(controls)):
+        if not norm_descs[i] or len(norm_descs[i]) < 30:
+            continue
+        if i in penalized_map:
+            continue  # already penalized
+
+        # ONLY penalize controls without a control_id.
+        # If a control has an ID, the auditor assigned it intentionally —
+        # even if its text is a substring of another control with a
+        # different ID, that's an intentional variant for a different
+        # control objective.
+        id_i = (controls[i].get("control_id") or "").strip()
+        if id_i:
+            continue  # has an ID → never penalize as subset
+
+        for j in range(len(controls)):
+            if i == j:
+                continue
+            if not norm_descs[j]:
+                continue
+
+            # Only check if i is shorter than j (true subset direction)
+            if len(norm_descs[i]) >= len(norm_descs[j]):
+                continue
+
+            # Exact substring check
+            if norm_descs[i] in norm_descs[j]:
+                penalized_map[i] = j
+                break  # found a superset, move on
+
+    subset_count = 0
+    for idx, superset_idx in penalized_map.items():
+        ctrl = controls[idx]
+        orig_conf = ctrl.get("control_confidence", 0)
+
+        # Heuristic: if the fragment ends mid-sentence (no terminal
+        # punctuation), it's almost certainly a chunk boundary cut-off
+        # → apply full penalty.  If it ends with '.', '!', '?' it may
+        # be a complete thought extracted without its ID → lighter penalty.
+        raw_desc = (ctrl.get("control_desc") or "").strip()
+        ends_cleanly = raw_desc and raw_desc[-1] in '.!?'
+        effective_factor = penalty_factor if not ends_cleanly else min(penalty_factor + 0.15, 0.90)
+
+        new_conf = round(orig_conf * effective_factor, 3)
+        ctrl["_subset_text_penalty"] = True
+        ctrl["_original_confidence"] = ctrl.get("_original_confidence", orig_conf)
+        ctrl["control_confidence"] = new_conf
+        subset_count += 1
+
+        superset_id = controls[superset_idx].get("control_id") or f"ctrl@{superset_idx}"
+        trunc_tag = "truncated" if not ends_cleanly else "complete-sentence"
+        logging.info(
+            f"[SUBSET_TEXT] no-ID '{raw_desc[:40]}…' is substring of '{superset_id}' "
+            f"[{trunc_tag}] → conf {orig_conf:.2f} × {effective_factor:.2f} = {new_conf:.2f}"
+        )
+
+    if subset_count:
+        logging.info(f"[SUBSET_TEXT] Penalized {subset_count} true-substring controls")
+    else:
+        logging.info("[SUBSET_TEXT] No true-substring overlaps detected")
+
+    return controls
 
 
 # ============================================================================
@@ -1450,13 +1832,33 @@ def extract_controls(
     # Step 4b: TSC criteria auto-filter
     accepted_controls, tsc_flagged = filter_tsc_criteria(accepted_controls)
     rejected_controls.extend(tsc_flagged)  # TSC criteria go to rejected with confidence=0
-    
+
+    # Step 4c: Auditor test procedure / generic statement filter
+    accepted_controls, quality_flagged = filter_auditor_and_generic(accepted_controls)
+    rejected_controls.extend(quality_flagged)
+
+    # Step 4d: Short-description confidence penalty (enumeration fragments)
+    accepted_controls = apply_short_description_penalty(accepted_controls)
+
+    # Step 4e: Missing control_id penalty (GPT ignores its own scoring guidance)
+    accepted_controls = apply_missing_id_penalty(accepted_controls)
+
+    # Step 4f: Subset-text detection (fragment re-extractions across chunks)
+    accepted_controls = detect_subset_controls(accepted_controls)
+
+    # NOTE: No re-filter here — penalties only lower confidence so controls
+    # move from high-confidence to low-confidence bucket for user review.
+
     # Add text_lines context to controls for page number extraction
     for control in accepted_controls:
         control["text_lines"] = text_lines
     
     # Step 5: Validate
     validated_controls = validate_controls(accepted_controls)
+    
+    # Step 5b: Augment page refs by scanning document text for control ID mentions
+    # Must run BEFORE text_lines are removed since it needs them for page lookup
+    validated_controls = augment_page_refs_from_text(validated_controls, text_lines)
     
     # Remove text_lines to avoid bloating the JSON output
     for control in validated_controls:
@@ -1870,7 +2272,7 @@ def extract_controls_parallel(
     logging.info(f"[PARALLEL] Filtering by confidence...")
     high_confidence_controls, rejected_controls = filter_by_confidence(
         merged_controls,
-        min_confidence=getattr(config, 'HIGH_CONFIDENCE_THRESHOLD', 0.75)
+        min_confidence=getattr(config, 'CONTROL_V4_MIN_CONFIDENCE', 0.0)
     )
     logging.info(f"[PARALLEL] Kept {len(high_confidence_controls)}, rejected {len(rejected_controls)}")
     
@@ -1879,7 +2281,25 @@ def extract_controls_parallel(
     rejected_controls.extend(tsc_flagged)
     if tsc_flagged:
         logging.info(f"[PARALLEL] TSC filter: {len(tsc_flagged)} flagged, {len(high_confidence_controls)} retained")
-    
+
+    # Auditor test procedure / generic statement filter
+    high_confidence_controls, quality_flagged = filter_auditor_and_generic(high_confidence_controls)
+    rejected_controls.extend(quality_flagged)
+    if quality_flagged:
+        logging.info(f"[PARALLEL] Quality filter: {len(quality_flagged)} flagged, {len(high_confidence_controls)} retained")
+
+    # Short-description confidence penalty (enumeration fragments)
+    high_confidence_controls = apply_short_description_penalty(high_confidence_controls)
+
+    # Missing control_id penalty (GPT ignores its own scoring guidance)
+    high_confidence_controls = apply_missing_id_penalty(high_confidence_controls)
+
+    # Subset-text detection (fragment re-extractions across chunks)
+    high_confidence_controls = detect_subset_controls(high_confidence_controls)
+
+    # NOTE: No re-filter here — penalties only lower confidence so controls
+    # move from high-confidence to low-confidence bucket for user review.
+
     # Add text_lines context to controls for page number extraction
     for control in high_confidence_controls:
         control["text_lines"] = text_lines
@@ -1887,6 +2307,9 @@ def extract_controls_parallel(
     logging.info(f"[PARALLEL] Validating and cleaning...")
     validated_controls = validate_controls(high_confidence_controls)
     logging.info(f"[PARALLEL] Validated {len(validated_controls)} controls")
+    
+    # Augment page refs by scanning document text for control ID mentions
+    validated_controls = augment_page_refs_from_text(validated_controls, text_lines)
     
     # Remove text_lines to avoid bloating the JSON output
     for control in validated_controls:

@@ -79,14 +79,6 @@ class Company(Base):
 
 class Control(Base):
     __tablename__ = "control"
-    __table_args__ = (
-        Index(
-            'uq_control_scan_control_id',
-            'scan_id', 'control_id',
-            unique=True,
-            postgresql_where=text("control_id IS NOT NULL AND control_id != ''"),
-        ),
-    )
     id = Column(Integer, primary_key=True, autoincrement=True)
     control_id = Column(String(128))
     control_desc = Column(Text)

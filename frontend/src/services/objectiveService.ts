@@ -75,6 +75,8 @@ export interface ControlObjective {
   
   // Metadata
   page_refs?: number[];
+  all_page_refs?: number[];
+  line_ref?: number;
   extracted_from?: string;
   analyst_notes?: string;
   

@@ -10,7 +10,7 @@ param(
     [int]$MaxControls = 10
 )
 
-$envFile = "c:\Users\bklumpp\OneDrive - NANDPS\Documents\Python Scripts\SOCAnalyzer5\.env"
+$envFile = Join-Path $PSScriptRoot "..\.env"
 
 function Get-TestModeStatus {
     if (Test-Path $envFile) {

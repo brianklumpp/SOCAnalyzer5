@@ -102,7 +102,8 @@ export const AddItemDialog = React.memo(function AddItemDialog({
   useEffect(() => {
     if (open) {
       setFormData({});
-      setActiveTab(0);
+      // Default to Search & Extract tab for controls, Manual Entry for others
+      setActiveTab(type === 'control' ? 1 : 0);
       setSearchText('');
       setForceMultiExtract(false);
       setExtracting(false);

@@ -15,9 +15,11 @@ from backend.app.auth.security import verify_access_token
 # HTTP Bearer token scheme
 security = HTTPBearer()
 
-# Short-lived cache to reduce DB lookups for auth
+# Short-lived cache to reduce DB lookups for auth.
+# Stores plain dicts (not ORM objects) to avoid DetachedInstanceError
+# when a session commits/closes and expires the cached object.
 AUTH_USER_CACHE_TTL_SECONDS = int(os.getenv("AUTH_USER_CACHE_TTL_SECONDS", "30"))
-_user_cache: dict[str, tuple[float, User]] = {}
+_user_cache: dict[str, tuple[float, dict]] = {}
 _user_cache_lock = asyncio.Lock()
 
 
@@ -33,6 +35,19 @@ def _exp_to_epoch(exp_val: Optional[object]) -> Optional[float]:
     return None
 
 
+def _user_to_dict(user: User) -> dict:
+    """Snapshot all mapped column values into a plain dict."""
+    return {col.key: getattr(user, col.key, None) for col in User.__table__.columns}
+
+
+def _dict_to_user(data: dict) -> User:
+    """Reconstruct a transient (session-free) User from a plain dict."""
+    from sqlalchemy.orm import make_transient
+    u = User(**data)
+    make_transient(u)
+    return u
+
+
 async def _get_cached_user(token: str) -> Optional[User]:
     if AUTH_USER_CACHE_TTL_SECONDS <= 0:
         return None
@@ -41,11 +56,11 @@ async def _get_cached_user(token: str) -> Optional[User]:
         entry = _user_cache.get(token)
         if not entry:
             return None
-        expires_at, user = entry
+        expires_at, user_dict = entry
         if expires_at <= now:
             _user_cache.pop(token, None)
             return None
-        return user
+        return _dict_to_user(user_dict)
 
 
 async def _set_cached_user(token: str, user: User, token_exp_epoch: Optional[float]) -> None:
@@ -58,7 +73,7 @@ async def _set_cached_user(token: str, user: User, token_exp_epoch: Optional[flo
         if cache_exp <= now:
             return
     async with _user_cache_lock:
-        _user_cache[token] = (cache_exp, user)
+        _user_cache[token] = (cache_exp, _user_to_dict(user))
 
 
 async def get_current_user(

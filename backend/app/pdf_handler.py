@@ -10,7 +10,7 @@ from .config import (
     SECTION_TOPICS, WATERMARK_PATTERNS, REGEX_PATTERNS, PRIORITY_KEYWORDS_MANAGEMENT_ASSERTION, PRIORITY_KEYWORDS_SERVICE_AUDITOR_REPORT,
     PRIORITY_KEYWORDS_DESCRIPTION_OF_SYSTEM, DEFAULT_GPT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P,
     LLM_PROVIDER, SECTION_DETECTION_PROMPT, EXTRACT_TOC_PROMPT, SECTION_HEADING_VALIDATION_PROMPT,
-    EXTRACT_TOC_HEADINGS_AND_PAGES_PROMPT
+    EXTRACT_TOC_HEADINGS_AND_PAGES_PROMPT, SECTION_TOPIC_KEYWORD_RULES
 )
 from .gpt_client import gpt_extract
 import argparse
@@ -611,6 +611,23 @@ def gpt_validate_section_heading(line, context, model=DEFAULT_GPT_MODEL, tempera
         return False, f"gpt_error:{e}"
 
 
+def _match_topic_keywords(section_lower: str):
+    """Match a lowercased section name against SECTION_TOPIC_KEYWORD_RULES.
+
+    Returns the topic string (e.g. 'Control_Descriptions') on first match,
+    or None if no rule matches.  Rules are evaluated in dict-order; within
+    each topic the rule list is evaluated top-to-bottom — first match wins.
+    """
+    for topic, rules in SECTION_TOPIC_KEYWORD_RULES.items():
+        for primary_kw, secondary_kws in rules:
+            if primary_kw not in section_lower:
+                continue
+            # If no secondary keywords, the primary alone is sufficient
+            if not secondary_kws or any(sk in section_lower for sk in secondary_kws):
+                return topic
+    return None
+
+
 def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_TEMPERATURE, top_p=DEFAULT_TOP_P, lookahead_lines=3):
     """
     GPT-based section identification with TOC-focused approach.
@@ -692,14 +709,14 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
             section_name = sec.get('name', '')
             section_lower = section_name.lower()
             
-            # Check if this is one of our 4 core sections
+            # Check if this is one of our 4 core sections using config-driven rules.
+            # Also use containment check for GPT-identified names since GPT may return
+            # a short name (e.g. "TESTING MATRICES") while section name includes
+            # prefix (e.g. "SECTION 4 TESTING MATRICES")
             is_core_section = (
-                'auditor' in section_lower and 'report' in section_lower or
-                'management' in section_lower and 'assertion' in section_lower or
-                'description' in section_lower and 'system' in section_lower or
-                'control' in section_lower and ('description' in section_lower or 'test' in section_lower or 'criteria' in section_lower) or
-                section_name == controls_section_name or
-                section_name == system_desc_section_name
+                _match_topic_keywords(section_lower) is not None or
+                (controls_section_name and controls_section_name.lower() in section_lower) or
+                (system_desc_section_name and system_desc_section_name.lower() in section_lower)
             )
             
             # Keep if: (1) not a subsection, OR (2) is a subsection but matches core topic
@@ -759,33 +776,25 @@ def find_section_candidates(text, model=DEFAULT_GPT_MODEL, temperature=DEFAULT_T
             
             # Determine topic mapping based on GPT's explicit identification first
             section_lower = section_name.lower()
-            if controls_section_name and section_name == controls_section_name:
+            if controls_section_name and controls_section_name.lower() in section_lower:
                 # GPT explicitly identified this as the controls section
+                # Use containment: GPT may return "TESTING MATRICES" while
+                # section name is "SECTION 4 TESTING MATRICES"
                 topic = 'Control_Descriptions'
                 explicit_match = True
-            elif system_desc_section_name and section_name == system_desc_section_name:
+            elif system_desc_section_name and system_desc_section_name.lower() in section_lower:
                 # GPT explicitly identified this as the system description
                 topic = 'Description_of_System'
                 explicit_match = True
-            elif 'auditor' in section_lower and 'report' in section_lower:
-                topic = 'Service_Auditor_Report'
-                explicit_match = False
-            elif 'management' in section_lower and ('assertion' in section_lower or 'statement' in section_lower):
-                topic = 'Management_Assertion'
-                explicit_match = False
-            elif 'assertion' in section_lower and 'of' in section_lower:
-                # Handle patterns like "Assertion of Amazon Web Services" (Management Assertion)
-                topic = 'Management_Assertion'
-                explicit_match = False
-            elif 'description' in section_lower and 'system' in section_lower:
-                topic = 'Description_of_System'
-                explicit_match = False
-            elif 'control' in section_lower:
-                topic = 'Control_Descriptions'
-                explicit_match = False
             else:
-                topic = 'Unknown'
-                explicit_match = False
+                # Fallback: match against SECTION_TOPIC_KEYWORD_RULES from config
+                matched_topic = _match_topic_keywords(section_lower)
+                if matched_topic:
+                    topic = matched_topic
+                    explicit_match = False
+                else:
+                    topic = 'Unknown'
+                    explicit_match = False
             
             # Find the actual section start by searching for the section heading in the document
             # Start search from the TOC page (toc_page), not doc_page (which is where TOC entry appears)

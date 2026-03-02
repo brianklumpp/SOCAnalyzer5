@@ -89,6 +89,38 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
         except Exception as e:
             logging.error(f"[REPORT] Failed to build primary objective map for scan_id={scan_id}: {e}")
 
+        # Build ALL objective mappings for controls (not just primary)
+        all_objectives_by_control_id: dict = {}
+        try:
+            all_mappings_result = await db.execute(
+                select(ControlObjectiveMapping, ControlObjective)
+                .join(ControlObjective, ControlObjectiveMapping.objective_id == ControlObjective.id)
+                .join(Control, ControlObjectiveMapping.control_id == Control.id)
+                .where(Control.scan_id == scan_id)
+                .order_by(ControlObjectiveMapping.mapping_confidence.desc())
+            )
+            for mapping, objective in all_mappings_result.all():
+                ctrl_id = mapping.control_id
+                if ctrl_id not in all_objectives_by_control_id:
+                    all_objectives_by_control_id[ctrl_id] = []
+                all_objectives_by_control_id[ctrl_id].append({
+                    "id": objective.id,
+                    "objective_id": objective.objective_id,
+                    "objective_text": objective.objective_text,
+                    "final_confidence": objective.final_confidence,
+                    "mapping_confidence": mapping.mapping_confidence,
+                    "mapping_method": mapping.mapping_method,
+                    "is_primary": mapping.is_primary,
+                    "confirmed": getattr(mapping, "confirmed", None),
+                    "mapping_justification": getattr(mapping, "mapping_justification", None),
+                    "page_proximity_score": getattr(mapping, "page_proximity_score", None),
+                    "gpt_alignment_score": getattr(mapping, "gpt_alignment_score", None),
+                    "id_alignment_score": getattr(mapping, "id_alignment_score", None),
+                    "status": objective.status,
+                })
+        except Exception as e:
+            logging.error(f"[REPORT] Failed to build all objectives map for scan_id={scan_id}: {e}")
+
         # Build primary objective mapping for CUECs
         primary_objective_by_cuec_id = {}
         try:
@@ -315,7 +347,8 @@ async def get_report(scan_id: int, diag: bool = False, db=Depends(get_db), curre
                         "gpt_alignment_score": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("gpt_alignment_score"),
                         "id_alignment_score": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("id_alignment_score"),
                         "total": (primary_objective_by_control_id.get(getattr(ctrl, "id", None)) or {}).get("mapping_confidence"),
-                    }
+                    },
+                    "all_objectives": all_objectives_by_control_id.get(getattr(ctrl, "id", None), []),
                 }) for ctrl in controls
             ],
             "bad_chunks": bad_chunks if any(bad_chunks.values()) else persisted_bad_chunks,

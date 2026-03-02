@@ -162,6 +162,7 @@ services:
 
 volumes:
   postgres_data:
+    name: socanalyzer_postgres_data
   frontend_node_modules:
 
 

@@ -4,9 +4,10 @@ Debug script to trace framework_mappings through the data pipeline.
 import json
 import os
 
-# Paths
-CONTROL_RESULT_PATH = r'c:\Users\bklumpp\OneDrive - NANDPS\Documents\Python Scripts\SOCAnalyzer5\data\json\control_result.json'
-COMBINED_RESULT_PATH = r'c:\Users\bklumpp\OneDrive - NANDPS\Documents\Python Scripts\SOCAnalyzer5\data\json\combined_result.json'
+# Paths - resolved relative to this script's location
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+CONTROL_RESULT_PATH = os.path.join(PROJECT_ROOT, 'data', 'json', 'control_result.json')
+COMBINED_RESULT_PATH = os.path.join(PROJECT_ROOT, 'data', 'json', 'combined_result.json')
 
 print("=" * 80)
 print("FRAMEWORK_MAPPINGS DEBUG TRACE")

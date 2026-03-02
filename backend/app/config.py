@@ -325,18 +325,42 @@ OBJECTIVE_MAPPING_GPT_ALIGNMENT_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_G
 OBJECTIVE_MAPPING_ID_SIMILARITY_THRESHOLD = float(os.getenv("OBJECTIVE_MAPPING_ID_SIMILARITY_THRESHOLD", "0.8"))
 
 # Tier minimum-score thresholds (combined_score must exceed these to create a mapping)
-OBJECTIVE_MAPPING_TIER0_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER0_MIN_SCORE", "0.50"))
-OBJECTIVE_MAPPING_TIER1_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER1_MIN_SCORE", "0.60"))
-OBJECTIVE_MAPPING_TIER2_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER2_MIN_SCORE", "0.60"))  # was 0.20
-OBJECTIVE_MAPPING_TIER3_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER3_MIN_SCORE", "0.60"))  # was 0.20
-# Tier 0 GPT floor: structural match requires GPT to agree at this level to prevent false positives
-OBJECTIVE_MAPPING_TIER0_GPT_FLOOR = float(os.getenv("OBJECTIVE_MAPPING_TIER0_GPT_FLOOR", "0.50"))
-# Tier 3 page proximity window (max pages apart for any page in the control/objective page arrays)
-OBJECTIVE_MAPPING_TIER3_MAX_PAGE_DISTANCE = int(os.getenv("OBJECTIVE_MAPPING_TIER3_MAX_PAGE_DISTANCE", "3"))
+# Data-driven: 0.75 gives 95% precision across scans 2+3 (vs 51% at 0.60)
+OBJECTIVE_MAPPING_TIER0_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER0_MIN_SCORE", "0.75"))
+OBJECTIVE_MAPPING_TIER1_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER1_MIN_SCORE", "0.75"))
+OBJECTIVE_MAPPING_TIER2_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER2_MIN_SCORE", "0.75"))  # was 0.60
+OBJECTIVE_MAPPING_TIER3_MIN_SCORE = float(os.getenv("OBJECTIVE_MAPPING_TIER3_MIN_SCORE", "0.80"))  # scan 11: kept at 0.80 (raising to 0.85 kills 19 TPs for only 8 FPs prevented)
+# Tier 0 GPT floor: scan 9+ lowered to 0.0 — trust document structure (96% precision without GPT gate)
+OBJECTIVE_MAPPING_TIER0_GPT_FLOOR = float(os.getenv("OBJECTIVE_MAPPING_TIER0_GPT_FLOOR", "0.0"))
+# Tier 3 page proximity window (legacy — only used when GPT classification disabled)
+OBJECTIVE_MAPPING_TIER3_MAX_PAGE_DISTANCE = int(os.getenv("OBJECTIVE_MAPPING_TIER3_MAX_PAGE_DISTANCE", "3"))  # scan 12: raised 2→3 (picks up 4 FNs at dist=3, precision 78.6% comparable to other bands; dist=4+ has diminishing returns)
+OBJECTIVE_MAPPING_TIER3_MAX_PER_CONTROL = int(os.getenv("OBJECTIVE_MAPPING_TIER3_MAX_PER_CONTROL", "0"))  # 0 = no cap (scan 12: data shows cap=2 blocked 30 TPs across 2 scans for only 14 fewer FPs; min-score threshold is sufficient guard)
+
+# ── Combined Mapping (scan 18+: line-nearest primary + page-based secondaries) ──
+# When enabled, mapping uses:
+#   (1) Document structure for primary (line-nearest, deterministic, no GPT)
+#   (2) Page co-location for secondaries (same-page objectives, no GPT)
+#   (3) ID hierarchy for additional matches (GPT alignment, few calls)
+# When disabled, falls back to legacy Tier 0-3 proximity scoring with GPT at every tier.
+ENABLE_GPT_OBJECTIVE_CLASSIFICATION = os.getenv('ENABLE_GPT_OBJECTIVE_CLASSIFICATION', 'true').lower() == 'true'
+# Max secondary objectives per control from classification (prevents over-mapping)
+GPT_CLASSIFICATION_MAX_SECONDARY = int(os.getenv("GPT_CLASSIFICATION_MAX_SECONDARY", "4"))
+# When True AND ENABLE_GPT_OBJECTIVE_CLASSIFICATION is True, uses GPT classification for
+# secondaries instead of page-based. Default False = page-based (zero GPT calls for secondaries).
+ENABLE_GPT_SECONDARY_CLASSIFICATION = os.getenv('ENABLE_GPT_SECONDARY_CLASSIFICATION', 'false').lower() == 'true'
+# Minimum page proximity confidence for page-based secondaries.
+# 0.85 = same-page only (0.85 is the same-page score). Lower to 0.70 to include 1-page-before.
+PAGE_SECONDARY_MIN_CONFIDENCE = float(os.getenv("PAGE_SECONDARY_MIN_CONFIDENCE", "0.85"))
+# Skip informational GPT alignment call on structural primary (saves ~N API calls per scan).
+# The GPT score is recorded but NOT used as a gate — purely for audit trail.
+SKIP_PRIMARY_GPT_INFO_CHECK = os.getenv('SKIP_PRIMARY_GPT_INFO_CHECK', 'true').lower() == 'true'
 
 # Enhanced mapping configuration - line proximity and hierarchical ID matching
 ENABLE_LINE_PROXIMITY_SCORING = os.getenv('ENABLE_LINE_PROXIMITY_SCORING', 'true').lower() == 'true'
 ENABLE_HIERARCHICAL_ID_MATCHING = os.getenv('ENABLE_HIERARCHICAL_ID_MATCHING', 'true').lower() == 'true'
+# Max line distance for hierarchy override to accept a parent-ID match as valid
+# (prevents coincidental prefix matches when parent objective is far away in the document)
+HIERARCHY_OVERRIDE_MAX_LINE_DISTANCE = int(os.getenv("HIERARCHY_OVERRIDE_MAX_LINE_DISTANCE", "300"))
 # Tier 4: GPT semantic matching for controls unmapped by proximity/ID — catches inaccurate page refs
 ENABLE_GPT_SEMANTIC_MAPPING = os.getenv('ENABLE_GPT_SEMANTIC_MAPPING', 'true').lower() == 'true'
 # Minimum GPT alignment score for Tier 4 semantic match (no proximity boost, so higher threshold)
@@ -1441,6 +1465,8 @@ GPT_MODELS = {
 BULK_TEST_THROTTLE_MS = int(os.getenv('BULK_TEST_THROTTLE_MS', '500'))
 
 # Runtime model configuration helpers with dual-layer persistence (Redis + Database)
+_model_config_table_missing = False  # Cache: skip DB lookup if table doesn't exist
+
 def get_runtime_model_config(extractor_name: str) -> str:
     """
     Get runtime model configuration for an extractor.
@@ -1470,32 +1496,38 @@ def get_runtime_model_config(extractor_name: str) -> str:
         logger.warning(f"Redis lookup failed for {extractor_name}: {e}")
     
     # Try database for persistence across restarts
-    try:
-        from sqlalchemy import text
-        from .database import sync_engine
-        
-        # Use dedicated sync connection for config access
-        with sync_engine.connect() as conn:
-            result = conn.execute(
-                text("SELECT model_name FROM model_config WHERE extractor_name = :name"),
-                {"name": extractor_name}
-            )
-            row = result.fetchone()
-            if row:
-                model_name = row[0]
-                logger.debug(f"Model config from DB: {extractor_name} → {model_name}")
-                
-                # Update Redis cache
-                try:
-                    from .utils.redis_helpers import _get_redis
-                    redis_client = _get_redis()
-                    redis_client.set(f"model_config:{extractor_name}", model_name, ex=86400)  # 24h TTL
-                except Exception:
-                    pass
-                
-                return model_name
-    except Exception as e:
-        logger.warning(f"Database lookup failed for {extractor_name}: {e}")
+    global _model_config_table_missing
+    if not _model_config_table_missing:
+        try:
+            from sqlalchemy import text
+            from .database import sync_engine
+            
+            # Use dedicated sync connection for config access
+            with sync_engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT model_name FROM model_config WHERE extractor_name = :name"),
+                    {"name": extractor_name}
+                )
+                row = result.fetchone()
+                if row:
+                    model_name = row[0]
+                    logger.debug(f"Model config from DB: {extractor_name} → {model_name}")
+                    
+                    # Update Redis cache
+                    try:
+                        from .utils.redis_helpers import _get_redis
+                        redis_client = _get_redis()
+                        redis_client.set(f"model_config:{extractor_name}", model_name, ex=86400)  # 24h TTL
+                    except Exception:
+                        pass
+                    
+                    return model_name
+        except Exception as e:
+            if 'UndefinedTable' in type(e).__name__ or 'model_config' in str(e):
+                _model_config_table_missing = True
+                logger.info(f"model_config table does not exist — using defaults (this warning won't repeat)")
+            else:
+                logger.warning(f"Database lookup failed for {extractor_name}: {e}")
     
     # Fallback to default configuration
     default_model = GPT_MODELS.get(extractor_name, DEFAULT_GPT_MODEL)
@@ -1684,6 +1716,30 @@ PRIORITY_KEYWORDS_DESCRIPTION_OF_SYSTEM = [
 PRIORITY_KEYWORDS_CONTROL_DESCRIPTIONS = [
     "tests of controls", "test of controls", "testing of controls", "trust services criteria", "testing matrices", "test results"
 ]
+
+# ---- Section topic keyword rules for fallback mapping ----
+# Used by pdf_handler.convert_to_legacy_format() when GPT's explicit controls_section_name /
+# system_description_section_name don't match.
+# Format: { topic: [ (primary_kw, [secondary_kw, ...]), ... ] }
+#   - If secondary list is empty, the primary keyword alone is sufficient.
+#   - Otherwise ALL must be present: primary AND at least one secondary.
+SECTION_TOPIC_KEYWORD_RULES: dict[str, list[tuple[str, list[str]]]] = {
+    "Service_Auditor_Report": [
+        ("auditor", ["report"]),
+    ],
+    "Management_Assertion": [
+        ("management", ["assertion", "statement"]),
+        ("assertion", ["of"]),                        # "Assertion of <Company> Management"
+    ],
+    "Description_of_System": [
+        ("description", ["system"]),
+    ],
+    "Control_Descriptions": [
+        ("control", []),                              # any heading with "control"
+        ("test", ["matric", "control", "operat", "result"]),  # Testing Matrices, Tests of Operating Effectiveness, Test Results
+        ("trust", ["criteria", "service"]),            # Trust Services Criteria
+    ],
+}
 
 WATERMARK_PATTERNS = [
     r"digitally signed by"
@@ -3698,12 +3754,13 @@ OBJECTIVE_CONFIDENCE_WEIGHTS = {
     'format': 0.35       # Format clarity (heading, numbering, table structure)
 }
 
-# Post-mapping recalculation weights (4-factor, must sum to 1.0)
-# Used after control-objective mapping provides alignment scores.
+# Post-mapping recalculation weights (5-factor, must sum to 1.0)
+# Used after control-objective mapping provides alignment and distance scores.
 OBJECTIVE_RECALC_WEIGHTS = {
-    'keyword': 0.30,     # TSC/COSO keyword presence in objective text
-    'gpt_opinion': 0.20, # GPT's confidence in identification
-    'alignment': 0.25,   # Alignment with extracted controls (only available post-mapping)
+    'keyword': 0.25,     # TSC/COSO keyword presence in objective text
+    'gpt_opinion': 0.15, # GPT's confidence in identification
+    'alignment': 0.25,   # Alignment with extracted controls (from mapping confidence)
+    'distance': 0.10,    # Page proximity between objective and mapped controls
     'format': 0.25       # Format clarity
 }
 
@@ -3800,6 +3857,13 @@ NEVER skip extracting something because you're "not sure" - just give it a lower
 - Privacy: P1.1-P8.1
 - Processing Integrity: PI1.1-PI1.5
 These are objectives by definition — always extract with gpt_opinion ≥ 0.85.
+
+**IMPORTANT — Sub-control numbering**:
+Some reports use hierarchical numbering where objectives get short IDs (e.g. CC1.1, CO-1, HR-01)
+and individual controls get extended sub-IDs (e.g. CC1.1.1, CO-1.1, HR-01a).  If a candidate
+objective has an ID that looks like a sub-numbering of a parent entry, lower gpt_opinion to 0.3-0.5
+(it is more likely a control activity than an objective).  When in doubt, still extract it —
+downstream filters will compare against known control IDs.
 
 ## Background:
 Control objectives describe the intended outcome or goal that controls are designed to achieve.
@@ -4218,6 +4282,44 @@ Assess how well this control fulfills or supports the stated objective.
 }}
 
 Respond ONLY with JSON.
+"""
+
+# ── GPT Classification Prompt (scan 9+: replaces pairwise Tier 3 scoring) ──
+# Sends ALL objectives in one call per control for relative judgment.
+# GPT returns only the objectives the control genuinely supports.
+OBJECTIVE_CLASSIFICATION_PROMPT = """You are analyzing a SOC 2 report. Given a control's description, identify ALL Trust Services Criteria (TSC) objectives this control directly supports.
+
+## Control
+ID: {control_id}
+Description: {control_desc}
+
+{primary_hint}
+
+## Available Objectives
+{objectives_list}
+{feedback_examples}
+## Instructions
+- Return EVERY objective this control **directly and clearly** supports.
+- Include the structural primary objective if the control genuinely fulfills it.
+- Include secondary objectives ONLY when there is a concrete, direct relationship — not a tangential one.
+- Be conservative: fewer correct matches are far better than many weak ones.
+
+## Confidence Guidelines
+- **0.95–1.0**: Control directly implements the objective (clear match)
+- **0.80–0.94**: Control strongly supports the objective
+- **0.65–0.79**: Control partially addresses the objective (solid but not primary)
+- Below 0.65: Do NOT include — the relationship is too weak.
+
+## Output Format
+Return a JSON object:
+{{
+  "objectives": [
+    {{"objective_id": "CC1.1", "confidence": 0.95, "reasoning": "Brief explanation (max 120 chars)"}},
+    ...
+  ]
+}}
+
+Respond ONLY with the JSON object. No additional text.
 """
 
 # Batch alignment prompt for scoring multiple objectives against one control

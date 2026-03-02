@@ -1157,7 +1157,7 @@ Format: X - reason"""
                 
                 try:
                     # Extract objectives
-                    objectives = extract_objectives(
+                    _result = extract_objectives(
                         extracted_text=extracted_text,
                         scan_id=None,  # Will be set when saving to database
                         db_session=db_session,
@@ -1165,6 +1165,7 @@ Format: X - reason"""
                         job_id=job_id,
                         redis_client=redis_client
                     )
+                    objectives = _result[0] if isinstance(_result, tuple) else _result
                     
                     logger.info(f"Extracted {len(objectives)} control objectives")
                     
@@ -1832,7 +1833,7 @@ Format: X - reason"""
                                 except Exception as e:
                                     logger.warning(f"[OBJECTIVE] Failed to load sections: {e}")
                                 
-                                objectives = extract_objectives(
+                                _result = extract_objectives(
                                     extracted_text=extracted_text,
                                     scan_id=None,
                                     db_session=objective_db_session,
@@ -1840,6 +1841,7 @@ Format: X - reason"""
                                     job_id=job_id,
                                     redis_client=redis_client
                                 )
+                                objectives = _result[0] if isinstance(_result, tuple) else _result
                                 
                                 logger.info(f"[OBJECTIVE] Extracted {len(objectives)} control objectives")
                                 results['objectives'] = objectives

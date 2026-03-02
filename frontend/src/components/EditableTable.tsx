@@ -484,6 +484,9 @@ const EditableTable: React.FC<EditableTableProps> = ({ columns, rows, ignored, o
                       { backgroundColor: theme.palette.mode === 'dark' ? '#663d00' : '#ffe4cc', borderLeft: '3px solid #ff9800' } : {}),
                   ...(row?.confidence === 0 || row?.cuec_confidence === 0 || row?.control_confidence === 0 ? 
                     { backgroundColor: theme.palette.mode === 'dark' ? '#665500' : '#fff3cd', borderLeft: '3px solid #ffc107' } : {}),
+                  // Light purple highlight for controls with no mapped objectives
+                  ...(row?.all_objectives && Array.isArray(row.all_objectives) && row.all_objectives.length === 0 ?
+                    { backgroundColor: theme.palette.mode === 'dark' ? '#2d1b4e' : '#f3e5f5', borderLeft: '3px solid #9c27b0' } : {}),
                   ...(row?.has_deviation ? { backgroundColor: theme.palette.mode === 'dark' ? '#5c1a1a' : '#fdecea', borderLeft: '3px solid #f44336' } : {}),
                   ...(recentlyChangedIds?.has(row.id) ? 
                     { backgroundColor: theme.palette.mode === 'dark' ? '#1a4d2e' : '#d4edda', borderLeft: '3px solid #28a745', transition: 'background-color 0.3s ease' } : {})

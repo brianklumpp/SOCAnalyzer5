@@ -2,8 +2,10 @@
 """
 Script to remove duplicate control loop code from objective_extractor.py
 """
+from pathlib import Path
 
-file_path = r'c:\Users\bklumpp\OneDrive - NANDPS\Documents\Python Scripts\SOCAnalyzer5\backend\app\extractors\objective_extractor.py'
+PROJECT_ROOT = Path(__file__).resolve().parent
+file_path = str(PROJECT_ROOT / 'backend' / 'app' / 'extractors' / 'objective_extractor.py')
 
 # Read the file
 with open(file_path, 'r', encoding='utf-8') as f:

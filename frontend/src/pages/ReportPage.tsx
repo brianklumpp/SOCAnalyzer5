@@ -307,6 +307,7 @@ const ReportPage: React.FC = () => {
   const [addDialogType, setAddDialogType] = useState<'suborg' | 'cuec' | 'control'>('suborg');
   const [createProgressMessage, setCreateProgressMessage] = useState<string | null>(null);
   const pendingObjectiveMapRef = useRef<number | null>(null);  // objective ID to auto-map new control to
+  const [refreshObjectiveId, setRefreshObjectiveId] = useState<{ objectiveId: number; ts: number } | null>(null);
 
   // Default confidence state (persisted)
   const [defaultConfidence, setDefaultConfidence] = useState<string>(
@@ -541,6 +542,26 @@ const ReportPage: React.FC = () => {
     setAddDialogOpen(true);
   }, []);
 
+  // Lightweight refresh: only fetch objective mappings for ControlsTable display.
+  // Does NOT re-fetch objectives list (avoids ObjectivesCoverageTab cascade) or full report.
+  const refreshMappingsOnly = useCallback(async () => {
+    if (!selectedScanId) return;
+    try {
+      const scanIdNum = parseInt(selectedScanId);
+      const mappingsMap = new Map<string | number, any>();
+      const mappingResponse = await getPrimaryObjectiveMappings(scanIdNum);
+      (mappingResponse.mappings || []).forEach((mapping: any) => {
+        const controlDbId = mapping.control_db_id;
+        const controlId = mapping.control_id;
+        if (controlDbId !== undefined && controlDbId !== null) mappingsMap.set(controlDbId, mapping);
+        if (controlId !== undefined && controlId !== null) mappingsMap.set(controlId, mapping);
+      });
+      setObjectiveMappings(mappingsMap);
+    } catch (error) {
+      console.debug('Mappings-only refresh failed:', error);
+    }
+  }, [selectedScanId]);
+
   const handleCreateItem = useCallback(async (formData: Record<string, any>) => {
     if (!selectedScanId) return;
 
@@ -619,49 +640,60 @@ const ReportPage: React.FC = () => {
         setCreateProgressMessage('Creating control…');
         const { data: created } = await api.post(`${API_URL}${selectedScanId}/controls`, payload);
         
-        // Automatically trigger TSC/COSO framework mapping after creation
-        try {
-          setCreateProgressMessage('Computing framework mappings…');
-          const mappingResp = await api.post(`${API_URL}${selectedScanId}/controls/id/${created.id}/recompute_frameworks`);
-          const mappedControl = { ...created, ...mappingResp.data.control };
-          setReport((prev: any) => ({ ...prev, controls: [...(prev?.controls || []), mappedControl] }));
-          
-          const message = mappingResp.data?.message;
-          const mappingCount = mappingResp.data?.mapping_count;
-          if (mappingCount === 0) {
-            showToast('Control created (no framework mappings found)', 'warning');
-          } else if (message) {
-            showToast(`Control created: ${message}`, 'success');
-          } else {
-            showToast('Control created with framework mappings', 'success');
-          }
-        } catch (mappingError: any) {
-          console.warn('Framework mapping failed, control created without mappings:', mappingError);
-          setReport((prev: any) => ({ ...prev, controls: [...(prev?.controls || []), created] }));
-          showToast('Control created (framework mapping failed)', 'warning');
-        }
+        // Add the control to the table immediately — no waiting for any mapping
+        setReport((prev: any) => ({ ...prev, controls: [...(prev?.controls || []), created] }));
+        showToast('Control created', 'success');
 
-        // Auto-map to pending objective if triggered from Objective Coverage tab
+        // Close dialog and clear progress IMMEDIATELY — all mapping is fire-and-forget
+        setAddDialogOpen(false);
+        setCreateProgressMessage(null);
+        setExecutiveSummaryStale(true);
+
+        // Fire-and-forget: compute framework mappings in the background
+        const bgScanId = selectedScanId;
+        (async () => {
+          try {
+            const mappingResp = await api.post(`${API_URL}${bgScanId}/controls/id/${created.id}/recompute_frameworks`);
+            const mappedControl = { ...created, ...mappingResp.data.control };
+            // Silently update the control row with mapping data
+            setReport((prev: any) => {
+              if (!prev?.controls) return prev;
+              return {
+                ...prev,
+                controls: prev.controls.map((c: any) =>
+                  c.id === created.id ? mappedControl : c
+                ),
+              };
+            });
+          } catch (mappingError: any) {
+            console.warn('Background framework mapping failed:', mappingError);
+          }
+        })();
+
+        // Fire-and-forget: auto-map to pending objective if triggered from Objective Coverage tab
         const pendingObjId = pendingObjectiveMapRef.current;
         if (pendingObjId && created.id) {
-          try {
-            setCreateProgressMessage('Mapping control to objective…');
-            await createMapping(parseInt(selectedScanId), {
-              objective_id: pendingObjId,
-              control_id: created.id,
-              mapping_confidence: 1.0,
-            } as any);
-            showToast('Control auto-mapped to objective', 'success');
-          } catch (mapErr: any) {
-            console.warn('Auto-map to objective failed:', mapErr);
-            showToast('Control created but objective mapping failed', 'warning');
-          }
           pendingObjectiveMapRef.current = null;
-          // Silent refresh so ObjectivesCoverageTab picks up the new mapping
-          // without unmounting/remounting tabs (which would lose sub-tab position)
-          setCreateProgressMessage('Refreshing report…');
-          if (selectedScanId) await silentRefresh(selectedScanId);
+          const mapScanId = parseInt(selectedScanId);
+          (async () => {
+            try {
+              await createMapping(mapScanId, {
+                objective_id: pendingObjId,
+                control_id: created.id,
+                mapping_confidence: 1.0,
+              } as any);
+              // Targeted reload of just this objective's controls in the accordion
+              setRefreshObjectiveId({ objectiveId: pendingObjId, ts: Date.now() });
+              // Lightweight: only update ControlsTable's objective mapping column
+              refreshMappingsOnly();
+            } catch (mapErr: any) {
+              console.warn('Background objective mapping failed:', mapErr);
+            }
+          })();
         }
+
+        // Early return — dialog already closed, no further cleanup needed
+        return;
       }
 
       setAddDialogOpen(false);
@@ -673,7 +705,7 @@ const ReportPage: React.FC = () => {
     } finally {
       setCreateProgressMessage(null);
     }
-  }, [selectedScanId, addDialogType, showToast, setReport, setExecutiveSummaryStale, refreshReport, silentRefresh]);
+  }, [selectedScanId, addDialogType, showToast, setReport, setExecutiveSummaryStale, refreshReport, refreshMappingsOnly]);
 
   // Handle confidence modal
   const handleOpenConfidenceModal = useCallback((control: any) => {
@@ -1036,7 +1068,7 @@ const ReportPage: React.FC = () => {
           <TabPanel value={activeTab} index={1} tabScrollPositions={tabScrollPositions} noPadding>
             <ReportObjectivesTab
               scanId={selectedScanId}
-              onRefresh={handleRefreshReport}
+              onRefresh={handleObjectivesRefresh}
               showToast={showToast}
               darkMode={darkMode}
               tocPageOffset={report?.toc_page_offset}
@@ -1133,9 +1165,10 @@ const ReportPage: React.FC = () => {
               onOpenControlModal={handleOpenControlModal}
               scanId={selectedScanId ? parseInt(selectedScanId) : undefined}
               highConfObjectives={filteredHighConfObjectives}
-              onRefresh={handleRefreshReport}
+              onRefresh={handleObjectivesRefresh}
               tocPageOffset={report?.toc_page_offset}
               onCreateControlForObjective={handleCreateControlForObjective}
+              refreshObjectiveId={refreshObjectiveId}
             />
           </TabPanel>
         </Box>

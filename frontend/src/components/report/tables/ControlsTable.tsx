@@ -185,19 +185,16 @@ export const ControlsTable = React.memo(function ControlsTable({
   }, [controls]);
 
   const handleOpenObjectiveCriteria = async (control: Control) => {
-    if (!scanId || !control?.id) return;
-    setCriteriaOpen(true);
-    setCriteriaLoading(true);
+    if (!control) return;
+    // Use all_objectives from row data (already loaded in report payload)
+    const allObj = (control as any).all_objectives || [];
+    setCriteriaData({
+      control: { control_id: (control as any).control_id, control_desc: (control as any).control_desc },
+      all_objectives: allObj,
+    });
     setCriteriaError(null);
-    setCriteriaData(null);
-    try {
-      const data = await getPrimaryObjectiveCriteria(scanId, control.id);
-      setCriteriaData(data);
-    } catch (error: any) {
-      setCriteriaError(error?.message || 'Failed to load mapping criteria');
-    } finally {
-      setCriteriaLoading(false);
-    }
+    setCriteriaLoading(false);
+    setCriteriaOpen(true);
   };
 
   const handleOpenObjectiveEditor = (control: Control) => {
@@ -581,7 +578,7 @@ export const ControlsTable = React.memo(function ControlsTable({
         onSelectionChange={setSelectedIds}
       />
 
-      <Dialog open={criteriaOpen} onClose={() => setCriteriaOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={criteriaOpen} onClose={() => setCriteriaOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Objective Mapping Criteria</DialogTitle>
         <DialogContent>
           {criteriaLoading ? (
@@ -597,30 +594,63 @@ export const ControlsTable = React.memo(function ControlsTable({
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
                   {criteriaData.control?.control_id || 'Unknown'}
                 </Typography>
-                <Typography variant="body2">{criteriaData.control?.control_desc}</Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2">Objective</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {criteriaData.objective?.objective_id || 'Unlabeled'}
+                <Typography variant="body2" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                  {criteriaData.control?.control_desc}
                 </Typography>
-                <Typography variant="body2">{criteriaData.objective?.objective_text}</Typography>
               </Box>
-              <Box>
-                <Typography variant="subtitle2">Scores</Typography>
-                <Typography variant="body2">Page proximity: {criteriaData.mapping?.page_proximity_score?.toFixed?.(2) ?? 'N/A'}</Typography>
-                <Typography variant="body2">Line proximity: {criteriaData.mapping?.line_proximity_score?.toFixed?.(2) ?? 'N/A'}</Typography>
-                <Typography variant="body2">GPT alignment: {criteriaData.mapping?.gpt_alignment_score?.toFixed?.(2) ?? 'N/A'}</Typography>
-                <Typography variant="body2">ID alignment: {criteriaData.mapping?.id_alignment_score?.toFixed?.(2) ?? 'N/A'}</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  Final mapping confidence: {criteriaData.mapping?.mapping_confidence?.toFixed?.(2) ?? 'N/A'}
+
+              {(criteriaData.all_objectives?.length ?? 0) === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  No objectives mapped to this control.
                 </Typography>
-                <Typography variant="body2">Method: {criteriaData.mapping?.mapping_method || 'N/A'}</Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2">Alignment reasoning</Typography>
-                <Typography variant="body2">{criteriaData.mapping?.alignment_reasoning || 'N/A'}</Typography>
-              </Box>
+              ) : (
+                criteriaData.all_objectives.map((obj: any, idx: number) => {
+                  const conf = obj.mapping_confidence ?? 0;
+                  const confColor = conf >= 0.8 ? '#4caf50' : conf >= 0.6 ? '#ff9800' : '#f44336';
+                  return (
+                    <Box key={obj.id || idx} sx={{
+                      border: '1px solid',
+                      borderColor: obj.is_primary ? 'primary.main' : 'divider',
+                      borderRadius: 1,
+                      p: 1.5,
+                      ...(obj.is_primary ? { bgcolor: 'rgba(25, 118, 210, 0.04)' } : {}),
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          {obj.objective_id || 'Unlabeled'}
+                        </Typography>
+                        {obj.is_primary && (
+                          <Typography variant="caption" sx={{ bgcolor: 'primary.main', color: '#fff', px: 0.75, py: 0.1, borderRadius: 0.5, fontSize: '0.65rem' }}>
+                            PRIMARY
+                          </Typography>
+                        )}
+                        {obj.confirmed && (
+                          <Typography variant="caption" sx={{ bgcolor: '#2e7d32', color: '#fff', px: 0.75, py: 0.1, borderRadius: 0.5, fontSize: '0.65rem' }}>
+                            CONFIRMED
+                          </Typography>
+                        )}
+                        <Typography variant="body2" sx={{ ml: 'auto', color: confColor, fontWeight: 700 }}>
+                          {Math.round(conf * 100)}%
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" sx={{ mb: 1, fontSize: '0.8rem' }}>
+                        {obj.objective_text || '—'}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', fontSize: '0.75rem', color: 'text.secondary' }}>
+                        <span>Page prox: <b>{obj.page_proximity_score?.toFixed?.(2) ?? '—'}</b></span>
+                        <span>GPT align: <b>{obj.gpt_alignment_score?.toFixed?.(2) ?? '—'}</b></span>
+                        <span>ID align: <b>{obj.id_alignment_score?.toFixed?.(2) ?? '—'}</b></span>
+                        <span>Method: <b>{obj.mapping_method || '—'}</b></span>
+                      </Box>
+                      {obj.mapping_justification && (
+                        <Typography variant="body2" sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary', fontStyle: 'italic' }}>
+                          {obj.mapping_justification}
+                        </Typography>
+                      )}
+                    </Box>
+                  );
+                })
+              )}
             </Box>
           ) : null}
         </DialogContent>

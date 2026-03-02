@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent / "backend"))
 # Use the most recent scan
 SCAN_ID = "6d8534eb-9b05-4b49-8087-b3b2085a5fb8"
 JOB_ID = 1
-BASE_PATH = Path(r"c:\Users\bklumpp\OneDrive - NANDPS\Documents\Python Scripts\SOCAnalyzer5\data\jobs") / str(JOB_ID) / SCAN_ID
+BASE_PATH = Path(__file__).resolve().parent.parent / "data" / "jobs" / str(JOB_ID) / SCAN_ID
 
 # Read section results
 section_json_path = BASE_PATH / "json" / "section_results.json"

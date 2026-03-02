@@ -6,7 +6,11 @@
  */
 
 import React from 'react';
-import { Box, Button } from '@mui/material';
+import { Box, Button, Chip } from '@mui/material';
+import {
+  CheckCircle as ConfirmedIcon,
+  Star as PrimaryIcon,
+} from '@mui/icons-material';
 import UniversalFrameworkMapper from '../../components/UniversalFrameworkMapper';
 import ConfidenceTooltip from '../../components/ConfidenceTooltip';
 import ControlTooltip from '../../components/ControlTooltip';
@@ -142,60 +146,105 @@ export const controlColumns = (
   { key: "control_desc", label: "Description", width: 400, editable: true },
   { 
     key: "primary_objective", 
-    label: "Control Objective", 
-    width: 300, 
+    label: "Control Objectives", 
+    width: 320, 
     editable: false,
     format: (v: any) => v?.objective_text || '',
     render: (row: any) => {
-      const objectiveText = row.primary_objective?.objective_text || row.primary_objective_text;
-      const objectiveId = row.primary_objective?.objective_id;
-      const hasObjective = Boolean(objectiveText);
-      const mappingConfidence = row.primary_objective_confidence;
-      const objectiveConfidence = row.primary_objective?.final_confidence ?? row.primary_objective_confidence ?? 0;
-      const confidence = typeof mappingConfidence === 'number' ? mappingConfidence : objectiveConfidence;
-      const confidenceLabel = typeof mappingConfidence === 'number' ? 'mapping' : 'objective';
-      const confidenceColor = confidence >= 0.8 ? '#4caf50' : confidence >= 0.6 ? '#ff9800' : '#f44336';
-      const scores = row.primary_objective_scores || {};
+      const allObjectives: any[] = row.all_objectives || [];
+      const hasAny = allObjectives.length > 0;
+
+      if (!hasAny) {
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <span style={{ fontSize: '0.85em', color: '#999', fontStyle: 'italic' }}>No mapped objectives</span>
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              {onOpenObjectiveEditor ? (
+                <Button size="small" variant="text" onClick={(e) => { e.stopPropagation(); onOpenObjectiveEditor(row); }}
+                  sx={{ minWidth: 'auto', padding: '0 6px', fontSize: '0.7rem' }}>Edit</Button>
+              ) : null}
+            </Box>
+          </Box>
+        );
+      }
+
+      // Sort: primary first, then by mapping_confidence desc
+      const sorted = [...allObjectives].sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (b.mapping_confidence ?? 0) - (a.mapping_confidence ?? 0);
+      });
+
       return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          <span style={{ fontSize: '0.75em', color: '#666' }}>ID: {objectiveId || 'Unlabeled'}</span>
-          <span>{objectiveText || 'Unmapped objective'}</span>
-          {(scores.page_proximity_score || scores.gpt_alignment_score || scores.id_alignment_score) ? (
-            <span style={{ fontSize: '0.72em', color: '#666' }}>
-              scores: page {scores.page_proximity_score ?? '—'} · gpt {scores.gpt_alignment_score ?? '—'} · id {scores.id_alignment_score ?? '—'}
-            </span>
-          ) : null}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            {hasObjective ? (
-              <span style={{ fontSize: '0.75em', color: confidenceColor, fontWeight: 'bold' }}>
-                {Math.round(confidence * 100)}% {confidenceLabel} confidence
-              </span>
-            ) : null}
-            {onOpenObjectiveCriteria ? (
-              <Button
-                size="small"
-                variant="text"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenObjectiveCriteria(row);
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+          {sorted.map((obj: any, idx: number) => {
+            const conf = obj.mapping_confidence ?? 0;
+            const confColor = conf >= 0.8 ? '#4caf50' : conf >= 0.6 ? '#ff9800' : '#f44336';
+            const isPrimary = obj.is_primary;
+            const isConfirmed = obj.confirmed;
+            const objId = obj.objective_id || 'Unlabeled';
+
+            return (
+              <Box
+                key={obj.id || idx}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 0.5,
+                  py: 0.25,
+                  ...(idx > 0 ? { borderTop: '1px solid', borderColor: 'divider' } : {}),
                 }}
-                sx={{ minWidth: 'auto', padding: '0 6px', fontSize: '0.7rem' }}
               >
-                Why?
-              </Button>
+                {/* Indicators column */}
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 16, pt: '1px' }}>
+                  {isPrimary && <PrimaryIcon sx={{ fontSize: 13, color: '#ff9800' }} />}
+                  {isConfirmed && <ConfirmedIcon sx={{ fontSize: 13, color: '#2e7d32' }} />}
+                </Box>
+
+                {/* Content */}
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Chip
+                      label={objId}
+                      size="small"
+                      variant={isPrimary ? 'filled' : 'outlined'}
+                      sx={{
+                        height: 18,
+                        fontSize: '0.7rem',
+                        fontWeight: isPrimary ? 700 : 400,
+                        bgcolor: isPrimary ? '#e3f2fd' : undefined,
+                        '& .MuiChip-label': { px: 0.75 },
+                      }}
+                    />
+                    <span style={{ fontSize: '0.68rem', color: confColor, fontWeight: 600 }}>
+                      {Math.round(conf * 100)}%
+                    </span>
+                  </Box>
+                  <span style={{
+                    fontSize: '0.78em',
+                    color: '#444',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical' as any,
+                    overflow: 'hidden',
+                    lineHeight: 1.3,
+                  }}>
+                    {obj.objective_text || '—'}
+                  </span>
+                </Box>
+              </Box>
+            );
+          })}
+
+          {/* Action buttons */}
+          <Box sx={{ display: 'flex', gap: 0.5, pt: 0.25 }}>
+            {onOpenObjectiveCriteria ? (
+              <Button size="small" variant="text" onClick={(e) => { e.stopPropagation(); onOpenObjectiveCriteria(row); }}
+                sx={{ minWidth: 'auto', padding: '0 6px', fontSize: '0.65rem' }}>Why?</Button>
             ) : null}
             {onOpenObjectiveEditor ? (
-              <Button
-                size="small"
-                variant="text"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenObjectiveEditor(row);
-                }}
-                sx={{ minWidth: 'auto', padding: '0 6px', fontSize: '0.7rem' }}
-              >
-                Edit
-              </Button>
+              <Button size="small" variant="text" onClick={(e) => { e.stopPropagation(); onOpenObjectiveEditor(row); }}
+                sx={{ minWidth: 'auto', padding: '0 6px', fontSize: '0.65rem' }}>Edit</Button>
             ) : null}
           </Box>
         </Box>

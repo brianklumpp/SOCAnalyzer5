@@ -39,6 +39,7 @@ interface ReportCoverageTabProps {
   onRefresh?: () => void;
   tocPageOffset?: number;
   onCreateControlForObjective?: (objectiveId: number) => void;
+  refreshObjectiveId?: { objectiveId: number; ts: number } | null;
 }
 
 export const ReportCoverageTab = React.memo(function ReportCoverageTab({
@@ -50,7 +51,8 @@ export const ReportCoverageTab = React.memo(function ReportCoverageTab({
   highConfObjectives,
   onRefresh,
   tocPageOffset,
-  onCreateControlForObjective
+  onCreateControlForObjective,
+  refreshObjectiveId
 }: ReportCoverageTabProps) {
   const [frameworkCriteria, setFrameworkCriteria] = useState<{ [key: string]: FrameworkCriteria }>({});
   const [loading, setLoading] = useState(true);
@@ -417,6 +419,7 @@ export const ReportCoverageTab = React.memo(function ReportCoverageTab({
             tocPageOffset={tocPageOffset}
             pdfNavigateHandler={pdfNavigateHandler}
             onCreateControlForObjective={onCreateControlForObjective}
+            refreshObjectiveId={refreshObjectiveId}
           />
         ) : availableFrameworks.length > 0 && selectedTab < availableFrameworks.length ? (
           renderFrameworkSection(availableFrameworks[selectedTab])

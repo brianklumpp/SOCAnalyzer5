@@ -146,3 +146,4 @@ services:
 
 volumes:
   postgres_data:
+    name: socanalyzer_postgres_data
