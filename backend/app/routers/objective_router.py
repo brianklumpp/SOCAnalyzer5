@@ -1196,6 +1196,20 @@ def _run_gap_extraction_internal(text: str, scan_id_val: int, redis_client: Any,
     SessionLocal = sessionmaker(bind=sync_engine)
     sync_db_session = SessionLocal()
 
+    def _get_fresh_session():
+        """Create a fresh sync session to avoid InFailedSqlTransaction from poisoned sessions."""
+        return SessionLocal()
+
+    def _ensure_clean_session(session):
+        """Attempt to recover a session from failed transaction state. Returns True if usable."""
+        try:
+            session.rollback()
+            # Test the session with a simple query
+            session.execute(select(func.count()).select_from(Scan).where(Scan.id == -1))
+            return True
+        except Exception:
+            return False
+
     started_at = datetime.datetime.utcnow()
     status_payload: Dict[str, Any] = {
         "status": "running",
@@ -1367,22 +1381,25 @@ def _run_gap_extraction_internal(text: str, scan_id_val: int, redis_client: Any,
         if not isinstance(pattern_data, dict) or not pattern_data.get("groups"):
             raise ValueError("GPT did not return any pattern groups")
 
-        # Store pattern_info on the scan record for future use
+        # Store pattern_info on the scan record for future use (fresh session to avoid poisoning)
+        pattern_session = _get_fresh_session()
         try:
-            scan_row = sync_db_session.execute(
+            scan_row = pattern_session.execute(
                 select(Scan).where(Scan.id == scan_id_val)
             ).scalars().first()
             if scan_row:
                 scan_row.pattern_info = pattern_data
-                sync_db_session.add(scan_row)
-                sync_db_session.commit()
+                pattern_session.add(scan_row)
+                pattern_session.commit()
                 logger.info(f"[objective_gap] Stored pattern_info on scan {scan_id_val}")
         except Exception as pattern_store_err:
             logger.warning(f"[objective_gap] Failed to store pattern_info: {pattern_store_err}")
             try:
-                sync_db_session.rollback()
+                pattern_session.rollback()
             except Exception:
                 pass
+        finally:
+            pattern_session.close()
 
         status_payload["pattern_output"] = pattern_data
         status_payload["progress_status"] = "Scanning for missing objectives..."
@@ -1584,25 +1601,34 @@ def _run_gap_extraction_internal(text: str, scan_id_val: int, redis_client: Any,
             logger.info(f"Creating gap objective: original_id='{original_objective_id}' → normalized_id='{normalized_objective_id}'")
 
             if objective_id:
-                # Safety rollback to ensure clean transaction state before query
+                # Use a fresh session for each objective creation to avoid
+                # InFailedSqlTransaction cascading from previous failures
+                obj_session = _get_fresh_session()
                 try:
-                    sync_db_session.rollback()
-                except Exception:
-                    pass
-                # Check both objective_id and objective_id_normalized for duplicates
-                existing = sync_db_session.execute(
-                    select(ControlObjective).where(
-                        and_(
-                            ControlObjective.scan_id == scan_id_val,
-                            or_(
-                                func.lower(ControlObjective.objective_id) == objective_id.lower(),
-                                func.lower(ControlObjective.objective_id_normalized) == (normalized_objective_id or objective_id).lower()
+                    # Check both objective_id and objective_id_normalized for duplicates
+                    existing = obj_session.execute(
+                        select(ControlObjective).where(
+                            and_(
+                                ControlObjective.scan_id == scan_id_val,
+                                or_(
+                                    func.lower(ControlObjective.objective_id) == objective_id.lower(),
+                                    func.lower(ControlObjective.objective_id_normalized) == (normalized_objective_id or objective_id).lower()
+                                )
                             )
                         )
-                    )
-                ).scalars().first()
-                if existing:
-                    return {"created": False, "message": "Objective ID already exists"}
+                    ).scalars().first()
+                    if existing:
+                        obj_session.close()
+                        return {"created": False, "message": "Objective ID already exists"}
+                except Exception as dup_check_err:
+                    logger.error(f"[objective_gap] Duplicate check failed for '{objective_id}': {dup_check_err}")
+                    try:
+                        obj_session.close()
+                    except Exception:
+                        pass
+                    return {"created": False, "message": f"Duplicate check failed: {dup_check_err}"}
+            else:
+                obj_session = _get_fresh_session()
 
             # Search the full document for ALL occurrences — find controls section heading
             refs = _find_line_and_page_refs(objective_text, objective_id)
@@ -1632,15 +1658,22 @@ def _run_gap_extraction_internal(text: str, scan_id_val: int, redis_client: Any,
                 created_at=now,
                 updated_at=now
             )
-            sync_db_session.add(new_obj)
+            obj_session.add(new_obj)
             try:
-                sync_db_session.commit()
-                sync_db_session.refresh(new_obj)
+                obj_session.commit()
+                obj_session.refresh(new_obj)
             except Exception as commit_err:
                 logger.error(f"[objective_gap] Commit failed for objective '{objective_id}': {commit_err}")
-                sync_db_session.rollback()
+                try:
+                    obj_session.rollback()
+                except Exception:
+                    pass
+                obj_session.close()
                 return {"created": False, "message": f"DB commit failed: {commit_err}"}
-            return {"created": True, "objective_id": new_obj.objective_id or objective_id, "db_id": new_obj.id}
+            created_id = new_obj.objective_id or objective_id
+            created_db_id = new_obj.id
+            obj_session.close()
+            return {"created": True, "objective_id": created_id, "db_id": created_db_id}
 
         def _process_candidate(candidate_id: str, allow_miss_count: bool = False) -> bool:
             nonlocal total_probed, total_found, total_extracted, extracted_ids, existing_ids_lower
@@ -1951,12 +1984,13 @@ def _run_gap_extraction_internal(text: str, scan_id_val: int, redis_client: Any,
         
         # Automatically map gap-extracted objectives to controls
         if total_extracted > 0:
+            map_session = _get_fresh_session()
             try:
                 from ..extractors.objective_extractor import map_controls_to_objectives
                 logger.info(f"[GAP_EXTRACT_AUTO_MAP] Mapping {total_extracted} gap-extracted objectives to controls for scan {scan_id_val}")
                 mappings_created = map_controls_to_objectives(
                     scan_id=scan_id_val,
-                    db_session=sync_db_session,
+                    db_session=map_session,
                     job_id=None,
                     redis_client=redis_client,
                     force=False
@@ -1965,33 +1999,48 @@ def _run_gap_extraction_internal(text: str, scan_id_val: int, redis_client: Any,
             except Exception as map_err:
                 logger.error(f"[GAP_EXTRACT_AUTO_MAP] Failed to create mappings: {map_err}")
                 try:
-                    sync_db_session.rollback()
+                    map_session.rollback()
                 except Exception:
                     pass
+            finally:
+                map_session.close()
 
-        # Safety rollback to clear any aborted transaction state before final queries
+        # Use a FRESH session for post-extraction operations to avoid
+        # InFailedSqlTransaction from any poisoned session state during extraction
+        final_session = _get_fresh_session()
         try:
-            sync_db_session.rollback()
-        except Exception:
-            pass
-
-        # Mark executive summary stale
-        scan_row = sync_db_session.execute(
-            select(Scan).where(Scan.id == scan_id_val)
-        ).scalars().first()
-        if scan_row:
-            scan_row.executive_summary_stale = True
-            sync_db_session.add(scan_row)
-            sync_db_session.commit()
+            # Mark executive summary stale
+            scan_row = final_session.execute(
+                select(Scan).where(Scan.id == scan_id_val)
+            ).scalars().first()
+            if scan_row:
+                scan_row.executive_summary_stale = True
+                final_session.add(scan_row)
+                final_session.commit()
+                logger.info(f"[objective_gap] Marked executive summary stale for scan {scan_id_val}")
+        except Exception as stale_err:
+            logger.error(f"[objective_gap] Failed to mark executive summary stale: {stale_err}")
+            try:
+                final_session.rollback()
+            except Exception:
+                pass
         
         # Merge duplicates after gap extraction (sync version for thread context)
         if total_extracted > 0:
+            merge_session = _get_fresh_session()
             try:
                 logger.info(f"[GAP_MERGE] Merging duplicate objectives after gap extraction for scan {scan_id_val}")
-                _merge_duplicates_sync(sync_db_session, scan_id_val)
+                _merge_duplicates_sync(merge_session, scan_id_val)
                 logger.info(f"[GAP_MERGE] Duplicate merge completed for scan {scan_id_val}")
             except Exception as merge_err:
                 logger.error(f"[GAP_MERGE] Failed to merge duplicates: {merge_err}")
+            finally:
+                merge_session.close()
+        
+        try:
+            final_session.close()
+        except Exception:
+            pass
 
     except RuntimeError as e:
         if str(e) == "cancelled":
